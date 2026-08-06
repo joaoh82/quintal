@@ -16,6 +16,13 @@ export const ROOM_OFFICE = 'office';
  */
 export const COLYSEUS_PATH = '/colyseus';
 
+/**
+ * Health endpoint, owned by the game server in both modes — in dev `next dev`
+ * proxies it to :2567, so `${origin}/health` answers the same way everywhere.
+ * Reserved: no Next.js route may claim this path.
+ */
+export const HEALTH_PATH = '/health';
+
 /** Port the game server listens on in dev (production uses PORT, default 3000). */
 export const DEV_GAME_PORT = 2567;
 

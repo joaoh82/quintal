@@ -2,7 +2,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 
 import { Server, logger } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { COLYSEUS_PATH, DEV_WEB_PORT, ROOM_OFFICE } from '@quintal/shared';
+import {
+  COLYSEUS_PATH,
+  DEV_WEB_PORT,
+  HEALTH_PATH,
+  ROOM_OFFICE,
+} from '@quintal/shared';
 import {
   closeDb,
   loadRootEnv,
@@ -48,7 +53,7 @@ async function handleRequest(
   const url = req.url ?? '/';
   const pathname = url.split('?')[0] ?? '/';
 
-  if (pathname === '/health') {
+  if (pathname === HEALTH_PATH) {
     handleHealth(res);
     return;
   }
