@@ -1,0 +1,26 @@
+{
+  "name": "quintal",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A spatial office where your AI agents are visible teammates.",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @quintal/shared build && concurrently -n shared,server,web -c magenta,cyan,green \"pnpm --filter @quintal/shared dev\" \"pnpm --filter @quintal/server dev\" \"pnpm --filter @quintal/web dev\"",
+    "build": "pnpm --filter @quintal/shared build && pnpm --filter @quintal/web build && pnpm --filter @quintal/server build",
+    "start": "cross-env NODE_ENV=production node apps/server/dist/index.js",
+    "typecheck": "pnpm --filter @quintal/shared build && pnpm -r typecheck",
+    "db:generate": "pnpm --filter @quintal/shared db:generate",
+    "db:migrate": "pnpm --filter @quintal/shared db:migrate",
+    "db:seed": "pnpm --filter @quintal/shared db:seed",
+    "db:studio": "pnpm --filter @quintal/shared db:studio"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.9.3"
+  }
+}

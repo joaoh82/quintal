@@ -1,0 +1,65 @@
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the full PR range, plus the base, to inspect each commit.
+          fetch-depth: 0
+
+      - name: Verify every commit is signed off
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          commits=$(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA")
+          if [ -z "$commits" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+
+          failed=0
+          for sha in $commits; do
+            author_name=$(git show -s --format='%an' "$sha")
+            author_email=$(git show -s --format='%ae' "$sha")
+            expected="Signed-off-by: $author_name <$author_email>"
+
+            if git show -s --format='%B' "$sha" | grep -Fqx "$expected"; then
+              echo "ok    $(git show -s --format='%h %s' "$sha")"
+            else
+              echo "FAIL  $(git show -s --format='%h %s' "$sha")"
+              echo "      expected trailer: $expected"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            cat <<'EOF'
+
+          One or more commits are missing a Developer Certificate of Origin
+          sign-off matching their author.
+
+          Fix the most recent commit:
+              git commit --amend -s --no-edit && git push --force-with-lease
+
+          Fix a whole branch:
+              git rebase --signoff main && git push --force-with-lease
+
+          See CONTRIBUTING.md.
+          EOF
+            exit 1
+          fi
+
+          echo "All commits signed off."
