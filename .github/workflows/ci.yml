@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets a run be started by hand from the Actions tab, so a green build is
+  # never blocked on waiting for the right event to come along.
+  workflow_dispatch:
 
 permissions:
   contents: read
