@@ -25,3 +25,6 @@ coverage/
 .idea/
 next-env.d.ts
 *.tsbuildinfo
+
+# Maps copied from packages/shared/maps by apps/web/scripts/sync-map.mjs
+apps/web/public/assets/maps/
