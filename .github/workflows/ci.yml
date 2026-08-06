@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm build
+
+      # The migration in the repo must match the schema it was generated from.
+      - name: Check migrations are up to date
+        run: |
+          pnpm db:generate
+          if ! git diff --quiet -- packages/shared/drizzle; then
+            echo "::error::Drizzle schema changed without a committed migration. Run 'pnpm db:generate' and commit the result."
+            git diff --stat -- packages/shared/drizzle
+            exit 1
+          fi
+
+      - name: Smoke test the unified production server
+        run: |
+          set -euo pipefail
+          BETTER_AUTH_SECRET=ci-secret-not-used-anywhere pnpm start &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo "health: $(curl -fsS http://127.0.0.1:3000/health)"
+          curl -fsS -o /dev/null http://127.0.0.1:3000/
+          echo "landing page served from the same port"

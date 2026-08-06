@@ -1,0 +1,23 @@
+packages:
+  - apps/*
+  - packages/*
+
+# The `colyseus` meta package and `@colyseus/core` peer-depend on every optional
+# transport/driver. We only use the WebSocket transport, so don't pull the rest
+# in — @colyseus/uwebsockets-transport in particular fetches uWebSockets.js from
+# a git repository, which pnpm blocks in subdependencies.
+peerDependencyRules:
+  ignoreMissing:
+    - '@colyseus/auth'
+    - '@colyseus/redis-driver'
+    - '@colyseus/redis-presence'
+    - '@colyseus/uwebsockets-transport'
+    - '@pm2/io'
+
+# Dependencies allowed to run install scripts (pnpm blocks them by default).
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+  unrs-resolver: true
