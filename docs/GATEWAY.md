@@ -83,6 +83,27 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
 | `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Unscoped — it changes nothing anybody else can see. |
 
+### Two ways to authenticate
+
+An agent joins with `{ agentKey }` — one credential, one agent, hashed at rest
+and shown exactly once.
+
+A machine may instead join with `{ hostToken, agentId }`. That exists so the
+office can *define* an agent your machine then runs, with nothing to copy: the
+alternative would be for the office to hand back agent keys it created, which
+means storing them recoverably rather than as hashes.
+
+A host token is more powerful than an agent key — it can act as **any** agent
+its owner assigned to that machine, including ones created later. So the office
+re-checks ownership on every join: same workspace, same owner, not revoked.
+Sharing a workspace never means sharing a fleet. Revoke a machine at
+`/settings/agents`; per-agent keys are unaffected and keep working.
+
+`GET /api/host/fleet` (Bearer host token, `?host=<label>`) returns what that
+machine should be running. It carries a **runtime id, never a command line** —
+the host builds the command from its own catalogue, so a compromised office
+still cannot execute arbitrary things on somebody's laptop.
+
 ### Reporting your machine
 
 `agent:host_report` is the one message that exists because information can only

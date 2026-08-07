@@ -31,6 +31,60 @@ function tokensMatch(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/**
+ * May this machine act as this agent?
+ *
+ * Pulled out of the two places that used to ask inline, because it is the one
+ * predicate that makes host tokens safe and it deserves to be readable, testable
+ * and impossible to get subtly different in two spots.
+ *
+ * Every clause is load-bearing:
+ * - **same workspace** — a token is scoped to the workspace it was made in.
+ * - **same owner** — sharing a workspace must not mean a teammate's laptop can
+ *   animate your agents. This is the one that stops a colleague's compromised
+ *   machine speaking as you.
+ * - **not revoked** — revoking an agent must not be undone by a machine that
+ *   still remembers it.
+ */
+export function hostMayActAs(
+  host: { workspaceId: string; ownerUserId: string },
+  agent: { workspaceId: string; ownerUserId: string; revoked: boolean } | null,
+): boolean {
+  if (!agent) return false;
+  if (agent.revoked) return false;
+  if (agent.workspaceId !== host.workspaceId) return false;
+  if (agent.ownerUserId !== host.ownerUserId) return false;
+  return true;
+}
+
+/**
+ * Should this machine be running this agent?
+ *
+ * Assignment on top of authorisation: `hostMayActAs` says the machine *could*,
+ * this says the office *asked it to*. Both, always — an agent assigned to a
+ * host it may not act as must not boot there.
+ */
+export function assignedToHost(
+  agent: {
+    workspaceId: string;
+    ownerUserId: string;
+    revoked: boolean;
+    enabled: boolean;
+    hostLabel: string | null;
+    runtimeId: string | null;
+    repoSpec: string | null;
+  },
+  host: { workspaceId: string; ownerUserId: string },
+  label: string,
+): boolean {
+  if (!hostMayActAs(host, agent)) return false;
+  if (!agent.enabled) return false;
+  if (agent.hostLabel !== label) return false;
+  // An agent with no runtime or no workspace was never set up to be launched;
+  // it is a per-agent-key agent that happens to live in the same workspace.
+  return typeof agent.runtimeId === 'string' && typeof agent.repoSpec === 'string';
+}
+
 export interface CreatedHostToken {
   id: string;
   label: string;
@@ -164,14 +218,21 @@ export async function fleetForHost(
     .where(eq(agents.workspaceId, host.workspaceId));
 
   return rows
-    .filter((row) => row.revokedAt === null && row.enabled)
-    // A host token acts only for its own owner's agents: sharing a workspace
-    // must not mean a teammate's laptop can run your fleet.
-    .filter((row) => row.ownerUserId === host.ownerUserId)
-    .filter((row) => row.hostLabel === hostLabel)
     .filter(
       (row): row is typeof row & { runtimeId: string; repoSpec: string } =>
-        typeof row.runtimeId === 'string' && typeof row.repoSpec === 'string',
+        assignedToHost(
+          {
+            workspaceId: host.workspaceId,
+            ownerUserId: row.ownerUserId,
+            revoked: row.revokedAt !== null,
+            enabled: row.enabled,
+            hostLabel: row.hostLabel,
+            runtimeId: row.runtimeId,
+            repoSpec: row.repoSpec,
+          },
+          host,
+          hostLabel,
+        ),
     )
     .map((row) => ({
       agentId: row.agentId,

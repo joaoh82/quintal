@@ -9,6 +9,7 @@ import {
   findAgentByKey,
   findAgentIdentityById,
   findHostByToken,
+  hostMayActAs,
   findRevokedAgentIds,
   getDb,
   recordAgentEvent,
@@ -55,12 +56,10 @@ export async function authenticateHostAgent(
   const host = await findHostByToken(db, token);
   if (!host) return null;
 
+  // `findAgentIdentityById` already refuses revoked agents, so `revoked: false`
+  // here is a statement about what came back, not an assumption.
   const agent = await findAgentIdentityById(db, agentId);
-  if (!agent) return null;
-  if (agent.workspaceId !== host.workspaceId) return null;
-  if (agent.ownerUserId !== host.ownerUserId) return null;
-
-  return agent;
+  return hostMayActAs(host, agent ? { ...agent, revoked: false } : null) ? agent : null;
 }
 
 export function hasScope(identity: AgentIdentity, scope: AgentScope): boolean {
