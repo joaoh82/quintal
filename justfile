@@ -13,6 +13,23 @@ install:
 dev:
     pnpm dev
 
+# Free Quintal's ports after an orphaned run (fixes EADDRINUSE on `just dev`).
+stop:
+    #!/usr/bin/env bash
+    for port in 3000 2567; do
+      pids=$(lsof -ti :$port 2>/dev/null || true)
+      if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        echo "freed port $port"
+      fi
+    done
+    pkill -f "acp-harness/dist/cli.js" 2>/dev/null || true
+    pkill -f "demo-agent" 2>/dev/null || true
+    echo "ports clear"
+
+# Stop anything stale, then start fresh.
+restart: stop dev
+
 # Build shared -> web -> server.
 build:
     pnpm build
