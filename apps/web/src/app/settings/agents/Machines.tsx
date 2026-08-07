@@ -88,6 +88,11 @@ export function Machines({
             </Button>
           </div>
           <p className="text-muted-foreground mt-2 text-[11px]">
+            Working inside the Quintal repo? The package isn&rsquo;t published yet,
+            so use <code className="font-mono">just acp login</code> with the same
+            flags — <code className="font-mono">npx</code> will 404.
+          </p>
+          <p className="text-muted-foreground mt-2 text-[11px]">
             Shown once, like an agent key — only a hash is stored. Treat it as more
             sensitive than one: it can act as <em>any</em> agent you assign to this
             machine, including ones you create later. Revoke it here if it leaks.
