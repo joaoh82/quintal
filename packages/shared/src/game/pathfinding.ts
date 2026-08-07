@@ -65,6 +65,10 @@ export function findPath(map: OfficeMap, start: TilePoint, goal: TilePoint): Til
 /**
  * Nearest walkable tile to `target`, searched outward in rings. Lets a click on
  * a desk walk you to the near side of it instead of doing nothing.
+ *
+ * Within a ring, the closest by straight-line distance wins — scan order would
+ * otherwise pick the top-left corner of the ring, which sends you around a wide
+ * desk the long way.
  */
 export function nearestWalkable(
   map: OfficeMap,
@@ -75,15 +79,23 @@ export function nearestWalkable(
 
   for (let radius = 1; radius <= maxRadius; radius += 1) {
     let best: TilePoint | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
     for (let dy = -radius; dy <= radius; dy += 1) {
       for (let dx = -radius; dx <= radius; dx += 1) {
         // Only the ring, not the filled square.
         if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
         const candidate = { x: target.x + dx, y: target.y + dy };
         if (!isWalkable(map, candidate.x, candidate.y)) continue;
-        if (best === null) best = candidate;
+
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = candidate;
+        }
       }
     }
+
     if (best) return best;
   }
   return null;

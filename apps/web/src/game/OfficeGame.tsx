@@ -74,6 +74,10 @@ export default function OfficeGame() {
       observer.disconnect();
       gameRef.current?.destroy(true);
       gameRef.current = null;
+      // The bridge is a module singleton and outlives the game. React's own
+      // listeners unsubscribe below, but anything that grabbed the bridge
+      // outside the tree would otherwise keep a handle on a dead scene.
+      gameBridge.clear();
     };
   }, []);
 

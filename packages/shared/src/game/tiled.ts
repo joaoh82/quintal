@@ -137,13 +137,26 @@ function parseZones(map: TiledMap): MapZone[] {
   return zones;
 }
 
+function isPlayerKind(value: string): value is PlayerKind {
+  return value === 'human' || value === 'agent';
+}
+
 function parseSpawns(map: TiledMap): SpawnPoint[] {
   const layer = objectLayer(map, LAYERS.spawns);
   if (!layer) return [];
 
   return layer.objects.map((object) => {
     const properties = propertyMap(object.properties);
-    const kind: PlayerKind = properties.kind === 'agent' ? 'agent' : 'human';
+    const kind = properties.kind;
+
+    // Same fail-loud contract as zones: defaulting an unknown value to "human"
+    // would turn a typo in Tiled into agents quietly losing their spawn points.
+    if (kind === undefined || !isPlayerKind(kind)) {
+      throw new Error(
+        `Spawn "${object.name}" (id ${object.id}) has kind "${kind ?? '<missing>'}" — expected human | agent`,
+      );
+    }
+
     return {
       name: object.name,
       kind,

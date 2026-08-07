@@ -128,11 +128,13 @@ export class OfficeScene extends Phaser.Scene {
     // Re-place so the *body* lands on the spawn tile, not the sprite's middle.
     this.#player.setPosition(this.#toSpriteX(spawn.x), this.#toSpriteY(spawn.y));
 
-    this.physics.add.collider(this.#player, walls);
-    this.physics.add.collider(this.#player, furniture);
-    // A blocked move means the route is stale — fall back to manual walking.
-    this.#player.body.onCollide = true;
-    this.physics.world.on('collide', () => this.#clearPath());
+    // A blocked move means the route is stale — drop it and stand still rather
+    // than grinding against the wall. Scoped to these two colliders on purpose:
+    // a world-wide 'collide' listener would also fire when another occupant
+    // bumps into scenery, cancelling your route for someone else's collision.
+    const onBlocked = () => this.#clearPath();
+    this.physics.add.collider(this.#player, walls, onBlocked);
+    this.physics.add.collider(this.#player, furniture, onBlocked);
 
     this.#zoneLabels();
     this.#debugStatic = this.add.graphics().setDepth(50).setVisible(false);
