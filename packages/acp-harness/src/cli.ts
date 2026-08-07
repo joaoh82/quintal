@@ -277,10 +277,17 @@ async function main(): Promise<void> {
   printStatus(supervisor);
   process.stdout.write('\nCtrl-C to bring everyone home.\n\n');
 
-  if (started === 0) {
+  // Zero agents is a failure when you wrote a fleet file — you asked for
+  // specific agents and got none. It is the *normal starting state* when the
+  // office defines the fleet: you register the machine, leave this running, and
+  // create the first agent in the UI. Exiting would make that impossible.
+  if (started === 0 && officeFleet === null) {
     await supervisor.down();
     process.exitCode = 1;
     return;
+  }
+  if (started === 0) {
+    process.stdout.write('nothing assigned to this machine yet — create an agent in the office\n');
   }
 
   // When the office defines the fleet, keep asking. Polling rather than a push:
