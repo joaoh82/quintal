@@ -1,18 +1,26 @@
 # Quintal
 
-**A spatial office where your AI agents are visible teammates.** Quintal is a 2D
-office — a tile map you walk around as an avatar, in the spirit of Gather.town —
-built for a primary user who is one developer plus their fleet of AI agents.
-Agents aren't a sidebar or a log tail: they get avatars, desks, status and
-presence, so a glance at the room tells you what your fleet is doing. Other
-humans can be invited in, but nothing assumes a team.
+**A spatial office where your AI agents are visible teammates.** Quintal gives
+your work a place: a 2D office you walk around as an avatar, built for one
+developer plus their fleet of AI agents. Agents aren't a sidebar or a log tail —
+they get avatars, desks, status and presence, so a glance at the room tells you
+what your fleet is doing and where. Other humans can be invited in, but nothing
+assumes a team.
 
-> **Under construction.** This is early, and honest about it: today you can sign
-> in and walk a single avatar around a 2D office — tile map, collision,
-> click-to-move pathfinding, zones. Nobody else can see you yet: there is no
-> networking, no voice and no agent gateway. Building in public means you can
-> watch that happen — every file here is world-readable and written with that in
-> mind.
+![Two people standing in the Quintal office: avatars on a tile map with name labels above them, one mid-sentence in a speech bubble, the online roster in the corner, and the Agent Bay carpeted across the lower half of the room](./screenshots/office.png)
+
+> **Under construction.** This is early, and honest about it.
+>
+> **Works today:** sign in with a magic link, walk around a tile map with
+> collision and click-to-move pathfinding, and share the office with other
+> people in real time — server-authoritative movement, name labels, a roster,
+> and proximity chat that only carries as far as your voice would.
+>
+> **Not yet:** the agent gateway, so the fleet the whole thing is *for* can't
+> log in and walk around — that's next. No voice, no Docker image.
+>
+> Building in public means you can watch that happen — every file here is
+> world-readable and written with that in mind.
 
 ## Quickstart
 
@@ -29,7 +37,9 @@ provider configured, the magic link is **printed to the server console** — tha
 is a supported way to run a solo instance, not just a dev hack.
 
 You land in the office at `/office`. **WASD or arrow keys** to walk, **click**
-to route there with pathfinding, **Z** to show the zone and collision overlay.
+to route there with pathfinding, **Enter** to chat with whoever is nearby, **Z**
+to show the zone and collision overlay. Open a second browser, sign in as
+someone else, and you'll see each other.
 
 The database is created for you at `data/quintal.db` and migrations run on boot.
 There is no setup command to forget.
@@ -40,6 +50,7 @@ There is no setup command to forget.
 | `pnpm build` | Build shared → web → server |
 | `pnpm start` | **One** process serving web + game server on one port |
 | `pnpm typecheck` | Typecheck every package |
+| `pnpm test` | Run the test suite (movement, pathfinding, map, state sync) |
 | `pnpm db:generate` | Generate a migration after changing the schema |
 | `pnpm db:seed` | Create a local demo user + personal workspace (idempotent) |
 
@@ -80,10 +91,10 @@ apps/
   server/     The production entry point. Boots Colyseus, applies database
               migrations, and in production initialises Next.js in-process.
 packages/
-  shared/     Types + constants both apps import (PlayerState with
-              kind: "human" | "agent", map zones, WS message enums), the Tiled
-              map + its parser, A* pathfinding, the game/UI event bridge, and
-              the Drizzle schema, migrations and database client.
+  shared/     Everything both sides must agree on: the Tiled map and its
+              parser, the movement simulation, A* pathfinding, the Colyseus
+              room schema and wire protocol, the game/UI event bridge, and the
+              Drizzle schema, migrations and database client.
 tools/        One-shot scripts, e.g. the generator that bootstrapped the map.
 ```
 
@@ -95,12 +106,24 @@ self-hosters never run a migration command.
 
 **The world** is a [Tiled](https://www.mapeditor.org/) map at
 `packages/shared/maps/hq.json` — three meeting rooms, an open floor, and a large
-central Agent Bay — rendered with [Phaser 3](https://phaser.io). The map lives in
-`packages/shared` rather than in the web app because the game server will read
-the same file: the walkability grid the client's pathfinder uses is the one the
-server will simulate against, not a second opinion. Game state stays inside
-Phaser and reaches React through a typed event bridge, so a 60fps loop never
-touches the reconciler.
+central Agent Bay — rendered with [Phaser 3](https://phaser.io). It lives in
+`packages/shared` because the game server reads the same file: the walkability
+grid the browser predicts against is the one the server simulates against, not a
+second opinion that drifts. Game state stays inside Phaser and reaches React
+through a typed event bridge, so a 60fps loop never touches the reconciler.
+
+**Movement is server-authoritative.** Clients send *intent* — a direction, or a
+tile to walk to — and the room simulates at 20Hz and broadcasts positions;
+position never travels client-to-server, so there is nothing to lie with. The
+browser predicts locally by running *the same movement code* from
+`packages/shared`, which is the only reason prediction and authority stay in
+agreement; disagreements are eased away, and large ones snapped. Other people
+are drawn a fraction of a second behind real time and interpolated, because
+smooth beats momentarily accurate in a room you walk around in.
+
+**Chat** carries 12 tiles and is stored nowhere. It exists before agents do
+because it's the medium agents will speak through — the same proximity
+broadcast, reading the same `kind` field.
 
 Art is [Kenney's](https://kenney.nl) CC0 RPG Urban Pack — see
 [apps/web/public/assets/CREDITS.md](./apps/web/public/assets/CREDITS.md).
