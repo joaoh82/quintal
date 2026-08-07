@@ -23,6 +23,14 @@ npx quintal-acp up
 
 Create agents and get keys at `/settings/agents` in your office.
 
+**From inside this repo**, before it's published, use the root script — nothing
+in the workspace depends on this package, so pnpm never links its bin:
+
+```bash
+pnpm build          # or: pnpm --filter quintal-acp build
+pnpm acp up
+```
+
 ## Fleet mode
 
 The primary user runs three to ten agents across mixed harnesses, so the config

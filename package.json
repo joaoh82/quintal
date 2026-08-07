@@ -18,7 +18,8 @@
     "db:migrate": "pnpm --filter @quintal/shared db:migrate",
     "db:seed": "pnpm --filter @quintal/shared db:seed",
     "db:studio": "pnpm --filter @quintal/shared db:studio",
-    "demo-agent": "tsx scripts/demo-agent.ts"
+    "demo-agent": "tsx scripts/demo-agent.ts",
+    "acp": "node packages/acp-harness/dist/cli.js"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
