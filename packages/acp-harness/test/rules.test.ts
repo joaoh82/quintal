@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadFleet, parseFleet, splitCommand, ConfigError } from '../src/config.js';
+import { resolveZone } from '../src/mcp/bridge.js';
 import { buildEnvelope, selectWindow, WINDOW_SIZE } from '../src/runner/context.js';
 import { MAX_BUBBLES, statusForTool, toBubbles } from '../src/runner/outbound.js';
 import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
@@ -282,5 +283,42 @@ describe('speaking in an office', () => {
     );
     assert.equal(statusForTool('Grep', { pattern: 'TODO' }), 'searching TODO');
     assert.ok(statusForTool('Edit', { file_path: '/a/b/c.ts' }).length <= 60);
+  });
+});
+
+describe('walking somewhere', () => {
+  const ZONES = [
+    { id: 'agent-bay', label: 'Agent Bay', kind: 'agent_area' },
+    { id: 'focus', label: 'Focus Room', kind: 'private' },
+    { id: 'huddle', label: 'Huddle', kind: 'private' },
+  ];
+
+  it('takes a zone id', () => {
+    assert.equal(resolveZone(ZONES, 'focus'), 'focus');
+  });
+
+  it('takes the human label, which is what somebody actually says', () => {
+    assert.equal(resolveZone(ZONES, 'Focus Room'), 'focus');
+    assert.equal(resolveZone(ZONES, 'agent bay'), 'agent-bay');
+  });
+
+  it('accepts a partial label — "the focus room" is one phrase to a person', () => {
+    assert.equal(resolveZone(ZONES, 'Focus'), 'focus');
+  });
+
+  it('prefers an exact id over a label that merely contains it', () => {
+    const zones = [
+      { id: 'huddle', label: 'Huddle', kind: 'private' },
+      { id: 'quiet', label: 'The huddle annex', kind: 'private' },
+    ];
+    assert.equal(resolveZone(zones, 'huddle'), 'huddle');
+  });
+
+  it('names the zones that do exist when asked for one that does not', () => {
+    assert.throws(() => resolveZone(ZONES, 'the roof'), /Focus Room/);
+  });
+
+  it('refuses an empty request rather than picking one', () => {
+    assert.throws(() => resolveZone(ZONES, '   '), /needs a zone/);
   });
 });

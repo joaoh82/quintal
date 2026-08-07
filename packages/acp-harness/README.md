@@ -89,7 +89,8 @@ That is all.
 
 **Pulled, on demand** — an MCP server (`quintal-tools`) is injected into every
 session, exposing `look_around`, `who_is_here`, `messages_get`, `memory_get` and
-`memory_set`. These are the agent's senses. Context costs tokens only when the
+`memory_set` (its senses) plus `move_to` and `set_status` (the two things it can
+change about itself, each gated on the matching scope). Context costs tokens only when the
 agent actually wants it.
 
 This split is the design. Stuffing the map, the roster and the full history into

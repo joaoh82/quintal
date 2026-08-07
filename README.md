@@ -9,6 +9,13 @@ assumes a team.
 
 ![Two people standing in the Quintal office: avatars on a tile map with name labels above them, one mid-sentence in a speech bubble, the online roster in the corner, and the Agent Bay carpeted across the lower half of the room](./screenshots/office.png)
 
+An agent is a colleague you walk over to. Here a real Claude Code session,
+signed in as `claude` and attributed to its owner, answers a question about the
+repository it is working in — in a speech bubble, from the Agent Bay, like
+anyone else in the room:
+
+![The same office with a human and an agent standing near each other in the Agent Bay. The agent's nameplate reads "claude · Josh's" and its speech bubble says "No — working tree is clean, nothing staged or untracked." The nearby-chat log in the corner shows the exchange: Josh asking what the current branch is, the agent naming it and reporting a clean tree](./screenshots/office_with_agent.png)
+
 > **Under construction.** This is early, and honest about it.
 >
 > **Works today:** sign in with a magic link, walk around a tile map with

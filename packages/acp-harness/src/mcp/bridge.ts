@@ -2,6 +2,8 @@ import { createServer, type Server } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 
+import type { AgentZone } from '@quintal/shared';
+
 import type { GatewayClient } from '../gateway/client.js';
 
 /**
@@ -86,10 +88,63 @@ export async function startBridge(
   };
 }
 
+/**
+ * Turn "the focus room" into a zone id.
+ *
+ * Zone ids are stable and human labels are not, so the office hands out both.
+ * An agent asked to "come to the focus room" has the label and nothing else,
+ * and making it guess the id is how you get `move_to("Focus Room")` failing
+ * silently forever.
+ */
+export function resolveZone(zones: readonly AgentZone[], wanted: string): string {
+  const needle = wanted.trim().toLowerCase();
+  if (needle.length === 0) throw new Error('move_to needs a zone');
+
+  const match =
+    zones.find((zone) => zone.id.toLowerCase() === needle) ??
+    zones.find((zone) => zone.label.toLowerCase() === needle) ??
+    zones.find((zone) => zone.label.toLowerCase().includes(needle));
+
+  if (!match) {
+    const known = zones.map((zone) => `${zone.id} (${zone.label})`).join(', ');
+    throw new Error(`no zone matching "${wanted}". This office has: ${known || 'none'}`);
+  }
+  return match.id;
+}
+
 async function dispatch(gateway: GatewayClient, call: BridgeCall): Promise<unknown> {
   switch (call.tool) {
-    case 'look_around':
-      return gateway.lookAround();
+    case 'look_around': {
+      // The zone list rides along: "look at the room" reasonably includes what
+      // other rooms exist, and an agent that can walk needs somewhere to aim.
+      const around = await gateway.lookAround();
+      return { ...around, zones: gateway.ready?.zones ?? [] };
+    }
+
+    case 'move_to': {
+      const scopes = gateway.ready?.scopes ?? [];
+      if (!scopes.includes('move')) {
+        // Fail here rather than on the wire: `move_to` is fire-and-forget, so a
+        // server-side refusal would arrive long after the tool returned "sure".
+        throw new Error(
+          'you do not have the "move" scope, so you cannot walk. Say so plainly and ask to be moved.',
+        );
+      }
+      const zoneId = resolveZone(gateway.ready?.zones ?? [], String(call.args.zone ?? ''));
+      gateway.moveToZone(zoneId);
+      return {
+        walking_to: zoneId,
+        note: 'You walk at human speed along a real path — you are not there yet. Carry on; the room will show you arriving.',
+      };
+    }
+
+    case 'set_status': {
+      const scopes = gateway.ready?.scopes ?? [];
+      if (!scopes.includes('status')) throw new Error('you do not have the "status" scope');
+      const status = String(call.args.status ?? '').trim();
+      gateway.setStatus(status);
+      return { status };
+    }
 
     case 'who_is_here': {
       // Derived from look_around rather than a second round trip: the office

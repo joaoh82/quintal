@@ -51,9 +51,42 @@ const TOOLS = [
     description:
       'Look at the room you are standing in: which zone you are in, your tile, ' +
       'and everyone nearby with their kind (human or agent), status and distance ' +
-      'in tiles. Call this before answering questions about who is present or ' +
+      'in tiles. Also lists every zone in the office, which is where move_to can ' +
+      'take you. Call this before answering questions about who is present or ' +
       'where you are — your pushed context deliberately does not include it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'move_to',
+    description:
+      'Walk to a zone. Give its id or its human label ("focus", "Focus Room") — ' +
+      'call look_around if you are unsure which exist. You walk at human speed ' +
+      'along a real path and arrive seconds later, so this returns before you ' +
+      'get there; it is a request to walk, not teleportation. Use it when ' +
+      'somebody asks you to come somewhere, or when your work belongs in a ' +
+      'particular room. Do not wander on your own.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        zone: { type: 'string', description: 'Zone id or human label.' },
+      },
+      required: ['zone'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'set_status',
+    description:
+      'Set the short line under your nameplate — how the room sees what you are ' +
+      'doing without interrupting you. Keep it under 60 characters and in the ' +
+      'present tense: "reading auth.ts", "waiting for review". Pass an empty ' +
+      'string when you go idle. This is not chat: nobody is notified.',
+    inputSchema: {
+      type: 'object',
+      properties: { status: { type: 'string' } },
+      required: ['status'],
+      additionalProperties: false,
+    },
   },
   {
     name: 'who_is_here',
