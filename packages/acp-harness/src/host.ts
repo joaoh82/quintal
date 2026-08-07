@@ -60,17 +60,25 @@ interface FleetResponse {
   agents: { agentId: string; name: string; runtimeId: string; repoSpec: string }[];
 }
 
-/** Ask the office what this machine should be running. */
+/**
+ * Ask the office what this machine should be running.
+ *
+ * `label` null means "you tell me": the office answers for the name the token
+ * was registered under. That is the right default, because the name lives in
+ * the UI where somebody typed it — guessing the OS hostname instead produces a
+ * machine called `Joaos-MBP-2.home` asking about a fleet assigned to `laptop`,
+ * and a confidently empty answer.
+ */
 export async function fetchFleet(
   host: StoredHost,
-  label: string,
+  label: string | null,
 ): Promise<FleetResponse> {
   if (!host.token.startsWith(HOST_TOKEN_PREFIX)) {
     throw new ConfigError(`a host token starts with "${HOST_TOKEN_PREFIX}"`);
   }
 
   const url = new URL('/api/host/fleet', host.url);
-  url.searchParams.set('host', label);
+  if (label !== null) url.searchParams.set('host', label);
 
   const response = await fetch(url, {
     headers: { authorization: `Bearer ${host.token}` },
@@ -144,6 +152,16 @@ export function toAgentConfigs(
   return { agents, skipped };
 }
 
-export function labelFor(host: StoredHost): string {
-  return (host.label ?? '').trim() || hostLabel();
+/**
+ * The name this machine answers to, or null to let the office decide.
+ *
+ * Only an explicit `--host` or a stored label overrides it. `hostname()` is
+ * deliberately *not* a fallback here — see `fetchFleet`.
+ */
+export function labelFor(host: StoredHost): string | null {
+  const stored = (host.label ?? '').trim();
+  return stored.length > 0 ? stored : null;
 }
+
+/** This machine's OS name, for the host report only. */
+export { hostLabel };

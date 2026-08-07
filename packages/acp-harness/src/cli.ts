@@ -228,24 +228,28 @@ async function main(): Promise<void> {
     const localFleet = stringFlag(flags, 'config') ?? findFleetFile(cwd);
 
     if (localFleet === null && stored !== null) {
+      // Null lets the office answer for the name the token was registered
+      // under, which is the name somebody typed into the UI.
       const label = stringFlag(flags, 'host') ?? labelFor(stored);
       reposDir = stringFlag(flags, 'repos-dir')
         ? expandHome(String(stringFlag(flags, 'repos-dir')))
         : (stored.reposDir ?? defaultReposDir());
 
       const mapId = stringFlag(flags, 'map') ?? 'hq';
-      const fleet = await fetchFleet(stored, label);
+      const fleet = await fetchFleet(stored, label ?? null);
       const built = toAgentConfigs(fleet, stored, reposDir, mapId);
       agents = built.agents;
       only = positional[1];
-      officeFleet = { host: stored, label, mapId };
+      // Poll under the name the office actually used, so a later rename in the
+      // UI is visible rather than silently answered for the old one.
+      officeFleet = { host: stored, label: fleet.host.label, mapId };
 
       for (const skip of built.skipped) {
         process.stderr.write(`skipping "${skip.name}": ${skip.why}\n`);
       }
       if (command === 'up' && only === undefined) {
         process.stdout.write(
-          `fleet: ${agents.length} agent(s) assigned to "${label}" by ${fleet.host.owner}\n`,
+          `fleet: ${agents.length} agent(s) assigned to "${fleet.host.label}" by ${fleet.host.owner}\n`,
         );
       }
     } else {
@@ -308,7 +312,10 @@ async function main(): Promise<void> {
         }
       })();
     }, FLEET_POLL_MS);
-    poll.unref();
+    // Deliberately *not* unref'd: with nothing assigned yet there are no open
+    // sockets, so this timer is the only thing keeping the process alive — and
+    // waiting for the first agent is the whole point of running it.
+    void poll;
   }
 
   // A running fleet answers SIGUSR2 with a status table — useful when the logs
