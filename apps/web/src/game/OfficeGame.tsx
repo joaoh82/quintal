@@ -184,6 +184,7 @@ export default function OfficeGame() {
         <ChatPanel
           messages={messages}
           focused={chatFocused}
+          roster={roster}
           onSend={send}
           onFocusChange={setChatFocused}
         />
@@ -223,7 +224,7 @@ export default function OfficeGame() {
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · @name to address · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
       </div>
     </div>

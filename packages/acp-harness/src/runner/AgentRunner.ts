@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
-import type { AgentChatEvent, AgentMentionEvent } from '@quintal/shared';
+import { isAddressed, type AgentChatEvent, type AgentMentionEvent } from '@quintal/shared';
 
 import { AgentProcess } from '../acp/agent-process.js';
 import type { AgentConfig } from '../config.js';
@@ -39,8 +39,11 @@ const PERMISSION_TIMEOUT_MS = 120_000;
 /**
  * How close someone must be for an unaddressed remark to count as talking to
  * you. Roughly "standing at your desk" rather than "somewhere in the room".
+ *
+ * A fallback only: the office serves its own value in `agent:ready`, because an
+ * owner who widens walk-up distance in settings expects agents to obey it.
  */
-const WALK_UP_RADIUS_TILES = 3;
+const WALK_UP_RADIUS_FALLBACK_TILES = 3;
 
 export class AgentRunner {
   readonly name: string;
@@ -266,7 +269,7 @@ export class AgentRunner {
     // than starting a turn about it.
     if (
       message.fromUserId === ready.ownerUserId &&
-      mentionsMe(message.text, ready.name) &&
+      isAddressed(message.text, ready.name) &&
       this.answerPermission(stripMention(message.text, ready.name))
     ) {
       return;
@@ -275,7 +278,7 @@ export class AgentRunner {
     // Other agents are context, not conversation. Two bots within earshot
     // acknowledging each other is the failure mode that ate Buzz's rooms, and
     // the only cure is refusing to start the loop.
-    if (message.fromKind === 'agent' && !mentionsMe(message.text, ready.name)) return;
+    if (message.fromKind === 'agent' && !isAddressed(message.text, ready.name)) return;
 
     if (!this.#addressesMe(message, distance, ready.name)) return;
 
@@ -305,14 +308,16 @@ export class AgentRunner {
    * exactly as three people would.
    */
   #addressesMe(message: AgentChatEvent, distance: number | null, myName: string): boolean {
-    if (mentionsMe(message.text, myName)) return true;
+    if (isAddressed(message.text, myName)) return true;
 
     const others = this.#gateway
       .occupants()
       .filter((occupant) => occupant.kind === 'agent' && occupant.name !== myName);
-    if (others.some((other) => mentionsMe(message.text, other.name))) return false;
+    if (others.some((other) => isAddressed(message.text, other.name))) return false;
 
-    return distance !== null && distance <= WALK_UP_RADIUS_TILES;
+    const walkUp =
+      this.#gateway.ready?.limits.walkUpRadiusTiles ?? WALK_UP_RADIUS_FALLBACK_TILES;
+    return distance !== null && distance <= walkUp;
   }
 
   /** A mention carries no distance: it reached us from anywhere on the map. */
@@ -693,11 +698,6 @@ function textOf(content: unknown): string {
 function stripMention(text: string, name: string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return text.replace(new RegExp(`^\\s*@?${escaped}[,:]?\\s*`, 'iu'), '').trim();
-}
-
-function mentionsMe(text: string, name: string): boolean {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^\\p{L}\\p{N}])@?${escaped}([^\\p{L}\\p{N}]|$)`, 'iu').test(text);
 }
 
 function describe(error: unknown): string {

@@ -74,7 +74,7 @@ than being told. An agent is kicked promptly, not instantly.)
 
 | Message | Payload | Scope | Notes |
 | --- | --- | --- | --- |
-| `agent:say` | `{ text }` | `chat` | Heard within 12 tiles. Rendered as a speech bubble and in nearby chat, badged as an agent. |
+| `agent:say` | `{ text }` | `chat` | Heard within earshot (12 tiles by default — see `/settings`). Rendered as a speech bubble and in nearby chat, badged as an agent. |
 | `agent:move_to` | `{ zoneId }` or `{ x, y }` | `move` | The server pathfinds and walks you there at human speed. |
 | `agent:set_status` | `{ status }` | `status` | ≤ 60 chars. Renders under your nameplate: `"running tests…"`. |
 | `agent:look_around` | `{ requestId }` | — | Who and what is around you. |
@@ -115,8 +115,8 @@ your own memory are not scoped: they change nothing anybody else can see.
 | Message | When |
 | --- | --- |
 | `agent:ready` | Once, immediately after joining. Your identity, position, scopes, **every zone on the map**, and the exact limits in force. |
-| `agent:nearby_chat` | Somebody within 12 tiles spoke. Carries `distance`. |
-| `agent:mention` | Somebody said your name, from **anywhere** on the map. No distance. |
+| `agent:nearby_chat` | Somebody within earshot spoke. Carries `distance`. Earshot is instance-configurable at `/settings`; `agent:ready` tells you the value in force. |
+| `agent:mention` | Somebody wrote `@you`, from **anywhere** on the map. No distance. |
 | `agent:roster` | On join, and whenever the room changes. Who is around, and which zone you are in. |
 | `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
 | `agent:result` | Reply to any `requestId`-carrying message. |
@@ -125,10 +125,20 @@ your own memory are not scoped: they change nothing anybody else can see.
 ### Mentions exist so you are reachable
 
 Proximity chat is the default because the office is a place. But an agent that
-can only be addressed by walking over to it is an agent nobody uses. Saying its
-name reaches it from anywhere — matched on a word boundary, case-insensitively,
-with or without a leading `@`, so an agent called `Ana` does not wake up for
-"banana".
+can only be addressed by walking over to it is an agent nobody uses. `@name`
+reaches it from anywhere on the map, at any distance.
+
+**The `@` is required.** Bare-name matching was ambiguous in exactly the way you
+would expect — "the reviewer said no" woke the reviewer, and an agent called
+`Ana` had to be defended against "banana". The sigil makes intent explicit, and
+gives the client something unambiguous to autocomplete against. Matching is
+case-insensitive, and `@` only counts at a word boundary, so `josh@quintal.sh`
+does not summon anybody called `quintal`.
+
+A reply to an `@mention` finds the person who asked even if they are out of
+earshot, for `replyWindowSeconds` after the question (default 90, `0` disables
+it). Otherwise asking an agent across the room is a question you never hear the
+answer to.
 
 ---
 

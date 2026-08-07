@@ -47,19 +47,3 @@ export class ChatLog {
     }
   }
 }
-
-/**
- * Was this agent named?
- *
- * Mentions reach an agent from anywhere on the map, so the test has to be
- * tighter than "the text contains this substring" — an agent called "Ana"
- * shouldn't wake up for the word "banana". Matches on a word boundary,
- * case-insensitively, with or without a leading @.
- */
-export function mentions(text: string, name: string): boolean {
-  const needle = name.trim();
-  if (needle.length === 0) return false;
-
-  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^\\p{L}\\p{N}])@?${escaped}([^\\p{L}\\p{N}]|$)`, 'iu').test(text);
-}

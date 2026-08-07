@@ -10,8 +10,8 @@ import {
   AgentMessage,
   AgentServerMessage,
   CHAT_MAX_LENGTH,
-  CHAT_RADIUS_TILES,
   ClientMessage,
+  DEFAULT_OFFICE_SETTINGS,
   MESSAGES_GET_MAX,
   OfficePlayer,
   OfficeState,
@@ -29,6 +29,8 @@ import {
   stepMovement,
   tileCentre,
   toTile,
+  isAddressed,
+  mentionedNames,
   zoneAt,
   type AgentChatEvent,
   type AgentErrorPayload,
@@ -55,6 +57,7 @@ import {
   type MessagesGetResult,
   type MoveIntent,
   type OfficeMap,
+  type OfficeSettings,
   type StatusPayload,
   type TilePoint,
   type WalkToPayload,
@@ -64,6 +67,7 @@ import {
   MemorySlugError,
   getAgentMemory,
   getDb,
+  getOfficeSettings,
   setAgentMemory,
   type AgentIdentity,
 } from '@quintal/shared/db';
@@ -82,7 +86,7 @@ import {
 } from '../agents/gateway.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
-import { ChatLog, mentions, type RoomMessage } from './chat-log.js';
+import { ChatLog, type RoomMessage } from './chat-log.js';
 
 interface OfficeRoomOptions {
   mapId?: unknown;
@@ -132,6 +136,21 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
   #revocationTimer?: NodeJS.Timeout;
+  #settingsTimer?: NodeJS.Timeout;
+
+  /** Refreshed from the database, so a change in /settings takes effect live. */
+  #settings: OfficeSettings = { ...DEFAULT_OFFICE_SETTINGS };
+
+  /**
+   * Who addressed whom from out of earshot, and when.
+   *
+   * Being reachable by name across the map is only half a conversation: without
+   * this, an agent summoned from the far side of the office answers into empty
+   * air, because its reply travels by normal proximity. Keyed
+   * `speaker -> [listeners]`, short-lived, so a reply finds the person who
+   * asked and nobody else.
+   */
+  readonly #awaitingReply = new Map<string, Map<string, number>>();
 
   override onCreate(options: OfficeRoomOptions): void {
     const mapId = typeof options.mapId === 'string' ? options.mapId : 'hq';
@@ -180,6 +199,9 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(AgentMessage.MemorySet, (client, payload: AgentMemorySetPayload) =>
       void this.#onAgentMemorySet(client, payload),
     );
+
+    void this.#refreshSettings();
+    this.#settingsTimer = setInterval(() => void this.#refreshSettings(), 10_000);
 
     this.#heartbeatTimer = setInterval(() => this.#sendHeartbeats(), AGENT_HEARTBEAT_MS);
     this.#revocationTimer = setInterval(
@@ -295,6 +317,8 @@ export class OfficeRoom extends Room<OfficeState> {
         messagesGetMax: MESSAGES_GET_MAX,
         memoryMaxBytes: AGENT_MEMORY_MAX_BYTES,
         coreMemoryMaxBytes: AGENT_CORE_MEMORY_MAX_BYTES,
+        chatRadiusTiles: this.#settings.chatRadiusTiles,
+        walkUpRadiusTiles: this.#settings.walkUpRadiusTiles,
       },
     };
     client.send(AgentServerMessage.Ready, ready);
@@ -344,6 +368,7 @@ export class OfficeRoom extends Room<OfficeState> {
   override onDispose(): void {
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     if (this.#revocationTimer) clearInterval(this.#revocationTimer);
+    if (this.#settingsTimer) clearInterval(this.#settingsTimer);
     logger.info(`[office] room ${this.roomId} disposed`);
   }
 
@@ -497,6 +522,7 @@ export class OfficeRoom extends Room<OfficeState> {
   #deliverChat(sessionId: string, speaker: OfficePlayer, text: string): void {
     const sentAt = Date.now();
     const tile = this.#tileOf(speaker);
+    const radius = this.#settings.chatRadiusTiles;
 
     const record: RoomMessage = {
       from: sessionId,
@@ -519,16 +545,26 @@ export class OfficeRoom extends Room<OfficeState> {
       sentAt,
     };
 
+    const addressed = mentionedNames(text);
+    const owed = this.#collectReplyDebt(sessionId, sentAt);
+
     for (const [listenerId, listener] of this.state.players) {
       const distance = this.#tileDistance(speaker, listener);
-      const withinEarshot = distance <= CHAT_RADIUS_TILES;
-      const agent = this.#agents.get(listenerId);
+      const withinEarshot = distance <= radius;
+      const byName = addressed.includes(listener.name.toLowerCase());
+      // Somebody who addressed this speaker from across the room is owed the
+      // answer, wherever they are standing now.
+      const owedThis = owed.has(listenerId);
+
+      if (!withinEarshot && !byName && !owedThis) continue;
+
       const target = this.clients.getById(listenerId);
       if (!target) continue;
 
+      const agent = this.#agents.get(listenerId);
       if (agent) {
         if (withinEarshot) {
-          const event: AgentChatEvent = {
+          target.send(AgentServerMessage.NearbyChat, {
             from: sessionId,
             fromUserId: speaker.userId,
             fromName: speaker.name,
@@ -536,10 +572,8 @@ export class OfficeRoom extends Room<OfficeState> {
             text,
             distance: round(distance),
             sentAt,
-          };
-          target.send(AgentServerMessage.NearbyChat, event);
-        } else if (listenerId !== sessionId && mentions(text, agent.name)) {
-          // Out of earshot but named: reaches it anyway, without a distance.
+          } satisfies AgentChatEvent);
+        } else if (listenerId !== sessionId) {
           target.send(AgentServerMessage.Mention, {
             from: sessionId,
             fromUserId: speaker.userId,
@@ -549,10 +583,49 @@ export class OfficeRoom extends Room<OfficeState> {
             sentAt,
           });
         }
-        continue;
+      } else {
+        target.send(ServerMessage.Chat, humanPayload);
       }
 
-      if (withinEarshot) target.send(ServerMessage.Chat, humanPayload);
+      // Addressing somebody out of earshot opens a short window for their
+      // reply to come back to you.
+      if (byName && !withinEarshot && listenerId !== sessionId) {
+        this.#oweReply(listenerId, sessionId, sentAt);
+      }
+    }
+  }
+
+  /** Record that `speaker` owes `listener` a reply they can actually hear. */
+  #oweReply(speakerId: string, listenerId: string, at: number): void {
+    if (this.#settings.replyWindowSeconds <= 0) return;
+    const debts = this.#awaitingReply.get(speakerId) ?? new Map<string, number>();
+    debts.set(listenerId, at);
+    this.#awaitingReply.set(speakerId, debts);
+  }
+
+  /** Who is still owed a reply from this speaker, clearing what has expired. */
+  #collectReplyDebt(speakerId: string, now: number): Set<string> {
+    const debts = this.#awaitingReply.get(speakerId);
+    if (!debts) return new Set();
+
+    const windowMs = this.#settings.replyWindowSeconds * 1000;
+    const live = new Set<string>();
+    for (const [listenerId, at] of debts) {
+      if (now - at <= windowMs) live.add(listenerId);
+      else debts.delete(listenerId);
+    }
+
+    // One reply settles the debt; a conversation that continues re-opens it
+    // through the normal addressing path.
+    this.#awaitingReply.delete(speakerId);
+    return live;
+  }
+
+  async #refreshSettings(): Promise<void> {
+    try {
+      this.#settings = await getOfficeSettings(getDb());
+    } catch (error: unknown) {
+      logger.error('[office] could not read settings', error);
     }
   }
 
@@ -691,8 +764,10 @@ export class OfficeRoom extends Room<OfficeState> {
     // way to read the whole office from a corner of it.
     const matches = this.#chatLog.recent((message) => {
       if (scope === 'zone') return myZone !== null && message.zoneId === myZone;
-      return Math.hypot(message.x - player.x, message.y - player.y) / this.#map.tileSize
-        <= CHAT_RADIUS_TILES;
+      return (
+        Math.hypot(message.x - player.x, message.y - player.y) / this.#map.tileSize <=
+        this.#settings.chatRadiusTiles
+      );
     }, limit);
 
     const result: MessagesGetResult = {
@@ -935,7 +1010,7 @@ export class OfficeRoom extends Room<OfficeState> {
     let count = 0;
     for (const [, listener] of this.state.players) {
       if (listener === speaker) continue;
-      if (this.#tileDistance(speaker, listener) <= CHAT_RADIUS_TILES) count += 1;
+      if (this.#tileDistance(speaker, listener) <= this.#settings.chatRadiusTiles) count += 1;
     }
     return count;
   }

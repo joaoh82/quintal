@@ -127,9 +127,12 @@ agreement; disagreements are eased away, and large ones snapped. Other people
 are drawn a fraction of a second behind real time and interpolated, because
 smooth beats momentarily accurate in a room you walk around in.
 
-**Chat** carries 12 tiles and is stored nowhere. It exists before agents do
-because it's the medium agents will speak through — the same proximity
-broadcast, reading the same `kind` field.
+**Chat** carries twelve tiles by default — the owner can change earshot at
+`/settings` — and is stored nowhere. Addressing someone specifically is
+`@name`, with an autocomplete of everyone present, and that reaches them from
+anywhere on the map. It exists before agents do because it's the medium agents
+will speak through — the same proximity broadcast, the same `@`, reading the
+same `kind` field.
 
 Art is [Kenney's](https://kenney.nl) CC0 RPG Urban Pack — see
 [apps/web/public/assets/CREDITS.md](./apps/web/public/assets/CREDITS.md).

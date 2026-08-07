@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { ChatLog, mentions, type RoomMessage } from './chat-log.js';
+import { ChatLog, type RoomMessage } from './chat-log.js';
 
 const message = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
   from: 's1',
@@ -14,44 +14,6 @@ const message = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
   y: 0,
   zoneId: null,
   ...overrides,
-});
-
-describe('mentions', () => {
-  it('matches the name on its own', () => {
-    assert.equal(mentions('reviewer can you look at this', 'reviewer'), true);
-  });
-
-  it('matches with an @ and regardless of case', () => {
-    assert.equal(mentions('hey @Reviewer', 'reviewer'), true);
-    assert.equal(mentions('REVIEWER!', 'reviewer'), true);
-  });
-
-  it('does not match inside a longer word', () => {
-    // The reason this is a word-boundary test and not `includes`: an agent
-    // called Ana must not wake up for "banana".
-    assert.equal(mentions('I ate a banana', 'ana'), false);
-    assert.equal(mentions('reviewership', 'reviewer'), false);
-  });
-
-  it('matches at either end of the sentence', () => {
-    assert.equal(mentions('reviewer', 'reviewer'), true);
-    assert.equal(mentions('ask reviewer', 'reviewer'), true);
-  });
-
-  it('treats punctuation as a boundary', () => {
-    assert.equal(mentions('reviewer, please', 'reviewer'), true);
-    assert.equal(mentions('(reviewer)', 'reviewer'), true);
-  });
-
-  it('is not fooled by regex characters in a name', () => {
-    assert.equal(mentions('ask c++ about it', 'c++'), true);
-    assert.equal(mentions('anything at all', '.*'), false);
-  });
-
-  it('ignores an empty name', () => {
-    assert.equal(mentions('anything', ''), false);
-    assert.equal(mentions('anything', '   '), false);
-  });
 });
 
 describe('ChatLog', () => {
