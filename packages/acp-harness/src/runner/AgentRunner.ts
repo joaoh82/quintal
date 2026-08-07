@@ -2,7 +2,12 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
-import { isAddressed, type AgentChatEvent, type AgentMentionEvent } from '@quintal/shared';
+import {
+  isAddressed,
+  parseAgentCommand,
+  type AgentChatEvent,
+  type AgentMentionEvent,
+} from '@quintal/shared';
 
 import { AgentProcess } from '../acp/agent-process.js';
 import type { AgentConfig } from '../config.js';
@@ -333,19 +338,30 @@ export class AgentRunner {
    * else's agent by renaming themselves.
    */
   #handleOwnerCommand(message: AgentChatEvent): boolean {
-    const text = message.text.trim().toLowerCase();
-    if (!text.startsWith('!')) return false;
+    const parsed = parseAgentCommand(message.text);
+    if (!parsed) return false;
 
     const ready = this.#gateway.ready;
     if (!ready) return true;
 
     if (message.fromUserId !== ready.ownerUserId) {
-      this.#log('warn', `ignoring "${text}" from ${message.fromName} (not the owner)`);
+      this.#log('warn', `ignoring "!${parsed.name}" from ${message.fromName} (not the owner)`);
       return true;
     }
 
-    const command = text.split(/\s+/)[0];
-    switch (command) {
+    // An untargeted command is for every agent that heard it — useful for
+    // "everyone stop", ruinous by accident. `!shutdown @claude` stops one.
+    if (parsed.target !== null && parsed.target !== ready.name.toLowerCase()) return true;
+
+    // Swallow a typo rather than passing it to the model: the office would
+    // otherwise pay for a turn to be told the message means nothing. The chat
+    // box refuses to send these, so reaching here means another client.
+    if (!parsed.known) {
+      this.#log('warn', `unknown command "!${parsed.name}"`);
+      return true;
+    }
+
+    switch (`!${parsed.name}`) {
       case '!cancel': {
         if (this.#currentAcpSession) this.#process?.cancel(this.#currentAcpSession);
         this.#busy = false;
@@ -365,7 +381,10 @@ export class AgentRunner {
         return true;
       }
       default:
-        return false;
+        // `known` is checked above, so this is only reachable if the catalogue
+        // grew a verb nobody implemented here.
+        this.#log('warn', `"!${parsed.name}" is advertised but not implemented`);
+        return true;
     }
   }
 

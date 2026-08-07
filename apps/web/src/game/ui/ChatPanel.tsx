@@ -1,13 +1,33 @@
 'use client';
 
 import {
+  AGENT_COMMANDS,
   CHAT_MAX_LENGTH,
+  applyCommand,
   applyMention,
+  commandQueryAt,
   mentionQueryAt,
+  parseAgentCommand,
   type ChatBroadcastPayload,
   type RosterEntry,
 } from '@quintal/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+/**
+ * One row in the picker. People and commands look different and complete
+ * differently, so they are a union rather than a lowest-common-denominator
+ * shape that would strip what makes each worth showing.
+ */
+type PickerItem =
+  | {
+      kind: 'person';
+      key: string;
+      name: string;
+      isAgent: boolean;
+      ownerName?: string | undefined;
+      status?: string | undefined;
+    }
+  | { kind: 'command'; key: string; name: string; summary: string };
 
 interface ChatPanelProps {
   messages: ChatBroadcastPayload[];
@@ -24,12 +44,15 @@ function timeOf(sentAt: number): string {
 }
 
 /**
- * Nearby chat: a scrolling log, one input, and an `@` picker.
+ * Nearby chat: a scrolling log, one input, and one picker serving two sigils.
  *
- * Two contracts live here. The focus one — Enter takes the keyboard, Escape
- * gives it back — and the addressing one: `@` opens a filtered list of everyone
- * present, because "type the name exactly right, case be damned" is not an
- * interface, and a name you can't spell is a colleague you can't reach.
+ * Three contracts live here. Focus — Enter takes the keyboard, Escape gives it
+ * back. Addressing — `@` opens a filtered list of everyone present, because
+ * "type the name exactly right, case be damned" is not an interface, and a name
+ * you can't spell is a colleague you can't reach. And commands — `!` opens the
+ * same list, filled with what the harness actually implements, so the answer to
+ * "what can I type at an agent" is one keystroke rather than a doc you have to
+ * have read.
  */
 export function ChatPanel({
   messages,
@@ -44,9 +67,25 @@ export function ChatPanel({
   const [caret, setCaret] = useState(0);
   const [highlighted, setHighlighted] = useState(0);
 
-  const mention = useMemo(() => mentionQueryAt(draft, caret), [draft, caret]);
+  // A command wins over a mention: `!shutdown @claude` should complete the verb
+  // first, and `mentionQueryAt` would otherwise fight for the same caret.
+  const command = useMemo(() => commandQueryAt(draft, caret), [draft, caret]);
+  const mention = useMemo(
+    () => (command ? null : mentionQueryAt(draft, caret)),
+    [command, draft, caret],
+  );
 
-  const candidates = useMemo(() => {
+  const candidates = useMemo<PickerItem[]>(() => {
+    if (command) {
+      return AGENT_COMMANDS.filter((entry) => entry.name.startsWith(command.query)).map(
+        (entry) => ({
+          kind: 'command',
+          key: `!${entry.name}`,
+          name: entry.name,
+          summary: entry.summary,
+        }),
+      );
+    }
     if (!mention) return [];
     return roster
       .filter((entry) => !entry.isSelf)
@@ -54,12 +93,30 @@ export function ChatPanel({
       // Agents first: they are the ones you address by name most often, and the
       // humans near you are usually the ones you just walk up to.
       .sort((a, b) => Number(b.kind === 'agent') - Number(a.kind === 'agent'))
-      .slice(0, 6);
-  }, [mention, roster]);
+      .slice(0, 6)
+      .map((entry) => ({
+        kind: 'person',
+        key: entry.sessionId,
+        name: entry.name,
+        isAgent: entry.kind === 'agent',
+        ownerName: entry.ownerName ?? undefined,
+        status: entry.status ?? undefined,
+      }));
+  }, [command, mention, roster]);
 
-  const open = mention !== null && candidates.length > 0;
+  const open = candidates.length > 0;
 
-  useEffect(() => setHighlighted(0), [mention?.query]);
+  /**
+   * A typo'd command would otherwise be sent as ordinary chat, wake every agent
+   * that heard it, and cost a model call to be told it means nothing. Catching
+   * it in the input costs nothing and says so immediately.
+   */
+  const unknownCommand = useMemo(() => {
+    const parsed = parseAgentCommand(draft);
+    return parsed && !parsed.known ? parsed.name : null;
+  }, [draft]);
+
+  useEffect(() => setHighlighted(0), [command?.query, mention?.query]);
 
   // Focus is driven by state, not by whoever called first: the parent owns
   // `focused` and the DOM follows it.
@@ -80,12 +137,18 @@ export function ChatPanel({
     if (input) setCaret(input.selectionStart ?? input.value.length);
   };
 
-  const choose = (name: string): void => {
-    if (!mention) return;
-    const next = applyMention(draft, mention.start, caret, name);
+  const choose = (item: PickerItem): void => {
+    const next =
+      item.kind === 'command'
+        ? applyCommand(draft, caret, item.name)
+        : mention
+          ? applyMention(draft, mention.start, caret, item.name)
+          : null;
+    if (!next) return;
+
     setDraft(next.text);
     setCaret(next.caret);
-    // Put the caret after the inserted name on the next tick, once React has
+    // Put the caret after the insertion on the next tick, once React has
     // written the new value.
     requestAnimationFrame(() => {
       const input = inputRef.current;
@@ -95,6 +158,7 @@ export function ChatPanel({
 
   const submit = (): void => {
     const text = draft.trim();
+    if (unknownCommand) return;
     if (text.length > 0) onSend(text);
     setDraft('');
     setCaret(0);
@@ -109,7 +173,7 @@ export function ChatPanel({
       >
         {messages.length === 0 ? (
           <p className="text-[11px] text-white/40">
-            Nothing said nearby. Enter to talk, @name to address someone.
+            Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.
           </p>
         ) : (
           messages.map((message) => (
@@ -134,7 +198,7 @@ export function ChatPanel({
           className="absolute bottom-full left-0 mb-1 w-full overflow-hidden rounded-md border border-white/15 bg-[#10131a]/95 shadow-lg backdrop-blur"
         >
           {candidates.map((entry, index) => (
-            <li key={entry.sessionId}>
+            <li key={entry.key}>
               <button
                 type="button"
                 role="option"
@@ -143,29 +207,48 @@ export function ChatPanel({
                 // the input has lost the caret we need.
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  choose(entry.name);
+                  choose(entry);
                 }}
                 onMouseEnter={() => setHighlighted(index)}
                 className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-xs ${
                   index === highlighted ? 'bg-white/10' : ''
                 }`}
               >
-                <span className={entry.kind === 'agent' ? 'text-sky-300' : 'text-white/85'}>
-                  {entry.kind === 'agent' ? '◆ ' : ''}
-                  {entry.name}
-                </span>
-                {entry.ownerName ? (
-                  <span className="text-[10px] text-white/35">{entry.ownerName}&rsquo;s</span>
-                ) : null}
-                {entry.status ? (
-                  <span className="ml-auto truncate font-mono text-[10px] text-white/40">
-                    {entry.status}
-                  </span>
-                ) : null}
+                {entry.kind === 'command' ? (
+                  <>
+                    <span className="font-mono text-amber-300">!{entry.name}</span>
+                    <span className="ml-auto truncate text-[10px] text-white/40">
+                      {entry.summary}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={entry.isAgent ? 'text-sky-300' : 'text-white/85'}>
+                      {entry.isAgent ? '◆ ' : ''}
+                      {entry.name}
+                    </span>
+                    {entry.ownerName ? (
+                      <span className="text-[10px] text-white/35">{entry.ownerName}&rsquo;s</span>
+                    ) : null}
+                    {entry.status ? (
+                      <span className="ml-auto truncate font-mono text-[10px] text-white/40">
+                        {entry.status}
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </button>
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {unknownCommand ? (
+        <p className="border-t border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[10px] text-amber-200/90">
+          <span className="font-mono">!{unknownCommand}</span> isn&rsquo;t a command. Try{' '}
+          {AGENT_COMMANDS.map((entry) => `!${entry.name}`).join(', ')} — or delete the ! to say it
+          out loud.
+        </p>
       ) : null}
 
       <input
@@ -200,7 +283,7 @@ export function ChatPanel({
             if (event.key === 'Enter' || event.key === 'Tab') {
               event.preventDefault();
               const picked = candidates[highlighted];
-              if (picked) choose(picked.name);
+              if (picked) choose(picked);
               return;
             }
             if (event.key === 'Escape') {
