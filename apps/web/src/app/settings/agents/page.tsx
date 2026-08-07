@@ -3,6 +3,7 @@ import {
   findMembership,
   getDb,
   listAgentsForWorkspace,
+  listHostsForWorkspace,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -10,6 +11,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 
 import { AgentsManager } from './AgentsManager';
+import { RuntimeList } from './RuntimeList';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +28,10 @@ export default async function AgentsSettingsPage() {
     email: session.user.email,
   });
 
-  const [agents, membership] = await Promise.all([
+  const [agents, membership, hosts] = await Promise.all([
     listAgentsForWorkspace(db, workspace.id),
     findMembership(db, workspace.id, session.user.id),
+    listHostsForWorkspace(db, workspace.id),
   ]);
 
   const canAdministerAll = membership?.role === 'owner' || membership?.role === 'admin';
@@ -42,6 +45,8 @@ export default async function AgentsSettingsPage() {
         attributed to whoever made them — that is the deal that makes it safe to
         let them into the room.
       </p>
+
+      <RuntimeList hosts={hosts} />
 
       <AgentsManager
         agents={agents}

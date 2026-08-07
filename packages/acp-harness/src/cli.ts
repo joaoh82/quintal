@@ -2,6 +2,7 @@
 import { isAbsolute, resolve } from 'node:path';
 
 import {
+  ALL_REPOS,
   ConfigError,
   defaultCommandFor,
   defaultReposDir,
@@ -35,6 +36,7 @@ Options
   --map <mapId>     map to join (default: hq)
   --cmd "<command>" explicit ACP command; required for --agent custom
   --repo <name>     workspace by name, resolved under --repos-dir
+  --all-repos       root at the repos directory itself, not one checkout
   --repos-dir <dir> where your projects live (default: ~/projects)
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
@@ -103,17 +105,26 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
   const repoFlag = stringFlag(flags, 'repo');
   const cwdFlag = stringFlag(flags, 'cwd');
 
-  if (!cwdFlag && !repoFlag) {
+  // `--all-repos`, not `--repo '*'`: an unquoted `*` is expanded by the shell
+  // before the CLI ever sees it, and a flag whose meaning depends on getting
+  // the quoting right through a task runner is a flag that will silently root
+  // an agent at whatever file sorted first in the current directory.
+  // `"repo": "*"` stays valid in the fleet file, where no shell is involved.
+  const rootedAtReposDir = flags['all-repos'] === true || repoFlag === ALL_REPOS;
+
+  if (!cwdFlag && !repoFlag && !rootedAtReposDir) {
     throw new ConfigError(
-      '--cwd or --repo is required: an agent needs an explicit workspace, and code context always comes from there',
+      '--cwd, --repo or --all-repos is required: an agent needs an explicit workspace, and code context always comes from there',
     );
   }
 
-  const workspace = repoFlag
-    ? resolve(reposDir, expandHome(repoFlag))
-    : isAbsolute(expandHome(cwdFlag ?? ''))
-      ? expandHome(cwdFlag ?? '')
-      : resolve(cwd, expandHome(cwdFlag ?? ''));
+  const workspace = rootedAtReposDir
+    ? reposDir
+    : repoFlag
+      ? resolve(reposDir, expandHome(repoFlag))
+      : isAbsolute(expandHome(cwdFlag ?? ''))
+        ? expandHome(cwdFlag ?? '')
+        : resolve(cwd, expandHome(cwdFlag ?? ''));
 
   return {
     name: stringFlag(flags, 'name') ?? harnessName,
@@ -121,6 +132,7 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
     harness: harnessName,
     command,
     cwd: workspace,
+    rootedAtReposDir,
     url: stringFlag(flags, 'url') ?? 'http://localhost:3000',
     mapId: stringFlag(flags, 'map') ?? 'hq',
   };
@@ -169,12 +181,16 @@ async function main(): Promise<void> {
 
   let agents: AgentConfig[];
   let only: string | undefined;
+  let reposDir = defaultReposDir();
 
   if (command === 'single') {
     agents = [singleAgentFrom(flags, cwd)];
+    const dir = stringFlag(flags, 'repos-dir');
+    if (dir) reposDir = expandHome(dir);
   } else if (command === 'up' || command === 'status') {
     const fleet = loadFleet(stringFlag(flags, 'config'), cwd);
     agents = fleet.agents;
+    reposDir = fleet.reposDir;
     only = positional[1];
     if (command === 'up' && only === undefined) {
       process.stdout.write(`fleet: ${agents.length} agent(s) from ${fleet.path}\n`);
@@ -185,7 +201,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const supervisor = new Supervisor(agents, { logDir, plain });
+  const supervisor = new Supervisor(agents, { logDir, plain, reposDir });
 
   if (command === 'status') {
     // `status` on a fleet nobody is running can only report the config; the

@@ -106,6 +106,7 @@ export const AGENT_EVENT_KINDS = [
   'command.messages_get',
   'command.memory_get',
   'command.memory_set',
+  'command.host_report',
   'command.rejected',
   'effect.spoke',
   'effect.moved',

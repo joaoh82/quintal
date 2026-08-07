@@ -37,11 +37,33 @@ export const AgentMessage = {
   MemoryGet: 'agent:memory_get',
   /** Write a memory slug. Over-size writes are rejected, not truncated. */
   MemorySet: 'agent:memory_set',
+  /**
+   * Tell the office about the machine hosting this agent: its name, where it
+   * keeps repositories, which agent runtimes are installed, and where this
+   * agent is rooted.
+   *
+   * Information only travels this way. The office cannot see anybody's PATH,
+   * and a hosted Quintal never will — so a harness reporting inward is the only
+   * way the settings page can show what you could actually run.
+   */
+  HostReport: 'agent:host_report',
 } as const;
 export type AgentMessage = (typeof AgentMessage)[keyof typeof AgentMessage];
 
 export interface AgentSayPayload {
   text: string;
+}
+
+export interface AgentHostReportPayload {
+  /** The machine. Hostname is enough to tell a laptop from a build box. */
+  label: string;
+  reposDir: string;
+  /** Omitted by all but the first agent of a fleet — the answer is per machine. */
+  runtimes?: { id: string; installed: boolean; path: string | null }[];
+  /** Where *this* agent is rooted. */
+  workspacePath: string;
+  /** True when rooted at the whole repos directory rather than one checkout. */
+  rootedAtReposDir: boolean;
 }
 
 /**

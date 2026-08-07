@@ -203,6 +203,18 @@ export const agents = sqliteTable(
       .default(['chat', 'move', 'status']),
     /** Presence line, mirrored into room state while connected. */
     status: text('status').notNull().default(''),
+    /**
+     * The directory this agent is rooted at, as its harness reported it.
+     *
+     * Shown wherever the agent is, because "what can this thing read and
+     * write" is exactly the fact that should be legible — the same reason its
+     * owner's name follows it around.
+     */
+    workspacePath: text('workspace_path').notNull().default(''),
+    /** True when rooted at the whole repos directory rather than one checkout. */
+    rootedAtReposDir: integer('rooted_at_repos_dir', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     /** Last time this agent did anything at all. Drives "last seen" in the UI. */
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -222,6 +234,39 @@ export const agents = sqliteTable(
  * here, so "what has this thing been doing" is answerable without trusting the
  * agent's own account of itself.
  */
+/**
+ * A machine that can host agents.
+ *
+ * The office cannot see anybody's PATH — and a hosted Quintal never will — so
+ * which runtimes exist is something a machine reports inward, not something we
+ * discover. One row per (workspace, machine), refreshed whenever a harness
+ * connects, so the settings page can show what you could run *here* rather
+ * than a generic list of what exists in the world.
+ */
+export const agentHosts = sqliteTable(
+  'agent_hosts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    ownerUserId: text('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Hostname, for telling two machines apart. */
+    label: text('label').notNull(),
+    /** Where this machine keeps repositories — its `reposDir`. */
+    reposDir: text('repos_dir').notNull().default(''),
+    /** JSON array of RuntimeStatus, normalised before it is stored. */
+    runtimes: text('runtimes', { mode: 'json' })
+      .$type<{ id: string; installed: boolean; path: string | null }[]>()
+      .notNull()
+      .default([]),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [uniqueIndex('agent_hosts_workspace_label').on(table.workspaceId, table.label)],
+);
+
 export const agentEvents = sqliteTable(
   'agent_events',
   {

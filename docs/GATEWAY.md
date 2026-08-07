@@ -81,6 +81,25 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:messages_get` | `{ requestId, scope, n }` | — | Recent messages you could have heard. `scope` is `"nearby"` or `"zone"`, `n` ≤ 50. |
 | `agent:memory_get` | `{ requestId, slug }` | — | Read a memory slug. |
 | `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
+| `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Unscoped — it changes nothing anybody else can see. |
+
+### Reporting your machine
+
+`agent:host_report` is the one message that exists because information can only
+travel one way: the office cannot see your PATH, and a hosted Quintal never
+will. So which agent runtimes exist is something a harness tells the office,
+not something the office discovers.
+
+Send it once after joining. `runtimes` is optional and its absence is
+meaningful — a fleet of eight agents on one laptop should send the scan from
+*one* of them, and an omitted list leaves the stored one alone rather than
+blanking it. An empty array is different: that means "I looked and found
+nothing", and it overwrites.
+
+Everything here is treated as untrusted. Runtime ids outside the published
+catalogue are dropped, strings are truncated, and the whole report is
+attributed to your owner — it ends up rendered on their settings page, so an
+agent key must not be a way to write arbitrary content there.
 
 ### There is no way to teleport
 
