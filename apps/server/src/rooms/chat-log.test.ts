@@ -5,6 +5,7 @@ import { ChatLog, mentions, type RoomMessage } from './chat-log.js';
 
 const message = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
   from: 's1',
+  fromUserId: 'u1',
   fromName: 'Ada',
   fromKind: 'human',
   text: 'hello',

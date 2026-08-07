@@ -105,6 +105,9 @@ interface PlayerSim {
 
 const STATUS_MAX_LENGTH = 60;
 
+/** Tiles of clearance an arriving agent tries to leave around everyone else. */
+const AGENT_SPAWN_GAP_TILES = 4;
+
 /**
  * The office.
  *
@@ -277,6 +280,7 @@ export class OfficeRoom extends Room<OfficeState> {
       agentId: identity.id,
       sessionId: client.sessionId,
       name: identity.name,
+      ownerUserId: identity.ownerUserId,
       ownerName: identity.ownerName,
       scopes: identity.scopes,
       mapId: this.state.mapId,
@@ -496,6 +500,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
     const record: RoomMessage = {
       from: sessionId,
+      fromUserId: speaker.userId,
       fromName: speaker.name,
       fromKind: speaker.kind,
       text,
@@ -525,6 +530,7 @@ export class OfficeRoom extends Room<OfficeState> {
         if (withinEarshot) {
           const event: AgentChatEvent = {
             from: sessionId,
+            fromUserId: speaker.userId,
             fromName: speaker.name,
             fromKind: speaker.kind,
             text,
@@ -536,6 +542,7 @@ export class OfficeRoom extends Room<OfficeState> {
           // Out of earshot but named: reaches it anyway, without a distance.
           target.send(AgentServerMessage.Mention, {
             from: sessionId,
+            fromUserId: speaker.userId,
             fromName: speaker.name,
             fromKind: speaker.kind,
             text,
@@ -692,6 +699,7 @@ export class OfficeRoom extends Room<OfficeState> {
       scope,
       messages: matches.map((message) => ({
         from: message.from,
+        fromUserId: message.fromUserId,
         fromName: message.fromName,
         fromKind: message.fromKind,
         text: message.text,
@@ -774,6 +782,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const tile = this.#tileOf(other);
       occupants.push({
         sessionId: otherId,
+        userId: other.userId,
         name: other.name,
         kind: other.kind,
         status: other.status,
@@ -886,22 +895,34 @@ export class OfficeRoom extends Room<OfficeState> {
 
   // --- helpers -------------------------------------------------------------
 
-  /** A free tile inside the agent_area zone, or the map's agent spawn. */
+  /**
+   * A free tile inside the agent_area zone, or the map's agent spawn.
+   *
+   * Agents are spaced out rather than packed in. Adjacent avatars overlap their
+   * nameplates into an unreadable smear, and a nameplate you cannot read is a
+   * legible worker you cannot identify — which is the entire point of them.
+   */
   #agentSpawn(): TilePoint {
     const bay = this.#map.zones.find((zone) => zone.kind === 'agent_area');
     if (bay) {
-      const taken = new Set<string>();
-      for (const [, player] of this.state.players) {
-        const tile = this.#tileOf(player);
-        taken.add(`${tile.x},${tile.y}`);
-      }
+      const occupied: TilePoint[] = [];
+      for (const [, player] of this.state.players) occupied.push(this.#tileOf(player));
 
-      // Scan the bay for somewhere free, so a fleet doesn't stack on one tile.
-      for (let y = bay.bounds.y; y < bay.bounds.y + bay.bounds.height; y += 1) {
-        for (let x = bay.bounds.x; x < bay.bounds.x + bay.bounds.width; x += 1) {
-          if (taken.has(`${x},${y}`)) continue;
-          const free = nearestWalkable(this.#map, { x, y }, 0);
-          if (free) return free;
+      const clearOf = (candidate: TilePoint, gap: number): boolean =>
+        occupied.every(
+          (tile) =>
+            Math.max(Math.abs(tile.x - candidate.x), Math.abs(tile.y - candidate.y)) >= gap,
+        );
+
+      // Try for elbow room first, then settle for anywhere free.
+      for (const gap of [AGENT_SPAWN_GAP_TILES, 1]) {
+        for (let y = bay.bounds.y; y < bay.bounds.y + bay.bounds.height; y += 1) {
+          for (let x = bay.bounds.x; x < bay.bounds.x + bay.bounds.width; x += 1) {
+            const candidate = { x, y };
+            if (!clearOf(candidate, gap)) continue;
+            const free = nearestWalkable(this.#map, candidate, 0);
+            if (free) return free;
+          }
         }
       }
     }
