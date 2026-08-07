@@ -2,6 +2,7 @@ import { ensurePersonalWorkspace, getDb } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { OfficeCanvas } from '@/game/OfficeCanvas';
 import { auth } from '@/lib/auth';
 
 // Session-dependent: never prerender.
@@ -20,21 +21,19 @@ export default async function OfficePage() {
   });
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-8 px-6 py-16">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{workspace.name}</h1>
-        <p className="text-muted-foreground text-sm">
-          /{workspace.slug} · signed in as {session.user.email}
+    <main className="flex h-dvh flex-col gap-3 p-3">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1">
+        <h1 className="text-lg font-semibold tracking-tight">{workspace.name}</h1>
+        <p className="text-muted-foreground text-xs">
+          /{workspace.slug} · {session.user.email}
+        </p>
+        <p className="text-muted-foreground ml-auto text-xs">
+          Single player for now — nobody else can see you yet.
         </p>
       </header>
 
-      <div className="border-border text-muted-foreground flex min-h-[24rem] flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-10 text-center">
-        <p className="text-foreground font-medium">The office goes here.</p>
-        <p className="max-w-sm text-sm">
-          The tile map, avatars and proximity voice land in later steps. For now
-          this page exists to prove the protected route and your personal
-          workspace.
-        </p>
+      <div className="min-h-0 flex-1">
+        <OfficeCanvas />
       </div>
     </main>
   );

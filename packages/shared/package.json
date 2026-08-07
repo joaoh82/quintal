@@ -16,7 +16,8 @@
   },
   "files": [
     "dist",
-    "drizzle"
+    "drizzle",
+    "maps"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -25,7 +26,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/cli/migrate.ts",
     "db:seed": "tsx src/cli/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

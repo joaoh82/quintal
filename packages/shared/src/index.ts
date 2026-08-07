@@ -5,6 +5,7 @@
  * `@quintal/shared/db`.
  */
 export * from './constants.js';
+export * from './game/index.js';
 export * from './map.js';
 export * from './messages.js';
 export * from './player.js';

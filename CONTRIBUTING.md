@@ -65,9 +65,10 @@ pnpm build
 
 | Path | What lives there |
 | --- | --- |
-| `apps/web` | Next.js app: pages, auth config, UI components |
+| `apps/web` | Next.js app: pages, auth config, UI components, the Phaser game |
 | `apps/server` | Production entry point: Colyseus rooms, HTTP routing, Next.js hosting |
-| `packages/shared` | Types + constants both apps import, Drizzle schema and migrations |
+| `packages/shared` | Types + constants both apps import, the map and its parser, pathfinding, Drizzle schema and migrations |
+| `tools/` | One-shot scripts, not part of any build |
 
 Anything both the browser and the server need goes in `packages/shared`. The
 root export must stay client-safe (no `node:*` imports) — server-only pieces
@@ -90,6 +91,34 @@ tables against what Better Auth expects with
 `npx @better-auth/cli generate --config src/lib/auth.ts` from `apps/web`. The
 CLI can't load a config that imports `server-only`, so comment that import out
 while you run it, then put it back.
+
+## The map
+
+`packages/shared/maps/hq.json` is a standard Tiled map — open it in
+[Tiled](https://www.mapeditor.org/) and edit it. It lives in `shared` because
+the game server will read the same file, so the walkability grid the client
+walks on is the one the server simulates.
+
+Layer contract, enforced by the parser in `packages/shared/src/game/tiled.ts`:
+
+| Layer | Type | Collides |
+| --- | --- | --- |
+| `floor` | tiles | no |
+| `walls` | tiles | **yes** |
+| `furniture` | tiles | **yes** |
+| `decor` | tiles | no |
+| `spawns` | objects (points) | — |
+| `zones` | objects (rectangles) | — |
+
+Every zone rectangle needs `kind` (`private`, `spawn` or `agent_area`), `zoneId`
+and `label` properties; the parser throws on an unknown `kind` rather than
+silently dropping the zone. A door is simply a hole in the `walls` layer.
+
+`tools/generate-hq-map.mjs` is how the map was first built. It is **not** a build
+step — if you've edited the map in Tiled, re-running it will overwrite your work.
+
+Art comes from Kenney's CC0 packs. If you add assets, record where they came from
+and their license in `apps/web/public/assets/CREDITS.md`.
 
 ## Conventions
 

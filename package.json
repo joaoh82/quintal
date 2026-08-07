@@ -13,6 +13,7 @@
     "build": "pnpm --filter @quintal/shared build && pnpm --filter @quintal/web build && pnpm --filter @quintal/server build",
     "start": "cross-env NODE_ENV=production node apps/server/dist/index.js",
     "typecheck": "pnpm --filter @quintal/shared build && pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
     "db:generate": "pnpm --filter @quintal/shared db:generate",
     "db:migrate": "pnpm --filter @quintal/shared db:migrate",
     "db:seed": "pnpm --filter @quintal/shared db:seed",
