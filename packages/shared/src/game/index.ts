@@ -1,3 +1,4 @@
+export * from './agent-protocol.js';
 export * from './events.js';
 export * from './movement.js';
 export * from './pathfinding.js';

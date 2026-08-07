@@ -84,6 +84,8 @@ export class OfficeScene extends Phaser.Scene {
   #currentTile: TilePoint = { x: -1, y: -1 };
   /** Signature of the last roster we published, to avoid pointless re-renders. */
   #rosterSignature = '';
+  /** When each occupant was last seen doing something. Drives "last action". */
+  readonly #lastAction = new Map<string, number>();
 
   #debugEnabled = false;
   #debugStatic!: Phaser.GameObjects.Graphics;
@@ -202,6 +204,7 @@ export class OfficeScene extends Phaser.Scene {
     $(room.state).players.onRemove((_player: OfficePlayer, sessionId: string) => {
       this.#avatars.get(sessionId)?.destroy();
       this.#avatars.delete(sessionId);
+      this.#lastAction.delete(sessionId);
       this.#publishRoster();
     });
   }
@@ -214,6 +217,12 @@ export class OfficeScene extends Phaser.Scene {
       this.#reconcile(player);
     } else {
       avatar.pushSnapshot(player);
+    }
+
+    // "Last action" means something a person would notice, not every patch.
+    if (player.moving || player.status !== avatar.lastStatus) {
+      this.#lastAction.set(sessionId, Date.now());
+      avatar.lastStatus = player.status;
     }
 
     // onChange fires for every field on every patch — 20Hz per player. Only
@@ -430,6 +439,10 @@ export class OfficeScene extends Phaser.Scene {
         kind: player.kind,
         status: player.status,
         isSelf: sessionId === this.#selfId,
+        ownerName: player.ownerName,
+        scopes: player.scopes ? player.scopes.split(',') : [],
+        identityId: player.userId,
+        lastActionAt: this.#lastAction.get(sessionId) ?? 0,
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
@@ -437,7 +450,10 @@ export class OfficeScene extends Phaser.Scene {
     // Cheaper than it looks, and far cheaper than re-rendering a React list
     // twenty times a second because somebody took a step.
     const signature = players
-      .map((p) => `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.isSelf ? 1 : 0}`)
+      .map(
+        (p) =>
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}`,
+      )
       .join('|');
     if (signature === this.#rosterSignature) return;
     this.#rosterSignature = signature;

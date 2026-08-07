@@ -2,11 +2,13 @@ import { sql } from 'drizzle-orm';
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
+import { AGENT_SCOPES } from '../agent.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
 /*
@@ -154,6 +156,101 @@ export const memberships = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+
+/**
+ * An agent belongs to a workspace and to exactly one human. That ownership is
+ * not decoration: it is who answers for what the agent does, and it is shown
+ * everywhere the agent appears.
+ *
+ * Keys are stored as a SHA-256 hash. The plaintext is shown once, at creation,
+ * and never again — a leaked database gives an attacker nothing to connect with.
+ */
+export const agents = sqliteTable(
+  'agents',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    ownerUserId: text('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    spriteKey: text('sprite_key').notNull().default('slate'),
+    apiKeyHash: text('api_key_hash').notNull().unique(),
+    /** JSON array of AgentScope. Text, because SQLite has no array type. */
+    scopes: text('scopes', { mode: 'json' })
+      .$type<(typeof AGENT_SCOPES)[number][]>()
+      .notNull()
+      .default(['chat', 'move', 'status']),
+    /** Presence line, mirrored into room state while connected. */
+    status: text('status').notNull().default(''),
+    /** Last time this agent did anything at all. Drives "last seen" in the UI. */
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(now)
+      .notNull(),
+    /** Set instead of deleting: an audit log with dangling agent ids is useless. */
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('agents_workspace_id_idx').on(table.workspaceId),
+    index('agents_owner_user_id_idx').on(table.ownerUserId),
+  ],
+);
+
+/**
+ * The audit log. Every inbound command and every outbound consequence lands
+ * here, so "what has this thing been doing" is answerable without trusting the
+ * agent's own account of itself.
+ */
+export const agentEvents = sqliteTable(
+  'agent_events',
+  {
+    id: text('id').primaryKey(),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    payload: text('payload', { mode: 'json' }).$type<unknown>(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(now)
+      .notNull(),
+  },
+  (table) => [
+    // The log is always read newest-first for one agent, and often filtered by
+    // kind; this index serves both.
+    index('agent_events_agent_created_idx').on(table.agentId, table.createdAt),
+    index('agent_events_kind_idx').on(table.kind),
+  ],
+);
+
+/**
+ * Durable scratch space for an agent's harness, addressed by slug. `core` is
+ * the one loaded on every turn and is held to a tighter size limit than the
+ * rest — see AGENT_CORE_MEMORY_MAX_BYTES.
+ */
+export const agentMemory = sqliteTable(
+  'agent_memory',
+  {
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    content: text('content').notNull().default(''),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+      .default(now)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.agentId, table.slug] }),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -161,3 +258,8 @@ export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;
 export type NewMembership = typeof memberships.$inferInsert;
+export type Agent = typeof agents.$inferSelect;
+export type NewAgent = typeof agents.$inferInsert;
+export type AgentEvent = typeof agentEvents.$inferSelect;
+export type NewAgentEvent = typeof agentEvents.$inferInsert;
+export type AgentMemory = typeof agentMemory.$inferSelect;

@@ -1,0 +1,219 @@
+'use client';
+
+import {
+  AGENT_SCOPES,
+  AGENT_SPRITE_KEYS,
+  DEFAULT_AGENT_SCOPES,
+  type AgentScope,
+} from '@quintal/shared';
+import type { AgentListEntry } from '@quintal/shared/db';
+import Link from 'next/link';
+import { useActionState, useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+import { createAgentAction, revokeAgentAction, type CreateAgentState } from './actions';
+
+const INITIAL: CreateAgentState = { ok: false };
+
+function when(ms: number | null): string {
+  if (ms === null) return 'never';
+  const seconds = Math.round((Date.now() - ms) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+  return new Date(ms).toLocaleDateString();
+}
+
+interface AgentsManagerProps {
+  agents: AgentListEntry[];
+  currentUserId: string;
+  canAdministerAll: boolean;
+}
+
+export function AgentsManager({ agents, currentUserId, canAdministerAll }: AgentsManagerProps) {
+  const [state, formAction, pending] = useActionState(createAgentAction, INITIAL);
+  const [copied, setCopied] = useState(false);
+
+  const live = agents.filter((agent) => agent.revokedAt === null);
+  const revoked = agents.filter((agent) => agent.revokedAt !== null);
+
+  return (
+    <div className="flex flex-col gap-8">
+      {/* The key is rendered here and nowhere else, ever again. */}
+      {state.ok && state.key ? (
+        <section className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4">
+          <h2 className="text-sm font-semibold">
+            {state.agentName} is ready — here is its key
+          </h2>
+          <p className="text-muted-foreground mt-1 text-xs">
+            This is the only time it will ever be shown. Only a hash is stored, so
+            if you lose it you must revoke this agent and create another.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <code className="bg-background flex-1 overflow-x-auto rounded border px-3 py-2 font-mono text-xs">
+              {state.key}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(state.key ?? '');
+                setCopied(true);
+              }}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+          <p className="text-muted-foreground mt-3 font-mono text-[11px]">
+            AGENT_KEY={state.key?.slice(0, 12)}… QUINTAL_URL=http://localhost:3000 pnpm
+            demo-agent
+          </p>
+        </section>
+      ) : null}
+
+      <section>
+        <h2 className="text-sm font-semibold">New agent</h2>
+        <p className="text-muted-foreground mt-1 text-xs">
+          An agent belongs to you. Your name appears next to it everywhere it acts,
+          and its whole history is on the record.
+        </p>
+
+        <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium">Name</span>
+            <Input name="name" placeholder="reviewer" required className="w-48" />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium">Sprite</span>
+            <select
+              name="spriteKey"
+              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+              defaultValue={AGENT_SPRITE_KEYS[0]}
+            >
+              {AGENT_SPRITE_KEYS.map((sprite) => (
+                <option key={sprite} value={sprite}>
+                  {sprite}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <fieldset className="flex flex-col gap-1">
+            <legend className="text-xs font-medium">Scopes</legend>
+            <div className="flex h-9 items-center gap-3">
+              {AGENT_SCOPES.map((scope) => (
+                <label key={scope} className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    name="scopes"
+                    value={scope}
+                    defaultChecked={DEFAULT_AGENT_SCOPES.includes(scope as AgentScope)}
+                    className="size-3.5"
+                  />
+                  {scope}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Creating…' : 'Create agent'}
+          </Button>
+        </form>
+
+        {state.error ? (
+          <p className="mt-2 text-xs text-rose-600">{state.error}</p>
+        ) : null}
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold">
+          Agents <span className="text-muted-foreground font-normal">({live.length})</span>
+        </h2>
+
+        {live.length === 0 ? (
+          <p className="text-muted-foreground mt-2 text-sm">
+            No agents yet. The office is all human.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y rounded-lg border">
+            {live.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {revoked.length > 0 ? (
+        <section>
+          <h2 className="text-muted-foreground text-sm font-semibold">
+            Revoked ({revoked.length})
+          </h2>
+          <p className="text-muted-foreground mt-1 text-xs">
+            Kept, not deleted: an audit log that points at agents which no longer
+            exist is not an audit log.
+          </p>
+          <ul className="mt-3 divide-y rounded-lg border opacity-60">
+            {revoked.map((agent) => (
+              <AgentRow key={agent.id} agent={agent} canRevoke={false} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function AgentRow({ agent, canRevoke }: { agent: AgentListEntry; canRevoke: boolean }) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
+      <span className="flex items-center gap-1.5 font-medium">
+        <span aria-hidden className="text-sky-500">
+          ◆
+        </span>
+        {agent.name}
+      </span>
+
+      <span className="text-muted-foreground text-xs">{agent.ownerName}&rsquo;s</span>
+
+      {agent.status ? (
+        <span className="text-muted-foreground truncate font-mono text-xs">
+          {agent.status}
+        </span>
+      ) : null}
+
+      <span className="text-muted-foreground ml-auto text-xs">
+        created {when(agent.createdAt)}
+      </span>
+      <span className="text-muted-foreground text-xs">
+        {agent.revokedAt !== null
+          ? `revoked ${when(agent.revokedAt)}`
+          : `seen ${when(agent.lastSeenAt)}`}
+      </span>
+
+      <Link
+        href={`/settings/agents/${agent.id}/log`}
+        className="text-xs underline underline-offset-2"
+      >
+        log
+      </Link>
+
+      {canRevoke ? (
+        <form action={revokeAgentAction}>
+          <input type="hidden" name="agentId" value={agent.id} />
+          <Button type="submit" variant="ghost" size="sm" className="text-rose-600">
+            Revoke
+          </Button>
+        </form>
+      ) : null}
+    </li>
+  );
+}

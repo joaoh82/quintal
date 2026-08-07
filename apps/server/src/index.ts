@@ -100,7 +100,19 @@ httpServer.prependListener('upgrade', (req: IncomingMessage) => {
 });
 
 const gameServer = new Server({
-  transport: new WebSocketTransport({ server: httpServer }),
+  transport: new WebSocketTransport({
+    server: httpServer,
+    /**
+     * Big enough for the largest message the agent protocol allows: a
+     * `memory_set` carrying the full 32KB a non-core slug permits, plus
+     * framing. The default is far smaller, and the failure mode is nasty —
+     * the socket is destroyed mid-write rather than the write being refused,
+     * so an agent gets a dead connection instead of the `too_large` error the
+     * protocol promises it. Bounded on purpose: an unlimited payload is a
+     * denial-of-service waiting to happen.
+     */
+    maxPayload: 64 * 1024,
+  }),
   greet: false,
   // We own the signal handlers below, so Colyseus shouldn't register its own.
   gracefullyShutdown: false,

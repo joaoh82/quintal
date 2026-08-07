@@ -37,6 +37,14 @@ export class OfficePlayer extends Schema {
   kind: PlayerKind = 'human';
   /** Free-text presence line: "idle", "running tests", … */
   status = '';
+  /**
+   * For agents: the human who owns this one, shown wherever it appears. Empty
+   * for humans. Attribution is not optional — an agent acting with nobody
+   * accountable for it is the thing this field exists to prevent.
+   */
+  ownerName = '';
+  /** For agents: comma-joined scopes, so the profile card can show them. */
+  scopes = '';
 }
 
 defineTypes(OfficePlayer, {
@@ -49,6 +57,8 @@ defineTypes(OfficePlayer, {
   spriteKey: 'string',
   kind: 'string',
   status: 'string',
+  ownerName: 'string',
+  scopes: 'string',
 });
 
 export class OfficeState extends Schema {
@@ -70,6 +80,8 @@ export interface PlayerInit {
   spriteKey?: string;
   kind?: PlayerKind;
   status?: string;
+  ownerName?: string;
+  scopes?: readonly string[];
 }
 
 /** Build a populated player. Assignment, not construction — see the note above. */
@@ -84,5 +96,7 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.spriteKey = init.spriteKey ?? 'default';
   player.kind = init.kind ?? 'human';
   player.status = init.status ?? '';
+  player.ownerName = init.ownerName ?? '';
+  player.scopes = (init.scopes ?? []).join(',');
   return player;
 }
