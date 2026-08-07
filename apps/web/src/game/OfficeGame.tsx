@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { gameBridge } from './bridge';
 import type { OfficeSession } from './createGame';
 import { ChatPanel } from './ui/ChatPanel';
+import { HelpPanel } from './ui/HelpPanel';
 import { RosterPanel } from './ui/RosterPanel';
 
 interface Hud {
@@ -54,6 +55,17 @@ export default function OfficeGame() {
   const [connectionDetail, setConnectionDetail] = useState<string>('');
   const [notice, setNotice] = useState<string>('');
   const [chatFocused, setChatFocused] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // `?` opens help. The chat input stops keydown propagation, so typing a
+  // question mark in a sentence never reaches this.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === '?') setHelpOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -226,7 +238,17 @@ export default function OfficeGame() {
             ? 'Esc returns to walking'
             : `WASD / arrows · click to walk · Enter to chat · @name to address · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          aria-label="Keys and commands"
+          className="pointer-events-auto rounded border border-white/20 px-1.5 leading-5 text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          ?
+        </button>
       </div>
+
+      {helpOpen ? <HelpPanel onClose={() => setHelpOpen(false)} /> : null}
     </div>
   );
 }
