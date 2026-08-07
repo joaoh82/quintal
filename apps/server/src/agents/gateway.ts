@@ -10,7 +10,9 @@ import {
   findRevokedAgentIds,
   getDb,
   recordAgentEvent,
+  recordHost,
   setAgentStatus,
+  setAgentWorkspace,
   touchAgent,
   type AgentIdentity,
 } from '@quintal/shared/db';
@@ -82,6 +84,38 @@ export function markSeen(agentId: string): void {
 export function persistStatus(agentId: string, status: string): void {
   void setAgentStatus(getDb(), agentId, status).catch((error: unknown) => {
     logger.error(`[agent] status write failed for ${agentId}`, error);
+  });
+}
+
+/**
+ * Record what a machine can run, and where one agent is rooted.
+ *
+ * Fire-and-forget for the same reason as the audit write: this is bookkeeping
+ * about somebody's laptop, and no agent command should wait on it.
+ */
+export function persistHostReport(input: {
+  agentId: string;
+  workspaceId: string;
+  ownerUserId: string;
+  report: unknown;
+  workspacePath: string;
+  rootedAtReposDir: boolean;
+}): void {
+  const db = getDb();
+  void recordHost(db, {
+    workspaceId: input.workspaceId,
+    ownerUserId: input.ownerUserId,
+    report: input.report,
+  }).catch((error: unknown) => {
+    logger.error(`[agent] host report failed for ${input.agentId}`, error);
+  });
+  void setAgentWorkspace(
+    db,
+    input.agentId,
+    input.workspacePath,
+    input.rootedAtReposDir,
+  ).catch((error: unknown) => {
+    logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
   });
 }
 

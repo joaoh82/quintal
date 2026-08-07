@@ -5,6 +5,7 @@ import type * as schema from '@agentclientprotocol/sdk';
 import {
   isAddressed,
   parseAgentCommand,
+  type RuntimeStatus,
   type AgentChatEvent,
   type AgentMentionEvent,
 } from '@quintal/shared';
@@ -323,6 +324,20 @@ export class AgentRunner {
     const walkUp =
       this.#gateway.ready?.limits.walkUpRadiusTiles ?? WALK_UP_RADIUS_FALLBACK_TILES;
     return distance !== null && distance <= walkUp;
+  }
+
+  /**
+   * Tell the office about this machine, and where this agent is rooted.
+   *
+   * The runtime list is optional and its absence is meaningful — see
+   * `Supervisor.#reportHost`.
+   */
+  reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[] }): void {
+    this.#gateway.hostReport({
+      ...host,
+      workspacePath: this.config.cwd,
+      rootedAtReposDir: this.config.rootedAtReposDir,
+    });
   }
 
   /** A mention carries no distance: it reached us from anywhere on the map. */

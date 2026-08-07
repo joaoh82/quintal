@@ -36,6 +36,7 @@ import {
   type AgentErrorPayload,
   type AgentLookAroundPayload,
   type AgentMemoryGetPayload,
+  type AgentHostReportPayload,
   type AgentMemorySetPayload,
   type AgentMessagesGetPayload,
   type AgentMoveToPayload,
@@ -81,6 +82,7 @@ import {
   findRevoked,
   hasScope,
   markSeen,
+  persistHostReport,
   persistStatus,
   type AgentSession,
 } from '../agents/gateway.js';
@@ -198,6 +200,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(AgentMessage.MemorySet, (client, payload: AgentMemorySetPayload) =>
       void this.#onAgentMemorySet(client, payload),
+    );
+    this.onMessage(AgentMessage.HostReport, (client, payload: AgentHostReportPayload) =>
+      this.#onAgentHostReport(client, payload),
     );
 
     void this.#refreshSettings();
@@ -727,6 +732,47 @@ export class OfficeRoom extends Room<OfficeState> {
       audit(session.identity.id, 'effect.status_changed', { status });
       this.#broadcastRosterToAgents();
     }
+  }
+
+  /**
+   * A harness describing the machine it runs on.
+   *
+   * Unscoped, because it changes nothing anybody else can see — it is the
+   * agent telling its owner where it lives. It is still *untrusted*: an agent
+   * key is a credential pasted into a config file, and everything here ends up
+   * rendered on the owner's settings page, so `recordHost` normalises it and
+   * drops runtime ids that aren't in the catalogue.
+   */
+  #onAgentHostReport(client: Client, payload: AgentHostReportPayload): void {
+    const session = this.#agentSession(client);
+    if (!session) return;
+
+    markSeen(session.identity.id);
+    const workspacePath = String(payload?.workspacePath ?? '');
+    const rootedAtReposDir = Boolean(payload?.rootedAtReposDir);
+
+    audit(session.identity.id, 'command.host_report', {
+      label: payload?.label,
+      workspacePath,
+      rootedAtReposDir,
+      runtimes: payload?.runtimes?.length ?? 0,
+    });
+
+    persistHostReport({
+      agentId: session.identity.id,
+      workspaceId: session.identity.workspaceId,
+      ownerUserId: session.identity.ownerUserId,
+      // The runtime list is passed through exactly as it arrived, including
+      // absent: only the first agent of a fleet scans PATH, and `[]` from the
+      // other seven would erase the answer seconds after getting it.
+      report: {
+        label: payload?.label,
+        reposDir: payload?.reposDir,
+        ...(payload?.runtimes ? { runtimes: payload.runtimes } : {}),
+      },
+      workspacePath,
+      rootedAtReposDir,
+    });
   }
 
   #onAgentLookAround(client: Client, payload: AgentLookAroundPayload): void {

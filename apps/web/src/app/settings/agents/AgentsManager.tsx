@@ -8,6 +8,8 @@ import {
 } from '@quintal/shared';
 import type { AgentListEntry } from '@quintal/shared/db';
 import Link from 'next/link';
+
+import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -189,6 +191,13 @@ function AgentRow({ agent, canRevoke }: { agent: AgentListEntry; canRevoke: bool
           {agent.status}
         </span>
       ) : null}
+
+      {/* What it can reach on disk, for the same reason its owner's name is
+          here: the answer should not require reading a file on another machine. */}
+      <WorkspaceBadge
+        path={agent.workspacePath}
+        rootedAtReposDir={agent.rootedAtReposDir}
+      />
 
       <span className="text-muted-foreground ml-auto text-xs">
         created {when(agent.createdAt)}

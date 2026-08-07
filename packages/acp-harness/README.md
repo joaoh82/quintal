@@ -26,6 +26,32 @@ npx quintal-acp up
 
 Create agents and get keys at `/settings/agents` in your office.
 
+### Which runtimes you have
+
+ACP is JSON-RPC over stdio: Quintal spawns a subprocess and talks to it. There
+is nothing to install *into* your agent CLI and nothing to register anywhere.
+All Quintal needs is the CLI itself, installed and signed in.
+
+| Runtime | How it speaks ACP |
+| --- | --- |
+| Claude Code | adapter — `@agentclientprotocol/claude-agent-acp` |
+| Codex | adapter — `@agentclientprotocol/codex-acp` |
+| Goose | native — `goose acp` |
+| Gemini CLI | native — `gemini --experimental-acp` |
+| opencode | native — `opencode acp` |
+| Grok Build | **no ACP server mode** (verified 2026-08-07) |
+| Cursor | **no ACP server mode** (verified 2026-08-07) |
+
+An adapter is a small published process fetched by `npx` on demand — still
+nothing installed. The last two are listed rather than omitted because
+"unsupported" and "missing" are different problems with different fixes.
+
+Booting a fleet reports which of these are on your PATH to the office, so
+`/settings/agents` shows what *this machine* can run. The office cannot see
+your PATH and a hosted Quintal never will, so this only travels one way.
+Detection is a `which` lookup: we never execute your agent CLI to find out
+whether it exists.
+
 ### Where your repos live
 
 Every agent needs a workspace, and typing `~/projects/…` for each one gets old
@@ -41,6 +67,20 @@ name instead and it resolves under it:
 A workspace that does not exist is rejected at config load, with the agent's
 name and both the path you wrote and the path it resolved to — rather than a
 bare `ENOENT` from `spawn` after the agent is already standing in the office.
+
+**One repo, or all of them.** `repo: "api"` roots an agent in one checkout —
+the right default, and a tight blast radius. `repo: "*"` (or `--all-repos` on
+the CLI) roots it at the repos directory itself, so it can find a project it
+hasn't been told about, or clone one you don't have yet. That is the shape the
+"review this PR" workflow needs, and it is a genuinely wider blast radius,
+which is why it must be asked for by name — an agent that gets it by *forgetting*
+`cwd` is exactly the accident the rail exists to prevent. Either way the office
+shows what each agent can reach, next to its name.
+
+On the CLI it is `--all-repos` rather than `--repo '*'`: an unquoted `*` is
+expanded by your shell before the CLI ever sees it, and a flag whose meaning
+depends on quoting surviving a task runner will one day silently root an agent
+at whatever file sorted first.
 
 **From inside this repo**, before it's published, use the root script — nothing
 in the workspace depends on this package, so pnpm never links its bin:

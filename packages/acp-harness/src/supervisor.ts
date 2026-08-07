@@ -1,5 +1,6 @@
 import type { AgentConfig } from './config.js';
 import { AgentRunner, type RunnerState } from './runner/AgentRunner.js';
+import { detectRuntimes, hostLabel } from './runtimes.js';
 
 /**
  * Runs a fleet.
@@ -16,6 +17,8 @@ export interface SupervisorOptions {
   logDir?: string;
   /** Write logs without ANSI colour — for pipes and CI. */
   plain?: boolean;
+  /** Where this machine keeps repositories, reported to the office. */
+  reposDir?: string;
 }
 
 interface Entry {
@@ -72,7 +75,36 @@ export class Supervisor {
     );
 
     const failed = results.filter((result) => result.status === 'rejected').length;
+    await this.#reportHost(targets.map(([, entry]) => entry.runner));
     return { started: results.length - failed, failed };
+  }
+
+  /**
+   * Tell the office what this machine can run.
+   *
+   * Scanned once and shared, not once per agent: which CLIs are on PATH is a
+   * fact about the laptop, and eight agents each shelling out to `which` eight
+   * times would be the same answer at eight times the cost. Only the first
+   * connected agent carries the list — the rest report the machine and their
+   * own workspace, and an omitted list deliberately leaves the stored scan
+   * alone rather than blanking it.
+   *
+   * Best-effort throughout: a fleet that works but hasn't told the settings
+   * page about itself is far better than a fleet that refuses to boot because
+   * `which` misbehaved.
+   */
+  async #reportHost(runners: AgentRunner[]): Promise<void> {
+    const live = runners.filter((runner) => runner.connected);
+    if (live.length === 0) return;
+
+    try {
+      const host = { label: hostLabel(), reposDir: this.options.reposDir ?? '' };
+      const runtimes = await detectRuntimes();
+      live[0]?.reportHost({ ...host, runtimes });
+      for (const runner of live.slice(1)) runner.reportHost(host);
+    } catch {
+      // Reporting is bookkeeping. Never let it take a working fleet down.
+    }
   }
 
   async down(): Promise<void> {

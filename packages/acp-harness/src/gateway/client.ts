@@ -5,6 +5,7 @@ import {
   type AgentErrorPayload,
   type AgentMentionEvent,
   type AgentOccupant,
+  type AgentHostReportPayload,
   type AgentReadyPayload,
   type AgentResultPayload,
   type AgentRosterEvent,
@@ -142,6 +143,10 @@ export class GatewayClient {
 
   moveToZone(zoneId: string): void {
     this.#room?.send(AgentMessage.MoveTo, { zoneId });
+  }
+
+  hostReport(payload: AgentHostReportPayload): void {
+    this.#room?.send(AgentMessage.HostReport, payload);
   }
 
   setStatus(status: string): void {

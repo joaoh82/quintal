@@ -193,6 +193,9 @@ export interface AgentListEntry {
   status: string;
   ownerUserId: string;
   ownerName: string;
+  /** Where its harness said it is rooted. Empty until one connects. */
+  workspacePath: string;
+  rootedAtReposDir: boolean;
   createdAt: number;
   lastSeenAt: number | null;
   revokedAt: number | null;
@@ -212,6 +215,8 @@ export async function listAgentsForWorkspace(
       status: agents.status,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      workspacePath: agents.workspacePath,
+      rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -244,6 +249,8 @@ export async function findAgentById(
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
       workspaceId: agents.workspaceId,
+      workspacePath: agents.workspacePath,
+      rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -304,6 +311,25 @@ export async function setAgentStatus(
   await db
     .update(agents)
     .set({ status: status.slice(0, AGENT_STATUS_MAX_LENGTH), lastSeenAt: new Date() })
+    .where(eq(agents.id, agentId));
+}
+
+/**
+ * Record where an agent is rooted, as its harness reported it.
+ *
+ * Kept on the agent rather than derived, because the office has no way to know
+ * — and because an owner deserves to see "this one can reach every repo I have"
+ * without reading a config file on another machine.
+ */
+export async function setAgentWorkspace(
+  db: Database,
+  agentId: string,
+  workspacePath: string,
+  rootedAtReposDir: boolean,
+): Promise<void> {
+  await db
+    .update(agents)
+    .set({ workspacePath: workspacePath.slice(0, 512), rootedAtReposDir })
     .where(eq(agents.id, agentId));
 }
 
