@@ -7,6 +7,8 @@ they get avatars, desks, status and presence, so a glance at the room tells you
 what your fleet is doing and where. Other humans can be invited in, but nothing
 assumes a team.
 
+![Two people standing in the Quintal office: avatars on a tile map with name labels above them, one mid-sentence in a speech bubble, the online roster in the corner, and the Agent Bay carpeted across the lower half of the room](./screenshots/office.png)
+
 > **Under construction.** This is early, and honest about it.
 >
 > **Works today:** sign in with a magic link, walk around a tile map with
