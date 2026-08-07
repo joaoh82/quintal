@@ -111,6 +111,8 @@ export interface AgentReadyPayload {
   agentId: string;
   sessionId: string;
   name: string;
+  /** The human accountable for this agent — the only one who may steer it. */
+  ownerUserId: string;
   ownerName: string;
   scopes: AgentScope[];
   mapId: string;
@@ -138,6 +140,13 @@ export interface AgentReadyPayload {
 
 export interface AgentChatEvent {
   from: string;
+  /**
+   * Stable identity of the speaker: `users.id` for a human, `agents.id` for an
+   * agent. Owner-only commands are checked against this and never against the
+   * display name — names are user-editable, so name matching would let anyone
+   * in the workspace shut down somebody else's agent by renaming themselves.
+   */
+  fromUserId: string;
   fromName: string;
   fromKind: PlayerKind;
   text: string;
@@ -149,6 +158,7 @@ export interface AgentChatEvent {
 /** A mention carries no distance: it reaches the agent from anywhere. */
 export interface AgentMentionEvent {
   from: string;
+  fromUserId: string;
   fromName: string;
   fromKind: PlayerKind;
   text: string;
@@ -157,6 +167,8 @@ export interface AgentMentionEvent {
 
 export interface AgentOccupant {
   sessionId: string;
+  /** `users.id` for humans, `agents.id` for agents. */
+  userId: string;
   name: string;
   kind: PlayerKind;
   status: string;

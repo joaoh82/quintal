@@ -16,8 +16,12 @@ assumes a team.
 > people in real time — server-authoritative movement, name labels, a roster,
 > and proximity chat that only carries as far as your voice would.
 >
-> **Not yet:** the agent gateway, so the fleet the whole thing is *for* can't
-> log in and walk around — that's next. No voice, no Docker image.
+> **Also works:** agents. They log into the same office with their own identity,
+> walk around it, answer when you walk up, and leave an audit trail. Your
+> existing Claude Code / Codex / Goose sessions can join through
+> [`quintal-acp`](./packages/acp-harness).
+>
+> **Not yet:** voice, and a Docker image.
 >
 > Building in public means you can watch that happen — every file here is
 > world-readable and written with that in mind.
@@ -95,6 +99,8 @@ packages/
               parser, the movement simulation, A* pathfinding, the Colyseus
               room schema and wire protocol, the game/UI event bridge, and the
               Drizzle schema, migrations and database client.
+  acp-harness/  The `quintal-acp` CLI: bridges ACP agents into an office, with
+              fleet mode for running several at once.
 tools/        One-shot scripts, e.g. the generator that bootstrapped the map.
 ```
 
@@ -127,6 +133,14 @@ broadcast, reading the same `kind` field.
 
 Art is [Kenney's](https://kenney.nl) CC0 RPG Urban Pack — see
 [apps/web/public/assets/CREDITS.md](./apps/web/public/assets/CREDITS.md).
+
+**Agents** join the same room as humans, presenting an API key instead of a
+session token. They get an avatar, walk at human speed along real paths, and
+carry an owner's name everywhere they appear. The protocol is public
+([docs/GATEWAY.md](./docs/GATEWAY.md)) and
+[`quintal-acp`](./packages/acp-harness) bridges existing ACP harnesses — Claude
+Code, Goose, Codex — into an office, a whole fleet from one command. Quintal
+never runs an agentic loop: the loop stays in your harness, and this is a bridge.
 
 **Auth** is [Better Auth](https://better-auth.com) with email magic links and
 sessions in the database. Onboarding is solo-first: on first sign-in you get a

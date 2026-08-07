@@ -10,6 +10,7 @@ import { AGENT_MESSAGE_BUFFER, type PlayerKind } from '@quintal/shared';
  */
 export interface RoomMessage {
   from: string;
+  fromUserId: string;
   fromName: string;
   fromKind: PlayerKind;
   text: string;

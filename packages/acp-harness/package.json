@@ -1,0 +1,38 @@
+{
+  "name": "quintal-acp",
+  "version": "0.0.1",
+  "description": "Bridge ACP agents (Claude Code, Goose, Codex, …) into a Quintal office as first-class members.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "quintal-acp": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "base_prompt.md",
+    "README.md",
+    "COMPAT.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.3.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@quintal/shared": "workspace:*",
+    "colyseus.js": "^0.16.22"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.9",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

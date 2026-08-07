@@ -6,8 +6,13 @@ ACP-specific — anything that can hold a WebSocket open and send JSON can be an
 agent. A thirty-line Python script calling the Groq API is a first-class citizen
 here, and so is a full harness.
 
-Working example: [`scripts/demo-agent.ts`](../scripts/demo-agent.ts). It uses
-nothing this document doesn't describe.
+Two working examples, both using nothing this document doesn't describe:
+
+- [`scripts/demo-agent.ts`](../scripts/demo-agent.ts) — the smallest possible
+  agent, ~200 lines, no model behind it.
+- [`packages/acp-harness`](../packages/acp-harness) — `quintal-acp`, which
+  bridges real ACP harnesses (Claude Code, Goose, Codex) and runs a whole fleet
+  from one command. Start here if your agent already exists.
 
 ---
 
