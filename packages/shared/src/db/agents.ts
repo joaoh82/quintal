@@ -250,6 +250,10 @@ export interface AgentListEntry {
   status: string;
   ownerUserId: string;
   ownerName: string;
+  /** How a host should launch it, when the office defines that. Null otherwise. */
+  runtimeId: string | null;
+  repoSpec: string | null;
+  hostLabel: string | null;
   /** Where its harness said it is rooted. Empty until one connects. */
   workspacePath: string;
   rootedAtReposDir: boolean;
@@ -272,6 +276,9 @@ export async function listAgentsForWorkspace(
       status: agents.status,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      runtimeId: agents.runtimeId,
+      repoSpec: agents.repoSpec,
+      hostLabel: agents.hostLabel,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -306,6 +313,9 @@ export async function findAgentById(
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
       workspaceId: agents.workspaceId,
+      runtimeId: agents.runtimeId,
+      repoSpec: agents.repoSpec,
+      hostLabel: agents.hostLabel,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -387,6 +397,37 @@ export async function setAgentWorkspace(
   await db
     .update(agents)
     .set({ workspacePath: workspacePath.slice(0, 512), rootedAtReposDir })
+    .where(eq(agents.id, agentId));
+}
+
+/**
+ * Assign an existing agent to a machine, or unassign it.
+ *
+ * Separate from creation because the two orderings are both natural: you might
+ * register a machine and then make agents for it, or make an agent today and
+ * decide where it runs tomorrow. Requiring the first was an artefact of the
+ * form, not a rule about agents.
+ *
+ * Null clears all three together — an agent with a runtime but no machine has
+ * nowhere to run, and one with a machine but no runtime has nothing to run, so
+ * they are only ever meaningful as a set.
+ */
+export async function setAgentLaunch(
+  db: Database,
+  agentId: string,
+  launch: { runtimeId: string; repoSpec: string; hostLabel: string } | null,
+): Promise<void> {
+  await db
+    .update(agents)
+    .set(
+      launch
+        ? {
+            runtimeId: launch.runtimeId,
+            repoSpec: launch.repoSpec.slice(0, 512),
+            hostLabel: launch.hostLabel,
+          }
+        : { runtimeId: null, repoSpec: null, hostLabel: null },
+    )
     .where(eq(agents.id, agentId));
 }
 

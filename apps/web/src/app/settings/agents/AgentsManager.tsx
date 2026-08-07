@@ -16,7 +16,12 @@ import { useActionState, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-import { createAgentAction, revokeAgentAction, type CreateAgentState } from './actions';
+import {
+  assignAgentAction,
+  createAgentAction,
+  revokeAgentAction,
+  type CreateAgentState,
+} from './actions';
 
 const INITIAL: CreateAgentState = { ok: false };
 
@@ -206,6 +211,7 @@ export function AgentsManager({
                 key={agent.id}
                 agent={agent}
                 canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
+                machines={machines}
               />
             ))}
           </ul>
@@ -223,7 +229,7 @@ export function AgentsManager({
           </p>
           <ul className="mt-3 divide-y rounded-lg border opacity-60">
             {revoked.map((agent) => (
-              <AgentRow key={agent.id} agent={agent} canRevoke={false} />
+              <AgentRow key={agent.id} agent={agent} canRevoke={false} machines={[]} />
             ))}
           </ul>
         </section>
@@ -232,7 +238,15 @@ export function AgentsManager({
   );
 }
 
-function AgentRow({ agent, canRevoke }: { agent: AgentListEntry; canRevoke: boolean }) {
+function AgentRow({
+  agent,
+  canRevoke,
+  machines,
+}: {
+  agent: AgentListEntry;
+  canRevoke: boolean;
+  machines: string[];
+}) {
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
       <span className="flex items-center gap-1.5 font-medium">
@@ -265,6 +279,51 @@ function AgentRow({ agent, canRevoke }: { agent: AgentListEntry; canRevoke: bool
           ? `revoked ${when(agent.revokedAt)}`
           : `seen ${when(agent.lastSeenAt)}`}
       </span>
+
+      {/* Where it runs, changeable after the fact — the ordering that forced
+          you to register a machine first was an artefact of the create form,
+          not a rule about agents. */}
+      {canRevoke && machines.length > 0 && agent.revokedAt === null ? (
+        <form
+          action={assignAgentAction}
+          className="order-last flex w-full flex-wrap items-center gap-2 pt-1"
+        >
+          <input type="hidden" name="agentId" value={agent.id} />
+          <span className="text-muted-foreground text-[11px]">Runs on</span>
+          <select
+            name="hostLabel"
+            defaultValue={agent.hostLabel ?? ''}
+            className="border-input bg-background h-7 rounded border px-2 text-xs"
+          >
+            <option value="">nowhere</option>
+            {machines.map((machine) => (
+              <option key={machine} value={machine}>
+                {machine}
+              </option>
+            ))}
+          </select>
+          <select
+            name="runtimeId"
+            defaultValue={agent.runtimeId ?? 'claude-code'}
+            className="border-input bg-background h-7 rounded border px-2 text-xs"
+          >
+            {RUNTIMES.filter((runtime) => runtime.acp.kind !== 'none').map((runtime) => (
+              <option key={runtime.id} value={runtime.id}>
+                {runtime.label}
+              </option>
+            ))}
+          </select>
+          <input
+            name="repoSpec"
+            defaultValue={agent.repoSpec ?? ''}
+            placeholder="api · * for all"
+            className="border-input bg-background h-7 w-36 rounded border px-2 text-xs"
+          />
+          <button type="submit" className="text-xs underline-offset-2 hover:underline">
+            Save
+          </button>
+        </form>
+      ) : null}
 
       <Link
         href={`/settings/agents/${agent.id}/log`}

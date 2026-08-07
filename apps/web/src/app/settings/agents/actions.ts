@@ -18,6 +18,7 @@ import {
   listHostTokens,
   revokeAgent,
   revokeHostToken,
+  setAgentLaunch,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -202,5 +203,52 @@ export async function revokeHostTokenAction(formData: FormData): Promise<void> {
   if (!mine) throw new Error('That is not your machine to revoke.');
 
   await revokeHostToken(db, id);
+  revalidatePath('/settings/agents');
+}
+
+
+/**
+ * Move an existing agent to a machine, or take it off one.
+ *
+ * A running fleet notices within a poll: the machine losing it stops it, the
+ * machine gaining it starts it, and agents that did not change keep their
+ * sessions. Which is why this is a plain form and not a warning-laden dialog —
+ * reassigning is cheap and reversible.
+ */
+export async function assignAgentAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) throw new Error('No such agent.');
+
+  // The same gate as revoking: your own agents, or anyone's if you run the
+  // workspace. Assigning somebody else's agent to your laptop would be a way
+  // to run their fleet on your machine.
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    throw new Error('That is not your agent to assign.');
+  }
+
+  const hostLabel = String(formData.get('hostLabel') ?? '').trim();
+  if (hostLabel.length === 0) {
+    await setAgentLaunch(db, agentId, null);
+    revalidatePath('/settings/agents');
+    return;
+  }
+
+  const runtimeId = String(formData.get('runtimeId') ?? '').trim();
+  const runtime = runtimeById(runtimeId);
+  if (!runtime) throw new Error(`Unknown runtime "${runtimeId}".`);
+  if (runtime.acp.kind === 'none') {
+    throw new Error(`${runtime.label} has no ACP mode, so nothing can drive it.`);
+  }
+
+  const repoSpec = String(formData.get('repoSpec') ?? '').trim();
+  if (repoSpec.length === 0) {
+    throw new Error('Say which repo it works in, or * for all of them.');
+  }
+
+  await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel });
   revalidatePath('/settings/agents');
 }
