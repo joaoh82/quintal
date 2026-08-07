@@ -32,3 +32,7 @@ apps/web/public/assets/maps/
 # Fleet configs are per-machine and frequently hold agent keys
 quintal.fleet.json
 .quintal/
+
+# The build plan: strategy, pricing and competitive analysis. Lives in the repo
+# so it can be kept in step with the code, but this repo is public.
+plan/
