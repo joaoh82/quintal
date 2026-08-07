@@ -28,7 +28,7 @@ export default async function OfficePage() {
           /{workspace.slug} · {session.user.email}
         </p>
         <p className="text-muted-foreground ml-auto text-xs">
-          Single player for now — nobody else can see you yet.
+          Enter to chat · anyone signed in shares this office
         </p>
       </header>
 
