@@ -51,6 +51,15 @@ const PERMISSION_TIMEOUT_MS = 120_000;
  */
 const WALK_UP_RADIUS_FALLBACK_TILES = 3;
 
+/** The machine credential, when this agent was defined in the office. */
+function hostCredential(
+  config: AgentConfig,
+): { token: string; agentId: string } | undefined {
+  return config.hostToken && config.agentId
+    ? { token: config.hostToken, agentId: config.agentId }
+    : undefined;
+}
+
 export class AgentRunner {
   readonly name: string;
 
@@ -88,7 +97,12 @@ export class AgentRunner {
     private readonly logDir?: string,
   ) {
     this.name = config.name;
-    this.#gateway = new GatewayClient(config.url, config.key, config.mapId);
+    this.#gateway = new GatewayClient(
+      config.url,
+      config.key,
+      config.mapId,
+      hostCredential(config),
+    );
     this.#sessions = new SessionStore({
       onEvict: (record, reason) => {
         this.#log('info', `session for "${record.scope}" ended (${reason})`);
@@ -176,7 +190,12 @@ export class AgentRunner {
     if (this.#stopping) return;
 
     try {
-      this.#gateway = new GatewayClient(this.config.url, this.config.key, this.config.mapId);
+      this.#gateway = new GatewayClient(
+        this.config.url,
+        this.config.key,
+        this.config.mapId,
+        hostCredential(this.config),
+      );
       await this.#connectGateway();
       this.#setState('connected');
       this.#setStatus(this.#statusLine || 'idle');

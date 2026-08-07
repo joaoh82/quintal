@@ -55,6 +55,13 @@ export interface CreateAgentInput {
   name: string;
   spriteKey: string;
   scopes?: readonly AgentScope[];
+  /**
+   * How a host should launch this agent, when the office defines it.
+   *
+   * All three together or none: an agent with a runtime but no host has nowhere
+   * to run, and one with a host but no runtime has nothing to run.
+   */
+  launch?: { runtimeId: string; repoSpec: string; hostLabel: string };
 }
 
 export interface CreatedAgent {
@@ -79,6 +86,13 @@ export async function createAgent(
     spriteKey: input.spriteKey,
     apiKeyHash: hashAgentKey(key),
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
+    ...(input.launch
+      ? {
+          runtimeId: input.launch.runtimeId,
+          repoSpec: input.launch.repoSpec,
+          hostLabel: input.launch.hostLabel,
+        }
+      : {}),
   });
 
   // The first line of the log, so the audit trail starts where the agent does.
@@ -151,6 +165,49 @@ export async function findAgentByKey(
   // The lookup was by hash, so this can only fail on a hash collision; check it
   // anyway, in constant time, because the cost is nothing.
   if (!hashesMatch(row.apiKeyHash, hash)) return null;
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    ownerUserId: row.ownerUserId,
+    ownerName: row.ownerName,
+    name: row.name,
+    spriteKey: row.spriteKey,
+    scopes: parseScopes(row.scopes),
+    status: row.status,
+  };
+}
+
+/**
+ * The same identity `findAgentByKey` returns, but resolved by id.
+ *
+ * Used only by host-token auth, which has already proved *which machine* is
+ * calling and now needs the agent it claims to be. Revoked agents come back
+ * null here too — a host token must not resurrect one.
+ */
+export async function findAgentIdentityById(
+  db: Database,
+  agentId: string,
+): Promise<AgentIdentity | null> {
+  const rows = await db
+    .select({
+      id: agents.id,
+      workspaceId: agents.workspaceId,
+      ownerUserId: agents.ownerUserId,
+      ownerName: users.name,
+      name: agents.name,
+      spriteKey: agents.spriteKey,
+      scopes: agents.scopes,
+      status: agents.status,
+      revokedAt: agents.revokedAt,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.ownerUserId))
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.revokedAt !== null) return null;
 
   return {
     id: row.id,

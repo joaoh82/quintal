@@ -5,6 +5,7 @@
 export * from './agents.js';
 export * from './client.js';
 export * from './env.js';
+export * from './host-tokens.js';
 export * from './hosts.js';
 export * from './migrate.js';
 export * from './schema.js';

@@ -52,6 +52,8 @@ export class GatewayClient {
     private readonly url: string,
     private readonly agentKey: string,
     private readonly mapId: string,
+    /** Machine credential, when this agent was defined in the office. */
+    private readonly host?: { token: string; agentId: string },
   ) {}
 
   on<K extends keyof GatewayEvents>(event: K, handler: GatewayEvents[K]): void {
@@ -73,7 +75,12 @@ export class GatewayClient {
   async connect(): Promise<AgentReadyPayload> {
     const client = new Client(new URL('/colyseus', this.url).toString());
     const room = await client.joinOrCreate('office', {
-      agentKey: this.agentKey,
+      // Exactly one credential travels: a host token identifies the machine
+      // and names the agent, an agent key is the agent. Sending both would
+      // leave which one authorised the join ambiguous in the audit log.
+      ...(this.host
+        ? { hostToken: this.host.token, agentId: this.host.agentId }
+        : { agentKey: this.agentKey }),
       mapId: this.mapId,
     });
     this.#room = room;

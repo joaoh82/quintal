@@ -24,7 +24,24 @@ export interface SupervisorOptions {
 interface Entry {
   runner: AgentRunner;
   colour: number;
+  config: AgentConfig;
   startError?: string;
+}
+
+/**
+ * Would these two configs produce the same running agent?
+ *
+ * Name is the identity; everything here is what cannot be changed without a
+ * restart. Deliberately ignores `key`/`hostToken` — a rotated credential is a
+ * reconnect concern, not a reason to drop a session mid-turn.
+ */
+function sameLaunch(a: AgentConfig, b: AgentConfig): boolean {
+  return (
+    a.cwd === b.cwd &&
+    a.url === b.url &&
+    a.mapId === b.mapId &&
+    a.command.join(' ') === b.command.join(' ')
+  );
 }
 
 export class Supervisor {
@@ -34,12 +51,14 @@ export class Supervisor {
     private readonly agents: AgentConfig[],
     private readonly options: SupervisorOptions = {},
   ) {
-    for (const [index, config] of agents.entries()) {
-      const runner = new AgentRunner(config, options.logDir);
-      const colour = COLOURS[index % COLOURS.length] ?? 36;
-      runner.on('log', (level, message) => this.#write(config.name, colour, level, message));
-      this.#entries.set(config.name, { runner, colour });
-    }
+    for (const [index, config] of agents.entries()) this.#add(config, index);
+  }
+
+  #add(config: AgentConfig, index: number): void {
+    const runner = new AgentRunner(config, this.options.logDir);
+    const colour = COLOURS[index % COLOURS.length] ?? 36;
+    runner.on('log', (level, message) => this.#write(config.name, colour, level, message));
+    this.#entries.set(config.name, { runner, colour, config });
   }
 
   get size(): number {
@@ -105,6 +124,57 @@ export class Supervisor {
     } catch {
       // Reporting is bookkeeping. Never let it take a working fleet down.
     }
+  }
+
+  /**
+   * Bring the running fleet in line with a new list.
+   *
+   * The office is the source of truth when it defines the fleet, so this is
+   * reconciliation rather than a restart: agents that are already up and
+   * unchanged are left alone, because tearing down a working agent mid-turn to
+   * apply an unrelated change is a worse outcome than a slightly stale fleet.
+   *
+   * Only *added* and *removed* agents are acted on. An agent whose repo or
+   * runtime changed is treated as removed-and-added, since neither can be
+   * changed on a live ACP session.
+   */
+  async reconcile(next: AgentConfig[]): Promise<{ added: string[]; removed: string[] }> {
+    const wanted = new Map(next.map((config) => [config.name, config]));
+    const added: string[] = [];
+    const removed: string[] = [];
+
+    for (const [name, entry] of [...this.#entries]) {
+      const config = wanted.get(name);
+      if (config && sameLaunch(config, entry.config)) continue;
+
+      await entry.runner.stop().catch(() => {});
+      this.#entries.delete(name);
+      removed.push(name);
+    }
+
+    for (const config of next) {
+      if (this.#entries.has(config.name)) continue;
+      this.#add(config, this.#entries.size);
+      added.push(config.name);
+    }
+
+    const fresh = added
+      .map((name) => this.#entries.get(name))
+      .filter((entry): entry is Entry => entry !== undefined);
+
+    await Promise.allSettled(
+      fresh.map(async (entry) => {
+        try {
+          await entry.runner.start();
+        } catch (error: unknown) {
+          entry.startError = error instanceof Error ? error.message : String(error);
+          this.#write(entry.runner.name, entry.colour, 'error', `failed to start: ${entry.startError}`);
+        }
+      }),
+    );
+    await this.#reportHost(fresh.map((entry) => entry.runner));
+
+    return { added, removed };
   }
 
   async down(): Promise<void> {

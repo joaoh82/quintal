@@ -215,6 +215,26 @@ export const agents = sqliteTable(
     rootedAtReposDir: integer('rooted_at_repos_dir', { mode: 'boolean' })
       .notNull()
       .default(false),
+
+    // --- how a host should launch this agent, when the office defines it ---
+    //
+    // Null throughout means "not office-defined": an agent created before this
+    // existed, or one you launch by hand with its own key. Those keep working
+    // exactly as they did; nothing here is a migration.
+    /** Runtime id from the shared catalogue — `claude-code`, `goose`, … */
+    runtimeId: text('runtime_id'),
+    /**
+     * Workspace as written by the person, not as resolved.
+     *
+     * A repo name, `*` for the whole repos directory, or an absolute path. Kept
+     * unresolved because it resolves differently on different machines, and the
+     * office is not the machine.
+     */
+    repoSpec: text('repo_spec'),
+    /** Which machine should run it, matching `agent_hosts.label`. */
+    hostLabel: text('host_label'),
+    /** Whether a host that pulls its fleet should be running this. */
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     /** Last time this agent did anything at all. Drives "last seen" in the UI. */
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -266,6 +286,34 @@ export const agentHosts = sqliteTable(
   },
   (table) => [uniqueIndex('agent_hosts_workspace_label').on(table.workspaceId, table.label)],
 );
+
+/**
+ * A machine's credential.
+ *
+ * Exists so the office can *define* an agent that your laptop then runs. The
+ * alternative — the office handing back agent keys it created — would mean
+ * storing those keys recoverably rather than as hashes, which is a worse trade
+ * than one revocable token that never leaves your machine.
+ *
+ * Scoped to one workspace and one owner: a host token may act as any agent that
+ * owner has assigned to it, and nothing else.
+ */
+export const hostTokens = sqliteTable('host_tokens', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id')
+    .notNull()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  ownerUserId: text('owner_user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** What the person called this machine when they created the token. */
+  label: text('label').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
+  /** Set instead of deleting, same as agents: revocation is a fact worth keeping. */
+  revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+});
 
 export const agentEvents = sqliteTable(
   'agent_events',

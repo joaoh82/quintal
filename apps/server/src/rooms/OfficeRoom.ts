@@ -79,6 +79,7 @@ import {
   allowMove,
   audit,
   authenticateAgent,
+  authenticateHostAgent,
   findRevoked,
   hasScope,
   markSeen,
@@ -94,6 +95,9 @@ interface OfficeRoomOptions {
   mapId?: unknown;
   token?: unknown;
   agentKey?: unknown;
+  /** A machine's credential, used with `agentId` instead of an agent key. */
+  hostToken?: unknown;
+  agentId?: unknown;
 }
 
 /** What `onAuth` hands to `onJoin`. Humans and agents come through one door. */
@@ -218,13 +222,27 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
-   * One door, two credentials. An agent presents `{ agentKey }`; a human
+   * One door, three credentials. An agent presents `{ agentKey }`; a machine
+   * running an office-defined agent presents `{ hostToken, agentId }`; a human
    * presents a Better Auth session token. Anything else is turned away.
    */
   override async onAuth(_client: Client, options: OfficeRoomOptions): Promise<JoinAuth> {
     // ServerError, not Error: a plain throw reaches the client as an empty
     // 4213 with no message, which for a documented public protocol means an
     // agent developer gets a bare number and no idea what they did wrong.
+    // A machine acting as one of its owner's agents. Checked first because it
+    // carries an explicit agent id; an agent key carries only itself.
+    if (options.hostToken !== undefined) {
+      const identity = await authenticateHostAgent(options.hostToken, options.agentId);
+      if (!identity) {
+        throw new ServerError(
+          ErrorCode.AUTH_FAILED,
+          'Unknown or revoked host token, or that agent is not yours. Manage machines at /settings/agents.',
+        );
+      }
+      return { kind: 'agent', identity };
+    }
+
     if (options.agentKey !== undefined) {
       const identity = await authenticateAgent(options.agentKey);
       if (!identity) {
