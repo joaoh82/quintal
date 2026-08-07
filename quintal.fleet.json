@@ -1,0 +1,6 @@
+{ "url": "http://localhost:3000",
+  "agents": [
+    { "name": "reviewer", "keyEnv": "qa_clPgS-N0JYpHKZzd1veYbOjJIfLQkBYXASxMVzc08PY", "agent": "custom",
+      "cmd": "node ~/projects/quintal/packages/acp-harness/test/fixtures/fake-acp-agent.mjs", "cwd": "./api" },
+    { "name": "builder", "keyEnv": "qa_CEOTRUrDHSoz8EDAfJNYB9VqRVj5j0nDqQGnoG4VtfY", "agent": "custom",
+      "cmd": "node ~/projects/quintal/packages/acp-harness/test/fixtures/fake-acp-agent.mjs", "cwd": "./web" }]}

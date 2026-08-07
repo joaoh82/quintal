@@ -3,7 +3,11 @@ import { describe, it } from 'node:test';
 
 import type { AgentChatEvent } from '@quintal/shared';
 
-import { parseFleet, splitCommand, ConfigError } from '../src/config.js';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { loadFleet, parseFleet, splitCommand, ConfigError } from '../src/config.js';
 import { buildEnvelope, selectWindow, WINDOW_SIZE } from '../src/runner/context.js';
 import { MAX_BUBBLES, statusForTool, toBubbles } from '../src/runner/outbound.js';
 import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
@@ -15,9 +19,11 @@ import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
  */
 
 describe('fleet config', () => {
+  // cwd is validated now, so the fixture points at a directory that exists.
+  const repo = mkdtempSync(join(tmpdir(), 'quintal-repo-'));
   const base = {
     url: 'http://localhost:3000',
-    agents: [{ name: 'reviewer', key: 'qa_x', agent: 'claude-code', cwd: '/repo' }],
+    agents: [{ name: 'reviewer', key: 'qa_x', agent: 'claude-code', cwd: repo }],
   };
 
   it('resolves a known harness to its default command', () => {
@@ -47,7 +53,7 @@ describe('fleet config', () => {
 
   it('refuses a custom harness with no command', () => {
     assert.throws(
-      () => parseFleet({ ...base, agents: [{ name: 'x', key: 'k', agent: 'custom', cwd: '/r' }] }, '/base'),
+      () => parseFleet({ ...base, agents: [{ name: 'x', key: 'k', agent: 'custom', cwd: repo }] }, '/base'),
       ConfigError,
     );
   });
@@ -60,11 +66,46 @@ describe('fleet config', () => {
   });
 
   it('resolves a relative cwd against the config location', () => {
-    const fleet = parseFleet(
-      { ...base, agents: [{ ...base.agents[0], cwd: './api' }] },
-      '/home/josh/projects',
+    const dir = mkdtempSync(join(tmpdir(), 'quintal-fleet-'));
+    mkdirSync(join(dir, 'api'));
+
+    const fleet = parseFleet({ ...base, agents: [{ ...base.agents[0], cwd: './api' }] }, dir);
+    assert.equal(fleet.agents[0]?.cwd, join(dir, 'api'));
+  });
+
+  it('refuses a cwd that does not exist, naming what was written', () => {
+    // The old failure was a bare ENOENT from spawn, seconds later, after the
+    // office connection was already open.
+    assert.throws(
+      () => parseFleet({ ...base, agents: [{ ...base.agents[0], cwd: '/nope/missing' }] }, '/base'),
+      /cwd "\/nope\/missing" does not exist/,
     );
-    assert.equal(fleet.agents[0]?.cwd, '/home/josh/projects/api');
+  });
+
+  it('reports the path it was given when --config is missing', () => {
+    // Saying "looked for quintal.fleet.json in <cwd>" after being handed an
+    // explicit path sends people hunting in the wrong directory.
+    assert.throws(
+      () => loadFleet('/definitely/not/here.json', '/base'),
+      /no fleet config at \/definitely\/not\/here\.json/,
+    );
+  });
+
+  it('resolves relative cwds against the config file, not the process', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'quintal-fleet-'));
+    mkdirSync(join(dir, 'api'));
+    writeFileSync(
+      join(dir, 'quintal.fleet.json'),
+      JSON.stringify({
+        url: 'http://localhost:3000',
+        agents: [{ name: 'a', key: 'qa_k', agent: 'goose', cwd: './api' }],
+      }),
+    );
+
+    // Loaded from somewhere else entirely: "./api" must still mean the api
+    // directory next to the config.
+    const fleet = loadFleet(join(dir, 'quintal.fleet.json'), '/some/other/place');
+    assert.equal(fleet.agents[0]?.cwd, join(dir, 'api'));
   });
 
   it('splits a command the way a shell would', () => {

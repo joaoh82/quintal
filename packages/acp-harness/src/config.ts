@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 
 /**
  * How a fleet is declared.
@@ -159,6 +159,12 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     const cwdRaw = requireString(rawAgent.cwd, 'cwd', name);
     const cwd = isAbsolute(cwdRaw) ? cwdRaw : resolve(baseDir, cwdRaw);
 
+    // Check it now, with the agent's name attached. Otherwise the failure is a
+    // bare ENOENT from `spawn` several seconds later, after the office
+    // connection is already open — and a relative cwd that resolved against the
+    // wrong directory looks identical to a typo.
+    assertDirectory(cwd, name, cwdRaw);
+
     return {
       name,
       key: resolveKey(rawAgent, name),
@@ -171,6 +177,20 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
   });
 
   return { url, mapId, agents };
+}
+
+function assertDirectory(path: string, agent: string, asWritten: string): void {
+  let stats;
+  try {
+    stats = statSync(path);
+  } catch {
+    throw new ConfigError(
+      `agent "${agent}": cwd "${asWritten}" does not exist (resolved to ${path})`,
+    );
+  }
+  if (!stats.isDirectory()) {
+    throw new ConfigError(`agent "${agent}": cwd "${asWritten}" is not a directory`);
+  }
 }
 
 export interface LoadedFleet extends FleetConfig {
@@ -188,6 +208,12 @@ export function loadFleet(explicitPath: string | undefined, cwd: string): Loaded
     try {
       contents = readFileSync(path, 'utf8');
     } catch {
+      // Only keep looking when we were guessing. An explicit --config that
+      // isn't there is an error about *that path*, not an invitation to search
+      // somewhere else and report the search.
+      if (explicitPath) {
+        throw new ConfigError(`no fleet config at ${path}`);
+      }
       continue;
     }
 
@@ -200,7 +226,11 @@ export function loadFleet(explicitPath: string | undefined, cwd: string): Loaded
       );
     }
 
-    return { ...parseFleet(parsed, cwd), path };
+    // Relative cwds resolve against the config file's own directory, not
+    // wherever the CLI happened to be run from — a fleet file describes paths
+    // relative to itself, and that is what makes `--config` from another
+    // directory behave the way anyone would expect.
+    return { ...parseFleet(parsed, dirname(path)), path };
   }
 
   throw new ConfigError(
