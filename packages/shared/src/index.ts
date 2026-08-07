@@ -4,6 +4,7 @@
  * pulls this in. Server-only pieces (Drizzle schema, DB client) live in
  * `@quintal/shared/db`.
  */
+export * from './agent.js';
 export * from './constants.js';
 export * from './game/index.js';
 export * from './map.js';

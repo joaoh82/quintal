@@ -1,0 +1,146 @@
+/**
+ * What an agent is, in Quintal's terms.
+ *
+ * The design stance, which every decision below serves: agents are **legible
+ * workers**, not companions. Always visibly non-human, always attributed to a
+ * human owner, quiet unless spoken to. An agent that could be mistaken for a
+ * person — or that acts with nobody accountable for it — is a bug, not a
+ * feature.
+ */
+
+/**
+ * What an agent is allowed to do to the world. Reading the room and using its
+ * own memory are not scoped: those don't change anything anyone else can see.
+ * These three do.
+ */
+export const AGENT_SCOPES = ['chat', 'move', 'status'] as const;
+export type AgentScope = (typeof AGENT_SCOPES)[number];
+
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status'];
+
+export function isAgentScope(value: string): value is AgentScope {
+  return (AGENT_SCOPES as readonly string[]).includes(value);
+}
+
+/** Parse the `scopes` JSON column, discarding anything unrecognised. */
+export function parseScopes(raw: unknown): AgentScope[] {
+  if (!Array.isArray(raw)) return [...DEFAULT_AGENT_SCOPES];
+  const scopes = raw.filter((value): value is AgentScope =>
+    typeof value === 'string' && isAgentScope(value),
+  );
+  return scopes.length > 0 ? scopes : [];
+}
+
+// --- API keys --------------------------------------------------------------
+
+/**
+ * Prefix on every agent key. Makes a leaked key greppable in logs and
+ * recognisable in a secret scanner.
+ */
+export const AGENT_KEY_PREFIX = 'qa_';
+
+/** Bytes of entropy behind a key. 32 is well past brute force. */
+export const AGENT_KEY_BYTES = 32;
+
+/** Shown in lists so a human can tell two keys apart without seeing either. */
+export function agentKeyHint(key: string): string {
+  return `${key.slice(0, AGENT_KEY_PREFIX.length + 4)}…${key.slice(-4)}`;
+}
+
+// --- limits ----------------------------------------------------------------
+
+/**
+ * Agents are quiet by default, and the server enforces it rather than trusting
+ * them to behave. An agent that floods the room is indistinguishable from a
+ * broken one, and either way nobody can work.
+ */
+export const AGENT_CHAT_INTERVAL_MS = 2_000;
+export const AGENT_MOVE_INTERVAL_MS = 500;
+
+/** Presence line under the nameplate: "running tests…". */
+export const AGENT_STATUS_MAX_LENGTH = 60;
+
+// --- memory ----------------------------------------------------------------
+
+/**
+ * The slug an agent's harness loads on every turn. Kept small on purpose: it
+ * costs context on every single request the agent makes.
+ */
+export const AGENT_CORE_MEMORY_SLUG = 'core';
+export const AGENT_CORE_MEMORY_MAX_BYTES = 8 * 1024;
+export const AGENT_MEMORY_MAX_BYTES = 32 * 1024;
+
+/** Longest a memory slug may be, and what it may contain. */
+export const AGENT_MEMORY_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export function memoryLimitFor(slug: string): number {
+  return slug === AGENT_CORE_MEMORY_SLUG
+    ? AGENT_CORE_MEMORY_MAX_BYTES
+    : AGENT_MEMORY_MAX_BYTES;
+}
+
+export function isValidMemorySlug(slug: string): boolean {
+  return AGENT_MEMORY_SLUG_PATTERN.test(slug);
+}
+
+// --- audit -----------------------------------------------------------------
+
+/**
+ * Every kind of thing that lands in `agent_events`.
+ *
+ * The rule is: an agent should never be able to do something that leaves no
+ * trace. Inbound commands and the outbound consequences that changed the world
+ * both get a row, so the log reads as a story rather than a list of requests.
+ */
+export const AGENT_EVENT_KINDS = [
+  'agent.created',
+  'agent.revoked',
+  'session.connected',
+  'session.disconnected',
+  'session.rejected',
+  'session.revoked',
+  'command.say',
+  'command.move_to',
+  'command.set_status',
+  'command.look_around',
+  'command.messages_get',
+  'command.memory_get',
+  'command.memory_set',
+  'command.rejected',
+  'effect.spoke',
+  'effect.moved',
+  'effect.status_changed',
+  'effect.memory_written',
+] as const;
+export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
+
+/** A row from `agent_events`, as the UI sees it. */
+export interface AgentEventView {
+  id: string;
+  kind: AgentEventKind | string;
+  payload: unknown;
+  createdAt: number;
+}
+
+// --- presentation ----------------------------------------------------------
+
+/**
+ * Sprite choices offered when creating an agent. Deliberately the *same* sheet
+ * humans use: an agent is marked out by its nameplate and ring, never by being
+ * given a robot costume. Costumes make them cute; badges make them legible.
+ */
+export const AGENT_SPRITE_KEYS = ['slate', 'amber', 'violet'] as const;
+export type AgentSpriteKey = (typeof AGENT_SPRITE_KEYS)[number];
+
+export const DEFAULT_AGENT_SPRITE: AgentSpriteKey = 'slate';
+
+export function isAgentSpriteKey(value: string): value is AgentSpriteKey {
+  return (AGENT_SPRITE_KEYS as readonly string[]).includes(value);
+}
+
+/** Agent names are shown next to human ones, so hold them to the same shape. */
+export const AGENT_NAME_MAX_LENGTH = 40;
+
+export function normaliseAgentName(input: string): string {
+  return input.trim().replace(/\s+/g, ' ').slice(0, AGENT_NAME_MAX_LENGTH);
+}

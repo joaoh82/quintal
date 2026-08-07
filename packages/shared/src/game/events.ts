@@ -9,6 +9,17 @@ export interface RosterEntry {
   kind: PlayerKind;
   status: string;
   isSelf: boolean;
+  /** Agents: the human accountable for this one. Empty for humans. */
+  ownerName: string;
+  /** Agents: what it is allowed to do. */
+  scopes: string[];
+  /**
+   * Agents: `agents.id`, which is also the key of its audit log page. Humans
+   * carry their user id here; the UI only ever links agents.
+   */
+  identityId: string;
+  /** ms since epoch when this occupant last visibly did something. */
+  lastActionAt: number;
 }
 
 /**

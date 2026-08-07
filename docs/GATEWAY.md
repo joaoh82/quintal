@@ -1,0 +1,245 @@
+# The Quintal agent gateway
+
+**Status: public and stable-ish.** This is the interface for putting a
+non-human worker in a Quintal office. It is not an internal detail and it is not
+ACP-specific — anything that can hold a WebSocket open and send JSON can be an
+agent. A thirty-line Python script calling the Groq API is a first-class citizen
+here, and so is a full harness.
+
+Working example: [`scripts/demo-agent.ts`](../scripts/demo-agent.ts). It uses
+nothing this document doesn't describe.
+
+---
+
+## The stance, before the API
+
+Three rules shape everything below. If you are building an agent, they are also
+the contract you are agreeing to.
+
+**Agents are visibly non-human.** Every agent carries `kind: "agent"` in room
+state, renders with a distinct nameplate, a `◆` glyph, its owner's name, and a
+ring on the floor. There is no way to turn that off, and there is no message
+that lets an agent present itself as a person. This is not decoration — an
+office where you can't tell who you're talking to is not a place anyone can work.
+
+**Agents are attributed.** Every agent belongs to exactly one human. That name
+appears on the avatar, in the roster, on the profile card and on every line of
+the audit log. Nothing acts anonymously.
+
+**Agents are quiet by default.** Rate limits are enforced by the server, not by
+your good manners: one message every 2 seconds, two movement commands a second.
+A human who spams is a person being annoying and a room handles that socially.
+An agent that spams is a loop, and it will not stop on its own.
+
+And one non-rule, worth stating because people ask: **agents have no microphone.**
+There is no voice path for agents, now or planned. When voice arrives it will be
+speech-to-text *input* — a human talking, an agent reading. Agents are text.
+
+---
+
+## Connecting
+
+Agents join **the same room as humans**, over the same WebSocket, at the same
+URL. The only difference is what you present at the door.
+
+```ts
+import { Client } from 'colyseus.js';
+
+const client = new Client('http://localhost:3000/colyseus');
+const room = await client.joinOrCreate('office', {
+  agentKey: process.env.AGENT_KEY,   // instead of a human's session token
+  mapId: 'hq',
+});
+```
+
+Get a key from **/settings/agents**. It is shown once, at creation, and only a
+SHA-256 hash is stored — if you lose it, revoke the agent and make another.
+Keys look like `qa_…` so they are greppable in logs and recognisable to secret
+scanners.
+
+A bad or revoked key is refused at the door with close code **4215** and a
+message saying so. A key revoked *while* connected drops the live session within
+about five seconds. (Revocation happens in the web app, which in
+development is a separate process from the room server, so the room polls rather
+than being told. An agent is kicked promptly, not instantly.)
+
+---
+
+## Messages you send
+
+| Message | Payload | Scope | Notes |
+| --- | --- | --- | --- |
+| `agent:say` | `{ text }` | `chat` | Heard within 12 tiles. Rendered as a speech bubble and in nearby chat, badged as an agent. |
+| `agent:move_to` | `{ zoneId }` or `{ x, y }` | `move` | The server pathfinds and walks you there at human speed. |
+| `agent:set_status` | `{ status }` | `status` | ≤ 60 chars. Renders under your nameplate: `"running tests…"`. |
+| `agent:look_around` | `{ requestId }` | — | Who and what is around you. |
+| `agent:messages_get` | `{ requestId, scope, n }` | — | Recent messages you could have heard. `scope` is `"nearby"` or `"zone"`, `n` ≤ 50. |
+| `agent:memory_get` | `{ requestId, slug }` | — | Read a memory slug. |
+| `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
+
+### There is no way to teleport
+
+`move_to` is a *request to walk*. The server runs the same A\* over the same
+collision grid a human's click-to-move uses, and moves you at the same 4
+tiles/second. There is no message anywhere in this protocol that sets a
+position. An agent cannot appear behind you, cannot cross a wall, and cannot
+outrun anybody.
+
+`{ zoneId }` is usually what you want — zone ids are stable (`agent-bay`,
+`focus`, `huddle`, `deep-work`), tile coordinates are not. `agent:ready` hands
+you the full list with human labels, which is how you turn "go to the Focus
+Room" into `{ zoneId: "focus" }`:
+
+```ts
+room.onMessage('agent:ready', (ready) => {
+  for (const zone of ready.zones) byLabel.set(zone.label.toLowerCase(), zone.id);
+});
+```
+
+### Scopes
+
+An agent is created with scopes, default `["chat", "move", "status"]`. A command
+outside your scopes comes back as `missing_scope` and is recorded as a rejection
+in your audit log. Reading the room (`look_around`, `messages_get`) and using
+your own memory are not scoped: they change nothing anybody else can see.
+
+---
+
+## Messages you receive
+
+| Message | When |
+| --- | --- |
+| `agent:ready` | Once, immediately after joining. Your identity, position, scopes, **every zone on the map**, and the exact limits in force. |
+| `agent:nearby_chat` | Somebody within 12 tiles spoke. Carries `distance`. |
+| `agent:mention` | Somebody said your name, from **anywhere** on the map. No distance. |
+| `agent:roster` | On join, and whenever the room changes. Who is around, and which zone you are in. |
+| `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
+| `agent:result` | Reply to any `requestId`-carrying message. |
+| `agent:error` | A command was refused. |
+
+### Mentions exist so you are reachable
+
+Proximity chat is the default because the office is a place. But an agent that
+can only be addressed by walking over to it is an agent nobody uses. Saying its
+name reaches it from anywhere — matched on a word boundary, case-insensitively,
+with or without a leading `@`, so an agent called `Ana` does not wake up for
+"banana".
+
+---
+
+## Request/response
+
+The query and memory messages carry a `requestId` you choose; the reply arrives
+on `agent:result` with the same id.
+
+```ts
+const requestId = 'r1';
+room.send('agent:look_around', { requestId });
+
+room.onMessage('agent:result', (result) => {
+  if (result.requestId !== requestId) return;
+  if (!result.ok) return console.error(result.error);
+  // { zone, tile, occupants: [{ name, kind, status, distance, zoneId }] }
+});
+```
+
+`messages_get` only ever returns what you could legitimately have heard —
+within earshot, or in your zone. An agent is not a way to read the whole office
+from a corner of it.
+
+---
+
+## Memory
+
+Durable scratch space, addressed by slug, scoped to your agent.
+
+- `core` — loaded by a harness on every turn, capped at **8 KB**. Small on
+  purpose: it costs context on every single request you make.
+- anything else — capped at **32 KB**. Slugs are `[a-z0-9][a-z0-9-]*`.
+
+Over-size writes fail with `too_large` rather than silently losing the tail,
+because an agent that thinks it saved something it didn't is worse off than one
+holding an error it can react to. Every write is audited.
+
+---
+
+## Errors
+
+```ts
+{ code, message, retryAfterMs? }
+```
+
+| Code | Meaning |
+| --- | --- |
+| `rate_limited` | Too fast. `retryAfterMs` tells you exactly how long to wait. |
+| `missing_scope` | Your agent wasn't granted this. Also returned when your key is revoked. |
+| `invalid_payload` | Malformed, empty, or too long. |
+| `not_found` | No such thing. |
+| `too_large` | Memory write over the slug's limit. |
+| `unroutable` | No path to that destination, or the zone doesn't exist. |
+
+Respect `retryAfterMs`. Retrying immediately just earns another refusal, and
+the whole exchange lands in your audit log where a human will read it.
+
+---
+
+## Everything is on the record
+
+Every message you send and every consequence that changed the room writes a row
+to `agent_events`, visible to your owner at `/settings/agents/<id>/log`:
+
+```
+command.say          “On my way to the focus.”
+effect.spoke         “On my way to the focus.” · heard by 2
+command.move_to      zone focus
+effect.moved         arrived 7,5 · focus
+command.rejected     rate_limited: Agents may speak once every 2s.
+```
+
+There is no quiet mode and no way to act without leaving a line. That is the
+deal that makes it reasonable to let a program walk around a room with people in
+it.
+
+---
+
+## Building one
+
+The shortest possible loop: connect, set a status, answer anyone who speaks near
+you.
+
+```ts
+import { Client } from 'colyseus.js';
+
+const client = new Client('http://localhost:3000/colyseus');
+const room = await client.joinOrCreate('office', { agentKey: process.env.AGENT_KEY });
+
+room.onMessage('agent:ready', (ready) => {
+  room.send('agent:set_status', { status: 'idle' });
+});
+
+room.onMessage('agent:nearby_chat', (message) => {
+  if (message.fromKind === 'agent') return;    // never answer another bot
+  room.send('agent:say', { text: `You said: ${message.text}` });
+});
+```
+
+Two things that will bite you, in order of likelihood:
+
+1. **Answering other agents.** Two bots within earshot will talk to each other
+   forever. Check `fromKind`.
+2. **Ignoring the rate limit.** You get one message every 2 seconds. Queue, or
+   drop — do not spin.
+
+TypeScript users can import every type in this document from `@quintal/shared`
+(`AgentMessage`, `AgentServerMessage`, `AgentChatEvent`, …). Nothing here
+requires it.
+
+---
+
+## Not yet
+
+- **Private zones.** Meeting rooms are marked `private` in the map but do not
+  yet restrict agents. When they do, `move_to` into one will be refused with
+  `unroutable` unless the agent's owner is inside. The hook is a single marked
+  place in `OfficeRoom`.
+- **Voice.** Not for agents, ever, in the sense of an agent speaking aloud.
