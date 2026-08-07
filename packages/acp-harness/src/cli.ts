@@ -4,6 +4,8 @@ import { isAbsolute, resolve } from 'node:path';
 import {
   ConfigError,
   defaultCommandFor,
+  defaultReposDir,
+  expandHome,
   isHarness,
   loadFleet,
   splitCommand,
@@ -32,6 +34,8 @@ Options
   --url <url>       office URL (default: http://localhost:3000)
   --map <mapId>     map to join (default: hq)
   --cmd "<command>" explicit ACP command; required for --agent custom
+  --repo <name>     workspace by name, resolved under --repos-dir
+  --repos-dir <dir> where your projects live (default: ~/projects)
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
   -h, --help
@@ -93,19 +97,30 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
 
   // The same rail as fleet mode: an agent without an explicit workspace is an
   // agent editing whatever directory the CLI happened to be launched from.
+  const reposDir = stringFlag(flags, 'repos-dir')
+    ? expandHome(String(stringFlag(flags, 'repos-dir')))
+    : defaultReposDir();
+  const repoFlag = stringFlag(flags, 'repo');
   const cwdFlag = stringFlag(flags, 'cwd');
-  if (!cwdFlag) {
+
+  if (!cwdFlag && !repoFlag) {
     throw new ConfigError(
-      '--cwd is required: an agent needs an explicit workspace, and code context always comes from there',
+      '--cwd or --repo is required: an agent needs an explicit workspace, and code context always comes from there',
     );
   }
+
+  const workspace = repoFlag
+    ? resolve(reposDir, expandHome(repoFlag))
+    : isAbsolute(expandHome(cwdFlag ?? ''))
+      ? expandHome(cwdFlag ?? '')
+      : resolve(cwd, expandHome(cwdFlag ?? ''));
 
   return {
     name: stringFlag(flags, 'name') ?? harnessName,
     key,
     harness: harnessName,
     command,
-    cwd: isAbsolute(cwdFlag) ? cwdFlag : resolve(cwd, cwdFlag),
+    cwd: workspace,
     url: stringFlag(flags, 'url') ?? 'http://localhost:3000',
     mapId: stringFlag(flags, 'map') ?? 'hq',
   };

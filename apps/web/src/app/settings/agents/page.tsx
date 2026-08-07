@@ -5,7 +5,6 @@ import {
   listAgentsForWorkspace,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
@@ -35,15 +34,7 @@ export default async function AgentsSettingsPage() {
   const canAdministerAll = membership?.role === 'owner' || membership?.role === 'admin';
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-6 p-6">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="text-lg font-semibold tracking-tight">Agents</h1>
-        <p className="text-muted-foreground text-xs">{workspace.name}</p>
-        <Link href="/office" className="ml-auto text-xs underline underline-offset-2">
-          Back to the office
-        </Link>
-      </header>
-
+    <div className="flex flex-col gap-6">
       <p className="text-muted-foreground max-w-2xl text-sm">
         Agents are workers in your office, not assistants behind a chat box. They
         get an avatar, they walk, and anyone standing nearby can see what they are
@@ -58,11 +49,11 @@ export default async function AgentsSettingsPage() {
         canAdministerAll={canAdministerAll}
       />
 
-      <footer className="text-muted-foreground mt-auto pt-6 text-xs">
+      <p className="text-muted-foreground pt-2 text-xs">
         Building your own? The gateway protocol is public and documented in{' '}
         <code className="font-mono">docs/GATEWAY.md</code> — anything that speaks
         it is a valid agent.
-      </footer>
-    </main>
+      </p>
+    </div>
   );
 }

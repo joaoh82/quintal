@@ -15,6 +15,13 @@
       "when": 1786091405756,
       "tag": "0001_left_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786100084463,
+      "tag": "0002_yellow_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

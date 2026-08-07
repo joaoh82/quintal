@@ -135,6 +135,14 @@ export interface AgentReadyPayload {
     messagesGetMax: number;
     memoryMaxBytes: number;
     coreMemoryMaxBytes: number;
+    /**
+     * Earshot and walk-up distance, in tiles.
+     *
+     * These are owner-configurable, so a harness that hardcodes them answers by
+     * a rule the office is no longer using. Served here rather than assumed.
+     */
+    chatRadiusTiles: number;
+    walkUpRadiusTiles: number;
   };
 }
 

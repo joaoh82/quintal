@@ -7,5 +7,6 @@ export * from './client.js';
 export * from './env.js';
 export * from './migrate.js';
 export * from './schema.js';
+export * from './settings.js';
 export * from './url.js';
 export * from './workspaces.js';

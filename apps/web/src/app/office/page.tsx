@@ -1,5 +1,6 @@
 import { ensurePersonalWorkspace, getDb } from '@quintal/shared/db';
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { OfficeCanvas } from '@/game/OfficeCanvas';
@@ -28,8 +29,14 @@ export default async function OfficePage() {
           /{workspace.slug} · {session.user.email}
         </p>
         <p className="text-muted-foreground ml-auto text-xs">
-          Enter to chat · anyone signed in shares this office
+          Enter to chat · @name to address someone
         </p>
+        <Link
+          href="/settings"
+          className="hover:bg-accent rounded-md border px-2.5 py-1 text-xs"
+        >
+          Settings
+        </Link>
       </header>
 
       <div className="min-h-0 flex-1">

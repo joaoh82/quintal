@@ -14,14 +14,33 @@ already is; this is a bridge, and that is the whole point.
 ## Quick start
 
 ```bash
-# one agent
-npx quintal-acp --key qa_… --agent claude-code --cwd ~/projects/api
+# one agent, by repo name under your repos directory
+npx quintal-acp --key qa_… --agent claude-code --repo api
+
+# or by explicit path
+npx quintal-acp --key qa_… --agent claude-code --cwd ~/work/api
 
 # a fleet
 npx quintal-acp up
 ```
 
 Create agents and get keys at `/settings/agents` in your office.
+
+### Where your repos live
+
+Every agent needs a workspace, and typing `~/projects/…` for each one gets old
+fast. So there is a **repos directory** — `~/projects` by default, overridable
+with `--repos-dir`, the `QUINTAL_REPOS_DIR` environment variable, or
+`"reposDir"` in the fleet file. Anywhere a path is wanted you can give a bare
+name instead and it resolves under it:
+
+```json
+{ "reposDir": "~/code", "agents": [{ "name": "reviewer", "repo": "api" }] }
+```
+
+A workspace that does not exist is rejected at config load, with the agent's
+name and both the path you wrote and the path it resolved to — rather than a
+bare `ENOENT` from `spawn` after the agent is already standing in the office.
 
 **From inside this repo**, before it's published, use the root script — nothing
 in the workspace depends on this package, so pnpm never links its bin:
@@ -40,9 +59,9 @@ file is the main interface:
 {
   "url": "https://office.example.com",
   "agents": [
-    { "name": "reviewer", "keyEnv": "REVIEWER_KEY", "agent": "claude-code", "cwd": "~/projects/api" },
-    { "name": "builder",  "keyEnv": "BUILDER_KEY",  "agent": "codex",       "cwd": "~/projects/web" },
-    { "name": "scout",    "keyEnv": "SCOUT_KEY",    "agent": "goose",       "cwd": "~/projects/infra" }
+    { "name": "reviewer", "keyEnv": "REVIEWER_KEY", "agent": "claude-code", "repo": "api" },
+    { "name": "builder",  "keyEnv": "BUILDER_KEY",  "agent": "codex",       "repo": "web" },
+    { "name": "scout",    "keyEnv": "SCOUT_KEY",    "agent": "goose",       "cwd": "/srv/infra" }
   ]
 }
 ```
@@ -82,14 +101,16 @@ expensive.
 - **One prompt in flight per (agent, zone).** Messages arriving mid-turn are
   delivered afterwards as a steer note, never as an interrupt.
 - **One session per zone**, created lazily, LRU-capped at four.
-- **Only answer when addressed** — your name from anywhere, or a walk-up within
-  three tiles. Without this, every agent in earshot wakes for every human
-  sentence, and a fleet of eight turns one question into eight model calls.
-- **Never answer another agent** unless it named you.
+- **Only answer when addressed** — `@yourname` from anywhere, or a walk-up
+  within three tiles (whatever the office's configured walk-up distance is; it
+  is served in `agent:ready`). Without this, every agent in earshot wakes for
+  every human sentence, and a fleet of eight turns one question into eight
+  model calls.
+- **Never answer another agent** unless it `@`-named you.
 - **At most three speech bubbles** per response, then "…(continued — ask me for
   more)". The office is not a terminal.
-- **`--cwd` is mandatory.** Code context always comes from the working
-  directory, never from Quintal.
+- **A workspace is mandatory** — `--repo` or `--cwd`. Code context always comes
+  from the working directory, never from Quintal.
 
 The behavioural rules the *model* must follow live in
 [`base_prompt.md`](./base_prompt.md) — edit that before you edit code.

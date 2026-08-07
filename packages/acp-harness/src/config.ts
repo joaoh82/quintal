@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 /**
  * How a fleet is declared.
@@ -37,6 +38,8 @@ export interface AgentConfig {
 export interface FleetConfig {
   url: string;
   mapId: string;
+  /** Root that `repo` names resolve against. */
+  reposDir: string;
   agents: AgentConfig[];
 }
 
@@ -47,12 +50,38 @@ interface RawAgent {
   agent?: unknown;
   cmd?: unknown;
   cwd?: unknown;
+  repo?: unknown;
 }
 
 interface RawFleet {
   url?: unknown;
   mapId?: unknown;
+  reposDir?: unknown;
   agents?: unknown;
+}
+
+/**
+ * Where your projects live.
+ *
+ * `cwd` stays mandatory — an agent must never inherit whatever directory the
+ * CLI happened to start in — but spelling out an absolute path per agent is
+ * tedious when they all live under one root. Set `reposDir` once and each agent
+ * can say `"repo": "api"` instead.
+ *
+ * Default follows the convention: `~/projects`, overridable per fleet or by
+ * QUINTAL_REPOS_DIR.
+ */
+export const DEFAULT_REPOS_DIRNAME = 'projects';
+
+export function defaultReposDir(): string {
+  return process.env.QUINTAL_REPOS_DIR ?? join(homedir(), DEFAULT_REPOS_DIRNAME);
+}
+
+/** Expand a leading `~` so config files can use it. */
+export function expandHome(path: string): string {
+  if (path === '~') return homedir();
+  if (path.startsWith('~/')) return join(homedir(), path.slice(2));
+  return path;
 }
 
 export const FLEET_FILENAMES = ['quintal.fleet.json', '.quintal/fleet.json'] as const;
@@ -127,6 +156,11 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
   const fleet = raw as RawFleet;
   const url = typeof fleet.url === 'string' ? fleet.url : 'http://localhost:3000';
   const mapId = typeof fleet.mapId === 'string' ? fleet.mapId : 'hq';
+  const reposDirRaw =
+    typeof fleet.reposDir === 'string' && fleet.reposDir.trim().length > 0
+      ? expandHome(fleet.reposDir.trim())
+      : defaultReposDir();
+  const reposDir = isAbsolute(reposDirRaw) ? reposDirRaw : resolve(baseDir, reposDirRaw);
 
   if (!Array.isArray(fleet.agents) || fleet.agents.length === 0) {
     throw new ConfigError('fleet config needs a non-empty "agents" array');
@@ -152,12 +186,19 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
         ? splitCommand(rawAgent.cmd)
         : defaultCommandFor(harnessName);
 
-    // Refusing to run without a cwd is a safety rail, not a convenience check:
+    // Refusing to guess a workspace is a safety rail, not a convenience check:
     // an agent's code context comes from its working directory, and one that
     // defaults to wherever the CLI happened to be launched is an agent editing
-    // a repository nobody chose.
-    const cwdRaw = requireString(rawAgent.cwd, 'cwd', name);
-    const cwd = isAbsolute(cwdRaw) ? cwdRaw : resolve(baseDir, cwdRaw);
+    // a repository nobody chose. `repo` is shorthand, not an exception — it
+    // still names a specific directory, just relative to `reposDir`.
+    const repo = typeof rawAgent.repo === 'string' ? rawAgent.repo.trim() : '';
+    const cwdRaw = repo.length > 0 ? repo : requireString(rawAgent.cwd, 'cwd', name);
+    const cwd =
+      repo.length > 0
+        ? resolve(reposDir, expandHome(repo))
+        : isAbsolute(expandHome(cwdRaw))
+          ? expandHome(cwdRaw)
+          : resolve(baseDir, expandHome(cwdRaw));
 
     // Check it now, with the agent's name attached. Otherwise the failure is a
     // bare ENOENT from `spawn` several seconds later, after the office
@@ -176,7 +217,7 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     } satisfies AgentConfig;
   });
 
-  return { url, mapId, agents };
+  return { url, mapId, reposDir, agents };
 }
 
 function assertDirectory(path: string, agent: string, asWritten: string): void {

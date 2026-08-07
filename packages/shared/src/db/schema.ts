@@ -156,6 +156,21 @@ export const memberships = sqliteTable(
   ],
 );
 
+/**
+ * Instance settings. One row, id 'global' — see `settings.ts` for why these are
+ * not per-workspace yet.
+ */
+export const officeSettings = sqliteTable('office_settings', {
+  id: text('id').primaryKey(),
+  chatRadiusTiles: integer('chat_radius_tiles').notNull().default(12),
+  walkUpRadiusTiles: integer('walk_up_radius_tiles').notNull().default(3),
+  replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .default(now)
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
 // ---------------------------------------------------------------------------
 // Agents
 // ---------------------------------------------------------------------------
@@ -263,3 +278,4 @@ export type NewAgent = typeof agents.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type AgentMemory = typeof agentMemory.$inferSelect;
+export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
