@@ -28,3 +28,7 @@ next-env.d.ts
 
 # Maps copied from packages/shared/maps by apps/web/scripts/sync-map.mjs
 apps/web/public/assets/maps/
+
+# Fleet configs are per-machine and frequently hold agent keys
+quintal.fleet.json
+.quintal/
