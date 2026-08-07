@@ -12,6 +12,10 @@
     "./db": {
       "types": "./dist/db/index.d.ts",
       "default": "./dist/db/index.js"
+    },
+    "./maps": {
+      "types": "./dist/maps/index.d.ts",
+      "default": "./dist/maps/index.js"
     }
   },
   "files": [
@@ -30,9 +34,10 @@
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@colyseus/schema": "^3.0.76",
     "@libsql/client": "^0.17.4",
-    "drizzle-orm": "^0.45.2",
-    "dotenv": "^17.2.4"
+    "dotenv": "^17.2.4",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

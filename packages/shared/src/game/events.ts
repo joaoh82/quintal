@@ -1,5 +1,26 @@
 import type { MapZone } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
+import type { ChatBroadcastPayload } from './protocol.js';
+
+/** One line in the roster panel. */
+export interface RosterEntry {
+  sessionId: string;
+  name: string;
+  kind: PlayerKind;
+  status: string;
+  isSelf: boolean;
+}
+
+/**
+ * What the UI needs to know about the socket. `reconnecting` covers the
+ * server-side grace period: the avatar is still standing in the room.
+ */
+export type ConnectionStatus =
+  | 'connecting'
+  | 'online'
+  | 'reconnecting'
+  | 'offline'
+  | 'error';
 
 /**
  * The bridge between the game and the UI.
@@ -22,6 +43,14 @@ export type GameEvents = {
   debug: { enabled: boolean };
   /** A click-to-move route was planned, or cleared (`length: 0`). */
   path: { length: number };
+  /** Everyone currently in the room, self included. Fires on any change. */
+  roster: { players: RosterEntry[]; selfSessionId: string | null };
+  /** Someone within earshot spoke. */
+  chat: ChatBroadcastPayload;
+  /** Socket state changed. `detail` is safe to show a human. */
+  connection: { status: ConnectionStatus; detail?: string };
+  /** The server rejected something — rate limit, bad move. */
+  notice: { code: string; message: string };
 };
 
 export type GameEventName = keyof GameEvents;
