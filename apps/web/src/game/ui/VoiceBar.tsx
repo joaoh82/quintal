@@ -101,11 +101,20 @@ export function VoiceBar({
         {voice.muted ? '🔇 muted' : '🎙 live'}
       </button>
 
-      <span className="text-white/40">
-        {voice.hearing.length === 0
-          ? 'nobody in range'
-          : `hearing ${voice.hearing.length}`}
-      </span>
+      {/* A refusal outranks the peer count: "nobody in range" next to a mic
+          that silently would not open is the most misleading pair of words
+          this bar could show. */}
+      {voice.detail ? (
+        <span className="text-amber-200" title={voice.detail}>
+          {voice.detail}
+        </span>
+      ) : (
+        <span className="text-white/40">
+          {voice.hearing.length === 0
+            ? 'nobody in range'
+            : `hearing ${voice.hearing.length}`}
+        </span>
+      )}
 
       {mics.length > 1 ? (
         <select

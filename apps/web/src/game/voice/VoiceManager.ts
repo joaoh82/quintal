@@ -66,6 +66,27 @@ const PROXIMITY_MS = 250;
 /** Smoothing for gain and pan changes. Long enough to hide stepping, short enough to track a walk. */
 const SMOOTHING = 0.08;
 
+/**
+ * Turn a getUserMedia failure into something worth reading.
+ *
+ * `NotAllowedError` is the common one and its message ("Permission denied") is
+ * true but useless — it does not say what to do, or that the fix lives in a
+ * browser control rather than in this app.
+ */
+function micRefusal(error: unknown): string {
+  const name = error instanceof Error ? error.name : '';
+  switch (name) {
+    case 'NotAllowedError':
+      return 'Microphone blocked — allow it in your browser’s address bar, then press M again.';
+    case 'NotFoundError':
+      return 'No microphone found on this machine.';
+    case 'NotReadableError':
+      return 'Your microphone is in use by another app.';
+    default:
+      return error instanceof Error ? error.message : 'Could not open the microphone.';
+  }
+}
+
 export class VoiceManager {
   #room: Room | null = null;
   #context: AudioContext | null = null;
@@ -126,12 +147,34 @@ export class VoiceManager {
     });
   }
 
+  /**
+   * Mute or unmute.
+   *
+   * The failure path is the important one. Unmuting calls `getUserMedia`, which
+   * throws whenever the browser says no — permission denied, no input device,
+   * a mic held by another app. Left unhandled, the rejection is swallowed by
+   * the caller's `void`, the button keeps saying "muted", and pressing it does
+   * nothing forever with no explanation anywhere. That is not a hypothetical:
+   * it is what shipped, and how it was found.
+   *
+   * So the flag only moves once the microphone actually agreed, and a refusal
+   * becomes something the bar can show.
+   */
   async setMuted(muted: boolean): Promise<void> {
+    const previous = this.#muted;
     this.#muted = muted;
-    await this.#room?.localParticipant.setMicrophoneEnabled(!muted, {
-      deviceId: this.#deviceId,
-    });
-    this.#publish(this.#state, this.#detail);
+    this.#publish(this.#state, muted ? '' : this.#detail);
+
+    try {
+      await this.#room?.localParticipant.setMicrophoneEnabled(
+        !muted,
+        this.#deviceId ? { deviceId: this.#deviceId } : undefined,
+      );
+      this.#publish(this.#state, '');
+    } catch (error: unknown) {
+      this.#muted = previous;
+      this.#publish(this.#state, micRefusal(error));
+    }
   }
 
   /** Switch microphone. Applied live if we are connected, remembered if not. */
