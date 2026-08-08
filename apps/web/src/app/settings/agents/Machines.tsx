@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 
+import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -20,15 +21,6 @@ interface MachineRow {
   lastSeenAt: number | null;
   revokedAt: number | null;
   ownerUserId: string;
-}
-
-function when(ms: number | null): string {
-  if (ms === null) return 'never';
-  const seconds = Math.round((Date.now() - ms) / 1000);
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
-  return new Date(ms).toLocaleDateString();
 }
 
 /**
@@ -121,12 +113,16 @@ export function Machines({
             >
               <span className="font-medium">{row.label}</span>
               <span className="text-muted-foreground text-xs">
-                registered {when(row.createdAt)}
+                registered <RelativeTime at={row.createdAt} />
               </span>
               <span className="text-muted-foreground ml-auto text-xs">
-                {row.lastSeenAt === null
-                  ? 'never connected'
-                  : `last asked ${when(row.lastSeenAt)}`}
+                {row.lastSeenAt === null ? (
+                  'never connected'
+                ) : (
+                  <>
+                    last asked <RelativeTime at={row.lastSeenAt} />
+                  </>
+                )}
               </span>
               {row.ownerUserId === currentUserId ? (
                 <form action={revokeHostTokenAction}>
