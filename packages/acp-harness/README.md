@@ -26,6 +26,25 @@ npx quintal-acp up
 
 Create agents and get keys at `/settings/agents` in your office.
 
+### Let the office define the fleet
+
+Instead of writing `quintal.fleet.json` by hand, register the machine once and
+create agents in the web UI:
+
+```bash
+npx quintal-acp login --token qh_… --url https://office.example.com
+npx quintal-acp up
+```
+
+`up` prefers a local fleet file if there is one — a config you checked in must
+not stop working because a machine got registered — and otherwise asks the
+office what this machine should run. It keeps asking, so an agent created in
+the UI walks in a few seconds later and one you remove leaves, without
+restarting the agents that did not change.
+
+The token is a *machine* credential: it can act as any agent you assign to that
+machine. Get one, and revoke one, at `/settings/agents`.
+
 ### Which runtimes you have
 
 ACP is JSON-RPC over stdio: Quintal spawns a subprocess and talks to it. There

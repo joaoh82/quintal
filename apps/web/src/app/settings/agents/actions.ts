@@ -2,6 +2,7 @@
 
 import {
   DEFAULT_AGENT_SCOPES,
+  runtimeById,
   isAgentScope,
   isAgentSpriteKey,
   normaliseAgentName,
@@ -10,10 +11,14 @@ import {
 import {
   canAdministerAgent,
   createAgent,
+  createHostToken,
   ensurePersonalWorkspace,
   findAgentById,
   getDb,
+  listHostTokens,
   revokeAgent,
+  revokeHostToken,
+  setAgentLaunch,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -68,12 +73,35 @@ export async function createAgentAction(
       email: session.user.email,
     });
 
+    // Launch details are all-or-nothing: a runtime with no machine has nowhere
+    // to run, and a machine with no runtime has nothing to run. Given none, the
+    // agent is created exactly as before and started by hand with its key.
+    const runtimeId = String(formData.get('runtimeId') ?? '').trim();
+    const repoSpec = String(formData.get('repoSpec') ?? '').trim();
+    const hostLabel = String(formData.get('hostLabel') ?? '').trim();
+    const wantsLaunch = runtimeId.length > 0 && hostLabel.length > 0;
+
+    if (wantsLaunch) {
+      const runtime = runtimeById(runtimeId);
+      if (!runtime) return { ok: false, error: `Unknown runtime "${runtimeId}".` };
+      if (runtime.acp.kind === 'none') {
+        return {
+          ok: false,
+          error: `${runtime.label} has no ACP mode, so nothing can drive it.`,
+        };
+      }
+      if (repoSpec.length === 0) {
+        return { ok: false, error: 'Say which repo it works in, or * for all of them.' };
+      }
+    }
+
     const created = await createAgent(db, {
       workspaceId: workspace.id,
       ownerUserId: session.user.id,
       name,
       spriteKey,
       scopes: scopes.length > 0 ? scopes : DEFAULT_AGENT_SCOPES,
+      ...(wantsLaunch ? { launch: { runtimeId, repoSpec, hostLabel } } : {}),
     });
 
     revalidatePath('/settings/agents');
@@ -99,5 +127,128 @@ export async function revokeAgentAction(formData: FormData): Promise<void> {
   if (!allowed) throw new Error('That is not your agent to revoke.');
 
   await revokeAgent(db, agentId, session.user.id);
+  revalidatePath('/settings/agents');
+}
+
+
+// --- machines --------------------------------------------------------------
+
+export interface HostTokenState {
+  ok: boolean;
+  /** Present exactly once, like an agent key. */
+  token?: string;
+  label?: string;
+  error?: string;
+}
+
+/**
+ * Register a machine.
+ *
+ * The token is shown once and stored only as a hash, exactly like an agent key
+ * — but it is more powerful than one, so the UI says so rather than leaving the
+ * reader to work it out.
+ */
+export async function createHostTokenAction(
+  _previous: HostTokenState,
+  formData: FormData,
+): Promise<HostTokenState> {
+  try {
+    const session = await requireSession();
+    const db = getDb();
+    const workspace = await ensurePersonalWorkspace(db, {
+      userId: session.user.id,
+      name: session.user.name,
+      email: session.user.email,
+    });
+
+    const label = String(formData.get('label') ?? '').trim();
+    if (label.length === 0) return { ok: false, error: 'Name the machine.' };
+
+    const existing = await listHostTokens(db, workspace.id);
+    if (existing.some((row) => row.label === label && row.revokedAt === null)) {
+      return { ok: false, error: `"${label}" is already registered. Revoke it first.` };
+    }
+
+    const created = await createHostToken(db, {
+      workspaceId: workspace.id,
+      ownerUserId: session.user.id,
+      label,
+    });
+
+    revalidatePath('/settings/agents');
+    return { ok: true, token: created.token, label: created.label };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not register the machine.',
+    };
+  }
+}
+
+export async function revokeHostTokenAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+  const workspace = await ensurePersonalWorkspace(db, {
+    userId: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+  });
+
+  const id = String(formData.get('tokenId') ?? '');
+  // Only your own machines: a host token is a credential for one person's
+  // fleet, so revoking somebody else's is not an admin action, it is a mistake.
+  const mine = (await listHostTokens(db, workspace.id)).find(
+    (row) => row.id === id && row.ownerUserId === session.user.id,
+  );
+  if (!mine) throw new Error('That is not your machine to revoke.');
+
+  await revokeHostToken(db, id);
+  revalidatePath('/settings/agents');
+}
+
+
+/**
+ * Move an existing agent to a machine, or take it off one.
+ *
+ * A running fleet notices within a poll: the machine losing it stops it, the
+ * machine gaining it starts it, and agents that did not change keep their
+ * sessions. Which is why this is a plain form and not a warning-laden dialog —
+ * reassigning is cheap and reversible.
+ */
+export async function assignAgentAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) throw new Error('No such agent.');
+
+  // The same gate as revoking: your own agents, or anyone's if you run the
+  // workspace. Assigning somebody else's agent to your laptop would be a way
+  // to run their fleet on your machine.
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    throw new Error('That is not your agent to assign.');
+  }
+
+  const hostLabel = String(formData.get('hostLabel') ?? '').trim();
+  if (hostLabel.length === 0) {
+    await setAgentLaunch(db, agentId, null);
+    revalidatePath('/settings/agents');
+    return;
+  }
+
+  const runtimeId = String(formData.get('runtimeId') ?? '').trim();
+  const runtime = runtimeById(runtimeId);
+  if (!runtime) throw new Error(`Unknown runtime "${runtimeId}".`);
+  if (runtime.acp.kind === 'none') {
+    throw new Error(`${runtime.label} has no ACP mode, so nothing can drive it.`);
+  }
+
+  const repoSpec = String(formData.get('repoSpec') ?? '').trim();
+  if (repoSpec.length === 0) {
+    throw new Error('Say which repo it works in, or * for all of them.');
+  }
+
+  await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel });
   revalidatePath('/settings/agents');
 }

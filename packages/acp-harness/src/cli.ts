@@ -7,11 +7,20 @@ import {
   defaultCommandFor,
   defaultReposDir,
   expandHome,
+  findFleetFile,
   isHarness,
   loadFleet,
   splitCommand,
   type AgentConfig,
 } from './config.js';
+import {
+  fetchFleet,
+  type StoredHost,
+  labelFor,
+  readStoredHost,
+  toAgentConfigs,
+  writeStoredHost,
+} from './host.js';
 import { runMcpServer } from './mcp/server.js';
 import { Supervisor } from './supervisor.js';
 
@@ -25,7 +34,11 @@ import { Supervisor } from './supervisor.js';
 
 const USAGE = `quintal-acp — bridge ACP agents into a Quintal office
 
-  quintal-acp up [name]        boot the fleet from quintal.fleet.json (or one agent)
+  quintal-acp login --token <qh_…>
+                               remember this machine's host token, so the office
+                               can define agents that boot here
+  quintal-acp up [name]        boot the fleet — from quintal.fleet.json if there
+                               is one, otherwise whatever the office assigns
   quintal-acp status           show the fleet's connection and status lines
   quintal-acp --key <KEY> --agent <harness> --cwd <dir> [--url <url>]
                                run a single agent without a config file
@@ -45,6 +58,9 @@ Options
 Harnesses: claude-code, goose, codex, custom
 Protocol:  docs/GATEWAY.md — anything speaking it is a valid agent.
 `;
+
+/** How often to ask the office whether the fleet changed. */
+const FLEET_POLL_MS = 15_000;
 
 interface Flags {
   [key: string]: string | boolean | undefined;
@@ -163,6 +179,21 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (positional[0] === 'login') {
+    const token = stringFlag(flags, 'token');
+    if (!token) throw new ConfigError('login needs --token <qh_…> from /settings/agents');
+    const path = writeStoredHost({
+      token,
+      url: stringFlag(flags, 'url') ?? 'http://localhost:3000',
+      ...(stringFlag(flags, 'host') ? { label: String(stringFlag(flags, 'host')) } : {}),
+      ...(stringFlag(flags, 'repos-dir')
+        ? { reposDir: expandHome(String(stringFlag(flags, 'repos-dir'))) }
+        : {}),
+    });
+    process.stdout.write(`saved to ${path} (owner-readable only)\n`);
+    return;
+  }
+
   if (flags.help === true) {
     process.stdout.write(USAGE);
     return;
@@ -182,18 +213,53 @@ async function main(): Promise<void> {
   let agents: AgentConfig[];
   let only: string | undefined;
   let reposDir = defaultReposDir();
+  /** Set when the office is the source of truth, so we know to keep asking. */
+  let officeFleet: { host: StoredHost; label: string; mapId: string } | null = null;
 
   if (command === 'single') {
     agents = [singleAgentFrom(flags, cwd)];
     const dir = stringFlag(flags, 'repos-dir');
     if (dir) reposDir = expandHome(dir);
   } else if (command === 'up' || command === 'status') {
-    const fleet = loadFleet(stringFlag(flags, 'config'), cwd);
-    agents = fleet.agents;
-    reposDir = fleet.reposDir;
-    only = positional[1];
-    if (command === 'up' && only === undefined) {
-      process.stdout.write(`fleet: ${agents.length} agent(s) from ${fleet.path}\n`);
+    // A local fleet file wins. Somebody who wrote one meant it, and silently
+    // preferring the office would make a checked-in config stop working the
+    // moment a machine was registered.
+    const stored = readStoredHost();
+    const localFleet = stringFlag(flags, 'config') ?? findFleetFile(cwd);
+
+    if (localFleet === null && stored !== null) {
+      // Null lets the office answer for the name the token was registered
+      // under, which is the name somebody typed into the UI.
+      const label = stringFlag(flags, 'host') ?? labelFor(stored);
+      reposDir = stringFlag(flags, 'repos-dir')
+        ? expandHome(String(stringFlag(flags, 'repos-dir')))
+        : (stored.reposDir ?? defaultReposDir());
+
+      const mapId = stringFlag(flags, 'map') ?? 'hq';
+      const fleet = await fetchFleet(stored, label ?? null);
+      const built = toAgentConfigs(fleet, stored, reposDir, mapId);
+      agents = built.agents;
+      only = positional[1];
+      // Poll under the name the office actually used, so a later rename in the
+      // UI is visible rather than silently answered for the old one.
+      officeFleet = { host: stored, label: fleet.host.label, mapId };
+
+      for (const skip of built.skipped) {
+        process.stderr.write(`skipping "${skip.name}": ${skip.why}\n`);
+      }
+      if (command === 'up' && only === undefined) {
+        process.stdout.write(
+          `fleet: ${agents.length} agent(s) assigned to "${fleet.host.label}" by ${fleet.host.owner}\n`,
+        );
+      }
+    } else {
+      const fleet = loadFleet(stringFlag(flags, 'config'), cwd);
+      agents = fleet.agents;
+      reposDir = fleet.reposDir;
+      only = positional[1];
+      if (command === 'up' && only === undefined) {
+        process.stdout.write(`fleet: ${agents.length} agent(s) from ${fleet.path}\n`);
+      }
     }
   } else {
     process.stderr.write(`unknown command "${command}"\n\n${USAGE}`);
@@ -215,10 +281,41 @@ async function main(): Promise<void> {
   printStatus(supervisor);
   process.stdout.write('\nCtrl-C to bring everyone home.\n\n');
 
-  if (started === 0) {
+  // Zero agents is a failure when you wrote a fleet file — you asked for
+  // specific agents and got none. It is the *normal starting state* when the
+  // office defines the fleet: you register the machine, leave this running, and
+  // create the first agent in the UI. Exiting would make that impossible.
+  if (started === 0 && officeFleet === null) {
     await supervisor.down();
     process.exitCode = 1;
     return;
+  }
+  if (started === 0) {
+    process.stdout.write('nothing assigned to this machine yet — create an agent in the office\n');
+  }
+
+  // When the office defines the fleet, keep asking. Polling rather than a push:
+  // the harness already holds one WebSocket per agent, and adding a control
+  // channel the office can speak on would be exactly the remote-command
+  // surface this design exists to avoid.
+  if (officeFleet !== null && only === undefined) {
+    const poll = setInterval(() => {
+      void (async () => {
+        try {
+          const fleet = await fetchFleet(officeFleet.host, officeFleet.label);
+          const built = toAgentConfigs(fleet, officeFleet.host, reposDir, officeFleet.mapId);
+          const { added, removed } = await supervisor.reconcile(built.agents);
+          for (const name of removed) process.stdout.write(`— ${name} left the fleet\n`);
+          for (const name of added) process.stdout.write(`+ ${name} joined the fleet\n`);
+        } catch {
+          // A blip should not take the fleet down; the next tick tries again.
+        }
+      })();
+    }, FLEET_POLL_MS);
+    // Deliberately *not* unref'd: with nothing assigned yet there are no open
+    // sockets, so this timer is the only thing keeping the process alive — and
+    // waiting for the first agent is the whole point of running it.
+    void poll;
   }
 
   // A running fleet answers SIGUSR2 with a status table — useful when the logs

@@ -39,6 +39,21 @@ export function parseScopes(raw: unknown): AgentScope[] {
  */
 export const AGENT_KEY_PREFIX = 'qa_';
 
+/**
+ * A machine's credential, as distinct from an agent's.
+ *
+ * An agent key identifies one agent; a host token identifies one *machine* and
+ * may act as any agent its owner has assigned to that machine. That is strictly
+ * more power, and the trade is deliberate: the alternative is for the office to
+ * hand out agent keys it defined, which means storing them recoverably instead
+ * of as hashes. One revocable credential on your laptop beats plaintext
+ * credentials in a database.
+ *
+ * Different prefix so the two can never be confused in a log, an error message
+ * or a paste.
+ */
+export const HOST_TOKEN_PREFIX = 'qh_';
+
 /** Bytes of entropy behind a key. 32 is well past brute force. */
 export const AGENT_KEY_BYTES = 32;
 

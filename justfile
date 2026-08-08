@@ -84,9 +84,11 @@ fleet-demo:
     export FAKE_REPLY="All 12 tests pass on the auth branch." FAKE_TOOL=Bash FAKE_DELAY_MS=3000
     node packages/acp-harness/dist/cli.js up --config "$DIR/quintal.fleet.json"
 
-# Run the ACP harness with your own arguments.
+# Run the ACP harness with your own arguments. Use this rather than
+# `npx quintal-acp` from inside the repo — the package isn't published yet.
+#   just acp login --token qh_… --url http://localhost:3000
 #   just acp up
-#   just acp --key qa_… --agent claude-code --cwd ~/projects/api
+#   just acp --key qa_… --agent claude-code --repo api
 acp *ARGS:
     @pnpm -s --filter quintal-acp build
     @node packages/acp-harness/dist/cli.js {{ARGS}}

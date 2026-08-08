@@ -23,8 +23,18 @@ export function isHarness(value: string): value is Harness {
 
 export interface AgentConfig {
   name: string;
-  /** Resolved at load time from `key` or `keyEnv`. Never written back to disk. */
+  /**
+   * Resolved at load time from `key` or `keyEnv`. Never written back to disk.
+   *
+   * Empty when this agent was defined in the office: there the credential is
+   * the machine's `hostToken` plus `agentId`, because a key the office could
+   * hand out would be a key the office had to store recoverably.
+   */
   key: string;
+  /** Machine credential, for an office-defined agent. */
+  hostToken?: string;
+  /** Which agent this machine is acting as. Paired with `hostToken`. */
+  agentId?: string;
   harness: Harness;
   /** Command line for the ACP agent. Required for `custom`. */
   command: string[];
@@ -263,6 +273,26 @@ function assertDirectory(path: string, agent: string, asWritten: string): void {
 export interface LoadedFleet extends FleetConfig {
   /** Where the config came from, for error messages. */
   path: string;
+}
+
+/**
+ * The fleet file this directory would use, or null if there isn't one.
+ *
+ * Separate from `loadFleet` because "is there a local fleet?" is a question
+ * asked *before* deciding whether to ask the office, and the answer must not be
+ * an exception.
+ */
+export function findFleetFile(cwd: string): string | null {
+  for (const name of FLEET_FILENAMES) {
+    const path = resolve(cwd, name);
+    try {
+      statSync(path);
+      return path;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 export function loadFleet(explicitPath: string | undefined, cwd: string): LoadedFleet {

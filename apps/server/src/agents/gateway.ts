@@ -7,6 +7,9 @@ import {
 } from '@quintal/shared';
 import {
   findAgentByKey,
+  findAgentIdentityById,
+  findHostByToken,
+  hostMayActAs,
   findRevokedAgentIds,
   getDb,
   recordAgentEvent,
@@ -31,6 +34,32 @@ export interface AgentSession {
 
 export async function authenticateAgent(key: unknown): Promise<AgentIdentity | null> {
   return findAgentByKey(getDb(), key);
+}
+
+/**
+ * A host token acting as one of its owner's agents.
+ *
+ * The second credential in the protocol, and the narrower-looking one is the
+ * more powerful: an agent key is one agent, a host token is every agent its
+ * owner assigned to that machine. Which is exactly why the agent id is checked
+ * against ownership here rather than trusted from the wire — a host token must
+ * never be able to animate somebody else's agent, even inside a shared
+ * workspace.
+ */
+export async function authenticateHostAgent(
+  token: unknown,
+  agentId: unknown,
+): Promise<AgentIdentity | null> {
+  if (typeof agentId !== 'string' || agentId.length === 0) return null;
+
+  const db = getDb();
+  const host = await findHostByToken(db, token);
+  if (!host) return null;
+
+  // `findAgentIdentityById` already refuses revoked agents, so `revoked: false`
+  // here is a statement about what came back, not an assumption.
+  const agent = await findAgentIdentityById(db, agentId);
+  return hostMayActAs(host, agent ? { ...agent, revoked: false } : null) ? agent : null;
 }
 
 export function hasScope(identity: AgentIdentity, scope: AgentScope): boolean {

@@ -55,6 +55,13 @@ export interface CreateAgentInput {
   name: string;
   spriteKey: string;
   scopes?: readonly AgentScope[];
+  /**
+   * How a host should launch this agent, when the office defines it.
+   *
+   * All three together or none: an agent with a runtime but no host has nowhere
+   * to run, and one with a host but no runtime has nothing to run.
+   */
+  launch?: { runtimeId: string; repoSpec: string; hostLabel: string };
 }
 
 export interface CreatedAgent {
@@ -79,6 +86,13 @@ export async function createAgent(
     spriteKey: input.spriteKey,
     apiKeyHash: hashAgentKey(key),
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
+    ...(input.launch
+      ? {
+          runtimeId: input.launch.runtimeId,
+          repoSpec: input.launch.repoSpec,
+          hostLabel: input.launch.hostLabel,
+        }
+      : {}),
   });
 
   // The first line of the log, so the audit trail starts where the agent does.
@@ -164,6 +178,49 @@ export async function findAgentByKey(
   };
 }
 
+/**
+ * The same identity `findAgentByKey` returns, but resolved by id.
+ *
+ * Used only by host-token auth, which has already proved *which machine* is
+ * calling and now needs the agent it claims to be. Revoked agents come back
+ * null here too — a host token must not resurrect one.
+ */
+export async function findAgentIdentityById(
+  db: Database,
+  agentId: string,
+): Promise<AgentIdentity | null> {
+  const rows = await db
+    .select({
+      id: agents.id,
+      workspaceId: agents.workspaceId,
+      ownerUserId: agents.ownerUserId,
+      ownerName: users.name,
+      name: agents.name,
+      spriteKey: agents.spriteKey,
+      scopes: agents.scopes,
+      status: agents.status,
+      revokedAt: agents.revokedAt,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.ownerUserId))
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.revokedAt !== null) return null;
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    ownerUserId: row.ownerUserId,
+    ownerName: row.ownerName,
+    name: row.name,
+    spriteKey: row.spriteKey,
+    scopes: parseScopes(row.scopes),
+    status: row.status,
+  };
+}
+
 /** Which of these agent ids have been revoked. Used to kick live sessions. */
 export async function findRevokedAgentIds(
   db: Database,
@@ -193,6 +250,10 @@ export interface AgentListEntry {
   status: string;
   ownerUserId: string;
   ownerName: string;
+  /** How a host should launch it, when the office defines that. Null otherwise. */
+  runtimeId: string | null;
+  repoSpec: string | null;
+  hostLabel: string | null;
   /** Where its harness said it is rooted. Empty until one connects. */
   workspacePath: string;
   rootedAtReposDir: boolean;
@@ -215,6 +276,9 @@ export async function listAgentsForWorkspace(
       status: agents.status,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      runtimeId: agents.runtimeId,
+      repoSpec: agents.repoSpec,
+      hostLabel: agents.hostLabel,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -249,6 +313,9 @@ export async function findAgentById(
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
       workspaceId: agents.workspaceId,
+      runtimeId: agents.runtimeId,
+      repoSpec: agents.repoSpec,
+      hostLabel: agents.hostLabel,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -330,6 +397,39 @@ export async function setAgentWorkspace(
   await db
     .update(agents)
     .set({ workspacePath: workspacePath.slice(0, 512), rootedAtReposDir })
+    .where(eq(agents.id, agentId));
+}
+
+/**
+ * Assign an existing agent to a machine, or unassign it.
+ *
+ * Separate from creation because the two orderings are both natural: you might
+ * register a machine and then make agents for it, or make an agent today and
+ * decide where it runs tomorrow. Requiring the first was an artefact of the
+ * form, not a rule about agents.
+ *
+ * Null unassigns by clearing the *machine only*, deliberately keeping the
+ * runtime and repo. `assignedToHost` already refuses an agent with no machine,
+ * so nothing runs it — and keeping the rest means flipping it back on is one
+ * click rather than retyping choices the UI just threw away. "Nowhere" means
+ * not assigned, not amnesia.
+ */
+export async function setAgentLaunch(
+  db: Database,
+  agentId: string,
+  launch: { runtimeId: string; repoSpec: string; hostLabel: string } | null,
+): Promise<void> {
+  await db
+    .update(agents)
+    .set(
+      launch
+        ? {
+            runtimeId: launch.runtimeId,
+            repoSpec: launch.repoSpec.slice(0, 512),
+            hostLabel: launch.hostLabel,
+          }
+        : { hostLabel: null },
+    )
     .where(eq(agents.id, agentId));
 }
 
