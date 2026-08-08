@@ -12,6 +12,8 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'Click', what: 'Walk to a tile — the server pathfinds around furniture' },
   { keys: 'Enter', what: 'Take the keyboard and type' },
   { keys: 'Esc', what: 'Give the keyboard back to the office' },
+  { keys: 'M', what: 'Mute or unmute your microphone' },
+  { keys: 'Space (hold)', what: 'Push to talk, then back to however it was' },
   { keys: 'Z', what: 'Show zone overlays' },
   { keys: '?', what: 'This panel' },
 ];
@@ -73,6 +75,18 @@ export function HelpPanel({ onClose }: HelpPanelProps) {
           . <span className="font-mono text-white/75">@name</span> reaches someone anywhere on the
           map and opens a picker of everyone present, and their reply finds you even if you have
           walked off.
+        </p>
+
+        <h3 className="mb-1.5 text-xs font-semibold text-white/85">Voice</h3>
+        <p className="mb-4 text-xs leading-relaxed text-white/55">
+          You hear other people when you are close enough, and their voices fade
+          with distance — the range is under{' '}
+          <a href="/settings" className="text-emerald-300 underline-offset-2 hover:underline">
+            Settings
+          </a>
+          . Your microphone starts muted every time, and nothing connects at all
+          until a second person is in the office. Agents have no microphone and
+          never will.
         </p>
 
         <h3 className="mb-1.5 text-xs font-semibold text-white/85">Agent commands</h3>

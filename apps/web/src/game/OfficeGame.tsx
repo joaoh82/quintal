@@ -11,7 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { gameBridge } from './bridge';
 import type { OfficeSession } from './createGame';
+import { VoiceManager, type VoiceSnapshot } from './voice/VoiceManager';
 import { ChatPanel } from './ui/ChatPanel';
+import { VoiceBar } from './ui/VoiceBar';
 import { HelpPanel } from './ui/HelpPanel';
 import { RosterPanel } from './ui/RosterPanel';
 
@@ -55,7 +57,118 @@ export default function OfficeGame() {
   const [connectionDetail, setConnectionDetail] = useState<string>('');
   const [notice, setNotice] = useState<string>('');
   const [chatFocused, setChatFocused] = useState(false);
+  // A ref as well as state: the voice key handler is bound once and must read
+  // the current value, not the one captured when it was registered.
+  const chatFocusedRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const voiceRef = useRef<VoiceManager | null>(null);
+  const [voice, setVoice] = useState<VoiceSnapshot>({
+    state: 'idle',
+    muted: true,
+    hearing: [],
+    speaking: [],
+    detail: '',
+  });
+
+  useEffect(() => {
+    chatFocusedRef.current = chatFocused;
+  }, [chatFocused]);
+
+  /**
+   * Voice, for as long as this office is open.
+   *
+   * Started unconditionally but connects nothing until a second human turns
+   * up — see `VoiceManager`. The session may not exist yet on first run, so
+   * positions are read through a getter rather than captured.
+   */
+  useEffect(() => {
+    const manager = new VoiceManager(
+      () => sessionRef.current?.occupants() ?? [],
+      setVoice,
+    );
+    voiceRef.current = manager;
+    manager.start();
+
+    // The radius is an office setting, so it is fetched rather than assumed —
+    // and re-read on the same slow cadence the room uses, so changing it in
+    // /settings takes effect without a reload. A failure here is not worth
+    // reporting: the default is a sensible radius, not a broken one.
+    const readRadius = (): void => {
+      void fetch('/api/office/settings')
+        .then((response) => (response.ok ? response.json() : null))
+        .then((settings: { voiceRadiusTiles?: number } | null) => {
+          if (settings?.voiceRadiusTiles) manager.setRadius(settings.voiceRadiusTiles);
+        })
+        .catch(() => {});
+    };
+    readRadius();
+    const radiusTimer = setInterval(readRadius, 10_000);
+
+    // Browsers block audio until the page has been interacted with. Any
+    // gesture will do, so we take the first one rather than demanding a click
+    // through a splash screen for audio that may never be needed.
+    const wake = (): void => manager.resumeAudio();
+    for (const event of ['pointerdown', 'keydown'] as const) {
+      window.addEventListener(event, wake, { once: true, passive: true });
+    }
+
+    // Leaving the page mid-call should hang up, not wait for a timeout.
+    const bye = (): void => void manager.stop();
+    window.addEventListener('pagehide', bye);
+
+    return () => {
+      clearInterval(radiusTimer);
+      window.removeEventListener('pagehide', bye);
+      for (const event of ['pointerdown', 'keydown'] as const) {
+        window.removeEventListener(event, wake);
+      }
+      voiceRef.current = null;
+      void manager.stop();
+    };
+  }, []);
+
+  /**
+   * `M` toggles the mic; holding Space is push-to-talk.
+   *
+   * Push-to-talk restores whatever the mic was before, so holding Space while
+   * already live does not silence you on release — the surprising outcome, and
+   * the one people notice mid-sentence.
+   */
+  useEffect(() => {
+    let pushed = false;
+    let wasMuted = true;
+
+    const down = (event: KeyboardEvent): void => {
+      if (chatFocusedRef.current || event.metaKey || event.ctrlKey || event.altKey) return;
+      const manager = voiceRef.current;
+      if (!manager) return;
+
+      if (event.key === 'm' || event.key === 'M') {
+        event.preventDefault();
+        void manager.setMuted(!manager.snapshot.muted);
+        return;
+      }
+      if (event.code === 'Space' && !pushed) {
+        event.preventDefault();
+        pushed = true;
+        wasMuted = manager.snapshot.muted;
+        if (wasMuted) void manager.setMuted(false);
+      }
+    };
+
+    const up = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || !pushed) return;
+      pushed = false;
+      if (wasMuted) void voiceRef.current?.setMuted(true);
+    };
+
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
 
   // `?` opens help. The chat input stops keydown propagation, so typing a
   // question mark in a sentence never reaches this.
@@ -189,7 +302,7 @@ export default function OfficeGame() {
       <div ref={containerRef} className="h-full w-full" data-testid="phaser-container" />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end gap-3 p-3">
-        <RosterPanel players={roster} connection={connection} />
+        <RosterPanel players={roster} connection={connection} speaking={voice.speaking} />
       </div>
 
       <div className="pointer-events-none absolute bottom-10 left-3">
@@ -236,8 +349,15 @@ export default function OfficeGame() {
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · @name to address · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · @name to address · M mic, Space to talk · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
+        <VoiceBar
+          voice={voice}
+          onToggleMute={() => void voiceRef.current?.setMuted(!voice.muted)}
+          onPickDevice={(deviceId) => void voiceRef.current?.setDevice(deviceId)}
+          onEnableAudio={() => voiceRef.current?.resumeAudio()}
+        />
+
         <button
           type="button"
           onClick={() => setHelpOpen(true)}

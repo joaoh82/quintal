@@ -27,6 +27,7 @@ export async function saveSettingsAction(
       chatRadiusTiles: Number(formData.get('chatRadiusTiles')),
       walkUpRadiusTiles: Number(formData.get('walkUpRadiusTiles')),
       replyWindowSeconds: Number(formData.get('replyWindowSeconds')),
+      voiceRadiusTiles: Number(formData.get('voiceRadiusTiles')),
     });
 
     const saved = await saveOfficeSettings(getDb(), next);

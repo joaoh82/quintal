@@ -34,6 +34,8 @@ function sinceLabel(at: number): string {
 interface RosterPanelProps {
   players: RosterEntry[];
   connection: ConnectionStatus;
+  /** Identity ids the office says are talking right now. */
+  speaking?: string[];
 }
 
 /**
@@ -44,7 +46,7 @@ interface RosterPanelProps {
  * "what is my fleet doing" without reading past the humans, and every agent
  * line carries whose it is.
  */
-export function RosterPanel({ players, connection }: RosterPanelProps) {
+export function RosterPanel({ players, connection, speaking = [] }: RosterPanelProps) {
   const [openAgent, setOpenAgent] = useState<string | null>(null);
 
   const humans = players.filter((player) => player.kind === 'human');
@@ -74,7 +76,15 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
                 key={player.sessionId}
                 className="flex items-baseline gap-2 px-3 py-1 text-xs"
               >
-                <span className={player.isSelf ? 'text-emerald-300' : 'text-white/85'}>
+                {/* A ring, not a colour change: somebody talking should be
+                    findable at a glance without the name becoming unreadable. */}
+                <span
+                  className={`${player.isSelf ? 'text-emerald-300' : 'text-white/85'} ${
+                    speaking.includes(player.identityId)
+                      ? 'rounded-full bg-emerald-400/20 px-1.5 ring-1 ring-emerald-400/70'
+                      : ''
+                  }`}
+                >
                   {player.name}
                 </span>
                 {player.isSelf ? (

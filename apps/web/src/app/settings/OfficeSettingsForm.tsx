@@ -79,6 +79,15 @@ export function OfficeSettingsForm({ settings }: { settings: OfficeSettings }) {
             max={SETTING_LIMITS.walkUpRadiusTiles.max}
           />
           <Field
+            name="voiceRadiusTiles"
+            label="Voice distance"
+            unit="tiles"
+            help="How close two people must be to hear each other speak. Smaller than earshot on purpose: text you can ignore, a voice you cannot."
+            value={current.voiceRadiusTiles}
+            min={SETTING_LIMITS.voiceRadiusTiles.min}
+            max={SETTING_LIMITS.voiceRadiusTiles.max}
+          />
+          <Field
             name="replyWindowSeconds"
             label="Reply reach"
             unit="seconds"
