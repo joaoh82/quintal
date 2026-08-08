@@ -31,10 +31,53 @@ function resolveSecret(): string {
   return DEV_SECRET;
 }
 
+/**
+ * Origins allowed to complete a sign-in.
+ *
+ * Better Auth trusts only `baseURL` by default, which is right — an open
+ * origin list is how a magic link gets completed against somebody else's
+ * page. But a spatial office is a thing you naturally test from a second
+ * machine on the same desk, and `http://192.168.1.89:3000` is not
+ * `http://localhost:3000`.
+ *
+ * So: **in development only**, private-network addresses are trusted too.
+ * Production trusts `baseURL` and whatever `BETTER_AUTH_TRUSTED_ORIGINS`
+ * names explicitly, and nothing else. The dev branch cannot widen a
+ * production deployment because it is gated on NODE_ENV, and RFC1918
+ * addresses are not reachable from the internet in the first place.
+ */
+const PRIVATE_HOST =
+  /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[\w-]+\.local)$/;
+
+function trustedOrigins(): string[] | ((request?: Request) => string[]) {
+  const configured = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (process.env.NODE_ENV === 'production') return configured;
+
+  return (request?: Request) => {
+    if (!request) return configured;
+    // The `Origin` header, not `request.url`: Next rewrites the request URL
+    // internally, so it reports localhost even when the browser arrived at a
+    // LAN address — which is exactly the case this exists to allow.
+    const header = request.headers.get('origin');
+    if (!header) return configured;
+    try {
+      const { hostname } = new URL(header);
+      return PRIVATE_HOST.test(hostname) ? [...configured, header] : configured;
+    } catch {
+      return configured;
+    }
+  };
+}
+
 export const auth = betterAuth({
   appName: 'Quintal',
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
   secret: resolveSecret(),
+  trustedOrigins: trustedOrigins(),
 
   database: drizzleAdapter(getDb(), {
     provider: 'sqlite',
