@@ -57,9 +57,13 @@ export async function POST(): Promise<NextResponse> {
     roomJoin: true,
     canPublish: true,
     canSubscribe: true,
-    // No data channel: chat already has a home in the Colyseus room, and two
-    // transports for the same messages is two things to keep in agreement.
-    canPublishData: false,
+    // Data channels stay enabled, despite Quintal sending no data over them.
+    // They are not an app feature you can decline: the client opens a lossy
+    // and a reliable channel as part of bringing the publisher up, so refusing
+    // the grant closes them mid-negotiation and the connection never
+    // completes — it just sits on "connecting" while the console fills with
+    // "publisher data channel closed unexpectedly".
+    canPublishData: true,
     // Audio only, forever. Quintal has no camera video by design; screen share
     // arrives in 0.7 and will widen this deliberately.
     canPublishSources: [TrackSource.MICROPHONE],
