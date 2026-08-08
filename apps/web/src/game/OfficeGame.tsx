@@ -74,6 +74,12 @@ export default function OfficeGame() {
     chatFocusedRef.current = chatFocused;
   }, [chatFocused]);
 
+  // Speaking rings live in the canvas, so the change has to be pushed into the
+  // scene rather than rendered — React does not own anything inside Phaser.
+  useEffect(() => {
+    sessionRef.current?.setSpeaking(voice.speaking);
+  }, [voice.speaking]);
+
   /**
    * Voice, for as long as this office is open.
    *

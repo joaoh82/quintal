@@ -46,6 +46,9 @@ const AGENT_LABEL_STYLE = {
 const AGENT_GLYPH = '◆';
 
 const AGENT_RING_COLOR = 0x7d9bb5;
+
+/** Talking. The same green the roster uses, so the two read as one signal. */
+const SPEAKING_RING_COLOR = 0x34d399;
 const AGENT_STATUS_STYLE = {
   fontFamily: 'ui-monospace, monospace',
   fontSize: '8px',
@@ -83,10 +86,20 @@ export class Avatar {
   lastStatus = '';
 
   readonly #scene: Phaser.Scene;
+  readonly #isAgent: boolean;
   readonly #sprite: Phaser.GameObjects.Sprite;
   readonly #label: Phaser.GameObjects.Text;
   /** Agents only: the ring on the floor and the status line under the plate. */
   readonly #ring: Phaser.GameObjects.Ellipse | null = null;
+  /**
+   * Humans only: shown while this person is talking.
+   *
+   * A separate object from the agent ring rather than a recoloured one. They
+   * mean opposite things — one marks something that can never speak, the other
+   * marks someone speaking right now — and an agent must never be able to
+   * render the "is talking" state by any code path at all.
+   */
+  #speakingRing: Phaser.GameObjects.Ellipse | null = null;
   readonly #statusLine: Phaser.GameObjects.Text | null = null;
   #bubble: Phaser.GameObjects.Text | null = null;
   #bubbleUntil = 0;
@@ -119,6 +132,7 @@ export class Avatar {
       .setDepth(isSelf ? 12 : 10);
 
     const isAgent = player.kind === 'agent';
+    this.#isAgent = isAgent;
 
     if (isAgent) {
       // Under the feet, deliberately low-contrast: it should read as "not a
@@ -211,10 +225,34 @@ export class Avatar {
     this.setFacing(to.dir, to.moving);
   }
 
+  /**
+   * Draw or clear the talking ring.
+   *
+   * Created lazily and destroyed when it stops: most avatars are silent most
+   * of the time, and an always-present hidden object per person is a cost
+   * paid for nothing.
+   */
+  setSpeaking(speaking: boolean): void {
+    if (this.#isAgent) return;
+
+    if (!speaking) {
+      this.#speakingRing?.destroy();
+      this.#speakingRing = null;
+      return;
+    }
+    if (this.#speakingRing) return;
+
+    this.#speakingRing = this.#scene.add
+      .ellipse(this.#sprite.x, this.#sprite.y + 6, 26, 12, SPEAKING_RING_COLOR, 0.22)
+      .setStrokeStyle(2, SPEAKING_RING_COLOR, 0.9)
+      .setDepth(8);
+  }
+
   setPosition(x: number, y: number): void {
     this.#sprite.setPosition(x, y);
     this.#label.setPosition(x, y - 22);
     this.#ring?.setPosition(x, y + 6);
+    this.#speakingRing?.setPosition(x, y + 6);
     this.#statusLine?.setPosition(x, y - 12);
     if (this.#bubble) this.#bubble.setPosition(x, y - 36);
   }
@@ -253,6 +291,7 @@ export class Avatar {
     this.#sprite.destroy();
     this.#label.destroy();
     this.#ring?.destroy();
+    this.#speakingRing?.destroy();
     this.#statusLine?.destroy();
     this.#bubble?.destroy();
   }

@@ -33,6 +33,8 @@ export interface OfficeSession {
    * which needs positions far more often than the UI does.
    */
   occupants(): VoiceOccupant[];
+  /** Who is talking, by identity id. Drives the ring under the avatar. */
+  setSpeaking(identityIds: readonly string[]): void;
   destroy(): void;
 }
 
@@ -135,6 +137,9 @@ export async function createGame(
     },
     occupants() {
       return scene()?.occupants() ?? [];
+    },
+    setSpeaking(identityIds) {
+      scene()?.setSpeaking(identityIds);
     },
     destroy() {
       closedByUs = true;

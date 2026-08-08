@@ -458,6 +458,22 @@ export class OfficeScene extends Phaser.Scene {
     return out;
   }
 
+  /**
+   * Mark who is talking, by identity id.
+   *
+   * Identity rather than session id because that is what LiveKit knows: a
+   * participant is a `users.id`, and the same human reconnecting keeps it
+   * while their Colyseus session id does not.
+   */
+  setSpeaking(identityIds: readonly string[]): void {
+    const talking = new Set(identityIds);
+    for (const [sessionId, avatar] of this.#avatars) {
+      const player = this.#room.state.players.get(sessionId);
+      if (!player) continue;
+      avatar.setSpeaking(talking.has(player.userId));
+    }
+  }
+
   // --- bookkeeping ---------------------------------------------------------
 
   #publishRoster(): void {
