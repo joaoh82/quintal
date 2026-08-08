@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node scripts/sync-map.mjs && next dev --port 3000",
     "build": "node scripts/sync-map.mjs && next build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.2.4",
     "dotenv": "^17.2.4",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.9",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.3"
   }

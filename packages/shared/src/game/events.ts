@@ -23,6 +23,23 @@ export interface RosterEntry {
 }
 
 /**
+ * One occupant's position, for proximity audio.
+ *
+ * Pulled rather than pushed — see `OfficeScene.occupants()`. Tiles, not
+ * pixels: every radius in Quintal is expressed in tiles, and converting once
+ * at the source beats converting at four call sites.
+ */
+export interface VoiceOccupant {
+  sessionId: string;
+  /** `users.id` for a human. What a LiveKit participant identity matches. */
+  identityId: string;
+  kind: PlayerKind;
+  x: number;
+  y: number;
+  isSelf: boolean;
+}
+
+/**
  * What the UI needs to know about the socket. `reconnecting` covers the
  * server-side grace period: the avatar is still standing in the room.
  */

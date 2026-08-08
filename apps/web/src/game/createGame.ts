@@ -5,6 +5,8 @@ import type { Room } from 'colyseus.js';
 // build if you ask for one.
 import * as Phaser from 'phaser';
 
+import type { VoiceOccupant } from '@quintal/shared';
+
 import { gameBridge } from './bridge';
 import { NotSignedInError, joinOffice } from './net/connection';
 import { OfficeScene } from './scenes/OfficeScene';
@@ -26,6 +28,11 @@ export interface OfficeSession {
   setInputCaptured(captured: boolean): void;
   /** Say something in the room. */
   say(text: string): void;
+  /**
+   * Everyone in the room, in tiles. Polled by the proximity-audio manager,
+   * which needs positions far more often than the UI does.
+   */
+  occupants(): VoiceOccupant[];
   destroy(): void;
 }
 
@@ -125,6 +132,9 @@ export async function createGame(
     },
     say(text) {
       scene()?.say(text);
+    },
+    occupants() {
+      return scene()?.occupants() ?? [];
     },
     destroy() {
       closedByUs = true;

@@ -20,7 +20,9 @@ import {
   type OfficeMap,
   type OfficePlayer,
   type OfficeState,
+  TILE_SIZE,
   type RosterEntry,
+  type VoiceOccupant,
   type TilePoint,
   type TiledMap,
 } from '@quintal/shared';
@@ -426,6 +428,34 @@ export class OfficeScene extends Phaser.Scene {
         .setAlpha(isAgentArea ? 0.85 : 0.55)
         .setDepth(5);
     }
+  }
+
+  /**
+   * Everyone in the room right now, in tiles.
+   *
+   * A *pull*, unlike everything else here, and deliberately so. Proximity
+   * audio needs positions several times a second, and the bridge exists
+   * precisely so a 20Hz simulation never pushes through React. The audio
+   * manager is a plain module, so it can just ask — which keeps the bridge
+   * announce-only and adds no high-rate event for the UI to ignore.
+   *
+   * Positions come from room state rather than sprite coordinates: sprites are
+   * interpolated a fraction of a second behind for smoothness, and audio
+   * should follow where people *are*.
+   */
+  occupants(): VoiceOccupant[] {
+    const out: VoiceOccupant[] = [];
+    for (const [sessionId, player] of this.#room.state.players) {
+      out.push({
+        sessionId,
+        identityId: player.userId,
+        kind: player.kind,
+        x: player.x / TILE_SIZE,
+        y: player.y / TILE_SIZE,
+        isSelf: sessionId === this.#selfId,
+      });
+    }
+    return out;
   }
 
   // --- bookkeeping ---------------------------------------------------------
