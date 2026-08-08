@@ -6,7 +6,16 @@
     "rootDir": "src",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    // `pnpm dev` builds this package once and then starts `tsc --watch` over
+    // the same config. Without a build info file the watch pass has no memory
+    // of that build, re-emits all of `dist/`, and every watcher downstream —
+    // `tsx watch` in apps/server, `next dev` in apps/web — sees the whole
+    // package change and restarts. That's the burst of "Process hasn't exited.
+    // Killing process..." lines at startup. Incremental makes the watch pass a
+    // no-op when nothing changed.
+    "incremental": true,
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts"

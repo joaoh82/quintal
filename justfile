@@ -10,12 +10,50 @@ install:
     pnpm install
 
 # Run web (:3000) and game server (:2567) as separate processes, with HMR.
-dev:
+# Sweeps up a previous run first: leftover file watchers are what turns a
+# healthy dev server into one that 404s every route (see `stop`).
+dev: stop
     pnpm dev
 
-# Free Quintal's ports after an orphaned run (fixes EADDRINUSE on `just dev`).
+# Take a previous `just dev` down — every process, not just the ones on a port.
+#
+# `just dev` starts five long-lived processes and only two of them own a port.
+# This recipe used to kill the port holders alone, which left the file watchers
+# — `tsc --watch`, `tsx watch`, and the `concurrently` that supervises them —
+# running forever, one more set per run. They're invisible: no port, no output,
+# nothing in the terminal you just closed.
+#
+# They are not harmless. Every one of them holds macOS file-watch resources for
+# the whole repo, and once enough have piled up the next `next dev` can't get
+# any: Watchpack dies with `EMFILE: too many open files, watch`, Next never
+# finishes indexing `apps/web/src/app`, and the route table comes up empty, so
+# every route — `/login`, `/api/auth/[...all]`, all of it — answers 404 while
+# `pnpm build && pnpm start` serves the same code fine. Raising the file
+# descriptor limit doesn't help, because the limit was never the problem.
 stop:
     #!/usr/bin/env bash
+    set -uo pipefail
+
+    # Anchored on $PWD so a second clone, or a git worktree, is left alone.
+    killed=0
+    for pattern in \
+      "$PWD/node_modules/.*/concurrently/" \
+      "$PWD/packages/shared/node_modules/.*/tsc" \
+      "$PWD/apps/server/node_modules/.*/(tsx|cross-env)" \
+      "$PWD/apps/web/node_modules/.*/next"
+    do
+      n=$(pgrep -f "$pattern" 2>/dev/null | wc -l | tr -d ' ')
+      if [ "$n" -gt 0 ]; then
+        pkill -f "$pattern" 2>/dev/null || true
+        killed=$((killed + n))
+      fi
+    done
+
+    pkill -f "acp-harness/dist/cli.js" 2>/dev/null || true
+    pkill -f "demo-agent" 2>/dev/null || true
+
+    # `next-server` renames its own process, so there's no path left to match
+    # on — it, and the production server, are reachable through their ports.
     for port in 3000 2567; do
       pids=$(lsof -ti :$port 2>/dev/null || true)
       if [ -n "$pids" ]; then
@@ -23,22 +61,24 @@ stop:
         echo "freed port $port"
       fi
     done
-    pkill -f "acp-harness/dist/cli.js" 2>/dev/null || true
-    pkill -f "demo-agent" 2>/dev/null || true
-    # Watchers outlive their ports. `tsx watch` re-spawns its child on every
-    # rebuild, and a Ctrl-C that misses the parent leaves one behind holding
-    # thousands of file watches — invisible, because it is no longer listening
-    # on anything. Twenty-nine of them accumulated over one working session and
-    # took the dev server down with EMFILE.
-    orphans=$(pgrep -f "tsx watch src/index.ts" 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$orphans" != "0" ]; then
-      pkill -f "tsx watch src/index.ts" 2>/dev/null || true
-      echo "killed $orphans orphaned watcher(s)"
-    fi
+
+    # Anything that ignored SIGTERM gets a second, blunter pass.
+    sleep 1
+    for pattern in \
+      "$PWD/node_modules/.*/concurrently/" \
+      "$PWD/packages/shared/node_modules/.*/tsc" \
+      "$PWD/apps/server/node_modules/.*/(tsx|cross-env)" \
+      "$PWD/apps/web/node_modules/.*/next"
+    do
+      pkill -9 -f "$pattern" 2>/dev/null || true
+    done
+
+    [ "$killed" -gt 0 ] && echo "stopped $killed leftover dev process(es)"
     echo "ports clear"
 
-# Stop anything stale, then start fresh.
-restart: stop dev
+# Stop anything stale, then start fresh. `just dev` does this by itself now;
+# this recipe stays for the muscle memory.
+restart: dev
 
 # Build shared -> web -> server.
 build:

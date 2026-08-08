@@ -9,7 +9,7 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "dev": "pnpm --filter @quintal/shared build && concurrently -n shared,server,web -c magenta,cyan,green \"pnpm --filter @quintal/shared dev\" \"pnpm --filter @quintal/server dev\" \"pnpm --filter @quintal/web dev\"",
+    "dev": "pnpm --filter @quintal/shared build && concurrently --kill-others --kill-signal SIGTERM -n shared,server,web -c magenta,cyan,green \"pnpm --filter @quintal/shared dev\" \"pnpm --filter @quintal/server dev\" \"pnpm --filter @quintal/web dev\"",
     "build": "pnpm --filter @quintal/shared build && pnpm --filter quintal-acp build && pnpm --filter @quintal/web build && pnpm --filter @quintal/server build",
     "start": "cross-env NODE_ENV=production node apps/server/dist/index.js",
     "typecheck": "pnpm --filter @quintal/shared build && pnpm -r typecheck && tsc -p tsconfig.json --noEmit",
