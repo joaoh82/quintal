@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
 
+import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -24,15 +25,6 @@ import {
 } from './actions';
 
 const INITIAL: CreateAgentState = { ok: false };
-
-function when(ms: number | null): string {
-  if (ms === null) return 'never';
-  const seconds = Math.round((Date.now() - ms) / 1000);
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
-  return new Date(ms).toLocaleDateString();
-}
 
 interface AgentsManagerProps {
   agents: AgentListEntry[];
@@ -272,12 +264,18 @@ function AgentRow({
       />
 
       <span className="text-muted-foreground ml-auto text-xs">
-        created {when(agent.createdAt)}
+        created <RelativeTime at={agent.createdAt} />
       </span>
       <span className="text-muted-foreground text-xs">
-        {agent.revokedAt !== null
-          ? `revoked ${when(agent.revokedAt)}`
-          : `seen ${when(agent.lastSeenAt)}`}
+        {agent.revokedAt !== null ? (
+          <>
+            revoked <RelativeTime at={agent.revokedAt} />
+          </>
+        ) : (
+          <>
+            seen <RelativeTime at={agent.lastSeenAt} />
+          </>
+        )}
       </span>
 
       {/* Where it runs, changeable after the fact — the ordering that forced

@@ -1,19 +1,12 @@
 import { RUNTIMES, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
 
+import { RelativeTime } from '@/components/RelativeTime';
+
 interface Host {
   label: string;
   reposDir: string;
   runtimes: RuntimeStatus[];
   lastSeenAt: Date;
-}
-
-function ago(when: Date): string {
-  const seconds = Math.max(0, Math.round((Date.now() - when.getTime()) / 1000));
-  if (seconds < 90) return 'just now';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 90) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 36 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 }
 
 /**
@@ -49,7 +42,7 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
           <div className="flex flex-wrap items-baseline gap-x-2">
             <h2 className="text-sm font-semibold">{host.label}</h2>
             <span className="text-muted-foreground text-xs">
-              seen {ago(host.lastSeenAt)}
+              seen <RelativeTime at={host.lastSeenAt.getTime()} />
             </span>
             {host.reposDir ? (
               <span className="text-muted-foreground ml-auto font-mono text-[11px]">
