@@ -16,6 +16,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "colyseus.js": "^0.16.22",
+    "livekit-client": "^2.21.0",
+    "livekit-server-sdk": "^2.17.0",
     "lucide-react": "^1.29.0",
     "next": "15.5.23",
     "nodemailer": "^9.0.4",

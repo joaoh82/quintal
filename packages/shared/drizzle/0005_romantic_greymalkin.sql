@@ -1,0 +1,1 @@
+ALTER TABLE `office_settings` ADD `voice_radius_tiles` integer DEFAULT 6 NOT NULL;

@@ -19,19 +19,39 @@ export interface OfficeSettings {
    * person who asked. Zero disables the behaviour entirely.
    */
   replyWindowSeconds: number;
+  /**
+   * How close two people must be to hear each other's voice, in tiles.
+   *
+   * Smaller than earshot on purpose. Text carries across a room because you can
+   * ignore it; a voice you did not choose to hear is an interruption, and a
+   * radius wide enough to catch the next conversation over is how an office
+   * becomes unusable.
+   */
+  voiceRadiusTiles: number;
 }
 
 export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   chatRadiusTiles: 12,
   walkUpRadiusTiles: 3,
   replyWindowSeconds: 90,
+  voiceRadiusTiles: 6,
 };
+
+/**
+ * Extra tiles you must travel *past* the voice radius before audio cuts.
+ *
+ * Without this, standing on the boundary subscribes and unsubscribes a dozen
+ * times a minute — audible as clipping, and a genuine cost in signalling
+ * traffic. Hysteresis makes the edge a band rather than a line.
+ */
+export const VOICE_HYSTERESIS_TILES = 2;
 
 /** Bounds the UI enforces and the server re-enforces. */
 export const SETTING_LIMITS = {
   chatRadiusTiles: { min: 2, max: 40 },
   walkUpRadiusTiles: { min: 1, max: 10 },
   replyWindowSeconds: { min: 0, max: 600 },
+  voiceRadiusTiles: { min: 2, max: 20 },
 } as const;
 
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
@@ -60,6 +80,12 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
       DEFAULT_OFFICE_SETTINGS.replyWindowSeconds,
       SETTING_LIMITS.replyWindowSeconds.min,
       SETTING_LIMITS.replyWindowSeconds.max,
+    ),
+    voiceRadiusTiles: clamp(
+      raw?.voiceRadiusTiles,
+      DEFAULT_OFFICE_SETTINGS.voiceRadiusTiles,
+      SETTING_LIMITS.voiceRadiusTiles.min,
+      SETTING_LIMITS.voiceRadiusTiles.max,
     ),
   };
 }

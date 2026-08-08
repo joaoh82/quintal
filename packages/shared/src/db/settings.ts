@@ -25,6 +25,7 @@ export async function getOfficeSettings(db: Database): Promise<OfficeSettings> {
     chatRadiusTiles: row.chatRadiusTiles,
     walkUpRadiusTiles: row.walkUpRadiusTiles,
     replyWindowSeconds: row.replyWindowSeconds,
+    voiceRadiusTiles: row.voiceRadiusTiles,
   });
 }
 

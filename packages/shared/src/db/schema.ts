@@ -165,6 +165,7 @@ export const officeSettings = sqliteTable('office_settings', {
   chatRadiusTiles: integer('chat_radius_tiles').notNull().default(12),
   walkUpRadiusTiles: integer('walk_up_radius_tiles').notNull().default(3),
   replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),
+  voiceRadiusTiles: integer('voice_radius_tiles').notNull().default(6),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .default(now)
     .$onUpdate(() => new Date())
