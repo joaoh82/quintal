@@ -313,10 +313,14 @@ function AgentRow({
               </option>
             ))}
           </select>
+          {/* `required` so the browser blocks an empty submit before it can
+              become a thrown server error — this form has no inline error
+              slot, and a full-page overlay is not how you say "fill this in". */}
           <input
             name="repoSpec"
             defaultValue={agent.repoSpec ?? ''}
             placeholder="api · * for all"
+            required
             className="border-input bg-background h-7 w-36 rounded border px-2 text-xs"
           />
           <button type="submit" className="text-xs underline-offset-2 hover:underline">

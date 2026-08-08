@@ -408,9 +408,11 @@ export async function setAgentWorkspace(
  * decide where it runs tomorrow. Requiring the first was an artefact of the
  * form, not a rule about agents.
  *
- * Null clears all three together — an agent with a runtime but no machine has
- * nowhere to run, and one with a machine but no runtime has nothing to run, so
- * they are only ever meaningful as a set.
+ * Null unassigns by clearing the *machine only*, deliberately keeping the
+ * runtime and repo. `assignedToHost` already refuses an agent with no machine,
+ * so nothing runs it — and keeping the rest means flipping it back on is one
+ * click rather than retyping choices the UI just threw away. "Nowhere" means
+ * not assigned, not amnesia.
  */
 export async function setAgentLaunch(
   db: Database,
@@ -426,7 +428,7 @@ export async function setAgentLaunch(
             repoSpec: launch.repoSpec.slice(0, 512),
             hostLabel: launch.hostLabel,
           }
-        : { runtimeId: null, repoSpec: null, hostLabel: null },
+        : { hostLabel: null },
     )
     .where(eq(agents.id, agentId));
 }
