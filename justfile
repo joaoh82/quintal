@@ -25,6 +25,16 @@ stop:
     done
     pkill -f "acp-harness/dist/cli.js" 2>/dev/null || true
     pkill -f "demo-agent" 2>/dev/null || true
+    # Watchers outlive their ports. `tsx watch` re-spawns its child on every
+    # rebuild, and a Ctrl-C that misses the parent leaves one behind holding
+    # thousands of file watches — invisible, because it is no longer listening
+    # on anything. Twenty-nine of them accumulated over one working session and
+    # took the dev server down with EMFILE.
+    orphans=$(pgrep -f "tsx watch src/index.ts" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$orphans" != "0" ]; then
+      pkill -f "tsx watch src/index.ts" 2>/dev/null || true
+      echo "killed $orphans orphaned watcher(s)"
+    fi
     echo "ports clear"
 
 # Stop anything stale, then start fresh.
