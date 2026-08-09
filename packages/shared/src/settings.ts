@@ -76,8 +76,11 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
  * unambiguous to autocomplete against.
  *
  * The leading boundary in the pattern matters just as much: without it
- * `josh@quintal.sh` addresses somebody called "quintal", and every email
- * pasted into chat becomes a summons.
+ * `npub1w0rd@relay.example` addresses somebody called "relay", and every
+ * identifier pasted into chat becomes a summons. Now that identity is a
+ * keypair, pasting one is routine — keys, handles of the form `name@host`,
+ * and relay URLs all travel through chat, and none of them are a way to get
+ * somebody's attention.
  */
 export const MENTION_PATTERN = /(^|[^\p{L}\p{N}_-])@([\p{L}\p{N}][\p{L}\p{N}_-]*)/gu;
 

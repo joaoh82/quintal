@@ -26,13 +26,24 @@ const now = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 // Better Auth tables (plural names; the adapter is configured with usePlural)
 // ---------------------------------------------------------------------------
 
+/**
+ * A human, identified by a public key.
+ *
+ * There is no email column and no password column, because there is no email
+ * and no password: you prove who you are by signing a challenge with a key you
+ * hold. That removes the whole class of things a self-hoster would otherwise
+ * have to operate and defend — a mail provider, deliverability, a reset flow,
+ * an inbox as the de-facto root credential for every account.
+ *
+ * `pubkey` is the 32-byte x-only key in lowercase hex, not an npub: hex is what
+ * signatures verify against, and storing exactly one encoding means two rows
+ * can never disagree about whether they are the same person. The npub is a
+ * rendering, produced at the edges.
+ */
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: integer('email_verified', { mode: 'boolean' })
-    .default(false)
-    .notNull(),
+  pubkey: text('pubkey').notNull().unique(),
   image: text('image'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .default(now)
@@ -61,6 +72,15 @@ export const sessions = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * Set for sessions minted by walking in through a guest link.
+     *
+     * On the session rather than the user because it is the *arrival* that was
+     * provisional, not the person: the same key coming back through a normal
+     * sign-in is not a guest. It also means a guest badge cannot outlive the
+     * visit that earned it.
+     */
+    isGuest: integer('is_guest', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => [index('sessions_user_id_idx').on(table.userId)],
 );
@@ -96,7 +116,14 @@ export const accounts = sqliteTable(
   (table) => [index('accounts_user_id_idx').on(table.userId)],
 );
 
-/** Magic-link tokens live here (and email verification, later). */
+/**
+ * Login nonces.
+ *
+ * `identifier` is the public key being challenged and `value` is the 32-byte
+ * hex nonce we issued for it, with a 60-second expiry. Better Auth owns this
+ * table's shape, and consuming a row is atomic — which is what makes a nonce
+ * single-use rather than merely short-lived.
+ */
 export const verifications = sqliteTable(
   'verifications',
   {
@@ -154,6 +181,45 @@ export const memberships = sqliteTable(
     ),
     index('memberships_user_id_idx').on(table.userId),
   ],
+);
+
+/**
+ * A link that lets somebody walk into the office without having an identity
+ * first.
+ *
+ * The token is stored as a SHA-256 hash for the same reason agent keys are: a
+ * leaked database should not hand an attacker a working door. The `v2.` prefix
+ * on the plaintext is a version marker carried outside the hash, so a future
+ * token format can be told apart on sight rather than by trying to validate it.
+ *
+ * Bounded twice over — by `expiresAt` and by `maxUses` — because a guest link
+ * is pasted into chats and forwarded, and the person who created it is not the
+ * only one who will ever hold it.
+ */
+export const inviteLinks = sqliteTable(
+  'invite_links',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** SHA-256 of the plaintext token, hex. The plaintext is shown once. */
+    tokenHash: text('token_hash').notNull().unique(),
+    /** What the guest becomes on the way in. */
+    role: text('role', { enum: MEMBERSHIP_ROLES }).notNull().default('member'),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    maxUses: integer('max_uses').notNull().default(1),
+    usedCount: integer('used_count').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' })
+      .default(now)
+      .notNull(),
+    /** Set instead of deleting, so a spent link stays explainable. */
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [index('invite_links_workspace_id_idx').on(table.workspaceId)],
 );
 
 /**
@@ -366,6 +432,8 @@ export type Workspace = typeof workspaces.$inferSelect;
 export type NewWorkspace = typeof workspaces.$inferInsert;
 export type Membership = typeof memberships.$inferSelect;
 export type NewMembership = typeof memberships.$inferInsert;
+export type InviteLink = typeof inviteLinks.$inferSelect;
+export type NewInviteLink = typeof inviteLinks.$inferInsert;
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;

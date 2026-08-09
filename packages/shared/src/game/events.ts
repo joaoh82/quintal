@@ -20,6 +20,8 @@ export interface RosterEntry {
   identityId: string;
   /** ms since epoch when this occupant last visibly did something. */
   lastActionAt: number;
+  /** Humans: walked in through a guest link. Always false for agents. */
+  isGuest: boolean;
 }
 
 /**

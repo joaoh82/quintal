@@ -70,7 +70,7 @@ export async function createAgentAction(
     const workspace = await ensurePersonalWorkspace(db, {
       userId: session.user.id,
       name: session.user.name,
-      email: session.user.email,
+      pubkey: session.user.pubkey,
     });
 
     // Launch details are all-or-nothing: a runtime with no machine has nowhere
@@ -158,7 +158,7 @@ export async function createHostTokenAction(
     const workspace = await ensurePersonalWorkspace(db, {
       userId: session.user.id,
       name: session.user.name,
-      email: session.user.email,
+      pubkey: session.user.pubkey,
     });
 
     const label = String(formData.get('label') ?? '').trim();
@@ -191,7 +191,7 @@ export async function revokeHostTokenAction(formData: FormData): Promise<void> {
   const workspace = await ensurePersonalWorkspace(db, {
     userId: session.user.id,
     name: session.user.name,
-    email: session.user.email,
+    pubkey: session.user.pubkey,
   });
 
   const id = String(formData.get('tokenId') ?? '');

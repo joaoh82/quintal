@@ -80,6 +80,11 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
                 {player.isSelf ? (
                   <span className="font-mono text-[10px] text-white/35">you</span>
                 ) : null}
+                {player.isGuest ? (
+                  <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">
+                    Guest
+                  </span>
+                ) : null}
                 {player.status ? (
                   <span className="ml-auto truncate font-mono text-[10px] text-white/45">
                     {player.status}

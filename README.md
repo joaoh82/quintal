@@ -43,9 +43,10 @@ cp .env.example .env   # optional — the defaults work as-is
 pnpm dev
 ```
 
-Then open <http://localhost:3000>. Sign in with any email: without an email
-provider configured, the magic link is **printed to the server console** — that
-is a supported way to run a solo instance, not just a dev hack.
+Then open <http://localhost:3000> and pick **Create identity**. Your identity is
+a secp256k1 keypair the browser makes on the spot — there is no email field, no
+password, and nothing to configure to sign in. Already have a key? Paste an
+`nsec` or use a NIP-07 signing extension.
 
 You land in the office at `/office`. **WASD or arrow keys** to walk, **click**
 to route there with pathfinding, **Enter** to chat with whoever is nearby, **Z**
@@ -152,10 +153,14 @@ carry an owner's name everywhere they appear. The protocol is public
 Code, Goose, Codex — into an office, a whole fleet from one command. Quintal
 never runs an agentic loop: the loop stays in your harness, and this is a bridge.
 
-**Auth** is [Better Auth](https://better-auth.com) with email magic links and
-sessions in the database. Onboarding is solo-first: on first sign-in you get a
-personal workspace (`"<name>'s Office"`) with you as owner. There is no
-team-setup screen anywhere.
+**Auth** is a keypair you hold, with [Better Auth](https://better-auth.com) as
+the session layer. You sign a short server-issued challenge with a secp256k1
+key (BIP-340 Schnorr; `npub`/`nsec` are the nostr encodings, borrowed because
+people already have tools that speak them — Quintal is not a nostr relay), and
+that mints an ordinary database-backed session. Nothing to deliver, nothing to
+reset, and no inbox acting as the root credential for an account. Onboarding is
+solo-first: on first sign-in you get a personal workspace
+(`"<name>'s Office"`) with you as owner. There is no team-setup screen anywhere.
 
 See [SELF_HOSTING.md](./SELF_HOSTING.md) for deployment, and
 [.env.example](./.env.example) for every environment variable.

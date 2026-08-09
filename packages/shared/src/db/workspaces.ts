@@ -4,11 +4,8 @@ import { and, eq } from 'drizzle-orm';
 
 import type { Database } from './client.js';
 import { memberships, users, workspaces, type Workspace } from './schema.js';
-import {
-  displayNameFromEmail,
-  personalWorkspaceName,
-  slugify,
-} from '../workspace.js';
+import { displayNameFromPubkey } from '../identity.js';
+import { personalWorkspaceName, slugify } from '../workspace.js';
 
 /** Find a free slug by appending `-2`, `-3`, … to the base. */
 async function uniqueSlug(db: Database, base: string): Promise<string> {
@@ -27,9 +24,9 @@ async function uniqueSlug(db: Database, base: string): Promise<string> {
 
 export interface EnsurePersonalWorkspaceInput {
   userId: string;
-  /** Falls back to the email local part when a magic-link signup carries no name. */
+  /** Falls back to a truncated npub when the identity has not been named yet. */
   name?: string | null;
-  email?: string | null;
+  pubkey?: string | null;
 }
 
 /**
@@ -53,7 +50,7 @@ export async function ensurePersonalWorkspace(
 
   const displayName =
     input.name?.trim() ||
-    (input.email ? displayNameFromEmail(input.email) : null) ||
+    (input.pubkey ? displayNameFromPubkey(input.pubkey) : null) ||
     'Quintal';
 
   const workspace: Workspace = {
@@ -106,12 +103,12 @@ export async function findMembership(
   return rows[0] ?? null;
 }
 
-/** Convenience for the seed script and future CLI tooling. */
-export async function findUserByEmail(db: Database, email: string) {
+/** Look somebody up by the key they sign with. Hex, never an npub. */
+export async function findUserByPubkey(db: Database, pubkey: string) {
   const rows = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.pubkey, pubkey))
     .limit(1);
   return rows[0] ?? null;
 }

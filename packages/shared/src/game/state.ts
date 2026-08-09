@@ -45,6 +45,13 @@ export class OfficePlayer extends Schema {
   ownerName = '';
   /** For agents: comma-joined scopes, so the profile card can show them. */
   scopes = '';
+  /**
+   * For humans: arrived through a guest link rather than with their own
+   * identity. Shown as a badge, because "who is this person and should they be
+   * hearing this" is a question the room has to answer visually — the same
+   * reason agents are marked rather than blending in.
+   */
+  isGuest = false;
 }
 
 defineTypes(OfficePlayer, {
@@ -59,6 +66,7 @@ defineTypes(OfficePlayer, {
   status: 'string',
   ownerName: 'string',
   scopes: 'string',
+  isGuest: 'boolean',
 });
 
 export class OfficeState extends Schema {
@@ -82,6 +90,7 @@ export interface PlayerInit {
   status?: string;
   ownerName?: string;
   scopes?: readonly string[];
+  isGuest?: boolean;
 }
 
 /** Build a populated player. Assignment, not construction — see the note above. */
@@ -98,5 +107,6 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.status = init.status ?? '';
   player.ownerName = init.ownerName ?? '';
   player.scopes = (init.scopes ?? []).join(',');
+  player.isGuest = init.isGuest ?? false;
   return player;
 }

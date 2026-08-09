@@ -1,5 +1,6 @@
 import { and, eq, gt } from 'drizzle-orm';
 
+import { displayNameFromPubkey } from '@quintal/shared';
 import { getDb, sessions, users } from '@quintal/shared/db';
 
 /**
@@ -15,7 +16,10 @@ import { getDb, sessions, users } from '@quintal/shared/db';
 export interface AuthenticatedUser {
   userId: string;
   name: string;
-  email: string;
+  /** x-only public key, hex. The identity behind the session. */
+  pubkey: string;
+  /** True when this session was minted by walking in through a guest link. */
+  isGuest: boolean;
 }
 
 /**
@@ -31,7 +35,8 @@ export async function verifySessionToken(
     .select({
       userId: users.id,
       name: users.name,
-      email: users.email,
+      pubkey: users.pubkey,
+      isGuest: sessions.isGuest,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -43,9 +48,20 @@ export async function verifySessionToken(
   return rows[0] ?? null;
 }
 
-/** Display name for the office, never empty. */
+/**
+ * Display name for the office, never empty.
+ *
+ * Falls back to a truncated npub rather than anything derived from the key's
+ * bytes directly: two people who have not named themselves should still be
+ * told apart on sight, and the npub is the string they will recognise as
+ * theirs.
+ */
 export function displayNameFor(user: AuthenticatedUser): string {
   const trimmed = user.name.trim();
   if (trimmed.length > 0) return trimmed;
-  return user.email.split('@')[0] ?? 'Someone';
+  try {
+    return displayNameFromPubkey(user.pubkey);
+  } catch {
+    return 'Someone';
+  }
 }

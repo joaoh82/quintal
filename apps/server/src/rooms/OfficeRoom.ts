@@ -102,7 +102,7 @@ interface OfficeRoomOptions {
 
 /** What `onAuth` hands to `onJoin`. Humans and agents come through one door. */
 type JoinAuth =
-  | { kind: 'human'; userId: string; name: string }
+  | { kind: 'human'; userId: string; name: string; isGuest: boolean }
   | { kind: 'agent'; identity: AgentIdentity };
 
 interface PlayerSim {
@@ -258,7 +258,12 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!user) {
       throw new ServerError(ErrorCode.AUTH_FAILED, 'No valid session. Sign in again.');
     }
-    return { kind: 'human', userId: user.userId, name: displayNameFor(user) };
+    return {
+      kind: 'human',
+      userId: user.userId,
+      name: displayNameFor(user),
+      isGuest: user.isGuest,
+    };
   }
 
   override onJoin(client: Client, _options: OfficeRoomOptions, auth: JoinAuth): void {
@@ -276,6 +281,7 @@ export class OfficeRoom extends Room<OfficeState> {
         x: tileCentre(spawn.x, this.#map.tileSize),
         y: tileCentre(spawn.y, this.#map.tileSize),
         kind: 'human',
+        isGuest: auth.isGuest,
       }),
     );
     this.#sims.set(client.sessionId, { intent: { x: 0, y: 0 }, path: [], away: false });

@@ -1,13 +1,11 @@
 import 'server-only';
 
-import { displayNameFromEmail } from '@quintal/shared';
-import { ensurePersonalWorkspace, getDb, schema } from '@quintal/shared/db';
+import { getDb, schema } from '@quintal/shared/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
-import { magicLink } from 'better-auth/plugins';
 
-import { sendMagicLinkEmail } from './mailer';
+import { keypairAuth } from './auth/keypair';
 
 const DEV_SECRET = 'quintal-development-secret-not-for-production';
 
@@ -43,7 +41,8 @@ export const auth = betterAuth({
     usePlural: true,
   }),
 
-  // Magic link only — no passwords to leak, nothing for a self-hoster to rotate.
+  // Identity is a keypair. There is no password to leak and no address to
+  // send anything to — see `auth/keypair.ts`.
   emailAndPassword: { enabled: false },
 
   session: {
@@ -51,35 +50,8 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // refresh at most once a day
   },
 
-  databaseHooks: {
-    user: {
-      create: {
-        // Magic-link signups carry no name — derive one so the office has
-        // something to put under your avatar.
-        before: (user) => {
-          const name = user.name?.trim()
-            ? user.name
-            : displayNameFromEmail(user.email);
-          return Promise.resolve({ data: { ...user, name } });
-        },
-        after: async (user) => {
-          // Solo-first onboarding: your office exists before you first see it.
-          await ensurePersonalWorkspace(getDb(), {
-            userId: user.id,
-            name: user.name,
-            email: user.email,
-          });
-        },
-      },
-    },
-  },
-
   plugins: [
-    magicLink({
-      sendMagicLink: async ({ email, url }) => {
-        await sendMagicLinkEmail({ to: email, url });
-      },
-    }),
+    keypairAuth(),
     // Must stay last: lets server actions set the session cookie.
     nextCookies(),
   ],

@@ -24,7 +24,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
   const workspace = await ensurePersonalWorkspace(getDb(), {
     userId: session.user.id,
     name: session.user.name,
-    email: session.user.email,
+    pubkey: session.user.pubkey,
   });
 
   return (
@@ -32,7 +32,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-xs">
-          {workspace.name} · {session.user.email}
+          {workspace.name} · {session.user.name}
         </p>
         <Link
           href="/office"
