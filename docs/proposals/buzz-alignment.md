@@ -1,8 +1,8 @@
 # Proposal: keypair identity, relay-style voice, desktop-first
 
-**Status: draft, awaiting validation.** Nothing in here is scheduled. This
-document exists so the three directional changes below can be judged as a
-set, then folded into the private build plan as concrete steps.
+**Status: validated 2026-08-09.** The three directional changes below were
+judged as a set and adopted; the decision outcomes are recorded at the end
+of this document. Concrete step sequencing lives in the build plan.
 
 The three changes, in one line each:
 
@@ -146,18 +146,18 @@ existing `verifications` table with a short TTL), `POST` takes a Schnorr
 signature over a canonical payload naming the server origin + nonce,
 verifies with `@noble/curves/secp256k1`, and mints a standard Better Auth
 session row — from there, cookies, `/api/game/join`, and the Colyseus
-`onAuth` all work unchanged. Keep the magic-link plugin behind a config
-flag during the transition rather than deleting it on day one.
-`AuthenticatedUser.email` becomes optional; the display-name fallback
-changes from `email.split('@')[0]` to a truncated npub.
+`onAuth` all work unchanged. Email auth, the mailer, and their config are
+deleted in the same step — pre-launch, there is no user base to migrate.
+`AuthenticatedUser` gains a pubkey and loses its email; the display-name
+fallback changes from `email.split('@')[0]` to a truncated npub.
 
 **A2. Invite links replace email as the guest path.**
 Buzz-style v2 codes: 32 random bytes, stored hashed, TTL + max-use caps,
 minted from settings by the workspace owner. A guest opening an invite link
 in the browser gets an **ephemeral keypair generated client-side** (NIP-07
 extension honored when present), signs the same challenge, and walks in.
-No mail provider in the loop at all; the mailer and its config become
-optional and then dead. Guests are marked as such in the roster.
+No mail provider in the loop at all. Guests are marked as such in the
+roster.
 
 **A3. Agent keypairs with owner attestation.**
 Agents move from `qa_` bearer secrets to their own keypairs. The desktop
@@ -259,17 +259,19 @@ visit one.**
 
 Dependency-ordered; A1→A2 and C1 unblock everything else.
 
-1. **A1** pubkey column + challenge login (magic link behind a flag)
-2. **A2** invite codes + ephemeral guest identity; email path optional
-3. **C1** Tauri shell with keychain custody + NIP-49 backup (**this is the
-   existing desktop-app step — 0.11 — pulled earlier**, because key custody
-   wants a desktop home before keys are the only identity)
-4. **A3** agent keypairs + owner attestation; harness migrates off `qa_`
-5. **B1+B2** voice relay + proximity peer-sets, desktop capture/playout
-6. **B4** web-guest voice + polish (speaking rings, PTT, device pickers)
-7. **C2/C3** managed-agent runtime in-app; web narrows to guest door
+1. **A1+A2** pubkey challenge login + invite codes + ephemeral guest
+   identity; email auth and the mailer deleted in the same step
+2. **C1** Tauri shell with keychain custody + NIP-49 backup (**this is the
+   existing desktop-app step pulled earlier and un-gated**, because key
+   custody wants a desktop home before keys are the only identity)
+3. **A3** agent keypairs + owner attestation; harness migrates off `qa_`
+4. **B1+B2** voice relay + proximity peer-sets, desktop capture/playout
+5. **B4** web-guest voice + polish (speaking rings, PTT, device pickers)
+6. **C2/C3** managed-agent runtime in-app; web narrows to guest door
+7. *(after the voice pilot)* screen share over the same relay (WebCodecs
+   video frames, server-enforced nearest-3 viewer cap)
 8. *(later, phase 1+)* STT bridge for agents; zone-walled voice with
-   private zones; magic-link + mailer removal once flag telemetry says safe
+   private zones
 
 Docs that must move in the same commits: `README.md` (magic-link onboarding
 story → keypair story), `SELF_HOSTING.md` (drop the LiveKit line, add
@@ -278,21 +280,26 @@ nothing — the one-process promise now covers voice), `docs/GATEWAY.md`
 
 ---
 
-## Decision points needing validation
+## Decisions (resolved 2026-08-09)
 
-1. **Full nostr, or nostr-shaped auth only?** This proposal deliberately
-   stops at keys/auth/attestation and does not rebuild Quintal as a relay.
-   Accepting that scope is the biggest single call in this document.
-2. **Guest path:** invite codes + ephemeral browser keys, with email
-   removed entirely (proposed) — or keep magic link as a permanent guest
-   option?
-3. **Voice shape:** continuous proximity fade (proposed) vs. discrete
-   huddle-style bubbles per zone? The plan assumes fade on the open floor
-   and hard walls only at private zones.
-4. **Desktop timing:** pulling the desktop step ahead of voice (proposed,
-   because key custody and PTT want it) vs. keeping voice first on web?
-5. **Attestation conditions grammar:** start with empty conditions (owner
-   authorizes agent key, full stop) and add constraint clauses later —
-   or carry Buzz's `kind=`/`created_at` clause grammar from day one?
-   Proposed: empty now, grammar-compatible format so clauses can be added
-   without re-signing ceremony changes.
+1. **Nostr scope: identity/auth layer only.** Keys, challenge auth, owner
+   attestation, npub/nsec/NIP-49 encodings. Quintal does not become a
+   relay — no event log, no federation. Standard encodings keep future
+   interop possible without committing to it.
+2. **Email is removed entirely.** Invite codes + ephemeral browser keys
+   are the guest path; members use durable keys; account recovery is the
+   encrypted key backup. No magic link, no mailer, no transition flag.
+3. **Voice shape: continuous proximity fade** on the open floor, hard
+   walls at private zones. Both receipt and isolation are enforced
+   server-side at the peer-set chokepoint.
+4. **Desktop ships before voice**, un-gated: it is the home for key
+   custody, agent spawning, and global push-to-talk. Web remains the
+   full-featured social client and the guest door; only key-custody
+   surfaces (agent creation, backups) are app/CLI-only.
+5. **Attestation conditions start empty** — "this is my agent," full
+   stop; revocation stays instant via the database. The format is
+   grammar-compatible so constraint clauses can be added later without
+   changing the signing ceremony.
+6. **Large events are out of scope indefinitely.** The product is a
+   solo/small-team fleet office; the relay's fan-out comfortably covers
+   every scale it targets, and no SFU returns even as an option.
