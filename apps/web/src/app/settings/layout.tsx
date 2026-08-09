@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { SignOutButton } from '@/components/SignOutButton';
 import { auth } from '@/lib/auth';
 
 import { SettingsTabs } from './SettingsTabs';
@@ -40,6 +41,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
         >
           ← Back to the office
         </Link>
+        <SignOutButton />
       </header>
 
       <SettingsTabs />

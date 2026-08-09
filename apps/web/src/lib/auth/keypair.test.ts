@@ -82,8 +82,12 @@ interface VerifyInput {
   inviteToken?: string;
 }
 
-async function verify(auth: ReturnType<typeof buildAuth>, body: VerifyInput) {
-  return auth.api.keypairVerify({ body, headers: new Headers() });
+async function verify(
+  auth: ReturnType<typeof buildAuth>,
+  body: VerifyInput,
+  headers: Headers = new Headers(),
+) {
+  return auth.api.keypairVerify({ body, headers });
 }
 
 /** Run `verify` and report the failure message, or throw if it wrongly passed. */
@@ -356,6 +360,55 @@ describe('verify', () => {
       payload,
     });
     assert.match(message, /not issued for this key/i);
+  });
+
+  it('refuses a browser request from another origin', async () => {
+    // Login CSRF: the signature here is valid, it just isn't the victim's.
+    // Without this check a page on another site could sign your browser into
+    // somebody else's office and watch you type into it.
+    const { auth } = await setup();
+    const { secretKey, pubkey } = keypair();
+
+    const nonce = await challenge(auth, pubkey);
+    const payload = buildAuthPayload({
+      origin: ORIGIN,
+      nonce,
+      timestamp: nowSeconds(),
+    });
+
+    let message = '';
+    try {
+      await verify(
+        auth,
+        { pubkey, sig: signAuthPayload(secretKey, payload), payload },
+        new Headers({ origin: 'https://evil.example.test' }),
+      );
+      throw new Error('a cross-origin sign-in was accepted');
+    } catch (error: unknown) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    assert.match(message, /must come from this site/i);
+  });
+
+  it('still accepts a request with no Origin, for non-browser clients', async () => {
+    // A browser always sends Origin cross-origin, so absence means CLI — and
+    // locking those out would be a cost with no attacker-facing benefit.
+    const { auth } = await setup();
+    const { secretKey, pubkey } = keypair();
+
+    const nonce = await challenge(auth, pubkey);
+    const payload = buildAuthPayload({
+      origin: ORIGIN,
+      nonce,
+      timestamp: nowSeconds(),
+    });
+
+    const result = (await verify(auth, {
+      pubkey,
+      sig: signAuthPayload(secretKey, payload),
+      payload,
+    })) as { token: string };
+    assert.ok(result.token);
   });
 
   it('refuses a payload that is not a challenge at all', async () => {

@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { SignOutButton } from '@/components/SignOutButton';
 import { OfficeCanvas } from '@/game/OfficeCanvas';
 import { auth } from '@/lib/auth';
 
@@ -37,6 +38,7 @@ export default async function OfficePage() {
         >
           Settings
         </Link>
+        <SignOutButton />
       </header>
 
       <div className="min-h-0 flex-1">

@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import {
   createIdentity,
+  forgetSavedNsec,
   hasExtension,
   identityFromExtension,
   identityFromNsec,
@@ -36,6 +37,10 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [extension, setExtension] = useState(false);
+  // Only true for a key we loaded back out of storage — a key generated a
+  // moment ago has nothing to forget yet.
+  const [wasSaved, setWasSaved] = useState(false);
+  const [confirmForget, setConfirmForget] = useState(false);
 
   // `window.nostr` is injected by an extension, which may not have run by the
   // time this component first renders — so it is checked after mount, not
@@ -52,6 +57,7 @@ export default function LoginPage() {
       setIdentity(identityFromNsec(saved));
       setMode('created');
       setRemember(true);
+      setWasSaved(true);
     } catch {
       // A corrupted entry is not worth surfacing; the choices below still work.
     }
@@ -188,6 +194,56 @@ export default function LoginPage() {
               >
                 {busy ? 'Signing in…' : 'Enter the office'}
               </Button>
+
+              {wasSaved ? (
+                <div className="border-t pt-3">
+                  {confirmForget ? (
+                    <div className="space-y-2">
+                      <p className="text-destructive text-sm font-medium">
+                        Forget this key?
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        This browser holds the only copy we know of. If you
+                        haven&apos;t saved the nsec somewhere else, this
+                        identity — and the office behind it — is gone for good.
+                        We cannot reissue it.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            forgetSavedNsec();
+                            setIdentity(null);
+                            setWasSaved(false);
+                            setConfirmForget(false);
+                            setRemember(false);
+                            setMode('choose');
+                          }}
+                        >
+                          Forget it
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirmForget(false)}
+                        >
+                          Keep it
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmForget(true)}
+                      disabled={busy}
+                    >
+                      Use a different identity
+                    </Button>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

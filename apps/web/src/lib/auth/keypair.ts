@@ -77,6 +77,26 @@ function expectedOrigin(baseURL: string): string {
   return new URL(baseURL).origin;
 }
 
+/**
+ * Refuse a browser request that came from somewhere else.
+ *
+ * Not the signature check — that is `verifyAuthSignature`, and it is what
+ * proves identity. This stops *login CSRF*: a page on another origin making
+ * your browser sign in as somebody else, so you go on to type into an office
+ * that belongs to them. The signature in that request is perfectly valid; it
+ * just isn't yours.
+ *
+ * A missing `Origin` is allowed through, because a browser always sends one on
+ * a cross-origin request — an attacker cannot strip it — while a CLI or the
+ * future desktop app sends none. So this closes the browser attack without
+ * shutting the door on non-browser clients.
+ */
+function crossOriginRequest(headers: Headers | undefined, baseURL: string): boolean {
+  const origin = headers?.get('origin');
+  if (!origin) return false;
+  return origin !== expectedOrigin(baseURL);
+}
+
 export interface KeypairAuthOptions {
   /**
    * The database to write users and memberships to. Defaults to the process
@@ -172,6 +192,12 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
 
           const invalid = (message: string) =>
             new APIError('UNAUTHORIZED', { message });
+
+          if (crossOriginRequest(ctx.headers, ctx.context.baseURL)) {
+            throw new APIError('FORBIDDEN', {
+              message: 'Sign-in must come from this site.',
+            });
+          }
 
           if (!isPubkeyHex(pubkey) || !isSignatureHex(sig)) {
             throw invalid('Malformed public key or signature.');
