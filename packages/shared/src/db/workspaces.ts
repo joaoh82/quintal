@@ -31,8 +31,20 @@ export interface EnsurePersonalWorkspaceInput {
 
 /**
  * Solo-first onboarding: give the user an office of their own the first time
- * they sign in. Idempotent — returns the existing workspace if they already
- * belong to one, so it is safe to call on every request.
+ * they sign in. Idempotent — returns the same workspace on every call, so it is
+ * safe to run on every request.
+ *
+ * "Personal" means *the one they own*, and the query says so. It used to take
+ * whichever membership came back first, which was indistinguishable from this
+ * for as long as everybody had exactly one. Guests broke that assumption: they
+ * hold a membership in the office that invited them as well as their own, and
+ * an unordered `limit(1)` across both is a coin toss decided by insertion
+ * order. Landing on the wrong side of it hands a visitor the host's settings
+ * page — their agents, their guest links — because every caller treats what
+ * comes back as "your office, which you administer".
+ *
+ * Teams will make multiple memberships normal rather than exceptional, so this
+ * has to be precise about which one it means rather than correct by accident.
  */
 export async function ensurePersonalWorkspace(
   db: Database,
@@ -42,7 +54,12 @@ export async function ensurePersonalWorkspace(
     .select({ workspace: workspaces })
     .from(memberships)
     .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
-    .where(eq(memberships.userId, input.userId))
+    .where(
+      and(
+        eq(memberships.userId, input.userId),
+        eq(memberships.role, 'owner'),
+      ),
+    )
     .limit(1);
 
   const found = existing[0];

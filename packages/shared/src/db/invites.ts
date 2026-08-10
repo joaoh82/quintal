@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from './client.js';
 import { inviteLinks, memberships, type InviteLink } from './schema.js';
@@ -219,5 +219,8 @@ export async function listInviteLinks(
   return db
     .select()
     .from(inviteLinks)
-    .where(eq(inviteLinks.workspaceId, workspaceId));
+    .where(eq(inviteLinks.workspaceId, workspaceId))
+    // Ordered here rather than at the call site: "newest first" was a promise
+    // this function made and left to whoever happened to render it.
+    .orderBy(desc(inviteLinks.createdAt));
 }

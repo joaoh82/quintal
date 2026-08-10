@@ -67,7 +67,12 @@ export default function LoginPage() {
     setBusy(true);
     setError('');
     try {
+      // Unticking the box has to *remove* an already-saved key, not merely
+      // decline to write it again. Otherwise the checkbox reads as a live
+      // setting while the credential it describes quietly stays on disk —
+      // exactly backwards on the shared machine this choice exists for.
       if (persist && withIdentity.kind === 'local') saveNsec(withIdentity.nsec);
+      else forgetSavedNsec();
       await signIn(withIdentity);
       router.push('/office');
     } catch (cause: unknown) {

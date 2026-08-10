@@ -28,11 +28,18 @@ export function SignOutButton({ className = '' }: { className?: string }) {
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await signOut();
-        // `replace`, not `push`: the office is not somewhere Back should
-        // return you to once the session behind it is gone.
-        router.replace('/login');
-        router.refresh();
+        try {
+          await signOut();
+          // `replace`, not `push`: the office is not somewhere Back should
+          // return you to once the session behind it is gone.
+          router.replace('/login');
+          router.refresh();
+        } finally {
+          // Without this a failed sign-out leaves the button disabled forever,
+          // so the one control for getting out of a session is the thing that
+          // breaks when the session misbehaves.
+          setBusy(false);
+        }
       }}
       className={`hover:bg-accent rounded-md border px-2.5 py-1 text-xs disabled:opacity-50 ${className}`}
     >

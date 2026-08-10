@@ -23,8 +23,8 @@ export default async function GuestsPage() {
     pubkey: session.user.pubkey,
   });
 
+  // Already newest-first — the ordering is the query's promise, not the page's.
   const links = await listInviteLinks(db, workspace.id);
-  links.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return <GuestLinks links={links} />;
 }
