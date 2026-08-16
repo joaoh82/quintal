@@ -23,6 +23,7 @@ import {
   npubFor,
   saveNsec,
   signIn,
+  storageActionFor,
   type Identity,
 } from '@/lib/keys';
 
@@ -67,12 +68,18 @@ export default function LoginPage() {
     setBusy(true);
     setError('');
     try {
-      // Unticking the box has to *remove* an already-saved key, not merely
-      // decline to write it again. Otherwise the checkbox reads as a live
-      // setting while the credential it describes quietly stays on disk —
-      // exactly backwards on the shared machine this choice exists for.
-      if (persist && withIdentity.kind === 'local') saveNsec(withIdentity.nsec);
-      else forgetSavedNsec();
+      // See `storageActionFor` — unticking must remove the key it describes,
+      // and must not touch one belonging to a different identity.
+      const action = storageActionFor({
+        identity: withIdentity,
+        persist,
+        saved: loadSavedNsec(),
+      });
+      if (action === 'save' && withIdentity.kind === 'local') {
+        saveNsec(withIdentity.nsec);
+      } else if (action === 'forget') {
+        forgetSavedNsec();
+      }
       await signIn(withIdentity);
       router.push('/office');
     } catch (cause: unknown) {

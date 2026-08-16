@@ -78,6 +78,42 @@ export function forgetSavedNsec(): void {
   }
 }
 
+/** What signing in should do to the key held by this browser. */
+export type StorageAction = 'save' | 'forget' | 'leave';
+
+/**
+ * Decide the fate of a stored key before signing in.
+ *
+ * Pure, and separate from the component, because the wrong answer here deletes
+ * an identity that cannot be reissued — and the naive version of this rule
+ * ("didn't ask to save it, so remove it") does exactly that in two ways that
+ * are easy to miss by reading it:
+ *
+ * - Signing in with an extension is not a statement about the local key at
+ *   all. The extension holds a different secret; the stored one is somebody
+ *   else's identity sitting in the same browser.
+ * - Pasting a *different* nsec with the box unticked says "don't save this
+ *   one". It does not say "destroy the one already here".
+ *
+ * So a key is only forgotten when the user unticks the box for the very key
+ * that is stored. Everything else leaves it alone, and the explicit
+ * "forget this key" confirmation on the sign-in page stays the only way to
+ * deliberately destroy one.
+ */
+export function storageActionFor({
+  identity,
+  persist,
+  saved,
+}: {
+  identity: Pick<Identity, 'kind'> & { nsec?: string };
+  persist: boolean;
+  saved: string | null;
+}): StorageAction {
+  if (identity.kind !== 'local' || !identity.nsec) return 'leave';
+  if (persist) return 'save';
+  return saved !== null && saved === identity.nsec ? 'forget' : 'leave';
+}
+
 // --- the identity this page is acting as ------------------------------------
 
 /**
