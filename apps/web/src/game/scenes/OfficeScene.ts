@@ -443,6 +443,7 @@ export class OfficeScene extends Phaser.Scene {
         scopes: player.scopes ? player.scopes.split(',') : [],
         identityId: player.userId,
         lastActionAt: this.#lastAction.get(sessionId) ?? 0,
+        isGuest: player.isGuest,
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
@@ -452,7 +453,7 @@ export class OfficeScene extends Phaser.Scene {
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;

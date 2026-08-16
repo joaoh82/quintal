@@ -4,11 +4,8 @@ import { and, eq } from 'drizzle-orm';
 
 import type { Database } from './client.js';
 import { memberships, users, workspaces, type Workspace } from './schema.js';
-import {
-  displayNameFromEmail,
-  personalWorkspaceName,
-  slugify,
-} from '../workspace.js';
+import { displayNameFromPubkey } from '../identity.js';
+import { personalWorkspaceName, slugify } from '../workspace.js';
 
 /** Find a free slug by appending `-2`, `-3`, … to the base. */
 async function uniqueSlug(db: Database, base: string): Promise<string> {
@@ -27,15 +24,27 @@ async function uniqueSlug(db: Database, base: string): Promise<string> {
 
 export interface EnsurePersonalWorkspaceInput {
   userId: string;
-  /** Falls back to the email local part when a magic-link signup carries no name. */
+  /** Falls back to a truncated npub when the identity has not been named yet. */
   name?: string | null;
-  email?: string | null;
+  pubkey?: string | null;
 }
 
 /**
  * Solo-first onboarding: give the user an office of their own the first time
- * they sign in. Idempotent — returns the existing workspace if they already
- * belong to one, so it is safe to call on every request.
+ * they sign in. Idempotent — returns the same workspace on every call, so it is
+ * safe to run on every request.
+ *
+ * "Personal" means *the one they own*, and the query says so. It used to take
+ * whichever membership came back first, which was indistinguishable from this
+ * for as long as everybody had exactly one. Guests broke that assumption: they
+ * hold a membership in the office that invited them as well as their own, and
+ * an unordered `limit(1)` across both is a coin toss decided by insertion
+ * order. Landing on the wrong side of it hands a visitor the host's settings
+ * page — their agents, their guest links — because every caller treats what
+ * comes back as "your office, which you administer".
+ *
+ * Teams will make multiple memberships normal rather than exceptional, so this
+ * has to be precise about which one it means rather than correct by accident.
  */
 export async function ensurePersonalWorkspace(
   db: Database,
@@ -45,7 +54,12 @@ export async function ensurePersonalWorkspace(
     .select({ workspace: workspaces })
     .from(memberships)
     .innerJoin(workspaces, eq(memberships.workspaceId, workspaces.id))
-    .where(eq(memberships.userId, input.userId))
+    .where(
+      and(
+        eq(memberships.userId, input.userId),
+        eq(memberships.role, 'owner'),
+      ),
+    )
     .limit(1);
 
   const found = existing[0];
@@ -53,7 +67,7 @@ export async function ensurePersonalWorkspace(
 
   const displayName =
     input.name?.trim() ||
-    (input.email ? displayNameFromEmail(input.email) : null) ||
+    (input.pubkey ? displayNameFromPubkey(input.pubkey) : null) ||
     'Quintal';
 
   const workspace: Workspace = {
@@ -106,12 +120,12 @@ export async function findMembership(
   return rows[0] ?? null;
 }
 
-/** Convenience for the seed script and future CLI tooling. */
-export async function findUserByEmail(db: Database, email: string) {
+/** Look somebody up by the key they sign with. Hex, never an npub. */
+export async function findUserByPubkey(db: Database, pubkey: string) {
   const rows = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.pubkey, pubkey))
     .limit(1);
   return rows[0] ?? null;
 }

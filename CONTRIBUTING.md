@@ -51,8 +51,10 @@ cp .env.example .env
 pnpm dev
 ```
 
-Web on <http://localhost:3000>, game server on :2567. Without an email provider
-configured, magic-link sign-in prints the link to the server console.
+Web on <http://localhost:3000>, game server on :2567. Sign in by creating an
+identity on the login page — it is a keypair the browser generates, so there is
+nothing to configure first. `pnpm db:seed` mints one for you and prints the
+`nsec` once if you'd rather start from a seeded workspace.
 
 Before pushing:
 

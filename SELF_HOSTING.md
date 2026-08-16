@@ -38,14 +38,31 @@ BETTER_AUTH_URL=https://office.example.com
 Everything else has a working default. See [.env.example](./.env.example) for
 the complete list.
 
-## Email
+## Sign-in
 
-Magic links are the only way in. Pick one:
+There is nothing to configure. Identity is a keypair: people sign in by signing
+a short challenge with a secp256k1 key their browser holds — generated on the
+spot, imported as an `nsec`, or held by a NIP-07 signing extension. No mail
+provider, no deliverability, no password resets, and no inbox sitting behind
+every account as its real root credential.
 
-- `RESEND_API_KEY` — send through Resend.
-- `SMTP_HOST` (plus `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`) — any SMTP relay.
-- Neither — the link is printed to the server console. For a single-user
-  instance this is a legitimate way to run, not a fallback to feel bad about.
+The one thing that matters operationally is **`BETTER_AUTH_URL`**. Every
+signature is bound to that origin, so a signature phished by another site — or
+made for a different Quintal instance — will not verify here. Set it to the
+origin people actually type.
+
+Two consequences worth stating plainly:
+
+- **A lost key cannot be recovered.** We never had it. Tell your users to put
+  their `nsec` in a password manager.
+- **"Save to this browser" is `localStorage`.** It is offered, and clearly
+  labelled as low-security, because the desktop app that will hold keys in the
+  OS keychain doesn't exist yet. A signing extension is better today.
+
+Guests come in through links you mint at `/settings/guests`: bounded by an
+expiry (72 hours by default) and a use count, redeemable at `/join/<token>`,
+and marked with a "Guest" badge everywhere they appear. Only a hash of the
+token is stored, so a link you lose track of can be revoked but never re-read.
 
 ## Storage
 

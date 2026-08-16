@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '/settings', label: 'Office', exact: true },
   { href: '/settings/agents', label: 'Agents', exact: false },
+  { href: '/settings/guests', label: 'Guests', exact: false },
 ] as const;
 
 /** Tab bar for the settings shell. Client-side only to know what's current. */

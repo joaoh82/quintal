@@ -30,6 +30,41 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Email was removed wholesale when identity became a keypair. There is no
+      # flag and no fallback path, so any reappearance is a regression rather
+      # than a feature — and the cheapest place to catch one is before it has
+      # a chance to grow a dependency.
+      - name: Check no email machinery has come back
+        run: |
+          set -euo pipefail
+
+          fail=0
+
+          # Mailer transports and the deleted module, in code we own.
+          if git grep -nEI 'from .(resend|nodemailer)|require\(.(resend|nodemailer)|lib/mailer|sendMagicLinkEmail|magicLink\(|magicLinkClient|displayNameFromEmail|findUserByEmail' \
+               -- ':!*.lock' ':!pnpm-lock.yaml' ':!.github/workflows/ci.yml'; then
+            echo "::error::Email machinery is back. Identity is a keypair; there is no mailer."
+            fail=1
+          fi
+
+          # The user table must not regrow an address column. Scoped to source:
+          # the drizzle history legitimately still mentions the column it drops.
+          if git grep -nEI 'users\.(email|emailVerified)|email_verified' \
+               -- 'packages/shared/src' 'apps' ; then
+            echo "::error::users.email is gone. Identity is users.pubkey."
+            fail=1
+          fi
+
+          # Email delivery configuration must not return to the environment.
+          if git grep -nEI '(RESEND_API_KEY|SMTP_HOST|SMTP_PORT|SMTP_USER|SMTP_PASSWORD|SMTP_SECURE|EMAIL_FROM)' \
+               -- ':!.github/workflows/ci.yml'; then
+            echo "::error::Email delivery env vars are back."
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "No mailer, no email column, no email env. Good."
+
       - run: pnpm typecheck
 
       - run: pnpm test

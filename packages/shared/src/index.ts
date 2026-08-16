@@ -7,6 +7,7 @@
 export * from './agent.js';
 export * from './constants.js';
 export * from './game/index.js';
+export * from './identity.js';
 export * from './map.js';
 export * from './player.js';
 export * from './commands.js';

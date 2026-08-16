@@ -27,7 +27,7 @@ export default async function AgentsSettingsPage() {
   const workspace = await ensurePersonalWorkspace(db, {
     userId: session.user.id,
     name: session.user.name,
-    email: session.user.email,
+    pubkey: session.user.pubkey,
   });
 
   const [agents, membership, hosts, machines] = await Promise.all([

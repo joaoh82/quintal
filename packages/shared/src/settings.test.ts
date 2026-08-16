@@ -46,8 +46,9 @@ describe('addressing', () => {
     assert.equal(isAddressed('the reviewer said no', 'reviewer'), false);
   });
 
-  it('ignores an @ inside a word, like an email address', () => {
-    assert.equal(isAddressed('mail me at josh@quintal.sh', 'quintal'), false);
+  it('ignores an @ inside a word, like a pasted identifier', () => {
+    assert.equal(isAddressed('find me at josh@quintal.sh', 'quintal'), false);
+    assert.equal(isAddressed('npub1w0rd@relay.example', 'relay'), false);
   });
 
   it('collects every distinct name addressed', () => {
@@ -65,7 +66,7 @@ describe('mention autocomplete', () => {
     assert.deepEqual(mentionQueryAt('@', 1), { query: '', start: 0 });
   });
 
-  it('stays closed inside an email address', () => {
+  it('stays closed inside a pasted identifier', () => {
     assert.equal(mentionQueryAt('josh@quintal', 12), null);
   });
 

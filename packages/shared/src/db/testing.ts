@@ -9,6 +9,7 @@ import { MIGRATIONS_FOLDER } from './url.js';
 import type { Database } from './client.js';
 import { ensurePersonalWorkspace } from './workspaces.js';
 import { users } from './schema.js';
+import { generateSecretKey, getPublicKeyHex } from '../identity.js';
 
 /**
  * A real database, in memory, for tests.
@@ -36,12 +37,19 @@ export async function createTestDb(): Promise<Database> {
 export interface TestUser {
   id: string;
   name: string;
-  email: string;
+  /** x-only public key, hex — what the `users` row is keyed by. */
+  pubkey: string;
+  /** The secret half, so a test can sign a real challenge with this identity. */
+  secretKey: Uint8Array;
   workspaceId: string;
 }
 
 /**
  * A signed-up human with their personal workspace, the way the app makes one.
+ *
+ * Every test user gets a real keypair rather than a fixture string: the login
+ * flow is signature verification all the way down, so a test identity that
+ * cannot sign is not an identity the product would accept.
  *
  * Goes through `ensurePersonalWorkspace` rather than inserting rows directly,
  * so a test is exercising the same shape the product produces.
@@ -52,12 +60,13 @@ export async function createTestUser(
   workspaceId?: string,
 ): Promise<TestUser> {
   const id = randomBytes(8).toString('hex');
-  const email = `${name.toLowerCase()}-${id}@example.test`;
+  const secretKey = generateSecretKey();
+  const pubkey = getPublicKeyHex(secretKey);
 
-  await db.insert(users).values({ id, name, email, emailVerified: true });
+  await db.insert(users).values({ id, name, pubkey });
 
-  if (workspaceId) return { id, name, email, workspaceId };
+  if (workspaceId) return { id, name, pubkey, secretKey, workspaceId };
 
-  const workspace = await ensurePersonalWorkspace(db, { userId: id, name, email });
-  return { id, name, email, workspaceId: workspace.id };
+  const workspace = await ensurePersonalWorkspace(db, { userId: id, name, pubkey });
+  return { id, name, pubkey, secretKey, workspaceId: workspace.id };
 }

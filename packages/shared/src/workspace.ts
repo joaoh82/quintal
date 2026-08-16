@@ -23,12 +23,3 @@ export function slugify(input: string): string {
     .replace(/-+$/g, '');
   return slug.length > 0 ? slug : 'workspace';
 }
-
-/** Display name to fall back on when a magic-link signup carries no name. */
-export function displayNameFromEmail(email: string): string {
-  const [local] = email.split('@');
-  if (!local) return 'Quintal';
-  const cleaned = local.replace(/[._-]+/g, ' ').trim();
-  if (cleaned.length === 0) return 'Quintal';
-  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
-}
