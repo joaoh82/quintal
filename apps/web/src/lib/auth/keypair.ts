@@ -13,7 +13,6 @@ import {
   verifyAuthSignature,
 } from '@quintal/shared';
 import {
-  ensureMembership,
   ensurePersonalWorkspace,
   getDb,
   redeemInviteLink,
@@ -279,11 +278,15 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
                         : 'That guest link is not valid.',
               });
             }
-            await ensureMembership(db, {
-              workspaceId: redeemed.link.workspaceId,
-              userId: user.id,
-              role: redeemed.link.role,
-            });
+            // Deliberately no `memberships` row. A membership outlives the
+            // visit, so minting one turns a link bounded by an expiry and a
+            // use count into a standing credential — a leaked ephemeral key
+            // would walk back in with no invite at all. The grant belongs to
+            // the session, which expires on its own; the session-scoped grant
+            // and the room gate that reads it land together when offices
+            // become workspace-scoped, because a grant nothing checks is
+            // decoration. Until then no room is scoped, so there is nothing
+            // for a membership to unlock.
             isGuest = true;
           }
 

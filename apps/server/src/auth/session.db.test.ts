@@ -47,7 +47,12 @@ interface Seeded {
  * actually reasons about, so they are the two knobs.
  */
 async function seedSession(
-  options: { name?: string; expiresInMs?: number; isGuest?: boolean } = {},
+  options: {
+    name?: string;
+    expiresInMs?: number;
+    isGuest?: boolean;
+    description?: string;
+  } = {},
 ): Promise<Seeded> {
   const db = getDb();
   const userId = randomUUID();
@@ -58,6 +63,7 @@ async function seedSession(
     id: userId,
     name: options.name ?? 'Ada',
     pubkey,
+    description: options.description ?? '',
   });
   await db.insert(sessions).values({
     id: randomUUID(),
@@ -91,6 +97,14 @@ describe('verifySessionToken', () => {
     assert.equal(user.isGuest, false);
   });
 
+  it('carries the profile description the office renders on a card', async () => {
+    const seeded = await seedSession({ description: 'Builds the office.' });
+
+    const user = await verifySessionToken(seeded.token);
+
+    assert.equal(user?.description, 'Builds the office.');
+  });
+
   it('marks a guest session as one', async () => {
     const seeded = await seedSession({ name: 'Visitor', isGuest: true });
 
@@ -118,7 +132,7 @@ describe('displayNameFor', () => {
   it('uses the name when there is one', () => {
     const pubkey = getPublicKeyHex(generateSecretKey());
     assert.equal(
-      displayNameFor({ userId: 'u', name: '  Ada  ', pubkey, isGuest: false }),
+      displayNameFor({ userId: 'u', name: '  Ada  ', pubkey, isGuest: false, description: '' }),
       'Ada',
     );
   });
@@ -128,7 +142,7 @@ describe('displayNameFor', () => {
     // "Someone" is not an acceptable answer while a key is available.
     const pubkey = getPublicKeyHex(generateSecretKey());
 
-    const name = displayNameFor({ userId: 'u', name: '', pubkey, isGuest: false });
+    const name = displayNameFor({ userId: 'u', name: '', pubkey, isGuest: false, description: '' });
 
     assert.ok(name.startsWith('npub1'));
     assert.ok(npubEncode(pubkey).endsWith(name.slice(-6)));
@@ -136,7 +150,7 @@ describe('displayNameFor', () => {
 
   it('never returns an empty label, even for a nonsense key', () => {
     assert.equal(
-      displayNameFor({ userId: 'u', name: '', pubkey: 'garbage', isGuest: false }),
+      displayNameFor({ userId: 'u', name: '', pubkey: 'garbage', isGuest: false, description: '' }),
       'Someone',
     );
   });

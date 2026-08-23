@@ -456,7 +456,7 @@ describe('guest links', () => {
     };
   }
 
-  it('lets a guest in, marks the session, and puts them in the workspace', async () => {
+  it('lets a guest in and marks the session', async () => {
     const { db, auth, host } = await withHost();
     const { token } = await createInviteLink(db, {
       workspaceId: host.workspaceId,
@@ -472,11 +472,31 @@ describe('guest links', () => {
     assert.equal(session?.isGuest, true, 'the session carries the guest mark');
 
     const guest = (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0];
+    assert.ok(guest, 'a guest is still a person in the room');
+  });
+
+  it('does not make a guest a member of the office they visited', async () => {
+    // The point of the whole design. A membership outlives the visit, so a
+    // leaked ephemeral key would walk back in later with no invite at all.
+    // The only durable trace of a visit is the users row the audit log needs.
+    const { db, auth, host } = await withHost();
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+    });
+
+    const { pubkey } = await joinAsGuest(auth, token);
+    const guest = (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0];
     assert.ok(guest);
+
     const joined = await listWorkspacesForUser(db, guest.id);
     assert.ok(
-      joined.some((row) => row.workspace.id === host.workspaceId),
-      'the guest is a member of the workspace they were invited to',
+      !joined.some((row) => row.workspace.id === host.workspaceId),
+      'no membership row in the host workspace',
+    );
+    assert.ok(
+      joined.every((row) => row.role === 'owner'),
+      'the only workspace a guest belongs to is the one they own',
     );
   });
 

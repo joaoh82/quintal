@@ -52,6 +52,8 @@ export class OfficePlayer extends Schema {
    * reason agents are marked rather than blending in.
    */
   isGuest = false;
+  /** Profile line, shown on the card you get by clicking somebody. */
+  description = '';
 }
 
 defineTypes(OfficePlayer, {
@@ -67,6 +69,7 @@ defineTypes(OfficePlayer, {
   ownerName: 'string',
   scopes: 'string',
   isGuest: 'boolean',
+  description: 'string',
 });
 
 export class OfficeState extends Schema {
@@ -91,6 +94,7 @@ export interface PlayerInit {
   ownerName?: string;
   scopes?: readonly string[];
   isGuest?: boolean;
+  description?: string;
 }
 
 /** Build a populated player. Assignment, not construction — see the note above. */
@@ -108,5 +112,6 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.ownerName = init.ownerName ?? '';
   player.scopes = (init.scopes ?? []).join(',');
   player.isGuest = init.isGuest ?? false;
+  player.description = init.description ?? '';
   return player;
 }

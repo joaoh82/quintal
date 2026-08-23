@@ -22,6 +22,8 @@ export interface RosterEntry {
   lastActionAt: number;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;
+  /** Humans: the profile line they wrote. Empty when unset. */
+  description: string;
 }
 
 /**

@@ -20,6 +20,8 @@ export interface AuthenticatedUser {
   pubkey: string;
   /** True when this session was minted by walking in through a guest link. */
   isGuest: boolean;
+  /** Profile line, shown on this person's card in the office. */
+  description: string;
 }
 
 /**
@@ -36,6 +38,7 @@ export async function verifySessionToken(
       userId: users.id,
       name: users.name,
       pubkey: users.pubkey,
+      description: users.description,
       isGuest: sessions.isGuest,
     })
     .from(sessions)

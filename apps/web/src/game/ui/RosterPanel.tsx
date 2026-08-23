@@ -45,11 +45,11 @@ interface RosterPanelProps {
  * line carries whose it is.
  */
 export function RosterPanel({ players, connection }: RosterPanelProps) {
-  const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [openCard, setOpenCard] = useState<string | null>(null);
 
   const humans = players.filter((player) => player.kind === 'human');
   const agents = players.filter((player) => player.kind === 'agent');
-  const selected = agents.find((agent) => agent.sessionId === openAgent) ?? null;
+  const selected = players.find((player) => player.sessionId === openCard) ?? null;
 
   return (
     <aside className="pointer-events-auto flex w-60 flex-col gap-2">
@@ -70,26 +70,33 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
             <li className="px-3 py-1.5 text-[11px] text-white/40">Nobody here yet.</li>
           ) : (
             humans.map((player) => (
-              <li
-                key={player.sessionId}
-                className="flex items-baseline gap-2 px-3 py-1 text-xs"
-              >
-                <span className={player.isSelf ? 'text-emerald-300' : 'text-white/85'}>
-                  {player.name}
-                </span>
-                {player.isSelf ? (
-                  <span className="font-mono text-[10px] text-white/35">you</span>
-                ) : null}
-                {player.isGuest ? (
-                  <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">
-                    Guest
+              <li key={player.sessionId}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenCard(openCard === player.sessionId ? null : player.sessionId)
+                  }
+                  className={`flex w-full items-baseline gap-2 px-3 py-1 text-left text-xs transition-colors hover:bg-white/5 ${
+                    openCard === player.sessionId ? 'bg-white/10' : ''
+                  }`}
+                >
+                  <span className={player.isSelf ? 'text-emerald-300' : 'text-white/85'}>
+                    {player.name}
                   </span>
-                ) : null}
-                {player.status ? (
-                  <span className="ml-auto truncate font-mono text-[10px] text-white/45">
-                    {player.status}
-                  </span>
-                ) : null}
+                  {player.isSelf ? (
+                    <span className="font-mono text-[10px] text-white/35">you</span>
+                  ) : null}
+                  {player.isGuest ? (
+                    <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">
+                      Guest
+                    </span>
+                  ) : null}
+                  {player.status ? (
+                    <span className="ml-auto truncate font-mono text-[10px] text-white/45">
+                      {player.status}
+                    </span>
+                  ) : null}
+                </button>
               </li>
             ))
           )}
@@ -112,10 +119,10 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
                 <button
                   type="button"
                   onClick={() =>
-                    setOpenAgent(openAgent === agent.sessionId ? null : agent.sessionId)
+                    setOpenCard(openCard === agent.sessionId ? null : agent.sessionId)
                   }
                   className={`flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-white/5 ${
-                    openAgent === agent.sessionId ? 'bg-white/10' : ''
+                    openCard === agent.sessionId ? 'bg-white/10' : ''
                   }`}
                 >
                   <span className="flex w-full items-baseline gap-1.5 text-xs">
@@ -141,7 +148,13 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
         </ul>
       </div>
 
-      {selected ? <AgentCard agent={selected} onClose={() => setOpenAgent(null)} /> : null}
+      {selected ? (
+        selected.kind === 'agent' ? (
+          <AgentCard agent={selected} onClose={() => setOpenCard(null)} />
+        ) : (
+          <PersonCard person={selected} onClose={() => setOpenCard(null)} />
+        )
+      ) : null}
     </aside>
   );
 }
@@ -196,6 +209,57 @@ function AgentCard({ agent, onClose }: { agent: RosterEntry; onClose: () => void
       >
         Audit log →
       </a>
+    </div>
+  );
+}
+
+/**
+ * Who a person is, in one card.
+ *
+ * A display name is self-asserted and duplicates are allowed, so the card is
+ * where the key gets shown: the name is the label you read, the npub is the
+ * thing that actually distinguishes two people who chose to be called the same
+ * thing. That is the whole reason it is here rather than floating over their
+ * head, where nobody would read it.
+ */
+function PersonCard({ person, onClose }: { person: RosterEntry; onClose: () => void }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-white/15 bg-black/80 p-3 text-white backdrop-blur-sm">
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm text-white/90">{person.name}</span>
+        {person.isGuest ? (
+          <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">
+            Guest
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto text-[11px] text-white/40 hover:text-white/70"
+          aria-label="Close profile card"
+        >
+          ✕
+        </button>
+      </div>
+
+      {person.description ? (
+        <p className="text-[11px] leading-relaxed text-white/75">{person.description}</p>
+      ) : (
+        <p className="text-[11px] text-white/35">No description yet.</p>
+      )}
+
+      <dl className="flex flex-col gap-1 text-[11px]">
+        <div className="flex gap-2">
+          <dt className="w-14 shrink-0 text-white/40">status</dt>
+          <dd className="font-mono text-white/75">{person.status || 'idle'}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-14 shrink-0 text-white/40">key</dt>
+          <dd className="font-mono text-[10px] break-all text-white/60">
+            {person.identityId}
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }
