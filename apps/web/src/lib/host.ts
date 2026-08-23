@@ -43,6 +43,8 @@ export interface Backup {
   /** `ncryptsec1…` — the secret key, encrypted under the passphrase. */
   blob: string;
   passphrase: string;
+  /** Hand back to `confirmBackup`. Proves an export actually happened. */
+  token: string;
 }
 
 export function isHostError(value: unknown): value is HostError {
@@ -62,9 +64,16 @@ export function isHostError(value: unknown): value is HostError {
  * host does not answer is worse than an absent one, because the UI cannot tell
  * the difference until it calls.
  *
- * Note what is *not* on this interface: nothing returns a secret key. The page
- * asks for a public key, or for a signature over a payload it supplies, so a
- * bug in the page cannot leak an identity the page never held.
+ * Most of this hands nothing secret across: the page asks for a public key, or
+ * for a signature over a payload it supplies, so a bug in the page cannot leak
+ * an identity the page never held.
+ *
+ * `exportBackup` is the exception, and it is deliberate. A backup has to be
+ * readable by a person to be written down, so it crosses the bridge — which
+ * means script running on the office origin could exfiltrate the identity
+ * rather than only borrow it. That is the cost of the paper backup existing at
+ * all; the mitigations are that only the configured origin can call it, and
+ * that it is the one call whose result the UI shows rather than stores.
  */
 export interface HostBridge {
   hasIdentity(): Promise<IdentityState>;
@@ -85,7 +94,7 @@ export interface HostBridge {
    */
   exportBackup(passphrase?: string): Promise<Backup>;
   /** Record that the person has actually written the backup down. */
-  confirmBackup(): Promise<void>;
+  confirmBackup(token: string): Promise<void>;
   /** Whether a backup has been confirmed, which is what unlocks the wipe. */
   canWipe(): Promise<boolean>;
   /** Forget the identity on this machine. Refused until a backup is confirmed. */
@@ -143,7 +152,7 @@ function tauriBridge(): HostBridge {
     importIdentity: (secret, passphrase) =>
       call<string>('import_identity', { secret, passphrase }),
     exportBackup: (passphrase) => call<Backup>('export_backup', { passphrase }),
-    confirmBackup: () => call<void>('confirm_backup'),
+    confirmBackup: (token) => call<void>('confirm_backup', { token }),
     canWipe: () => call<boolean>('can_wipe'),
     wipeIdentity: () => call<void>('wipe_identity'),
   };

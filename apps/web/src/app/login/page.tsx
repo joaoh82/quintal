@@ -42,6 +42,7 @@ export default function LoginPage() {
   const [extension, setExtension] = useState(false);
   /** Null while we are still asking the host, or when there is no host. */
   const [hostKey, setHostKey] = useState<IdentityState | null>(null);
+  const [asking, setAsking] = useState(true);
   // Only true for a key we loaded back out of storage — a key generated a
   // moment ago has nothing to forget yet.
   const [wasSaved, setWasSaved] = useState(false);
@@ -59,7 +60,10 @@ export default function LoginPage() {
   // its keychain" are different questions and the second has three answers.
   useEffect(() => {
     const host = getHost();
-    if (!host) return;
+    if (!host) {
+      setAsking(false);
+      return;
+    }
     let live = true;
     void host
       .hasIdentity()
@@ -68,6 +72,9 @@ export default function LoginPage() {
       })
       .catch(() => {
         if (live) setHostKey('locked');
+      })
+      .finally(() => {
+        if (live) setAsking(false);
       });
     return () => {
       live = false;
@@ -75,7 +82,12 @@ export default function LoginPage() {
   }, []);
 
   // Somebody who saved a key here last time should not have to paste it again.
+  //
+  // Skipped inside the app: the host holds a better copy of a key than
+  // localStorage does, and restoring one here would hide it behind the tier it
+  // exists to retire.
   useEffect(() => {
+    if (getHost()) return;
     const saved = loadSavedNsec();
     if (!saved) return;
     try {
@@ -157,6 +169,22 @@ export default function LoginPage() {
       setError('That does not look like an nsec. It starts with “nsec1”.');
       return;
     }
+    // Inside the app the key belongs in the keychain, not in this page and
+    // certainly not in localStorage. Hand it to the host and sign in with it.
+    const host = getHost();
+    if (host) {
+      setBusy(true);
+      try {
+        await host.importIdentity(nsecInput.trim());
+        await signIn(await identityFromHost());
+        router.push('/office');
+      } catch (cause: unknown) {
+        setError(cause instanceof Error ? cause.message : 'Could not import that key.');
+        setBusy(false);
+      }
+      return;
+    }
+
     await enter(imported, remember);
   }
 
@@ -200,7 +228,11 @@ export default function LoginPage() {
                 className="w-full"
                 variant={hostKey ? 'outline' : 'default'}
                 onClick={onCreate}
-                disabled={busy || hostKey === 'locked'}
+                // Disabled until the host has answered: a click in that window
+                // mints a browser key, which is the exact action the locked
+                // panel exists to prevent — and we do not yet know whether the
+                // panel should be showing.
+                disabled={busy || hostKey === 'locked' || (asking && Boolean(getHost()))}
               >
                 Create identity{hostKey ? ' in this window instead' : ''}
               </Button>

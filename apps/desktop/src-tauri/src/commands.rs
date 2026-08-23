@@ -14,6 +14,13 @@ use crate::secrets::{SecretStore, SecretsError};
 
 pub struct HostState {
     pub store: SecretStore,
+    /// Token handed out by the last `export_backup`, spent by `confirm_backup`.
+    ///
+    /// Confirming is what unlocks the wipe, so it must not be callable on its
+    /// own: anything that can reach the bridge could otherwise confirm a backup
+    /// nobody ever saw and then wipe the key. In memory only — a confirmation
+    /// should not survive a restart the export did not.
+    pub pending_export: std::sync::Mutex<Option<String>>,
 }
 
 /// An error the UI can branch on rather than only display.
@@ -83,6 +90,9 @@ pub fn import_identity(
 pub struct BackupPayload {
     pub blob: String,
     pub passphrase: String,
+    /// Hand back to `confirm_backup`. Proves this export is the one being
+    /// confirmed, rather than a confirmation conjured from nothing.
+    pub token: String,
 }
 
 /// Produce a backup. Does **not** mark it stored — see `confirm_backup`.
@@ -92,9 +102,16 @@ pub fn export_backup(
     passphrase: Option<String>,
 ) -> Result<BackupPayload, HostError> {
     let backup = identity::export(&state.store, passphrase.as_deref())?;
+
+    let mut token_bytes = [0u8; 16];
+    rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut token_bytes);
+    let token = hex::encode(token_bytes);
+    *state.pending_export.lock().unwrap() = Some(token.clone());
+
     Ok(BackupPayload {
         blob: backup.blob,
         passphrase: backup.passphrase,
+        token,
     })
 }
 
@@ -104,7 +121,21 @@ pub fn export_backup(
 /// never written down is not a backup, and the wipe is the one action here that
 /// cannot be taken back.
 #[tauri::command]
-pub fn confirm_backup(state: State<'_, HostState>) -> Result<(), HostError> {
+pub fn confirm_backup(state: State<'_, HostState>, token: String) -> Result<(), HostError> {
+    let mut pending = state.pending_export.lock().unwrap();
+    match pending.as_deref() {
+        Some(expected) if expected == token => {}
+        _ => {
+            return Err(HostError {
+                code: "no_backup".into(),
+                message: "Export a backup first; that confirmation does not match one.".into(),
+            })
+        }
+    }
+    // Spent, so one export confirms once.
+    *pending = None;
+    drop(pending);
+
     state.store.confirm_backup().map_err(IdentityError::from)?;
     Ok(())
 }

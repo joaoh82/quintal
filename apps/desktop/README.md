@@ -23,7 +23,7 @@ pnpm desktop             # the app, in another terminal
 | Variable | What it does |
 | --- | --- |
 | `QUINTAL_OFFICE_URL` | Which office to open. Default `http://localhost:3000`. |
-| `QUINTAL_SECRETS_BACKEND` | `file` to skip the OS keychain — for CI and for a dev box you would rather not prompt. |
+| `QUINTAL_SECRETS_BACKEND` | `file` to skip the OS keychain — for CI and for a dev box you would rather not prompt. Detected automatically otherwise. |
 | `QUINTAL_PRIVATE_KEY` | Sign with this key (hex or `nsec`) instead of the stored one. Used in memory, never written down. |
 
 ## Where your key lives
@@ -40,15 +40,41 @@ not open". Confusing those two would mean generating a fresh identity over a
 real one, which cannot be undone, so a locked keychain is a state the UI
 explains rather than a case it silently recovers from.
 
-If no keychain is reachable at all, secrets fall back to a `0600` file in the
-app data directory, written atomically.
+If this machine has no credential store at all — a Linux box with no secret
+service — secrets fall back to a `0600` file in the app data directory, written
+atomically. That is decided by whether a keychain can be *addressed*, never by
+whether a read succeeds: a failed read means the keychain is **locked**, and
+falling back there would look like a first run and mint a new identity over a
+perfectly good one.
 
 ## Only your office may call the bridge
 
-IPC is granted to exactly one origin, built at startup from the configured
-office URL. The tempting shortcut — a `https://*` pattern — would mean any page
-the window ever reaches can ask this process to sign a challenge. Changing
-offices means restarting, which is the right price.
+Each command is declared in `build.rs` and granted, by name, to exactly one
+origin built at startup from the configured office URL. Both halves matter:
+without the app manifest, Tauri takes its "all application commands are
+allowed" branch, and since the office is a *remote* origin the runtime then
+refuses every call — the app looks alive and nothing works. With it, the grant
+is explicit and narrow.
+
+The office URL is validated before it is interpolated into that grant. A value
+like `https://*` would become the pattern `https://*/*`, which is every site on
+the internet; anything that is not an `http(s)` URL with a real host falls back
+to localhost instead.
+
+Changing offices means restarting, which is the right price.
+
+## Verifying the bridge
+
+```bash
+node scripts/desktop-ipc-check.mjs
+```
+
+Stands up a throwaway office, points the app at it, and lets the page call every
+command — then checks the signature that comes back with `@noble/curves`, the
+library the real office verifies against. This exists because a slice shipped
+with every command rejected and nothing caught it: the Rust tests call the
+functions directly, the web tests mock the bridge, and neither crosses the IPC
+hop where the ACL applies.
 
 ## Backing up your key
 

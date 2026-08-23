@@ -147,7 +147,7 @@ pub fn decrypt(blob: &str, passphrase: &str) -> Result<Zeroizing<[u8; 32]>, Nip4
 
 /// The EFF short wordlist, one word per line, comments stripped at load.
 fn wordlist() -> Vec<&'static str> {
-    include_str!("data/eff_short_wordlist.txt")
+    include_str!("wordlists/eff_short_wordlist.txt")
         .lines()
         .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
         .collect()

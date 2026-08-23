@@ -67,6 +67,23 @@ pub struct Blob {
     pub slots: std::collections::BTreeMap<String, String>,
 }
 
+/// Keychain if this platform has one we can address, otherwise a file.
+///
+/// The probe is `Entry::new`, which fails when there is no credential store at
+/// all — a Linux box with no secret service running. It deliberately does *not*
+/// probe by reading: a read failure means the keychain is **locked**, and
+/// falling back to an empty file there would look like a first run and mint a
+/// replacement identity over a perfectly good one.
+fn detect_backend() -> Backend {
+    match keyring::Entry::new(SERVICE, SECRETS_KEY) {
+        Ok(_) => Backend::Keychain,
+        Err(error) => {
+            eprintln!("[quintal] no OS keychain here ({error}); secrets will live in a 0600 file");
+            Backend::File
+        }
+    }
+}
+
 pub struct SecretStore {
     dir: PathBuf,
     backend: Backend,
@@ -82,7 +99,7 @@ impl SecretStore {
         fs::create_dir_all(&dir)?;
         let backend = match std::env::var("QUINTAL_SECRETS_BACKEND").as_deref() {
             Ok("file") => Backend::File,
-            _ => Backend::Keychain,
+            _ => detect_backend(),
         };
         Ok(Self { dir, backend })
     }

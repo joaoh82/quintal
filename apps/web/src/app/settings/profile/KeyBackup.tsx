@@ -80,7 +80,8 @@ export function KeyBackup() {
     setBusy(true);
     setError('');
     try {
-      await host!.confirmBackup();
+      if (!backup) throw new Error('Nothing to confirm.');
+      await host!.confirmBackup(backup.token);
       setCanWipe(true);
       setBackup(null);
       setNote('Backup recorded. You can restore this identity with those two things.');

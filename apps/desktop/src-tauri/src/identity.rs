@@ -341,8 +341,9 @@ mod tests {
     #[test]
     fn signs_something_noble_would_accept() {
         // The other direction. Signatures are randomised, so this checks the
-        // shape and self-consistency; `identity.interop.test.ts` on the web
-        // side verifies a signature this function actually produced.
+        // shape and self-consistency; `scripts/desktop-ipc-check.mjs` closes
+        // the loop by verifying a signature this app really produced, over
+        // real IPC, with noble.
         let sig = sign_payload(&secret(), PAYLOAD).unwrap();
         assert_eq!(sig.len(), 128, "64 bytes, hex");
 

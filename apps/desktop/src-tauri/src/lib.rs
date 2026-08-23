@@ -39,6 +39,7 @@ pub fn run() {
 
             app.manage(commands::HostState {
                 store: secrets::SecretStore::new(&dir)?,
+                pending_export: std::sync::Mutex::new(None),
             });
 
             if let Some(window) = app.get_webview_window("main") {

@@ -10,7 +10,30 @@ use std::path::{Path, PathBuf};
 const OFFICE_FILE: &str = "office.txt";
 const DEFAULT_OFFICE: &str = "http://localhost:3000";
 
+/// Is this a URL we are willing to point a window at and grant IPC to?
+///
+/// The grant is built by interpolating this string into a capability, so a
+/// value like `https://*` would become the pattern `https://*/*` and hand every
+/// site on the internet the ability to ask this process for a signature.
+/// Validated before it is ever used, not after.
+pub fn is_usable_office(raw: &str) -> bool {
+    let Ok(url) = url::Url::parse(raw) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    // A real host, and nothing that a glob could hide in.
+    match url.host_str() {
+        Some(host) => !host.is_empty() && !host.contains(['*', '?', '[', ']']),
+        None => false,
+    }
+}
+
 /// The configured office URL, normalised to an origin with no trailing slash.
+///
+/// Anything unusable falls back to the default rather than being trusted: a
+/// misconfigured office should land you on localhost, not on a wildcard.
 pub fn office_url(dir: &Path) -> String {
     let raw = std::env::var("QUINTAL_OFFICE_URL")
         .ok()
@@ -24,7 +47,13 @@ pub fn office_url(dir: &Path) -> String {
         })
         .unwrap_or_else(|| DEFAULT_OFFICE.to_string());
 
-    raw.trim_end_matches('/').to_string()
+    let trimmed = raw.trim_end_matches('/').to_string();
+    if is_usable_office(&trimmed) {
+        trimmed
+    } else {
+        eprintln!("[quintal] refusing office URL {trimmed:?}; using {DEFAULT_OFFICE}");
+        DEFAULT_OFFICE.to_string()
+    }
 }
 
 pub fn office_path(dir: &Path) -> PathBuf {
@@ -46,8 +75,26 @@ pub fn capability_for(office: &str) -> String {
         "identifier": "office-bridge",
         "description": "IPC for the configured office, and nothing else.",
         "windows": ["main"],
-        "remote": { "urls": [format!("{office}/*")] },
-        "permissions": ["core:default", "core:window:default", "core:webview:default"]
+        // `local: false` so this grant applies only to the remote office, never
+        // to the bundled bootstrap page.
+        "local": false,
+        // Both patterns: `navigate("https://office")` lands on a URL with no
+        // path, which `{office}/*` alone does not match.
+        "remote": { "urls": [office.to_string(), format!("{office}/*")] },
+        "permissions": [
+            "core:default",
+            // Generated from `AppManifest::commands` in build.rs. Named one by
+            // one rather than wildcarded: a command added later should have to
+            // be granted deliberately, not inherit a blanket allow.
+            "allow-has-identity",
+            "allow-get-public-key",
+            "allow-sign-challenge",
+            "allow-import-identity",
+            "allow-export-backup",
+            "allow-confirm-backup",
+            "allow-can-wipe",
+            "allow-wipe-identity"
+        ]
     })
     .to_string()
 }
@@ -67,6 +114,45 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(office_path(dir.path()), "https://office.example.com/\n").unwrap();
         assert_eq!(office_url(dir.path()), "https://office.example.com");
+    }
+
+    #[test]
+    fn refuses_office_urls_that_could_widen_the_grant() {
+        assert!(is_usable_office("http://localhost:3000"));
+        assert!(is_usable_office("https://office.example.com"));
+
+        // The one that matters: a glob here becomes `https://*/*` in the
+        // capability, which is every site on the internet.
+        assert!(!is_usable_office("https://*"));
+        assert!(!is_usable_office("https://*.example.com"));
+        assert!(!is_usable_office("file:///etc/passwd"));
+        assert!(!is_usable_office("javascript:alert(1)"));
+        assert!(!is_usable_office("not a url"));
+        assert!(!is_usable_office(""));
+    }
+
+    #[test]
+    fn an_unusable_office_falls_back_rather_than_being_trusted() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(office_path(dir.path()), "https://*").unwrap();
+        assert_eq!(office_url(dir.path()), DEFAULT_OFFICE);
+    }
+
+    #[test]
+    fn grants_the_commands_by_name_so_a_new_one_is_not_inherited() {
+        let capability = capability_for("https://office.example.com");
+        for permission in [
+            "allow-sign-challenge",
+            "allow-export-backup",
+            "allow-wipe-identity",
+        ] {
+            assert!(
+                capability.contains(permission),
+                "{permission} must be granted"
+            );
+        }
+        // The bootstrap page is local and must not get this grant.
+        assert!(capability.contains("\"local\":false"));
     }
 
     #[test]
