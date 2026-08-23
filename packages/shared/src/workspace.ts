@@ -41,15 +41,28 @@ export const PROFILE_DESCRIPTION_MAX_LENGTH = 280;
  *
  * Control characters are stripped rather than trimmed, because a name is drawn
  * over somebody's head and inside a roster row: a stray newline or a bidi
- * override does not just look wrong, it lets one person's label reach into
+ * control does not just look wrong, it lets one person's label reach into
  * another's. Same reason the length is capped rather than merely discouraged.
+ *
+ * The class covers all of it, not just the famous one. `U+202E` (RLO) is the
+ * override everybody knows; `U+2066`–`U+2069` are the newer *isolates*, which
+ * reorder surrounding text just as effectively, and `U+061C` and `U+FEFF` are
+ * invisible marks that do the same quietly.
+ *
+ * Clamped by code point rather than by `String.prototype.slice`, which counts
+ * UTF-16 units and will happily cut an emoji in half and leave a lone
+ * surrogate behind.
  */
 function tidy(input: string, max: number): string {
-  return input
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e]/g, ' ')
+  const collapsed = input
+    .replace(
+      /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g,
+      ' ',
+    )
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, max);
+    .trim();
+  const points = Array.from(collapsed);
+  return points.length > max ? points.slice(0, max).join('') : collapsed;
 }
 
 /**

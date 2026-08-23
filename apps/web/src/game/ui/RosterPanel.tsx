@@ -1,6 +1,6 @@
 'use client';
 
-import type { ConnectionStatus, RosterEntry } from '@quintal/shared';
+import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
 import { useState } from 'react';
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -256,10 +256,27 @@ function PersonCard({ person, onClose }: { person: RosterEntry; onClose: () => v
         <div className="flex gap-2">
           <dt className="w-14 shrink-0 text-white/40">key</dt>
           <dd className="font-mono text-[10px] break-all text-white/60">
-            {person.identityId}
+            {npubFor(person.pubkey)}
           </dd>
         </div>
       </dl>
     </div>
   );
+}
+
+/**
+ * The npub to print on a card, or an honest blank.
+ *
+ * Never falls back to an internal id: a row identifier looks like an identity
+ * without being one, and this row exists precisely so somebody can tell two
+ * people with the same display name apart. Showing a UUID here would look like
+ * it answered that question while answering nothing.
+ */
+function npubFor(pubkey: string): string {
+  if (!pubkey) return 'unknown';
+  try {
+    return npubEncode(pubkey);
+  } catch {
+    return 'unknown';
+  }
 }

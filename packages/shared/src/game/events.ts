@@ -24,6 +24,13 @@ export interface RosterEntry {
   isGuest: boolean;
   /** Humans: the profile line they wrote. Empty when unset. */
   description: string;
+  /**
+   * Humans: x-only public key, hex — render it as an npub. Empty for agents.
+   *
+   * Distinct from `identityId`, which is an internal row id and identifies
+   * nobody to a human being.
+   */
+  pubkey: string;
 }
 
 /**

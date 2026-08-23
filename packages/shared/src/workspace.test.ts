@@ -42,6 +42,33 @@ describe('normaliseDisplayName', () => {
     assert.equal(normaliseDisplayName('Jo\u200Bsh'), 'Jo sh');
   });
 
+  it('strips the bidi isolates too, not just the famous override', () => {
+    // U+2066..U+2069 reorder surrounding text exactly as RLO does, and are
+    // the ones a check written from memory forgets. U+061C and U+FEFF are the
+    // invisible marks that do it quietly.
+    for (const mark of ['\u2066', '\u2067', '\u2068', '\u2069', '\u061C', '\uFEFF']) {
+      assert.equal(
+        normaliseDisplayName(`Jo${mark}sh`),
+        'Jo sh',
+        `U+${mark.codePointAt(0)!.toString(16).toUpperCase()} survived`,
+      );
+    }
+  });
+
+  it('clamps by code point, so an emoji is never cut in half', () => {
+    // slice() counts UTF-16 units: 40 units of astral characters is 20 emoji
+    // plus, without care, one orphaned surrogate that renders as a tofu box.
+    const name = normaliseDisplayName('😀'.repeat(60)) ?? '';
+    assert.equal(Array.from(name).length, DISPLAY_NAME_MAX_LENGTH);
+    assert.ok(
+      ![...name].some((c) => {
+        const code = c.codePointAt(0) ?? 0;
+        return code >= 0xd800 && code <= 0xdfff;
+      }),
+      'no lone surrogate at the boundary',
+    );
+  });
+
   it('clamps length rather than trusting the form', () => {
     const long = 'x'.repeat(500);
     assert.equal(normaliseDisplayName(long)?.length, DISPLAY_NAME_MAX_LENGTH);

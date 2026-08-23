@@ -27,17 +27,21 @@ export function ProfileForm({
   isGuest,
 }: ProfileFormProps) {
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
   async function onSave(formData: FormData) {
     setBusy(true);
     setError('');
-    setMessage('');
     const result = await saveProfileAction(formData);
-    if (result.ok) setMessage('Saved.');
-    else setError(result.error);
+    if (result.ok) {
+      // Reload rather than just saying "Saved": the server normalises what it
+      // stored, so leaving the typed value in the field would show a name that
+      // is not the one anybody else sees.
+      window.location.reload();
+      return;
+    }
+    setError(result.error);
     setBusy(false);
   }
 
@@ -98,7 +102,6 @@ export function ProfileForm({
               onClick={async () => {
                 setBusy(true);
                 setError('');
-                setMessage('');
                 const result = await resetDisplayNameAction();
                 if (result.ok) window.location.reload();
                 else {
@@ -112,7 +115,6 @@ export function ProfileForm({
           </div>
         )}
 
-        {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
         {error ? (
           <p className="text-destructive text-sm" role="alert">
             {error}

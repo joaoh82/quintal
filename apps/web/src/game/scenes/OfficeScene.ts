@@ -445,6 +445,7 @@ export class OfficeScene extends Phaser.Scene {
         lastActionAt: this.#lastAction.get(sessionId) ?? 0,
         isGuest: player.isGuest,
         description: player.description,
+        pubkey: player.pubkey,
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
