@@ -62,14 +62,7 @@ describe('getHost', () => {
       'hasIdentity',
       'getPublicKey',
       'signChallenge',
-      'exportBackup',
       'importIdentity',
-      'detectRuntimes',
-      'listRepos',
-      'pickReposDir',
-      'hostStatus',
-      'startAgent',
-      'stopAgent',
     ] as const) {
       assert.equal(typeof host[method], 'function', `${method} is missing`);
     }
@@ -84,5 +77,23 @@ describe('getHost', () => {
     const fake = { getPublicKey: async () => 'ab'.repeat(32) } as unknown as HostBridge;
     resetHostForTests(fake);
     assert.equal(getHost(), fake);
+  });
+});
+
+describe('a host identity holds no secret', () => {
+  it('is never a candidate for browser storage', async () => {
+    // The storage rule is keyed on `kind === 'local'`. A host identity has no
+    // nsec to save and none to destroy, so both branches must decline — saving
+    // would write `undefined`, and forgetting would delete a *different*
+    // identity that happens to be in this browser.
+    const { storageActionFor } = await import('./keys');
+    for (const persist of [true, false]) {
+      for (const saved of [null, 'nsec1whatever']) {
+        assert.equal(
+          storageActionFor({ identity: { kind: 'host' }, persist, saved }),
+          'leave',
+        );
+      }
+    }
   });
 });

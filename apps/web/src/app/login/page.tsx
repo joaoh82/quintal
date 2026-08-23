@@ -13,9 +13,11 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { getHost, isHostError, type IdentityState } from '@/lib/host';
 import {
   createIdentity,
   forgetSavedNsec,
+  identityFromHost,
   hasExtension,
   identityFromExtension,
   identityFromNsec,
@@ -38,6 +40,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [extension, setExtension] = useState(false);
+  /** Null while we are still asking the host, or when there is no host. */
+  const [hostKey, setHostKey] = useState<IdentityState | null>(null);
   // Only true for a key we loaded back out of storage — a key generated a
   // moment ago has nothing to forget yet.
   const [wasSaved, setWasSaved] = useState(false);
@@ -48,6 +52,26 @@ export default function LoginPage() {
   // during it.
   useEffect(() => {
     setExtension(hasExtension());
+  }, []);
+
+  // Inside the app, the key on this machine is the way in. Asked once on mount
+  // rather than assumed, because "the app is hosting" and "the app can reach
+  // its keychain" are different questions and the second has three answers.
+  useEffect(() => {
+    const host = getHost();
+    if (!host) return;
+    let live = true;
+    void host
+      .hasIdentity()
+      .then((state) => {
+        if (live) setHostKey(state);
+      })
+      .catch(() => {
+        if (live) setHostKey('locked');
+      });
+    return () => {
+      live = false;
+    };
   }, []);
 
   // Somebody who saved a key here last time should not have to paste it again.
@@ -94,6 +118,24 @@ export default function LoginPage() {
     setError('');
   }
 
+  async function onUseHostKey() {
+    setError('');
+    setBusy(true);
+    try {
+      await signIn(await identityFromHost());
+      router.push('/office');
+    } catch (cause: unknown) {
+      setError(
+        isHostError(cause) && cause.code === 'locked'
+          ? 'This computer holds your key but the keychain is locked. Unlock it and try again — do not create a new identity, or you will lose this one.'
+          : cause instanceof Error
+            ? cause.message
+            : 'Could not use this computer\'s key.',
+      );
+      setBusy(false);
+    }
+  }
+
   async function onUseExtension() {
     setError('');
     try {
@@ -132,8 +174,35 @@ export default function LoginPage() {
         <CardContent className="space-y-4">
           {mode === 'choose' ? (
             <div className="space-y-3">
-              <Button className="w-full" onClick={onCreate} disabled={busy}>
-                Create identity
+              {hostKey === 'locked' ? (
+                <div className="border-destructive/40 bg-destructive/5 space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">Your keychain is locked.</p>
+                  <p className="text-muted-foreground text-xs">
+                    This computer is holding your key and cannot open it. Unlock
+                    the keychain and reopen Quintal.{' '}
+                    <strong>Do not create a new identity</strong> — it would be a
+                    different person, and this one would be gone.
+                  </p>
+                </div>
+              ) : null}
+
+              {hostKey === 'ready' || hostKey === 'none' ? (
+                <Button className="w-full" onClick={onUseHostKey} disabled={busy}>
+                  {busy
+                    ? 'Signing in…'
+                    : hostKey === 'ready'
+                      ? "Continue with this computer's key"
+                      : 'Create identity on this computer'}
+                </Button>
+              ) : null}
+
+              <Button
+                className="w-full"
+                variant={hostKey ? 'outline' : 'default'}
+                onClick={onCreate}
+                disabled={busy || hostKey === 'locked'}
+              >
+                Create identity{hostKey ? ' in this window instead' : ''}
               </Button>
               <Button
                 variant="outline"

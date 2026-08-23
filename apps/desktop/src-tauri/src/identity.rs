@@ -240,8 +240,8 @@ pub fn import(store: &SecretStore, secret_input: &str) -> Result<String, Identit
 #[cfg(test)]
 mod tests {
     use super::*;
-    use k256::schnorr::signature::hazmat::PrehashVerifier;
     use crate::secrets::{Backend, SecretStore};
+    use k256::schnorr::signature::hazmat::PrehashVerifier;
 
     /// Produced by `@noble/curves` on the web side — the exact library the
     /// office verifies with. Regenerate with the same secret if this ever needs

@@ -15,36 +15,6 @@
  * it does not.
  */
 
-/** How a runtime binary was found, so the UI can explain what it is showing. */
-export interface HostRuntime {
-  /** Matches `RuntimeSpec.id` in the shared catalogue. */
-  id: string;
-  installed: boolean;
-  /** Absolute path the binary resolved to, when it did. */
-  path: string | null;
-}
-
-export interface HostStatus {
-  /** Hostname, matching what the harness reports as `agent_hosts.label`. */
-  label: string;
-  /** Where this machine keeps repositories. */
-  reposDir: string;
-  /** Agents this host currently has running. */
-  running: string[];
-  version: string;
-}
-
-export interface AgentSpec {
-  /** The agent's name in the office, used to stop it again. */
-  name: string;
-  /** Runtime id from the shared catalogue — never a free-form command. */
-  runtimeId: string;
-  /** Repo the agent is rooted at, as written by the person. */
-  repoSpec: string;
-  /** The agent's credential. Passed to the child through the environment. */
-  agentKey: string;
-}
-
 /**
  * What the identity subsystem can tell the UI about itself.
  *
@@ -55,24 +25,41 @@ export interface AgentSpec {
  */
 export type IdentityState = 'none' | 'ready' | 'locked';
 
+/** An error the UI can branch on rather than only display. */
+export interface HostError {
+  code: 'locked' | 'bad_key' | 'host_error';
+  message: string;
+}
+
+export function isHostError(value: unknown): value is HostError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as HostError).code === 'string' &&
+    typeof (value as HostError).message === 'string'
+  );
+}
+
+/**
+ * The bridge.
+ *
+ * Identity only, for now. Runtime detection, repo listing and agent spawning
+ * land with the slices that implement them — a method declared here that the
+ * host does not answer is worse than an absent one, because the UI cannot tell
+ * the difference until it calls.
+ *
+ * Note what is *not* on this interface: nothing returns a secret key. The page
+ * asks for a public key, or for a signature over a payload it supplies, so a
+ * bug in the page cannot leak an identity the page never held.
+ */
 export interface HostBridge {
-  // --- identity -----------------------------------------------------------
   hasIdentity(): Promise<IdentityState>;
-  /** x-only public key, lowercase hex. */
+  /** x-only public key, lowercase hex. Creates one on a genuine first run. */
   getPublicKey(): Promise<string>;
   /** BIP-340 signature over sha256(payload), lowercase hex. */
   signChallenge(payload: string): Promise<string>;
-  /** NIP-49 `ncryptsec…`. The passphrase is generated when not supplied. */
-  exportBackup(passphrase?: string): Promise<{ blob: string; passphrase: string }>;
-  importIdentity(secret: string, passphrase?: string): Promise<string>;
-
-  // --- the machine --------------------------------------------------------
-  detectRuntimes(): Promise<HostRuntime[]>;
-  listRepos(): Promise<string[]>;
-  pickReposDir(): Promise<string | null>;
-  hostStatus(): Promise<HostStatus>;
-  startAgent(spec: AgentSpec): Promise<void>;
-  stopAgent(name: string): Promise<void>;
+  /** Replace the stored identity. Returns the new npub. */
+  importIdentity(secret: string): Promise<string>;
 }
 
 declare global {
@@ -123,15 +110,6 @@ function tauriBridge(): HostBridge {
     hasIdentity: () => call<IdentityState>('has_identity'),
     getPublicKey: () => call<string>('get_public_key'),
     signChallenge: (payload) => call<string>('sign_challenge', { payload }),
-    exportBackup: (passphrase) =>
-      call<{ blob: string; passphrase: string }>('export_backup', { passphrase }),
-    importIdentity: (secret, passphrase) =>
-      call<string>('import_identity', { secret, passphrase }),
-    detectRuntimes: () => call<HostRuntime[]>('detect_runtimes'),
-    listRepos: () => call<string[]>('list_repos'),
-    pickReposDir: () => call<string | null>('pick_repos_dir'),
-    hostStatus: () => call<HostStatus>('host_status'),
-    startAgent: (spec) => call<void>('start_agent', { spec }),
-    stopAgent: (name) => call<void>('stop_agent', { name }),
+    importIdentity: (secret) => call<string>('import_identity', { secret }),
   };
 }

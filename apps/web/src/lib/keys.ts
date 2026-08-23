@@ -1,5 +1,6 @@
 'use client';
 
+import { getHost } from './host';
 import {
   buildAuthPayload,
   generateSecretKey,
@@ -12,24 +13,24 @@ import {
 } from '@quintal/shared';
 
 /**
- * Key handling in the browser.
+ * Key handling in the page.
  *
- * Three ways to hold a key, in descending order of how much we'd like you to
+ * Four ways to hold a key, in descending order of how much we'd like you to
  * use them:
  *
- *   1. A NIP-07 extension (`window.nostr`). The secret never enters this page.
- *      Preferred whenever one is installed, and the only option here that a
- *      cross-site scripting bug in Quintal cannot steal from.
- *   2. In memory, for this tab only. Generated on the spot; closing the tab
+ *   1. The desktop host. The secret sits in the OS keychain and never enters
+ *      this page at all — the page asks for a signature, not for a key. Both
+ *      durable and unstealable by a bug in the web app, which is why it is
+ *      first whenever the app is what's hosting us.
+ *   2. A NIP-07 extension (`window.nostr`). Same property, different custodian.
+ *   3. In memory, for this tab only. Generated on the spot; closing the tab
  *      forgets it. Safe, and useless for coming back tomorrow.
- *   3. `localStorage`, if you explicitly ask for it. Survives a reload, and is
+ *   4. `localStorage`, if you explicitly ask for it. Survives a reload, and is
  *      readable by any script that manages to run on this origin. That is a
  *      real trade and the UI says so in those words.
  *
- * The third tier exists because the desktop app — which will hold keys in the
- * OS keychain — does not exist yet, and "your identity disappears when you
- * close the tab" is not a product. It should disappear the moment there is
- * somewhere better to put a key.
+ * The fourth tier exists for browser users who want to come back tomorrow and
+ * have no extension. It is the one the desktop app is meant to retire.
  */
 
 const STORAGE_KEY = 'quintal.nsec';
@@ -123,6 +124,8 @@ export function storageActionFor({
  * this object does, unless the user has explicitly saved it.
  */
 export type Identity =
+  /** The desktop host signs. The secret is in the OS keychain and never here. */
+  | { kind: 'host'; pubkey: string }
   | { kind: 'extension'; pubkey: string }
   | { kind: 'local'; pubkey: string; secretKey: Uint8Array; nsec: string };
 
@@ -145,6 +148,20 @@ export function identityFromNsec(nsec: string): Identity {
   return identityFromSecretKey(nsecDecode(nsec));
 }
 
+/**
+ * Adopt the key this computer holds.
+ *
+ * Preferred over everything else when the app is hosting: the secret lives in
+ * the OS keychain rather than in this page, so a bug here cannot leak it and
+ * closing the tab cannot lose it. Creates a key on a genuine first run — the
+ * host refuses when its keychain is merely locked, rather than starting over.
+ */
+export async function identityFromHost(): Promise<Identity> {
+  const host = getHost();
+  if (!host) throw new Error('This is not the Quintal app.');
+  return { kind: 'host', pubkey: await host.getPublicKey() };
+}
+
 /** Adopt the signing extension's key. */
 export async function identityFromExtension(): Promise<Identity> {
   if (!window.nostr) throw new Error('No signing extension found.');
@@ -162,6 +179,12 @@ export function npubFor(identity: Identity): string {
 async function sign(identity: Identity, payload: string): Promise<string> {
   if (identity.kind === 'local') {
     return signAuthPayload(identity.secretKey, payload);
+  }
+
+  if (identity.kind === 'host') {
+    const host = getHost();
+    if (!host) throw new Error('The app stopped answering mid-sign-in.');
+    return host.signChallenge(payload);
   }
 
   const nostr = window.nostr;
