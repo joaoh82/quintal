@@ -5,7 +5,11 @@ import { and, eq } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { memberships, users, workspaces, type Workspace } from './schema.js';
 import { displayNameFromPubkey } from '../identity.js';
-import { personalWorkspaceName, slugify } from '../workspace.js';
+import {
+  normaliseWorkspaceName,
+  personalWorkspaceName,
+  slugify,
+} from '../workspace.js';
 
 /** Find a free slug by appending `-2`, `-3`, … to the base. */
 async function uniqueSlug(db: Database, base: string): Promise<string> {
@@ -128,4 +132,38 @@ export async function findUserByPubkey(db: Database, pubkey: string) {
     .where(eq(users.pubkey, pubkey))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Rename an office.
+ *
+ * The slug is regenerated to follow the name, which is safe precisely because
+ * nothing routes by it yet — it is shown in the header and nowhere else. Once
+ * offices are addressable by slug, this becomes a decision about breaking
+ * links and should stop being automatic.
+ */
+export async function renameWorkspace(
+  db: Database,
+  workspaceId: string,
+  rawName: string,
+): Promise<Workspace | null> {
+  const name = normaliseWorkspaceName(rawName);
+  if (!name) return null;
+
+  const existing = await db
+    .select()
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  const current = existing[0];
+  if (!current) return null;
+  if (current.name === name) return current;
+
+  const slug = await uniqueSlug(db, name);
+  await db
+    .update(workspaces)
+    .set({ name, slug })
+    .where(eq(workspaces.id, workspaceId));
+
+  return { ...current, name, slug };
 }

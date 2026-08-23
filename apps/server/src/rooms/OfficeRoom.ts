@@ -102,7 +102,14 @@ interface OfficeRoomOptions {
 
 /** What `onAuth` hands to `onJoin`. Humans and agents come through one door. */
 type JoinAuth =
-  | { kind: 'human'; userId: string; name: string; isGuest: boolean }
+  | {
+      kind: 'human';
+      userId: string;
+      name: string;
+      isGuest: boolean;
+      description: string;
+      pubkey: string;
+    }
   | { kind: 'agent'; identity: AgentIdentity };
 
 interface PlayerSim {
@@ -263,6 +270,8 @@ export class OfficeRoom extends Room<OfficeState> {
       userId: user.userId,
       name: displayNameFor(user),
       isGuest: user.isGuest,
+      description: user.description,
+      pubkey: user.pubkey,
     };
   }
 
@@ -282,6 +291,8 @@ export class OfficeRoom extends Room<OfficeState> {
         y: tileCentre(spawn.y, this.#map.tileSize),
         kind: 'human',
         isGuest: auth.isGuest,
+        description: auth.description,
+        pubkey: auth.pubkey,
       }),
     );
     this.#sims.set(client.sessionId, { intent: { x: 0, y: 0 }, path: [], away: false });

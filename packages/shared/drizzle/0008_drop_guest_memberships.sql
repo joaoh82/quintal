@@ -1,0 +1,16 @@
+-- Guest visits used to mint a permanent `memberships` row. They no longer do:
+-- a membership outlives the visit, which turned a link bounded by an expiry and
+-- a use count into a standing credential. Removing the code stopped new ones;
+-- this removes the rows already written, so the invariant is true of the
+-- database and not only of future joins.
+--
+-- Safe to target by role. There are exactly two places that have ever inserted
+-- a membership: `ensurePersonalWorkspace`, which always writes 'owner', and the
+-- guest redemption path, which wrote the invite's role and was only ever
+-- reachable from a link the settings page creates with the default 'member'.
+-- So a non-owner row can only have come from a guest walking in.
+--
+-- Pre-launch, and the office is not workspace-scoped yet, so nothing here is
+-- load-bearing for anybody's access today. It matters for the moment it becomes
+-- load-bearing.
+DELETE FROM `memberships` WHERE `role` <> 'owner';

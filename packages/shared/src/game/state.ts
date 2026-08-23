@@ -52,6 +52,18 @@ export class OfficePlayer extends Schema {
    * reason agents are marked rather than blending in.
    */
   isGuest = false;
+  /** Profile line, shown on the card you get by clicking somebody. */
+  description = '';
+  /**
+   * For humans: the x-only public key, hex. Empty for agents.
+   *
+   * Synced because a display name is self-asserted and duplicates are allowed,
+   * so the profile card has to be able to show the thing that actually
+   * distinguishes two people who chose to be called the same. Without this the
+   * card can only show a name and an internal id, which distinguishes nothing
+   * a person could check.
+   */
+  pubkey = '';
 }
 
 defineTypes(OfficePlayer, {
@@ -67,6 +79,8 @@ defineTypes(OfficePlayer, {
   ownerName: 'string',
   scopes: 'string',
   isGuest: 'boolean',
+  description: 'string',
+  pubkey: 'string',
 });
 
 export class OfficeState extends Schema {
@@ -91,6 +105,8 @@ export interface PlayerInit {
   ownerName?: string;
   scopes?: readonly string[];
   isGuest?: boolean;
+  description?: string;
+  pubkey?: string;
 }
 
 /** Build a populated player. Assignment, not construction — see the note above. */
@@ -108,5 +124,7 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.ownerName = init.ownerName ?? '';
   player.scopes = (init.scopes ?? []).join(',');
   player.isGuest = init.isGuest ?? false;
+  player.description = init.description ?? '';
+  player.pubkey = init.pubkey ?? '';
   return player;
 }

@@ -1,7 +1,12 @@
 'use server';
 
 import { normaliseSettings, type OfficeSettings } from '@quintal/shared';
-import { getDb, saveOfficeSettings } from '@quintal/shared/db';
+import {
+  ensurePersonalWorkspace,
+  getDb,
+  renameWorkspace,
+  saveOfficeSettings,
+} from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
@@ -29,8 +34,24 @@ export async function saveSettingsAction(
       replyWindowSeconds: Number(formData.get('replyWindowSeconds')),
     });
 
-    const saved = await saveOfficeSettings(getDb(), next);
+    const db = getDb();
+
+    // The office is a place, not a person: it starts out named after whoever
+    // owns it, and renaming it here is what stops it referring to anybody.
+    const name = formData.get('workspaceName');
+    if (typeof name === 'string') {
+      const workspace = await ensurePersonalWorkspace(db, {
+        userId: session.user.id,
+        name: session.user.name,
+        pubkey: session.user.pubkey,
+      });
+      const renamed = await renameWorkspace(db, workspace.id, name);
+      if (!renamed) return { ok: false, error: 'An office needs a name.' };
+    }
+
+    const saved = await saveOfficeSettings(db, next);
     revalidatePath('/settings');
+    revalidatePath('/office');
     return { ok: true, saved };
   } catch (error: unknown) {
     return {

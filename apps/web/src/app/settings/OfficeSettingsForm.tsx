@@ -1,6 +1,10 @@
 'use client';
 
-import { SETTING_LIMITS, type OfficeSettings } from '@quintal/shared';
+import {
+  SETTING_LIMITS,
+  WORKSPACE_NAME_MAX_LENGTH,
+  type OfficeSettings,
+} from '@quintal/shared';
 import { useActionState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -45,13 +49,47 @@ function Field({ name, label, unit, help, value, min, max }: FieldProps) {
   );
 }
 
-export function OfficeSettingsForm({ settings }: { settings: OfficeSettings }) {
+export function OfficeSettingsForm({
+  settings,
+  workspaceName,
+}: {
+  settings: OfficeSettings;
+  workspaceName: string;
+}) {
   const [state, formAction, pending] = useActionState(saveSettingsAction, INITIAL);
   const current = state.saved ?? settings;
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <section>
+        <h2 className="text-sm font-semibold">This office</h2>
+        <p className="text-muted-foreground mt-1 max-w-2xl text-xs">
+          Named after you to begin with, because your key was the only name
+          anything had. It does not have to stay that way — an office is a
+          place, and it can be called whatever the place is.
+        </p>
+
+        <div className="mt-3 flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:gap-6">
+          <div className="sm:w-64 sm:shrink-0">
+            <label htmlFor="workspaceName" className="text-sm font-medium">
+              Office name
+            </label>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              Shown in the header and to anyone you invite.
+            </p>
+          </div>
+          <Input
+            id="workspaceName"
+            name="workspaceName"
+            defaultValue={workspaceName}
+            maxLength={WORKSPACE_NAME_MAX_LENGTH}
+            required
+            className="sm:max-w-sm"
+          />
+        </div>
+      </section>
+
+      <section className="border-t pt-4">
         <h2 className="text-sm font-semibold">How the office sounds</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-xs">
           These take effect within about ten seconds — no restart, nobody gets

@@ -44,6 +44,12 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   pubkey: text('pubkey').notNull().unique(),
+  /**
+   * A line under your name, shown on your profile card. Self-asserted and
+   * length-capped — it is rendered next to other people's names, so it is
+   * untrusted input like any other.
+   */
+  description: text('description').notNull().default(''),
   image: text('image'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .default(now)
