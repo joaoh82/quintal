@@ -9,6 +9,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::identity::{self, IdentityError, IdentityState};
+use crate::nip49::Nip49Error;
 use crate::secrets::{SecretStore, SecretsError};
 
 pub struct HostState {
@@ -30,6 +31,11 @@ impl From<IdentityError> for HostError {
         let code = match &error {
             IdentityError::Secrets(SecretsError::Locked) => "locked",
             IdentityError::BadKey => "bad_key",
+            IdentityError::NoBackupYet => "no_backup",
+            IdentityError::WrongIdentity => "wrong_identity",
+            IdentityError::Backup(Nip49Error::Undecryptable) => "bad_passphrase",
+            IdentityError::Backup(Nip49Error::NotNcryptsec) => "not_a_backup",
+            IdentityError::Backup(Nip49Error::CostTooHigh { .. }) => "cost_too_high",
             _ => "host_error",
         };
         HostError {
@@ -61,6 +67,54 @@ pub fn sign_challenge(state: State<'_, HostState>, payload: String) -> Result<St
 }
 
 #[tauri::command]
-pub fn import_identity(state: State<'_, HostState>, secret: String) -> Result<String, HostError> {
-    Ok(identity::import(&state.store, &secret)?)
+pub fn import_identity(
+    state: State<'_, HostState>,
+    secret: String,
+    passphrase: Option<String>,
+) -> Result<String, HostError> {
+    Ok(identity::import(
+        &state.store,
+        &secret,
+        passphrase.as_deref(),
+    )?)
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupPayload {
+    pub blob: String,
+    pub passphrase: String,
+}
+
+/// Produce a backup. Does **not** mark it stored — see `confirm_backup`.
+#[tauri::command]
+pub fn export_backup(
+    state: State<'_, HostState>,
+    passphrase: Option<String>,
+) -> Result<BackupPayload, HostError> {
+    let backup = identity::export(&state.store, passphrase.as_deref())?;
+    Ok(BackupPayload {
+        blob: backup.blob,
+        passphrase: backup.passphrase,
+    })
+}
+
+/// The person says they have stored the backup. This is what unlocks the wipe.
+///
+/// Separate from `export_backup` on purpose: a blob rendered on screen and
+/// never written down is not a backup, and the wipe is the one action here that
+/// cannot be taken back.
+#[tauri::command]
+pub fn confirm_backup(state: State<'_, HostState>) -> Result<(), HostError> {
+    state.store.confirm_backup().map_err(IdentityError::from)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn can_wipe(state: State<'_, HostState>) -> bool {
+    state.store.backup_confirmed()
+}
+
+#[tauri::command]
+pub fn wipe_identity(state: State<'_, HostState>) -> Result<(), HostError> {
+    Ok(identity::wipe(&state.store)?)
 }

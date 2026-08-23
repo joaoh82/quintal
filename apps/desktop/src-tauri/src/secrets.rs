@@ -33,6 +33,8 @@ const SECRETS_KEY: &str = "secrets";
 /// be described to the person whose key it is.
 const MARKER_FILE: &str = "identity.marker";
 const SECRETS_FILE: &str = "secrets.json";
+/// Written when the person confirms they have stored a backup. Gates the wipe.
+const EXPORTED_MARKER: &str = "backup.confirmed";
 const LOCK_FILE: &str = "secrets.lock";
 const IDENTITY_SLOT: &str = "identity";
 
@@ -101,6 +103,20 @@ impl SecretStore {
 
     fn secrets_path(&self) -> PathBuf {
         self.dir.join(SECRETS_FILE)
+    }
+
+    /// Has a backup been exported *and* confirmed stored?
+    ///
+    /// The gate on wiping. Exporting is not enough on its own: a blob shown on
+    /// screen and never written down is not a backup, and the wipe is the one
+    /// button here that cannot be undone.
+    pub fn backup_confirmed(&self) -> bool {
+        self.dir.join(EXPORTED_MARKER).exists()
+    }
+
+    /// Record that the person says they have stored the backup.
+    pub fn confirm_backup(&self) -> Result<(), SecretsError> {
+        write_synced(&self.dir.join(EXPORTED_MARKER), b"confirmed")
     }
 
     /// The npub recorded at the last successful write, if any.
@@ -244,6 +260,7 @@ impl SecretStore {
                 }
             }
             let _ = fs::remove_file(self.marker_path());
+            let _ = fs::remove_file(self.dir.join(EXPORTED_MARKER));
             Ok(())
         })
     }

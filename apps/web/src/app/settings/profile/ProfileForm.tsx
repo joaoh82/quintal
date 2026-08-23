@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+import { KeyBackup } from './KeyBackup';
 import { resetDisplayNameAction, saveProfileAction } from './actions';
 
 interface ProfileFormProps {
@@ -146,6 +147,8 @@ export function ProfileForm({
           <p className="mt-1 font-mono text-xs break-all">{pubkey}</p>
         </details>
       </div>
+
+      <KeyBackup />
     </div>
   );
 }

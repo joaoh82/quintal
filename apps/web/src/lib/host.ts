@@ -27,8 +27,22 @@ export type IdentityState = 'none' | 'ready' | 'locked';
 
 /** An error the UI can branch on rather than only display. */
 export interface HostError {
-  code: 'locked' | 'bad_key' | 'host_error';
+  code:
+    | 'locked'
+    | 'bad_key'
+    | 'no_backup'
+    | 'wrong_identity'
+    | 'bad_passphrase'
+    | 'not_a_backup'
+    | 'cost_too_high'
+    | 'host_error';
   message: string;
+}
+
+export interface Backup {
+  /** `ncryptsec1…` — the secret key, encrypted under the passphrase. */
+  blob: string;
+  passphrase: string;
 }
 
 export function isHostError(value: unknown): value is HostError {
@@ -58,8 +72,24 @@ export interface HostBridge {
   getPublicKey(): Promise<string>;
   /** BIP-340 signature over sha256(payload), lowercase hex. */
   signChallenge(payload: string): Promise<string>;
-  /** Replace the stored identity. Returns the new npub. */
-  importIdentity(secret: string): Promise<string>;
+  /**
+   * Replace the stored identity. Returns the new npub.
+   *
+   * Takes an `nsec`, bare hex, or an `ncryptsec1…` with its passphrase.
+   */
+  importIdentity(secret: string, passphrase?: string): Promise<string>;
+
+  /**
+   * Encrypt the identity for safekeeping. Generates a passphrase unless given
+   * one. Does *not* mark the backup as stored — see `confirmBackup`.
+   */
+  exportBackup(passphrase?: string): Promise<Backup>;
+  /** Record that the person has actually written the backup down. */
+  confirmBackup(): Promise<void>;
+  /** Whether a backup has been confirmed, which is what unlocks the wipe. */
+  canWipe(): Promise<boolean>;
+  /** Forget the identity on this machine. Refused until a backup is confirmed. */
+  wipeIdentity(): Promise<void>;
 }
 
 declare global {
@@ -110,6 +140,11 @@ function tauriBridge(): HostBridge {
     hasIdentity: () => call<IdentityState>('has_identity'),
     getPublicKey: () => call<string>('get_public_key'),
     signChallenge: (payload) => call<string>('sign_challenge', { payload }),
-    importIdentity: (secret) => call<string>('import_identity', { secret }),
+    importIdentity: (secret, passphrase) =>
+      call<string>('import_identity', { secret, passphrase }),
+    exportBackup: (passphrase) => call<Backup>('export_backup', { passphrase }),
+    confirmBackup: () => call<void>('confirm_backup'),
+    canWipe: () => call<boolean>('can_wipe'),
+    wipeIdentity: () => call<void>('wipe_identity'),
   };
 }

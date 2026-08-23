@@ -63,6 +63,10 @@ describe('getHost', () => {
       'getPublicKey',
       'signChallenge',
       'importIdentity',
+      'exportBackup',
+      'confirmBackup',
+      'canWipe',
+      'wipeIdentity',
     ] as const) {
       assert.equal(typeof host[method], 'function', `${method} is missing`);
     }

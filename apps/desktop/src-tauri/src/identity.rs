@@ -12,6 +12,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
+use crate::nip49::{self, Nip49Error};
 use crate::secrets::{Blob, SecretStore, SecretsError};
 
 const IDENTITY_SLOT: &str = "identity";
@@ -24,6 +25,12 @@ pub enum IdentityError {
     BadKey,
     #[error("could not encode a key: {0}")]
     Encoding(String),
+    #[error(transparent)]
+    Backup(#[from] Nip49Error),
+    #[error("that backup is for a different identity")]
+    WrongIdentity,
+    #[error("export a backup and confirm you have stored it before wiping")]
+    NoBackupYet,
 }
 
 /// What the UI is allowed to know about the state of the key.
@@ -218,9 +225,58 @@ pub fn load_or_create_with(
     })
 }
 
+/// A backup blob and the passphrase that opens it.
+pub struct Backup {
+    pub blob: String,
+    pub passphrase: String,
+}
+
+/// Encrypt the identity into an `ncryptsec1…`.
+///
+/// The blob is decrypted again before it is handed back, and the key that comes
+/// out is checked against the one that went in. A backup nobody can open is
+/// worse than no backup: it is a backup you *believe* you have, and you find
+/// out otherwise on the day the machine is gone.
+pub fn export(store: &SecretStore, passphrase: Option<&str>) -> Result<Backup, IdentityError> {
+    let identity = load_or_create(store)?;
+    let passphrase = match passphrase {
+        Some(given) if !given.trim().is_empty() => given.trim().to_string(),
+        _ => nip49::generate_passphrase(),
+    };
+
+    let blob = nip49::encrypt(&identity.secret, &passphrase, nip49::DEFAULT_LOG_N)?;
+
+    let reopened = nip49::decrypt(&blob, &passphrase)?;
+    if public_key_hex(&reopened)? != identity.public_key_hex()? {
+        return Err(IdentityError::WrongIdentity);
+    }
+
+    Ok(Backup { blob, passphrase })
+}
+
+/// Wipe the identity, but only once a backup has been confirmed stored.
+pub fn wipe(store: &SecretStore) -> Result<(), IdentityError> {
+    if !store.backup_confirmed() {
+        return Err(IdentityError::NoBackupYet);
+    }
+    store.wipe()?;
+    Ok(())
+}
+
 /// Replace the identity with an imported one. Returns the new npub.
-pub fn import(store: &SecretStore, secret_input: &str) -> Result<String, IdentityError> {
-    let secret = decode_secret(secret_input)?;
+///
+/// Takes an nsec, a bare hex key, or an `ncryptsec1…` with its passphrase.
+pub fn import(
+    store: &SecretStore,
+    secret_input: &str,
+    passphrase: Option<&str>,
+) -> Result<String, IdentityError> {
+    let trimmed = secret_input.trim();
+    let secret = if trimmed.starts_with("ncryptsec1") {
+        nip49::decrypt(trimmed, passphrase.unwrap_or_default())?
+    } else {
+        decode_secret(trimmed)?
+    };
     let signing = signing_key(&secret)?;
     let npub = npub_of(&signing.verifying_key().to_bytes().into())?;
 
@@ -333,7 +389,7 @@ mod tests {
 
     // --- the states that must never be confused -----------------------------
 
-    fn store() -> (tempfile::TempDir, SecretStore) {
+    fn new_store() -> (tempfile::TempDir, SecretStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = SecretStore::with_backend(dir.path(), Backend::File).unwrap();
         (dir, store)
@@ -341,7 +397,7 @@ mod tests {
 
     #[test]
     fn first_run_creates_a_key_and_finds_it_again() {
-        let (_dir, store) = store();
+        let (_dir, store) = new_store();
         assert_eq!(state_with(&store, None), IdentityState::None);
 
         let first = load_or_create_with(&store, None).unwrap();
@@ -360,7 +416,7 @@ mod tests {
         // The failure this whole design exists to prevent: the keychain is
         // there but will not open, and the app decides it is a first run and
         // generates a replacement identity nobody can undo.
-        let (dir, store) = store();
+        let (dir, store) = new_store();
         let created = load_or_create_with(&store, None).unwrap();
         let npub = created.npub().unwrap();
 
@@ -387,14 +443,14 @@ mod tests {
 
     #[test]
     fn import_replaces_the_identity_and_survives_a_locked_store() {
-        let (dir, store) = store();
+        let (dir, store) = new_store();
         load_or_create_with(&store, None).unwrap();
         std::fs::remove_file(dir.path().join("secrets.json")).unwrap();
         assert_eq!(state_with(&store, None), IdentityState::Locked);
 
         // Importing is the way out of locked: the person is supplying the key,
         // so there is nothing left to lose by writing.
-        let npub = import(&store, NSEC).unwrap();
+        let npub = import(&store, NSEC, None).unwrap();
         assert_eq!(state_with(&store, None), IdentityState::Ready);
         assert_eq!(
             load_or_create_with(&store, None)
@@ -408,7 +464,7 @@ mod tests {
 
     #[test]
     fn an_env_key_is_used_and_never_written_down() {
-        let (dir, store) = store();
+        let (dir, store) = new_store();
         let identity = load_or_create_with(&store, Some(secret())).unwrap();
 
         assert_eq!(identity.public_key_hex().unwrap(), PUBKEY);
@@ -435,8 +491,102 @@ mod tests {
     }
 
     #[test]
+    fn a_backup_opens_again_and_restores_the_same_identity() {
+        let (_dir, store) = new_store();
+        let original = load_or_create_with(&store, None)
+            .unwrap()
+            .public_key_hex()
+            .unwrap();
+
+        let backup = export(&store, Some("a-known-passphrase")).unwrap();
+        assert!(backup.blob.starts_with("ncryptsec1"));
+        assert_eq!(backup.passphrase, "a-known-passphrase");
+
+        // A different machine entirely.
+        let (_other_dir, other) = new_store();
+        let npub = import(&other, &backup.blob, Some("a-known-passphrase")).unwrap();
+        assert!(npub.starts_with("npub1"));
+        assert_eq!(
+            load_or_create_with(&other, None)
+                .unwrap()
+                .public_key_hex()
+                .unwrap(),
+            original,
+            "export then import must land the same identity, not a lookalike",
+        );
+    }
+
+    #[test]
+    fn a_generated_passphrase_is_long_enough_to_be_worth_having() {
+        let (_dir, store) = new_store();
+        let backup = export(&store, None).unwrap();
+        assert_eq!(
+            backup.passphrase.split('-').count(),
+            crate::nip49::PASSPHRASE_WORDS,
+        );
+        assert!(!backup.passphrase.trim().is_empty());
+    }
+
+    #[test]
+    fn an_empty_passphrase_is_treated_as_asking_us_to_pick_one() {
+        // Otherwise a blank field would produce a blob encrypted under "",
+        // which is not a backup, it is a plain-text key with extra steps.
+        let (_dir, store) = new_store();
+        let backup = export(&store, Some("   ")).unwrap();
+        assert_eq!(
+            backup.passphrase.split('-').count(),
+            crate::nip49::PASSPHRASE_WORDS,
+        );
+    }
+
+    #[test]
+    fn a_wrong_passphrase_does_not_import() {
+        let (_dir, store) = new_store();
+        let backup = export(&store, Some("right-one")).unwrap();
+        let (_other_dir, other) = new_store();
+        assert!(import(&other, &backup.blob, Some("wrong-one")).is_err());
+        assert_eq!(
+            state_with(&other, None),
+            IdentityState::None,
+            "and nothing was written"
+        );
+    }
+
+    #[test]
+    fn wiping_is_refused_until_a_backup_is_confirmed_stored() {
+        // The gate. Exporting alone is not enough: a blob shown on screen and
+        // never written down is exactly the case this protects against.
+        let (_dir, store) = new_store();
+        load_or_create_with(&store, None).unwrap();
+
+        assert!(matches!(wipe(&store), Err(IdentityError::NoBackupYet)));
+        export(&store, None).unwrap();
+        assert!(
+            matches!(wipe(&store), Err(IdentityError::NoBackupYet)),
+            "exporting is not confirming",
+        );
+
+        store.confirm_backup().unwrap();
+        wipe(&store).unwrap();
+        assert_eq!(state_with(&store, None), IdentityState::None);
+    }
+
+    #[test]
+    fn a_wipe_also_clears_the_backup_confirmation() {
+        // Otherwise the next identity on this machine would inherit permission
+        // to be wiped, having never been backed up at all.
+        let (_dir, store) = new_store();
+        load_or_create_with(&store, None).unwrap();
+        store.confirm_backup().unwrap();
+        wipe(&store).unwrap();
+
+        load_or_create_with(&store, None).unwrap();
+        assert!(matches!(wipe(&store), Err(IdentityError::NoBackupYet)));
+    }
+
+    #[test]
     fn wipe_clears_both_the_secret_and_the_marker() {
-        let (dir, store) = store();
+        let (dir, store) = new_store();
         load_or_create_with(&store, None).unwrap();
         store.wipe().unwrap();
         assert!(!dir.path().join("secrets.json").exists());

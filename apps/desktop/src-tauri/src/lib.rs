@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod identity;
+pub mod nip49;
 pub mod office;
 pub mod secrets;
 
@@ -19,6 +20,10 @@ pub fn run() {
             commands::get_public_key,
             commands::sign_challenge,
             commands::import_identity,
+            commands::export_backup,
+            commands::confirm_backup,
+            commands::can_wipe,
+            commands::wipe_identity,
         ])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;

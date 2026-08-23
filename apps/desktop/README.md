@@ -50,9 +50,28 @@ office URL. The tempting shortcut — a `https://*` pattern — would mean any p
 the window ever reaches can ask this process to sign a challenge. Changing
 offices means restarting, which is the right price.
 
+## Backing up your key
+
+Settings → Profile, inside the app. Export produces a NIP-49 `ncryptsec1…` —
+your key encrypted under a passphrase — and a passphrase generated from the EFF
+short wordlist. Both are shown once, and the blob is decrypted and checked
+against the live key before you are given it, because a backup nobody can open
+is worse than none: it is one you believe you have.
+
+**Six words, not three.** The list holds 1296 words, so each is 10.34 bits.
+Three words is 31 bits, and a backup is a thing people write down and mislay;
+scrypt makes each guess cost 64 MiB, but 2³¹ candidates is within reach of
+anyone willing to spend a little, and the prize is an identity that cannot be
+revoked or reissued. Six words is 62 bits, which is not. The cost is two more
+words on the paper — see `PASSPHRASE_WORDS` in `src/nip49.rs`.
+
+Wiping is refused until you have exported *and* confirmed you stored it. A blob
+rendered on screen and never written down is not a backup, and this is the one
+button here that cannot be taken back.
+
 ## What works so far
 
-Identity: create on first run, sign in, import. Runtime detection, fleet
-spawning, NIP-49 backup and the native affordances land in later slices; the
+Identity: create on first run, sign in, import, back up, restore, wipe. Runtime
+detection, fleet spawning and the native affordances land in later slices; the
 bridge deliberately does not declare them yet, because a method the host does
 not answer is worse than an absent one.
