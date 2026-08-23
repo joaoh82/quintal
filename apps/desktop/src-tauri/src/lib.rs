@@ -5,6 +5,9 @@
 //! one narrow bridge. Anything added here that the web UI cannot reach, or that
 //! duplicates a screen the web app already has, is a mistake.
 
+pub mod identity;
+pub mod secrets;
+
 pub fn run() {
     tauri::Builder::default()
         .run(tauri::generate_context!())
