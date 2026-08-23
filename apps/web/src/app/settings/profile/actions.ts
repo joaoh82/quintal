@@ -1,8 +1,6 @@
 'use server';
 
 import {
-  DISPLAY_NAME_MAX_LENGTH,
-  PROFILE_DESCRIPTION_MAX_LENGTH,
   displayNameFromPubkey,
   normaliseDisplayName,
   normaliseProfileDescription,
@@ -72,8 +70,3 @@ export async function resetDisplayNameAction(): Promise<SaveProfileResult> {
   revalidatePath('/office');
   return { ok: true };
 }
-
-export const LIMITS = {
-  name: DISPLAY_NAME_MAX_LENGTH,
-  description: PROFILE_DESCRIPTION_MAX_LENGTH,
-} as const;

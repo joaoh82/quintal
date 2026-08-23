@@ -65,6 +65,24 @@ jobs:
           if [ "$fail" -ne 0 ]; then exit 1; fi
           echo "No mailer, no email column, no email env. Good."
 
+      # A `'use server'` file may only export async functions. Exporting a
+      # constant from one throws at the moment a form action is submitted —
+      # not at build time, and not in any test: `next build` tree-shakes an
+      # unused export away entirely, so it can pass while dev is broken. That
+      # combination shipped once; this is the cheapest thing that catches it.
+      - name: Check "use server" files only export async functions
+        run: |
+          set -euo pipefail
+          fail=0
+          for file in $(git grep -l "^'use server'" -- '*.ts' '*.tsx'); do
+            if git grep -nE "^export (const|let|var|class|default|function )" -- "$file"; then
+              echo "::error file=$file::a 'use server' file may only export async functions"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "Every 'use server' file exports only async functions."
+
       - run: pnpm typecheck
 
       - run: pnpm test
@@ -96,3 +114,8 @@ jobs:
           echo "health: $(curl -fsS http://127.0.0.1:3000/health)"
           curl -fsS -o /dev/null http://127.0.0.1:3000/
           echo "landing page served from the same port"
+
+          # Sign in with a keypair and fetch every page. Catches a route that
+          # throws while rendering, which no unit test sees — these pages are
+          # all `force-dynamic`, so `next build` never renders them.
+          node scripts/smoke.mjs http://127.0.0.1:3000
