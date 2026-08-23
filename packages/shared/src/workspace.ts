@@ -35,6 +35,7 @@ export function slugify(input: string): string {
  */
 export const DISPLAY_NAME_MAX_LENGTH = 40;
 export const PROFILE_DESCRIPTION_MAX_LENGTH = 280;
+export const WORKSPACE_NAME_MAX_LENGTH = 60;
 
 /**
  * Collapse whitespace and clamp.
@@ -81,4 +82,33 @@ export function normaliseDisplayName(input: unknown): string | null {
 export function normaliseProfileDescription(input: unknown): string {
   if (typeof input !== 'string') return '';
   return tidy(input, PROFILE_DESCRIPTION_MAX_LENGTH);
+}
+
+/**
+ * An office name fit to render, or null when the input is empty.
+ *
+ * An office is a place, not a person: it starts out named after whoever owns
+ * it because that is the only thing we know at first sight, but it is allowed
+ * to become "Acme" or "The Lab" and stop referring to anybody. Same containment
+ * as a display name — it is drawn in a header other people read.
+ */
+export function normaliseWorkspaceName(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const name = tidy(input, WORKSPACE_NAME_MAX_LENGTH);
+  return name.length > 0 ? name : null;
+}
+
+/**
+ * Is this office still wearing the name it was given at creation?
+ *
+ * Used to decide whether renaming yourself should carry the office along.
+ * Comparing against the name the owner had a moment ago is exact rather than a
+ * guess: an office someone deliberately called "Acme" cannot match, so it is
+ * never quietly renamed out from under them.
+ */
+export function workspaceNameFollows(
+  workspaceName: string,
+  ownerDisplayName: string,
+): boolean {
+  return workspaceName.trim() === personalWorkspaceName(ownerDisplayName);
 }

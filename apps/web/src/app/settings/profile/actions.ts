@@ -4,8 +4,15 @@ import {
   displayNameFromPubkey,
   normaliseDisplayName,
   normaliseProfileDescription,
+  personalWorkspaceName,
+  workspaceNameFollows,
 } from '@quintal/shared';
-import { getDb, users } from '@quintal/shared/db';
+import {
+  ensurePersonalWorkspace,
+  getDb,
+  renameWorkspace,
+  users,
+} from '@quintal/shared/db';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -42,15 +49,43 @@ export async function saveProfileAction(
   }
   const description = normaliseProfileDescription(formData.get('description'));
 
-  await getDb()
+  const db = getDb();
+  await db
     .update(users)
     .set({ name, description })
     .where(eq(users.id, session.user.id));
+  await followOfficeName(session.user.id, session.user.name, name);
 
   // The office header, the roster and your nameplate all read this.
   revalidatePath('/settings/profile');
+  revalidatePath('/settings');
   revalidatePath('/office');
   return { ok: true };
+}
+
+/**
+ * Carry the office along when it is still named after you.
+ *
+ * A brand-new office is called "<npub…>'s Office" because the npub is the only
+ * name anybody has yet, so renaming yourself to Josh and leaving the office as
+ * a string of bech32 is just the old name surviving in a second place.
+ *
+ * Only when it *still matches* the name you had a moment ago, which is an exact
+ * test rather than a guess: an office deliberately called "Acme" cannot match,
+ * so a chosen name is never quietly overwritten.
+ */
+async function followOfficeName(
+  userId: string,
+  previousName: string,
+  nextName: string,
+): Promise<void> {
+  if (previousName.trim() === nextName) return;
+
+  const db = getDb();
+  const workspace = await ensurePersonalWorkspace(db, { userId, name: nextName });
+  if (!workspaceNameFollows(workspace.name, previousName)) return;
+
+  await renameWorkspace(db, workspace.id, personalWorkspaceName(nextName));
 }
 
 /** Give the field back to the npub the account started with. */
