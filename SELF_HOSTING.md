@@ -81,6 +81,46 @@ DATABASE_AUTH_TOKEN=...
 `data/quintal.db` along with any `-wal` / `-shm` files. That file is the whole
 of your instance's state.
 
+## Deploying on Railway
+
+One service. The app, the game server and the migrations are a single process,
+so there is nothing to split apart.
+
+```bash
+DATABASE_URL=libsql://your-db.turso.io
+DATABASE_AUTH_TOKEN=...
+BETTER_AUTH_SECRET=...        # openssl rand -base64 32
+BETTER_AUTH_URL=https://office.example.com
+```
+
+Create the database first — `turso db create quintal`, then `turso db show
+--url` and `turso db tokens create` for the two values above. The free tier is
+enough to run a small instance at no cost.
+
+**Prefer Turso to a Railway Volume.** A volume can only be mounted by one active
+deployment, so Railway cannot overlap the old and new versions: every push
+becomes stop-then-start and everyone in the office is disconnected. Nothing is
+lost when that happens — positions live in memory and chat is stored nowhere —
+but it is a tax on every deploy, and a volume has no backup story of its own.
+Turso removes the volume while keeping the same SQLite dialect, the same
+schema and the same migrations, and brings point-in-time recovery with it.
+
+> **Leave the replica count at one.**
+>
+> Colyseus rooms live in the memory of the process that created them. A second
+> instance is a second office that cannot see the first: two people who both
+> "join the office" can land in different rooms and never meet, and an agent
+> can be connected to one while its owner is in the other.
+>
+> Running more than one node needs shared presence and a matchmaker that routes
+> a join to the node already holding that room — `@colyseus/redis-driver` and
+> the work around it — not a bigger number. Worth knowing that a volume made
+> this mistake impossible by refusing to mount twice. Turso does not, so the
+> guardrail is now this paragraph.
+
+Avatars and file attachments will need object storage; that is not wired up
+yet — see [Still to come](#still-to-come).
+
 ## Behind a reverse proxy
 
 The game connection is a WebSocket on the same origin as the app, under
@@ -123,6 +163,8 @@ Migrations apply themselves on the next boot.
 
 ## Still to come
 
+- Object storage for avatars and file attachments — a local directory by
+  default, any S3-compatible bucket (Railway, R2, MinIO) in the cloud
 - Docker image and compose file
 - LiveKit configuration for proximity voice
 - Agent gateway setup (connecting your fleet)
