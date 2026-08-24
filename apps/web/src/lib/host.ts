@@ -39,6 +39,22 @@ export interface HostError {
   message: string;
 }
 
+/** One agent runtime, as this machine reports it. */
+export interface HostRuntime {
+  /** Matches `RuntimeSpec.id` in the shared catalogue. */
+  id: string;
+  label: string;
+  installed: boolean;
+  /** Absolute path the binary resolved to, when it did. */
+  path: string | null;
+  acp: 'native' | 'adapter' | 'none';
+  /** On PATH *and* able to speak ACP. Only a usable runtime can be started. */
+  usable: boolean;
+  /** How the classification was made, so the UI can explain rather than assert. */
+  evidence: string;
+  install: string;
+}
+
 export interface Backup {
   /** `ncryptsec1…` — the secret key, encrypted under the passphrase. */
   blob: string;
@@ -99,6 +115,14 @@ export interface HostBridge {
   canWipe(): Promise<boolean>;
   /** Forget the identity on this machine. Refused until a backup is confirmed. */
   wipeIdentity(): Promise<void>;
+
+  /**
+   * What this machine could run.
+   *
+   * Not cached by the host: "I just installed it" happens while the app is
+   * open, so the caller decides when to ask again.
+   */
+  detectRuntimes(): Promise<HostRuntime[]>;
 }
 
 declare global {
@@ -155,6 +179,7 @@ function tauriBridge(): HostBridge {
     confirmBackup: (token) => call<void>('confirm_backup', { token }),
     canWipe: () => call<boolean>('can_wipe'),
     wipeIdentity: () => call<void>('wipe_identity'),
+    detectRuntimes: () => call<HostRuntime[]>('detect_runtimes'),
   };
 }
 

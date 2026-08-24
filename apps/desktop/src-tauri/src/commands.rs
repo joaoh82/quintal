@@ -10,6 +10,7 @@ use tauri::State;
 
 use crate::identity::{self, IdentityError, IdentityState};
 use crate::nip49::Nip49Error;
+use crate::runtimes::{self, RuntimeStatus};
 use crate::secrets::{SecretStore, SecretsError};
 
 pub struct HostState {
@@ -157,4 +158,15 @@ pub fn wipe_identity(state: State<'_, HostState>) -> Result<(), HostError> {
     // Nothing left for a stale token to confirm.
     *state.pending_export.lock().unwrap() = None;
     Ok(())
+}
+
+/// What this machine could run.
+///
+/// Answered from the generated catalogue plus a PATH walk, so the office never
+/// has to guess and never sees a runtime that would fail at spawn time. Not
+/// cached here: the caller decides when to ask again, because "I just installed
+/// it" is a thing that happens while the app is open.
+#[tauri::command]
+pub fn detect_runtimes() -> Vec<RuntimeStatus> {
+    runtimes::detect()
 }

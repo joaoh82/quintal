@@ -121,6 +121,7 @@ pub fn capability_for(office: &str) -> String {
             // one rather than wildcarded: a command added later should have to
             // be granted deliberately, not inherit a blanket allow.
             "allow-has-identity",
+            "allow-detect-runtimes",
             "allow-get-public-key",
             "allow-sign-challenge",
             "allow-import-identity",

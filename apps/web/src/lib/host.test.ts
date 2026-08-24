@@ -74,6 +74,7 @@ describe('getHost', () => {
       'confirmBackup',
       'canWipe',
       'wipeIdentity',
+      'detectRuntimes',
     ] as const) {
       assert.equal(typeof host[method], 'function', `${method} is missing`);
     }

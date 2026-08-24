@@ -10,6 +10,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "has_identity",
+            "detect_runtimes",
             "get_public_key",
             "sign_challenge",
             "import_identity",

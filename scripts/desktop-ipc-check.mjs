@@ -63,6 +63,7 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     await run('get_public_key', 'get_public_key', {});
     await run('sign_challenge', 'sign_challenge', { payload: ${JSON.stringify(PAYLOAD)} });
     await run('can_wipe (before)', 'can_wipe', {});
+    await run('detect_runtimes', 'detect_runtimes', {});
 
     // The gate, from the outside: a confirmation nobody earned must be refused.
     await run('confirm_backup (junk token)', 'confirm_backup', { token: 'not-a-real-token' });
@@ -184,6 +185,9 @@ const EXPECTED = {
   'get_public_key': { ok: true },
   'sign_challenge': { ok: true },
   'can_wipe (before)': { ok: true, value: false },
+  // Contents depend on what is installed on the machine; what must hold is
+  // that the call is permitted and answers.
+  'detect_runtimes': { ok: true },
   'confirm_backup (junk token)': { ok: false },
   'export_backup': { ok: true },
   'import_identity': { ok: true },

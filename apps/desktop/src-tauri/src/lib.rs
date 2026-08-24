@@ -9,6 +9,7 @@ pub mod commands;
 pub mod identity;
 pub mod nip49;
 pub mod office;
+pub mod runtimes;
 pub mod secrets;
 
 use tauri::Manager;
@@ -17,6 +18,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::has_identity,
+            commands::detect_runtimes,
             commands::get_public_key,
             commands::sign_challenge,
             commands::import_identity,

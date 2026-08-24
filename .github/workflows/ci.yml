@@ -89,6 +89,19 @@ jobs:
 
       - run: pnpm build
 
+      # The Rust host reads the runtime catalogue as generated data, so a
+      # change to the TypeScript that is not regenerated means the office and
+      # the host disagree about what a runtime id means — and the host is what
+      # turns an id into a command to spawn.
+      - name: Check the runtime catalogue is up to date
+        run: |
+          node scripts/emit-runtimes.mjs
+          if ! git diff --quiet -- packages/shared/runtimes.generated.json; then
+            echo "::error::runtimes.generated.json is stale. Run 'node scripts/emit-runtimes.mjs' and commit it."
+            git diff -- packages/shared/runtimes.generated.json
+            exit 1
+          fi
+
       # The migration in the repo must match the schema it was generated from.
       - name: Check migrations are up to date
         run: |
