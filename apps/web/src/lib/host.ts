@@ -157,3 +157,59 @@ function tauriBridge(): HostBridge {
     wipeIdentity: () => call<void>('wipe_identity'),
   };
 }
+
+/**
+ * What the sign-in page should offer, given what the host has said so far.
+ *
+ * Pure and separate from the component because the interesting case is the one
+ * that is easy to get wrong: **"we could not ask" is not "the answer is bad".**
+ *
+ * `hasIdentity` cannot fail on the Rust side — it returns a state, not a
+ * result — so a rejected call means the message never got through: IPC not up
+ * yet, a capability that does not cover this page, the office reloading
+ * underneath us. Treating that as `locked` renders a specific, alarming and
+ * false claim ("this computer is holding your key") and disables the only
+ * button that would get somebody moving again. Being stuck behind a wrong
+ * diagnosis is worse than being told we do not know.
+ */
+export type HostPrompt =
+  /** Not the desktop app; the browser paths are all there is. */
+  | { kind: 'browser' }
+  | { kind: 'asking' }
+  /** A key is here and usable — the normal case. */
+  | { kind: 'ready' }
+  /** The app is hosting and has no key yet. */
+  | { kind: 'create' }
+  /** The host says its keychain will not open. The one case that must block. */
+  | { kind: 'locked' }
+  /** The host did not answer. Say so, offer a retry, block nothing. */
+  | { kind: 'unreachable'; message: string };
+
+export function hostPromptFor({
+  hosted,
+  asking,
+  state,
+  error,
+}: {
+  hosted: boolean;
+  asking: boolean;
+  state: IdentityState | null;
+  error: string | null;
+}): HostPrompt {
+  if (!hosted) return { kind: 'browser' };
+  if (asking) return { kind: 'asking' };
+  if (error !== null) return { kind: 'unreachable', message: error };
+  switch (state) {
+    case 'ready':
+      return { kind: 'ready' };
+    case 'none':
+      return { kind: 'create' };
+    case 'locked':
+      return { kind: 'locked' };
+    default:
+      // Hosted, not asking, no error and no state is not a situation the code
+      // can produce — but guessing `locked` here is exactly the bug this
+      // function exists to prevent.
+      return { kind: 'unreachable', message: 'This computer did not answer.' };
+  }
+}

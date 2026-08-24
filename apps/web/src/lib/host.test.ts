@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
-import { getHost, hasHost, resetHostForTests, type HostBridge } from './host';
+import {
+  getHost,
+  hasHost,
+  hostPromptFor,
+  resetHostForTests,
+  type HostBridge,
+} from './host';
 
 /**
  * Whether the app is hosted, and what happens when it is not.
@@ -99,5 +105,51 @@ describe('a host identity holds no secret', () => {
         );
       }
     }
+  });
+});
+
+describe('hostPromptFor', () => {
+  const base = { hosted: true, asking: false, state: null, error: null } as const;
+
+  it('offers the browser paths when there is no host', () => {
+    assert.deepEqual(
+      hostPromptFor({ ...base, hosted: false }),
+      { kind: 'browser' },
+    );
+  });
+
+  it('waits while the host is still being asked', () => {
+    assert.deepEqual(hostPromptFor({ ...base, asking: true }), { kind: 'asking' });
+  });
+
+  it('maps each answer the host can actually give', () => {
+    assert.deepEqual(hostPromptFor({ ...base, state: 'ready' }), { kind: 'ready' });
+    assert.deepEqual(hostPromptFor({ ...base, state: 'none' }), { kind: 'create' });
+    assert.deepEqual(hostPromptFor({ ...base, state: 'locked' }), { kind: 'locked' });
+  });
+
+  it('does not call a failed question a locked keychain', () => {
+    // The bug this exists for. `hasIdentity` cannot fail on the Rust side, so a
+    // rejection means the call never landed — and rendering "this computer is
+    // holding your key, do not create a new identity" on the back of that is a
+    // false claim that also disables the way out.
+    const prompt = hostPromptFor({ ...base, error: 'ipc unavailable' });
+    assert.equal(prompt.kind, 'unreachable');
+    assert.notEqual(prompt.kind, 'locked');
+    assert.match(prompt.kind === 'unreachable' ? prompt.message : '', /ipc unavailable/);
+  });
+
+  it('prefers the error over a stale state', () => {
+    // If the last answer was `ready` and the next call failed, we no longer
+    // know; saying "continue with this computer's key" would offer a button
+    // that cannot work.
+    assert.equal(
+      hostPromptFor({ ...base, state: 'ready', error: 'gone' }).kind,
+      'unreachable',
+    );
+  });
+
+  it('never guesses locked from an absent answer', () => {
+    assert.equal(hostPromptFor({ ...base, state: null }).kind, 'unreachable');
   });
 });
