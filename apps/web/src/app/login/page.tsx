@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
+  describeHostFailure,
   getHost,
   hostPromptFor,
   isHostError,
@@ -88,9 +89,9 @@ export default function LoginPage() {
         // false and disables the only button that gets anyone moving.
         if (!live) return;
         setHostKey(null);
-        setHostError(
-          cause instanceof Error ? cause.message : 'This computer did not answer.',
-        );
+        // Not `cause.message` — Tauri rejects with the value, so an ACL refusal
+        // is a bare string and the message is the whole diagnosis.
+        setHostError(describeHostFailure(cause));
       })
       .finally(() => {
         if (live) setAsking(false);

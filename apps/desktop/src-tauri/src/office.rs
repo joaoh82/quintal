@@ -101,9 +101,17 @@ pub fn capability_for(office: &str) -> String {
         "identifier": "office-bridge",
         "description": "IPC for the configured office, and nothing else.",
         "windows": ["main"],
-        // `local: false` so this grant applies only to the remote office, never
-        // to the bundled bootstrap page.
-        "local": false,
+        // Local windows are included, and must be.
+        //
+        // In `tauri dev` the office *is* the dev server, and Tauri classifies
+        // any URL relative to `devUrl` as local — so `local: false` refuses
+        // every command in the exact configuration a developer runs:
+        //
+        //   has_identity not allowed on window "main", URL: local
+        //
+        // The only other local page is the bootstrap file this app ships,
+        // which renders one paragraph and calls nothing. Excluding local buys
+        // nothing and costs the whole development build.
         // Both patterns: `navigate("https://office")` lands on a URL with no
         // path, which `{office}/*` alone does not match.
         "remote": { "urls": [office.to_string(), format!("{office}/*")] },
@@ -189,8 +197,13 @@ mod tests {
                 "{permission} must be granted"
             );
         }
-        // The bootstrap page is local and must not get this grant.
-        assert!(capability.contains("\"local\":false"));
+        // Must NOT be remote-only: in `tauri dev` the office is served from
+        // `devUrl`, which Tauri calls a local origin, and excluding local
+        // rejects every command in the configuration developers actually use.
+        assert!(
+            !capability.contains("\"local\":false"),
+            "a remote-only grant breaks `tauri dev` entirely",
+        );
     }
 
     #[test]

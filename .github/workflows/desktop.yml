@@ -92,3 +92,18 @@ jobs:
           QUINTAL_IPC_TIMEOUT_MS: '90000'
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" node scripts/desktop-ipc-check.mjs
         timeout-minutes: 6
+
+      # The same commands from a *local* origin. Tauri classifies any URL under
+      # `devUrl` as local rather than remote, and capabilities treat the two
+      # differently — so checking only a foreign port tests the packaged app
+      # and skips `tauri dev`, which is what a developer runs. That gap shipped
+      # once: every command refused in development, this script green.
+      - name: IPC check (local origin)
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          QUINTAL_IPC_TIMEOUT_MS: '90000'
+          QUINTAL_IPC_PORT: '3000'
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" node scripts/desktop-ipc-check.mjs
+        timeout-minutes: 6
