@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
 import {
+  describeHostFailure,
   getHost,
   hasHost,
   hostPromptFor,
@@ -151,5 +152,35 @@ describe('hostPromptFor', () => {
 
   it('never guesses locked from an absent answer', () => {
     assert.equal(hostPromptFor({ ...base, state: null }).kind, 'unreachable');
+  });
+});
+
+describe('describeHostFailure', () => {
+  it('keeps a plain string, which is how an ACL refusal arrives', () => {
+    // The real one. Tauri rejects with the value, not an Error, so the
+    // `instanceof Error` check discarded precisely the useful message.
+    const refusal = 'has_identity not allowed on window "main", URL: local';
+    assert.equal(describeHostFailure(refusal), refusal);
+  });
+
+  it('reads a HostError from the Rust side', () => {
+    assert.equal(
+      describeHostFailure({ code: 'locked', message: 'the keychain would not unlock' }),
+      'the keychain would not unlock',
+    );
+  });
+
+  it('reads an ordinary Error', () => {
+    assert.equal(describeHostFailure(new Error('boom')), 'boom');
+  });
+
+  it('does not swallow an object with no message', () => {
+    assert.match(describeHostFailure({ weird: true }), /weird/);
+  });
+
+  it('says so plainly when there is genuinely nothing', () => {
+    for (const nothing of [undefined, null, '', new Error('')]) {
+      assert.match(describeHostFailure(nothing), /no reason/);
+    }
   });
 });

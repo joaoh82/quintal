@@ -213,3 +213,41 @@ export function hostPromptFor({
       return { kind: 'unreachable', message: 'This computer did not answer.' };
   }
 }
+
+/**
+ * Turn whatever a rejected bridge call threw into something readable.
+ *
+ * Tauri rejects with the *value* the command produced, not with an `Error`. An
+ * ACL refusal arrives as a plain string; a command that returned `Err` arrives
+ * as the serialised struct. So `cause instanceof Error ? cause.message : …`
+ * discards the message in exactly the cases worth reading — which is how
+ *
+ *   has_identity not allowed on window "main", URL: local
+ *
+ * reached a user as "This computer did not answer." The diagnosis was sitting
+ * right there and the handler threw it away.
+ */
+export function describeHostFailure(cause: unknown): string {
+  const text = extractMessage(cause);
+  return text !== undefined && text.trim().length > 0
+    ? text
+    : 'This computer did not answer, and gave no reason.';
+}
+
+function extractMessage(cause: unknown): string | undefined {
+  if (typeof cause === 'string') return cause;
+  if (isHostError(cause)) return cause.message;
+  // Before the object branch: an `Error` *is* an object, and one with an empty
+  // message would otherwise be stringified into a useless `{}`.
+  if (cause instanceof Error) return cause.message;
+  if (cause && typeof cause === 'object') {
+    const message = (cause as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+    try {
+      return JSON.stringify(cause);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}

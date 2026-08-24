@@ -22,7 +22,18 @@ import { join } from 'node:path';
 
 import { buildAuthPayload, verifyAuthSignature } from '@quintal/shared';
 
-const PORT = 3399;
+/**
+ * Which origin to serve the fake office from.
+ *
+ * This matters more than it looks. Tauri calls a URL "local" when it is
+ * relative to `devUrl`, and capabilities distinguish local from remote — so a
+ * check that only ever runs on some other port exercises the remote path and
+ * silently skips the one `tauri dev` actually uses. That gap shipped: every
+ * command was refused in development while this script was green.
+ *
+ * `QUINTAL_IPC_PORT=3000` (the configured `devUrl` port) runs the local path.
+ */
+const PORT = Number(process.env.QUINTAL_IPC_PORT ?? 3399);
 /** Generous on a cold CI runner, where WebKit takes its time to first paint. */
 const TIMEOUT_MS = Number(process.env.QUINTAL_IPC_TIMEOUT_MS ?? 60_000);
 const ORIGIN = `http://localhost:${PORT}`;
