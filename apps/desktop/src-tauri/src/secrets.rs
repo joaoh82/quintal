@@ -136,6 +136,26 @@ impl SecretStore {
         write_synced(&self.dir.join(EXPORTED_MARKER), b"confirmed")
     }
 
+    /// Make the marker describe the secret that is actually stored.
+    ///
+    /// The two can drift, because they live in different places: the secret is
+    /// in the OS keychain and the marker is a file. Deleting the app data
+    /// directory takes the marker and leaves the keychain entry — which is
+    /// exactly what happened while testing this.
+    ///
+    /// A secret with no marker is not harmless. The marker is the only thing
+    /// that tells a locked keychain apart from a first run, so until it is back
+    /// the UI will offer to create an identity over one that already exists.
+    /// (The creation itself fails safe — `load` propagates the keychain error
+    /// rather than treating it as empty — but the button lies.) Healing on a
+    /// successful read costs one file write and restores the invariant.
+    pub fn ensure_marker(&self, npub: &str) -> Result<(), SecretsError> {
+        if self.marker().as_deref() == Some(npub) {
+            return Ok(());
+        }
+        write_synced(&self.marker_path(), npub.as_bytes())
+    }
+
     /// Forget that a backup was confirmed. Used when the identity changes.
     pub fn clear_backup_confirmation(&self) -> Result<(), SecretsError> {
         match fs::remove_file(self.dir.join(EXPORTED_MARKER)) {

@@ -205,6 +205,12 @@ pub fn load_or_create_with(
     let mut blob = store.load()?;
     if let Some(existing) = blob.slots.get(IDENTITY_SLOT) {
         let secret = decode_secret(existing)?;
+        // Heal a marker that went missing while the secret survived — see
+        // `SecretStore::ensure_marker`. Without this the drift persists until
+        // the next write, and so does the window where a locked keychain looks
+        // like a first run.
+        let signing = signing_key(&secret)?;
+        store.ensure_marker(&npub_of(&signing.verifying_key().to_bytes().into())?)?;
         return Ok(Identity {
             secret,
             ephemeral: false,
@@ -414,6 +420,59 @@ mod tests {
             first.public_key_hex().unwrap(),
             second.public_key_hex().unwrap(),
             "a second launch must not mint a second identity",
+        );
+    }
+
+    #[test]
+    fn a_marker_lost_beside_a_surviving_secret_is_put_back() {
+        // The drift is real and easy to cause: the secret lives in the OS
+        // keychain, the marker is a file, and deleting the app data directory
+        // takes one and not the other.
+        let (dir, store) = new_store();
+        let created = load_or_create_with(&store, None).unwrap();
+        let npub = created.npub().unwrap();
+
+        std::fs::remove_file(dir.path().join("identity.marker")).unwrap();
+        assert!(store.marker().is_none(), "drift established");
+
+        let again = load_or_create_with(&store, None).unwrap();
+        assert_eq!(again.npub().unwrap(), npub, "same identity, not a new one");
+        assert_eq!(
+            store.marker().as_deref(),
+            Some(npub.as_str()),
+            "and the marker describes it again",
+        );
+    }
+
+    #[test]
+    fn healing_the_marker_restores_the_locked_check() {
+        // Why the healing matters at all. With the marker gone, a keychain that
+        // will not open reads as "no key yet" and the UI offers to create one
+        // over an identity that already exists. Reading once puts the guard
+        // back.
+        let (dir, store) = new_store();
+        load_or_create_with(&store, None).unwrap();
+        std::fs::remove_file(dir.path().join("identity.marker")).unwrap();
+
+        // Before healing: secret unreadable + no marker looks like a first run.
+        let secrets = dir.path().join("secrets.json");
+        let saved = std::fs::read(&secrets).unwrap();
+        std::fs::remove_file(&secrets).unwrap();
+        assert_eq!(
+            state_with(&store, None),
+            IdentityState::None,
+            "this is the window the drift opens",
+        );
+
+        // Put the secret back, read once to heal, then take it away again.
+        std::fs::write(&secrets, &saved).unwrap();
+        load_or_create_with(&store, None).unwrap();
+        std::fs::remove_file(&secrets).unwrap();
+
+        assert_eq!(
+            state_with(&store, None),
+            IdentityState::Locked,
+            "now an unreadable secret is correctly reported as locked",
         );
     }
 
