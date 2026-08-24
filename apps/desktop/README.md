@@ -92,7 +92,10 @@ short wordlist. Both are shown once, and the blob is decrypted and checked
 against the live key before you are given it, because a backup nobody can open
 is worse than none: it is one you believe you have.
 
-**Six words, not three.** The list holds 1296 words, so each is 10.34 bits.
+**Six words, not three.** The list holds 1296 words — 1295 once the single
+hyphenated entry is dropped, since the words are joined with hyphens and
+`yo-yo` would make a passphrase impossible to read back off paper — so each is
+10.34 bits.
 Three words is 31 bits, and a backup is a thing people write down and mislay;
 scrypt makes each guess cost 64 MiB, but 2³¹ candidates is within reach of
 anyone willing to spend a little, and the prize is an identity that cannot be

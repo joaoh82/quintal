@@ -145,11 +145,22 @@ pub fn decrypt(blob: &str, passphrase: &str) -> Result<Zeroizing<[u8; 32]>, Nip4
 
 // --- passphrases ------------------------------------------------------------
 
-/// The EFF short wordlist, one word per line, comments stripped at load.
+/// The character between words in a generated passphrase.
+const SEPARATOR: char = '-';
+
+/// The EFF short wordlist, minus anything containing the separator.
+///
+/// The list has exactly one hyphenated entry, `yo-yo`, and joining words with a
+/// hyphen makes it ambiguous the moment it is drawn: `ivy-crumb-yo-yo-ride`
+/// cannot be told apart from five separate words by the person copying it onto
+/// paper, which is the only thing this passphrase is for. Dropping it costs
+/// 0.001 bits and makes "count the dashes" a way to check you transcribed it
+/// correctly.
 fn wordlist() -> Vec<&'static str> {
     include_str!("wordlists/eff_short_wordlist.txt")
         .lines()
         .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .filter(|word| !word.contains(SEPARATOR))
         .collect()
 }
 
@@ -171,7 +182,7 @@ pub fn generate_passphrase() -> String {
     (0..PASSPHRASE_WORDS)
         .map(|_| words[uniform_index(words.len())])
         .collect::<Vec<_>>()
-        .join("-")
+        .join(&SEPARATOR.to_string())
 }
 
 /// A uniform index, rejecting the biased tail rather than taking a modulus.
@@ -274,11 +285,30 @@ mod tests {
 
     #[test]
     fn the_wordlist_is_the_one_we_think_it_is() {
+        // 1296 in the file, less the single hyphenated entry we cannot use.
         let words = wordlist();
-        assert_eq!(words.len(), 1296, "EFF short wordlist #1");
+        assert_eq!(words.len(), 1295, "EFF short wordlist #1, minus `yo-yo`");
         assert!(words.iter().all(|w| !w.contains(char::is_whitespace)));
+        assert!(
+            words.iter().all(|w| !w.contains(SEPARATOR)),
+            "a word containing the separator makes the passphrase ambiguous to read",
+        );
         let unique: std::collections::HashSet<_> = words.iter().collect();
-        assert_eq!(unique.len(), 1296, "a duplicate would quietly cost entropy");
+        assert_eq!(unique.len(), 1295, "a duplicate would quietly cost entropy");
+    }
+
+    #[test]
+    fn a_passphrase_always_has_exactly_the_words_it_claims() {
+        // This failed in CI roughly one run in two hundred, because `yo-yo`
+        // could be drawn and then split into two. The bug was not the test.
+        for _ in 0..2_000 {
+            let phrase = generate_passphrase();
+            assert_eq!(
+                phrase.split(SEPARATOR).count(),
+                PASSPHRASE_WORDS,
+                "{phrase} does not read as {PASSPHRASE_WORDS} words",
+            );
+        }
     }
 
     #[test]
