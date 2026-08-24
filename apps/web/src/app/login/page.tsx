@@ -13,7 +13,12 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getHost, isHostError, type IdentityState } from '@/lib/host';
+import {
+  getHost,
+  hostPromptFor,
+  isHostError,
+  type IdentityState,
+} from '@/lib/host';
 import {
   createIdentity,
   forgetSavedNsec,
@@ -42,7 +47,10 @@ export default function LoginPage() {
   const [extension, setExtension] = useState(false);
   /** Null while we are still asking the host, or when there is no host. */
   const [hostKey, setHostKey] = useState<IdentityState | null>(null);
+  /** Set when the host did not answer at all — distinct from a bad answer. */
+  const [hostError, setHostError] = useState<string | null>(null);
   const [asking, setAsking] = useState(true);
+  const [askedAt, setAskedAt] = useState(0);
   // Only true for a key we loaded back out of storage — a key generated a
   // moment ago has nothing to forget yet.
   const [wasSaved, setWasSaved] = useState(false);
@@ -65,13 +73,24 @@ export default function LoginPage() {
       return;
     }
     let live = true;
+    setAsking(true);
     void host
       .hasIdentity()
       .then((state) => {
-        if (live) setHostKey(state);
+        if (!live) return;
+        setHostKey(state);
+        setHostError(null);
       })
-      .catch(() => {
-        if (live) setHostKey('locked');
+      .catch((cause: unknown) => {
+        // NOT `locked`. `has_identity` cannot fail on the host side — it
+        // returns a state, not a result — so a rejection means the question
+        // never arrived. Calling that a locked keychain states something
+        // false and disables the only button that gets anyone moving.
+        if (!live) return;
+        setHostKey(null);
+        setHostError(
+          cause instanceof Error ? cause.message : 'This computer did not answer.',
+        );
       })
       .finally(() => {
         if (live) setAsking(false);
@@ -79,7 +98,7 @@ export default function LoginPage() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [askedAt]);
 
   // Somebody who saved a key here last time should not have to paste it again.
   //
@@ -188,6 +207,13 @@ export default function LoginPage() {
     await enter(imported, remember);
   }
 
+  const prompt = hostPromptFor({
+    hosted: Boolean(getHost()),
+    asking,
+    state: hostKey,
+    error: hostError,
+  });
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
       <Card>
@@ -202,7 +228,7 @@ export default function LoginPage() {
         <CardContent className="space-y-4">
           {mode === 'choose' ? (
             <div className="space-y-3">
-              {hostKey === 'locked' ? (
+              {prompt.kind === 'locked' ? (
                 <div className="border-destructive/40 bg-destructive/5 space-y-2 rounded-md border p-3">
                   <p className="text-sm font-medium">Your keychain is locked.</p>
                   <p className="text-muted-foreground text-xs">
@@ -214,11 +240,35 @@ export default function LoginPage() {
                 </div>
               ) : null}
 
-              {hostKey === 'ready' || hostKey === 'none' ? (
+              {prompt.kind === 'unreachable' ? (
+                <div className="space-y-2 rounded-md border p-3">
+                  <p className="text-sm font-medium">
+                    This computer didn&apos;t answer.
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    We couldn&apos;t ask about the key it holds, so we don&apos;t
+                    know whether there is one. That is different from your
+                    keychain being locked, and it is usually worth another try.
+                  </p>
+                  <p className="text-muted-foreground font-mono text-[11px] break-all">
+                    {prompt.message}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setAskedAt(Date.now())}
+                  >
+                    Try again
+                  </Button>
+                </div>
+              ) : null}
+
+              {prompt.kind === 'ready' || prompt.kind === 'create' ? (
                 <Button className="w-full" onClick={onUseHostKey} disabled={busy}>
                   {busy
                     ? 'Signing in…'
-                    : hostKey === 'ready'
+                    : prompt.kind === 'ready'
                       ? "Continue with this computer's key"
                       : 'Create identity on this computer'}
                 </Button>
@@ -226,15 +276,15 @@ export default function LoginPage() {
 
               <Button
                 className="w-full"
-                variant={hostKey ? 'outline' : 'default'}
+                variant={prompt.kind === 'browser' ? 'default' : 'outline'}
                 onClick={onCreate}
-                // Disabled until the host has answered: a click in that window
-                // mints a browser key, which is the exact action the locked
-                // panel exists to prevent — and we do not yet know whether the
-                // panel should be showing.
-                disabled={busy || hostKey === 'locked' || (asking && Boolean(getHost()))}
+                // Blocked only while the host is still being asked, or when it
+                // has actually said `locked`. An unanswered question leaves
+                // this open on purpose: stuck behind a guess is worse than a
+                // second identity somebody can sign out of.
+                disabled={busy || prompt.kind === 'locked' || prompt.kind === 'asking'}
               >
-                Create identity{hostKey ? ' in this window instead' : ''}
+                Create identity{prompt.kind === 'browser' ? '' : ' in this window instead'}
               </Button>
               <Button
                 variant="outline"
