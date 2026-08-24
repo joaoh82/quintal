@@ -1,0 +1,94 @@
+name: Desktop
+
+# Only when the host or the crypto it has to agree with changes. The Linux
+# system dependencies below take longer to install than the tests take to run,
+# so this is deliberately not on the critical path of every PR.
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/web/src/lib/host.ts'
+      - 'packages/shared/src/identity.ts'
+      - 'scripts/desktop-ipc-check.mjs'
+      - '.github/workflows/desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/web/src/lib/host.ts'
+      - 'packages/shared/src/identity.ts'
+      - 'scripts/desktop-ipc-check.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri links against the system webview even for a test build.
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb at-spi2-core
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Format
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+
+      - name: Clippy
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+
+      # The one that matters: `identity::tests` verifies a signature produced by
+      # @noble/curves, the library the office actually checks against. Rust
+      # agreeing with itself proves nothing — k256's plain signer hashes what it
+      # is given, so signing a digest signs it twice and yields a valid
+      # signature over the wrong message.
+      - name: Tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      # The hop that unit tests cannot see.
+      #
+      # A whole slice shipped with every command rejected by Tauri's ACL: the
+      # Rust tests call the functions directly, the web tests mock the bridge,
+      # and neither crosses the boundary where the failure lived. This runs the
+      # real binary against a real remote origin and drives every command,
+      # including the two that must be *refused*.
+      #
+      # Needs a display, hence xvfb — a Tauri window will not open without one.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @quintal/shared build
+
+      - name: Build the app
+        run: cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: IPC check
+        # WebKitGTK will start and then never paint on a headless runner unless
+        # told to stop looking for a GPU. The dmabuf renderer is the one that
+        # matters on webkit2gtk 4.1; the other two are belt and braces. Without
+        # them the app comes up, logs `libEGL DRI3` and reports nothing.
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          QUINTAL_IPC_TIMEOUT_MS: '90000'
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" node scripts/desktop-ipc-check.mjs
+        timeout-minutes: 6

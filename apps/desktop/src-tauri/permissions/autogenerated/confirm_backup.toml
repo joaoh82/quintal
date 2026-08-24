@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-confirm-backup"
+description = "Enables the confirm_backup command without any pre-configured scope."
+commands.allow = ["confirm_backup"]
+
+[[permission]]
+identifier = "deny-confirm-backup"
+description = "Denies the confirm_backup command without any pre-configured scope."
+commands.deny = ["confirm_backup"]

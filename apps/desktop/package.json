@@ -1,0 +1,16 @@
+{
+  "name": "@quintal/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "The Quintal desktop host: key custody, fleet spawning, and native affordances around the web UI.",
+  "scripts": {
+    "dev": "tauri dev",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "bundle": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.2"
+  }
+}

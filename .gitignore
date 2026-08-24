@@ -36,3 +36,9 @@ quintal.fleet.json
 # The build plan: strategy, pricing and competitive analysis. Lives in the repo
 # so it can be kept in step with the code, but this repo is public.
 plan/
+
+# Rust build output for the desktop host. The crate graph is large and entirely
+# reproducible from Cargo.lock.
+apps/desktop/src-tauri/target/
+# Tauri regenerates its ACL/capability schemas on every build.
+apps/desktop/src-tauri/gen/schemas/

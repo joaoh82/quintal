@@ -1,0 +1,54 @@
+[package]
+name = "quintal-desktop"
+version = "0.0.1"
+description = "The Quintal desktop host"
+edition = "2021"
+rust-version = "1.82"
+license = "AGPL-3.0-only"
+
+[lib]
+# Tauri 2 builds the app as a library so the same code can back a mobile target
+# later; `main.rs` is a thin shim over it.
+name = "quintal_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# BIP-340 Schnorr over secp256k1, pure Rust so there is no C toolchain between a
+# contributor and a build. Must agree byte-for-byte with @noble/curves on the
+# web side; `identity::tests` pins that against a vector noble produced.
+k256 = { version = "0.13", features = ["schnorr"] }
+sha2 = "0.10"
+bech32 = "0.11"
+hex = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
+# Interprocess lock around blob writes: two copies of the app must not race and
+# leave a half-written secret store behind.
+fs4 = { version = "0.13", features = ["sync"] }
+zeroize = { version = "1", features = ["derive"] }
+thiserror = "2"
+url = "2"
+# NIP-49: scrypt to stretch a passphrase, XChaCha20-Poly1305 over the key.
+scrypt = { version = "0.11", default-features = false }
+chacha20poly1305 = "0.10"
+unicode-normalization = "0.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []

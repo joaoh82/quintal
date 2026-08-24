@@ -20,7 +20,9 @@
     "db:studio": "pnpm --filter @quintal/shared db:studio",
     "demo-agent": "tsx scripts/demo-agent.ts",
     "acp": "node packages/acp-harness/dist/cli.js",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "desktop": "pnpm --filter @quintal/desktop dev",
+    "desktop:check": "pnpm --filter @quintal/desktop check"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
