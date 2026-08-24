@@ -20,12 +20,19 @@ pub fn is_usable_office(raw: &str) -> bool {
     let Ok(url) = url::Url::parse(raw) else {
         return false;
     };
-
-    // A real host, and nothing a glob could hide in.
-    let Some(host) = url.host_str() else {
+    let Some(host) = url.host() else {
         return false;
     };
-    if host.is_empty() || host.contains(['*', '?', '[', ']']) {
+
+    // Matched on the parser's own host type rather than on the string. A
+    // string check has to reject `[` and `]` to keep globs out of the grant,
+    // and that quietly refuses every IPv6 literal — `[::1]` is a bracketed
+    // host, not a character class.
+    let host_ok = match &host {
+        url::Host::Domain(name) => !name.is_empty() && !name.contains(['*', '?', '[', ']']),
+        url::Host::Ipv4(_) | url::Host::Ipv6(_) => true,
+    };
+    if !host_ok {
         return false;
     }
 
@@ -35,13 +42,18 @@ pub fn is_usable_office(raw: &str) -> bool {
         // *and* its passphrase, which together are the nsec, so an office
         // reached over plain http is one anybody on the path can lift an
         // identity from. Loopback has no path to sit on.
-        "http" => is_loopback(host),
+        "http" => is_loopback(&host),
         _ => false,
     }
 }
 
-fn is_loopback(host: &str) -> bool {
-    matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]")
+fn is_loopback(host: &url::Host<&str>) -> bool {
+    match host {
+        url::Host::Domain(name) => *name == "localhost",
+        // The whole 127.0.0.0/8 block, not just 127.0.0.1.
+        url::Host::Ipv4(ip) => ip.is_loopback(),
+        url::Host::Ipv6(ip) => ip.is_loopback(),
+    }
 }
 
 /// The configured office URL, normalised to an origin with no trailing slash.
@@ -134,6 +146,9 @@ mod tests {
     fn refuses_office_urls_that_could_widen_the_grant() {
         assert!(is_usable_office("http://localhost:3000"));
         assert!(is_usable_office("http://127.0.0.1:3000"));
+        // `Url::host_str` strips the brackets from an IPv6 literal, so the
+        // allowlist has to match the bare form as well as the written one.
+        assert!(is_usable_office("http://[::1]:3000"));
         assert!(is_usable_office("https://office.example.com"));
 
         // Cleartext off this machine. `export_backup` returns the blob and the
@@ -141,6 +156,8 @@ mod tests {
         // hands the identity to anyone on the wire.
         assert!(!is_usable_office("http://office.example.com"));
         assert!(!is_usable_office("http://192.168.1.10:3000"));
+        // The whole loopback block, since the parser knows what one is.
+        assert!(is_usable_office("http://127.0.0.2:3000"));
 
         // The one that matters: a glob here becomes `https://*/*` in the
         // capability, which is every site on the internet.

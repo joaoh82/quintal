@@ -16,13 +16,15 @@
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { buildAuthPayload, verifyAuthSignature } from '@quintal/shared';
 
 const PORT = 3399;
+/** Generous on a cold CI runner, where WebKit takes its time to first paint. */
+const TIMEOUT_MS = Number(process.env.QUINTAL_IPC_TIMEOUT_MS ?? 60_000);
 const ORIGIN = `http://localhost:${PORT}`;
 const PAYLOAD = buildAuthPayload({
   origin: ORIGIN,
@@ -53,12 +55,22 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
 
     // The gate, from the outside: a confirmation nobody earned must be refused.
     await run('confirm_backup (junk token)', 'confirm_backup', { token: 'not-a-real-token' });
-    const backup = await run('export_backup', 'export_backup', {});
-    await run('confirm_backup (real token)', 'confirm_backup', { token: backup && backup.token });
-    await run('can_wipe (after)', 'can_wipe', {});
+    const first = await run('export_backup', 'export_backup', {});
+    await run('confirm_backup (real token)', 'confirm_backup', { token: first && first.token });
+    await run('can_wipe (after confirm)', 'can_wipe', {});
 
+    // Replacing the identity must revoke the previous one's permission to be
+    // wiped — on disk *and* in memory. The stale token below is the half that
+    // a disk-only fix leaves redeemable.
     await run('import_identity', 'import_identity', { secret: ${JSON.stringify('nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqps52s3re')} });
     await run('can_wipe (after import)', 'can_wipe', {});
+    await run('confirm_backup (stale token)', 'confirm_backup', { token: first && first.token });
+    await run('can_wipe (after stale confirm)', 'can_wipe', {});
+    await run('wipe_identity (unbacked)', 'wipe_identity', {});
+
+    // The replacement earns its own backup, and only then may be wiped.
+    const second = await run('export_backup (second)', 'export_backup', {});
+    await run('confirm_backup (second)', 'confirm_backup', { token: second && second.token });
     await run('wipe_identity', 'wipe_identity', {});
   }
   await fetch('/report', {
@@ -86,8 +98,14 @@ const report = await new Promise((resolve, reject) => {
   server.listen(PORT);
 
   const dataDir = mkdtempSync(join(tmpdir(), 'quintal-ipc-'));
+  const binary = 'apps/desktop/src-tauri/target/debug/quintal-desktop';
+  if (!existsSync(binary)) {
+    server.close();
+    reject(new Error(`no binary at ${binary} — run \`cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml\` first`));
+    return;
+  }
   const app = spawn(
-    'apps/desktop/src-tauri/target/debug/quintal-desktop',
+    binary,
     [],
     {
       env: {
@@ -102,7 +120,16 @@ const report = await new Promise((resolve, reject) => {
     },
   );
   let stderr = '';
+  let stdout = '';
+  let exited = null;
   app.stderr.on('data', (chunk) => (stderr += chunk));
+  app.stdout.on('data', (chunk) => (stdout += chunk));
+  app.on('exit', (code, signal) => {
+    exited = `exit ${code}${signal ? ` (${signal})` : ''}`;
+  });
+  app.on('error', (error) => {
+    exited = `could not spawn: ${error.message}`;
+  });
 
   const done = () => {
     app.kill();
@@ -111,8 +138,20 @@ const report = await new Promise((resolve, reject) => {
   const timer = setTimeout(() => {
     done();
     server.close();
-    reject(new Error(`the app never reported back.\n${stderr}`));
-  }, 45_000);
+    reject(
+      new Error(
+        [
+          `the app never reported back within ${TIMEOUT_MS / 1000}s.`,
+          `process: ${exited ?? 'still running'}`,
+          stdout.trim() ? `stdout:\n${stdout.trim()}` : 'stdout: (empty)',
+          stderr.trim() ? `stderr:\n${stderr.trim()}` : 'stderr: (empty)',
+          '',
+          'On a headless runner this is usually WebKitGTK failing to render:',
+          'set WEBKIT_DISABLE_DMABUF_RENDERER=1 and WEBKIT_DISABLE_COMPOSITING_MODE=1.',
+        ].join('\n'),
+      ),
+    );
+  }, TIMEOUT_MS);
 
   server.on('close', () => {
     clearTimeout(timer);
@@ -133,13 +172,19 @@ const EXPECTED = {
   'confirm_backup (junk token)': { ok: false },
   'export_backup': { ok: true },
   'confirm_backup (real token)': { ok: true },
-  'can_wipe (after)': { ok: true, value: true },
+  'can_wipe (after confirm)': { ok: true, value: true },
   'import_identity': { ok: true },
   // Importing replaces the identity, so the confirmation must not carry over.
   'can_wipe (after import)': { ok: true, value: false },
-  // ...which means the wipe has to be refused, even though one was confirmed
-  // a moment ago for the key that has just been replaced.
-  'wipe_identity': { ok: false },
+  // The other half of that, and the one a disk-only fix leaves open: the token
+  // from the *previous* identity's export must no longer redeem.
+  'confirm_backup (stale token)': { ok: false },
+  'can_wipe (after stale confirm)': { ok: true, value: false },
+  'wipe_identity (unbacked)': { ok: false },
+  // ...and the replacement can be wiped once it has a backup of its own.
+  'export_backup (second)': { ok: true },
+  'confirm_backup (second)': { ok: true },
+  'wipe_identity': { ok: true },
 };
 
 let failed = false;

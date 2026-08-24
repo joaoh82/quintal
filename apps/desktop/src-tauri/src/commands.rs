@@ -147,5 +147,8 @@ pub fn can_wipe(state: State<'_, HostState>) -> bool {
 
 #[tauri::command]
 pub fn wipe_identity(state: State<'_, HostState>) -> Result<(), HostError> {
-    Ok(identity::wipe(&state.store)?)
+    identity::wipe(&state.store)?;
+    // Nothing left for a stale token to confirm.
+    *state.pending_export.lock().unwrap() = None;
+    Ok(())
 }

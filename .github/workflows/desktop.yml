@@ -33,7 +33,7 @@ jobs:
       - name: System dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb at-spi2-core
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -81,5 +81,14 @@ jobs:
         run: cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
 
       - name: IPC check
+        # WebKitGTK will start and then never paint on a headless runner unless
+        # told to stop looking for a GPU. The dmabuf renderer is the one that
+        # matters on webkit2gtk 4.1; the other two are belt and braces. Without
+        # them the app comes up, logs `libEGL DRI3` and reports nothing.
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          QUINTAL_IPC_TIMEOUT_MS: '90000'
         run: xvfb-run -a --server-args="-screen 0 1280x800x24" node scripts/desktop-ipc-check.mjs
-        timeout-minutes: 5
+        timeout-minutes: 6
