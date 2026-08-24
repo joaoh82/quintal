@@ -136,6 +136,15 @@ impl SecretStore {
         write_synced(&self.dir.join(EXPORTED_MARKER), b"confirmed")
     }
 
+    /// Forget that a backup was confirmed. Used when the identity changes.
+    pub fn clear_backup_confirmation(&self) -> Result<(), SecretsError> {
+        match fs::remove_file(self.dir.join(EXPORTED_MARKER)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// The npub recorded at the last successful write, if any.
     pub fn marker(&self) -> Option<String> {
         fs::read_to_string(self.marker_path())

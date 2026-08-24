@@ -58,8 +58,12 @@ is explicit and narrow.
 
 The office URL is validated before it is interpolated into that grant. A value
 like `https://*` would become the pattern `https://*/*`, which is every site on
-the internet; anything that is not an `http(s)` URL with a real host falls back
-to localhost instead.
+the internet, so globs, `file:` and hostless URLs all fall back to localhost.
+
+**Cleartext `http` is allowed only to this machine.** `export_backup` returns
+the encrypted blob *and* its passphrase, which together are the key — so an
+office reached over plain http is one anybody on the path can lift an identity
+from. Loopback has no path to sit on; everywhere else needs `https`.
 
 Changing offices means restarting, which is the right price.
 
@@ -69,12 +73,16 @@ Changing offices means restarting, which is the right price.
 node scripts/desktop-ipc-check.mjs
 ```
 
-Stands up a throwaway office, points the app at it, and lets the page call every
-command — then checks the signature that comes back with `@noble/curves`, the
-library the real office verifies against. This exists because a slice shipped
-with every command rejected and nothing caught it: the Rust tests call the
-functions directly, the web tests mock the bridge, and neither crosses the IPC
-hop where the ACL applies.
+Stands up a throwaway office, points the app at it, and drives **every** command
+across the real IPC hop — including the two that must be *refused*: a backup
+confirmation with a token nobody issued, and a wipe after the identity has been
+replaced. Then it checks the signature that came back with `@noble/curves`, the
+library the real office verifies against.
+
+This exists because a slice shipped with every command rejected and nothing
+caught it: the Rust tests call the functions directly, the web tests mock the
+bridge, and neither crosses the hop where the ACL applies. It runs in CI, under
+`xvfb`, for the same reason — a guard nobody runs is not a guard.
 
 ## Backing up your key
 

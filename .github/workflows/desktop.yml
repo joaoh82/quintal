@@ -7,13 +7,17 @@ on:
   pull_request:
     paths:
       - 'apps/desktop/**'
+      - 'apps/web/src/lib/host.ts'
       - 'packages/shared/src/identity.ts'
+      - 'scripts/desktop-ipc-check.mjs'
       - '.github/workflows/desktop.yml'
   push:
     branches: [main]
     paths:
       - 'apps/desktop/**'
+      - 'apps/web/src/lib/host.ts'
       - 'packages/shared/src/identity.ts'
+      - 'scripts/desktop-ipc-check.mjs'
   workflow_dispatch:
 
 permissions:
@@ -29,7 +33,7 @@ jobs:
       - name: System dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -52,3 +56,30 @@ jobs:
       # signature over the wrong message.
       - name: Tests
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      # The hop that unit tests cannot see.
+      #
+      # A whole slice shipped with every command rejected by Tauri's ACL: the
+      # Rust tests call the functions directly, the web tests mock the bridge,
+      # and neither crosses the boundary where the failure lived. This runs the
+      # real binary against a real remote origin and drives every command,
+      # including the two that must be *refused*.
+      #
+      # Needs a display, hence xvfb — a Tauri window will not open without one.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @quintal/shared build
+
+      - name: Build the app
+        run: cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: IPC check
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" node scripts/desktop-ipc-check.mjs
+        timeout-minutes: 5

@@ -290,6 +290,11 @@ pub fn import(
     blob.slots
         .insert(IDENTITY_SLOT.to_string(), nsec_of(&secret)?);
     store.store(&blob, &npub)?;
+
+    // The confirmation belonged to the identity that was just replaced. Leaving
+    // it would unlock the wipe for a key nobody has ever backed up — the same
+    // inheritance a wipe already clears.
+    store.clear_backup_confirmation()?;
     Ok(npub)
 }
 
@@ -570,6 +575,23 @@ mod tests {
         store.confirm_backup().unwrap();
         wipe(&store).unwrap();
         assert_eq!(state_with(&store, None), IdentityState::None);
+    }
+
+    #[test]
+    fn importing_clears_the_previous_identity_s_backup_confirmation() {
+        // Otherwise: back up A, import B, and the wipe is unlocked for B — a
+        // key that has never been written down anywhere.
+        let (_dir, store) = new_store();
+        load_or_create_with(&store, None).unwrap();
+        export(&store, None).unwrap();
+        store.confirm_backup().unwrap();
+
+        import(&store, NSEC, None).unwrap();
+
+        assert!(
+            matches!(wipe(&store), Err(IdentityError::NoBackupYet)),
+            "the new identity has to earn its own confirmation",
+        );
     }
 
     #[test]
