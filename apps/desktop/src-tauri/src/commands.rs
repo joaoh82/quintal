@@ -79,11 +79,17 @@ pub fn import_identity(
     secret: String,
     passphrase: Option<String>,
 ) -> Result<String, HostError> {
-    Ok(identity::import(
-        &state.store,
-        &secret,
-        passphrase.as_deref(),
-    )?)
+    let npub = identity::import(&state.store, &secret, passphrase.as_deref())?;
+
+    // `identity::import` clears the confirmation on disk. This clears the other
+    // half: a token from the *previous* identity's export is still outstanding
+    // in memory, and would otherwise redeem straight back into a marker —
+    // unlocking the wipe for a key nobody has ever written down. The disk half
+    // alone does not close it, and the IPC check now proves that by failing
+    // when this line is missing.
+    *state.pending_export.lock().unwrap() = None;
+
+    Ok(npub)
 }
 
 #[derive(Debug, Serialize)]

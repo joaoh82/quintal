@@ -146,8 +146,8 @@ mod tests {
     fn refuses_office_urls_that_could_widen_the_grant() {
         assert!(is_usable_office("http://localhost:3000"));
         assert!(is_usable_office("http://127.0.0.1:3000"));
-        // `Url::host_str` strips the brackets from an IPv6 literal, so the
-        // allowlist has to match the bare form as well as the written one.
+        // Matched via `url::Host`, so a bracketed literal is an Ipv6 host
+        // rather than a string full of characters the glob guard rejects.
         assert!(is_usable_office("http://[::1]:3000"));
         assert!(is_usable_office("https://office.example.com"));
 

@@ -55,15 +55,18 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
 
     // The gate, from the outside: a confirmation nobody earned must be refused.
     await run('confirm_backup (junk token)', 'confirm_backup', { token: 'not-a-real-token' });
-    const first = await run('export_backup', 'export_backup', {});
-    await run('confirm_backup (real token)', 'confirm_backup', { token: first && first.token });
-    await run('can_wipe (after confirm)', 'can_wipe', {});
 
-    // Replacing the identity must revoke the previous one's permission to be
-    // wiped — on disk *and* in memory. The stale token below is the half that
-    // a disk-only fix leaves redeemable.
+    // Export but deliberately do NOT confirm. The token stays outstanding,
+    // which is the state the next steps are about — confirming it here would
+    // spend it, and every later refusal would then be "already spent" rather
+    // than "the import revoked it". That is the mistake the previous version of
+    // this script made, and it is why it passed while the hole was open.
+    const first = await run('export_backup', 'export_backup', {});
+
     await run('import_identity', 'import_identity', { secret: ${JSON.stringify('nsec1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqps52s3re')} });
     await run('can_wipe (after import)', 'can_wipe', {});
+    // The load-bearing step: an outstanding token from the identity that was
+    // just replaced must not confirm a backup for its replacement.
     await run('confirm_backup (stale token)', 'confirm_backup', { token: first && first.token });
     await run('can_wipe (after stale confirm)', 'can_wipe', {});
     await run('wipe_identity (unbacked)', 'wipe_identity', {});
@@ -71,6 +74,7 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // The replacement earns its own backup, and only then may be wiped.
     const second = await run('export_backup (second)', 'export_backup', {});
     await run('confirm_backup (second)', 'confirm_backup', { token: second && second.token });
+    await run('can_wipe (final)', 'can_wipe', {});
     await run('wipe_identity', 'wipe_identity', {});
   }
   await fetch('/report', {
@@ -171,8 +175,6 @@ const EXPECTED = {
   'can_wipe (before)': { ok: true, value: false },
   'confirm_backup (junk token)': { ok: false },
   'export_backup': { ok: true },
-  'confirm_backup (real token)': { ok: true },
-  'can_wipe (after confirm)': { ok: true, value: true },
   'import_identity': { ok: true },
   // Importing replaces the identity, so the confirmation must not carry over.
   'can_wipe (after import)': { ok: true, value: false },
@@ -184,6 +186,7 @@ const EXPECTED = {
   // ...and the replacement can be wiped once it has a backup of its own.
   'export_backup (second)': { ok: true },
   'confirm_backup (second)': { ok: true },
+  'can_wipe (final)': { ok: true, value: true },
   'wipe_identity': { ok: true },
 };
 
