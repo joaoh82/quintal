@@ -23,7 +23,9 @@
     "smoke": "node scripts/smoke.mjs",
     "desktop": "concurrently --kill-others --kill-signal SIGTERM -n office,app -c magenta,blue \"pnpm dev\" \"pnpm --filter @quintal/desktop dev\"",
     "desktop:check": "pnpm --filter @quintal/desktop check",
-    "desktop:attach": "pnpm --filter @quintal/desktop dev"
+    "desktop:attach": "pnpm --filter @quintal/desktop dev",
+    "desktop:sign": "node scripts/sign-desktop.mjs",
+    "desktop:bundle": "APPLE_SIGNING_IDENTITY=\"$(node scripts/sign-desktop.mjs --print-identity)\" pnpm --filter @quintal/desktop exec tauri build --bundles app"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
