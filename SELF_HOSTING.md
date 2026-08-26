@@ -64,6 +64,20 @@ expiry (72 hours by default) and a use count, redeemable at `/join/<token>`,
 and marked with a "Guest" badge everywhere they appear. Only a hash of the
 token is stored, so a link you lose track of can be revoked but never re-read.
 
+## The desktop app
+
+The app is a client, not a second server. It loads whatever office you point it
+at — `http://localhost:3000`, your deployment, or somebody else's — so a
+self-hosted instance needs nothing extra to support it.
+
+The office URL is stored per machine and defaults to localhost; the app grants
+IPC to that one origin and no other, so pointing it somewhere new is a
+deliberate act rather than a redirect.
+
+Everything social works in a plain browser tab against the same instance. What
+the app adds is key custody and the ability to run agents on the computer it is
+installed on — see [docs/DESKTOP.md](./docs/DESKTOP.md).
+
 ## Storage
 
 `DATABASE_URL` defaults to `file:./data/quintal.db`, resolved from the repo root
