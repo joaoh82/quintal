@@ -13,11 +13,18 @@
  * copy instead of two hand-maintained ones, and CI fails if they drift — the
  * same arrangement the drizzle migrations already use.
  *
- *   node scripts/emit-runtimes.mjs
+ * Read straight from the TypeScript source, under tsx, rather than through the
+ * `@quintal/shared` package entry — that entry resolves to `dist/`, so
+ * importing it would generate from the *last build* instead of from what is
+ * actually in the file. In CI the build happens to run first and the two agree;
+ * run it by hand on a stale `dist/` and it writes a plausible, wrong catalogue.
+ * A drift check should not itself be able to drift.
+ *
+ *   pnpm tsx scripts/emit-runtimes.mjs
  */
 import { writeFileSync } from 'node:fs';
 
-import { RUNTIMES, acpCommandFor } from '@quintal/shared';
+import { RUNTIMES, acpCommandFor } from '../packages/shared/src/runtimes.ts';
 
 const catalogue = RUNTIMES.map((spec) => ({
   id: spec.id,

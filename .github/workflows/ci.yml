@@ -93,11 +93,15 @@ jobs:
       # change to the TypeScript that is not regenerated means the office and
       # the host disagree about what a runtime id means — and the host is what
       # turns an id into a command to spawn.
+      #
+      # Run under tsx: the generator reads `src/runtimes.ts` directly, so this
+      # check does not depend on `pnpm build` having run first and cannot be
+      # fooled by a stale `dist/`.
       - name: Check the runtime catalogue is up to date
         run: |
-          node scripts/emit-runtimes.mjs
+          pnpm tsx scripts/emit-runtimes.mjs
           if ! git diff --quiet -- packages/shared/runtimes.generated.json; then
-            echo "::error::runtimes.generated.json is stale. Run 'node scripts/emit-runtimes.mjs' and commit it."
+            echo "::error::runtimes.generated.json is stale. Run 'pnpm tsx scripts/emit-runtimes.mjs' and commit it."
             git diff -- packages/shared/runtimes.generated.json
             exit 1
           fi

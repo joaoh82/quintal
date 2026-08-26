@@ -21,13 +21,15 @@
     "demo-agent": "tsx scripts/demo-agent.ts",
     "acp": "node packages/acp-harness/dist/cli.js",
     "smoke": "node scripts/smoke.mjs",
-    "desktop": "pnpm --filter @quintal/desktop dev",
-    "desktop:check": "pnpm --filter @quintal/desktop check"
+    "desktop": "concurrently --kill-others --kill-signal SIGTERM -n office,app -c magenta,blue \"pnpm dev\" \"pnpm --filter @quintal/desktop dev\"",
+    "desktop:check": "pnpm --filter @quintal/desktop check",
+    "desktop:attach": "pnpm --filter @quintal/desktop dev"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "concurrently": "^10.0.4",
     "cross-env": "^10.1.0",
+    "quintal-acp": "workspace:*",
     "tsx": "^4.23.9",
     "typescript": "^5.9.3"
   },
