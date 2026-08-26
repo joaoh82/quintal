@@ -36,9 +36,26 @@ import { auth } from '@/lib/auth';
  * never sent again.
  */
 
+/**
+ * A signed-in, non-guest session.
+ *
+ * Everything in this file creates or destroys something durable: agents, the
+ * machine credentials that let a computer run them, and the assignments between
+ * the two. A guest link is a time-boxed visit, and none of that should outlive
+ * it.
+ *
+ * The sharpest case is the machine credential. A guest could mint a `qh_` token
+ * for their own workspace and — from the desktop app's devtools — hand it to
+ * `remember_host_token`, leaving somebody else's computer holding *their*
+ * machine token and booting *their* fleet. `POST /api/host/register` already
+ * refuses guests; this is the other door into the same room.
+ */
 async function requireSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Not signed in.');
+  if (session.session.isGuest) {
+    throw new Error('Guests cannot manage agents or machines.');
+  }
   return session;
 }
 

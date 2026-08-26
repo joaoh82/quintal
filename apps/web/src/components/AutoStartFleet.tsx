@@ -41,7 +41,7 @@ export function AutoStartFleet() {
         // and restarting it silently on every launch would hide that rather than
         // fix it.
         if (cancelled || state.state !== 'stopped') return;
-        await host.startFleet(window.location.origin);
+        await host.startFleet();
       } catch {
         // Nothing here is worth interrupting anybody over — see above.
       }

@@ -153,7 +153,14 @@ export interface HostBridge {
    * the office what belongs here and resolves each id through the shared
    * catalogue itself, so nothing on this call can become something to execute.
    */
-  startFleet(office: string, reposDir?: string): Promise<FleetState>;
+  /**
+   * Run the agents the office has assigned to this machine.
+   *
+   * Takes nothing. No command, no runtime id, no working directory, and not
+   * even the office URL — the host knows which office it is configured for, and
+   * the machine credential's destination is not the page's to choose.
+   */
+  startFleet(): Promise<FleetState>;
   stopFleet(): Promise<void>;
   fleetStatus(): Promise<FleetState>;
   /** What the harness has said recently. Bounded; oldest lines fall off. */
@@ -167,8 +174,15 @@ export interface HostBridge {
    * The office cannot see anybody's filesystem, so without this a workspace has
    * to be typed exactly right from memory.
    */
-  listRepos(dir?: string): Promise<Repo[]>;
-  /** Ask for a folder. Null means the dialog was dismissed, not that it failed. */
+  /** What is in the repos directory. Takes no path: see `pickReposDir`. */
+  listRepos(): Promise<Repo[]>;
+  /**
+   * Ask for a folder, and remember it.
+   *
+   * Picking and remembering are one action on the host side. Returning a path
+   * for the page to store meant it was stored nowhere, and the button changed a
+   * label while the harness kept using the old directory.
+   */
   pickReposDir(): Promise<string | null>;
 }
 
@@ -262,13 +276,12 @@ function tauriBridge(): HostBridge {
     rememberHostToken: (token, label) =>
       call<void>('remember_host_token', { token, label }),
     forgetHostToken: () => call<void>('forget_host_token'),
-    startFleet: (office, reposDir) =>
-      call<FleetState>('start_fleet', { office, reposDir }),
+    startFleet: () => call<FleetState>('start_fleet'),
     stopFleet: () => call<void>('stop_fleet'),
     fleetStatus: () => call<FleetState>('fleet_status'),
     fleetLogs: () => call<LogLine[]>('fleet_logs'),
     reposDir: () => call<string>('repos_dir'),
-    listRepos: (dir) => call<Repo[]>('list_repos', { dir }),
+    listRepos: () => call<Repo[]>('list_repos'),
     pickReposDir: () => call<string | null>('pick_repos_dir'),
   };
 }

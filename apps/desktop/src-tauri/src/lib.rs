@@ -55,6 +55,7 @@ pub fn run() {
             app.manage(commands::HostState {
                 store: secrets::SecretStore::new(&dir)?,
                 dir: dir.clone(),
+                office: office.clone(),
                 pending_export: std::sync::Mutex::new(None),
                 fleet: spawn::Fleet::new(),
             });
@@ -75,6 +76,16 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Quintal desktop host");
+        .build(tauri::generate_context!())
+        .expect("error while running the Quintal desktop host")
+        .run(|app, event| {
+            // Closing the window must not leave a harness behind. The fleet is a
+            // child process of this one, and an orphan keeps agents in the office
+            // that nobody can see or stop from here.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                if let Some(state) = app.try_state::<commands::HostState>() {
+                    let _ = state.fleet.stop();
+                }
+            }
+        });
 }

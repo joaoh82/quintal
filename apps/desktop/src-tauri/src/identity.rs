@@ -35,6 +35,8 @@ pub enum IdentityError {
     NoIdentityYet,
     #[error("a host token cannot be empty")]
     EmptyToken,
+    #[error("a machine needs a name")]
+    EmptyLabel,
 }
 
 /// What the UI is allowed to know about the state of the key.

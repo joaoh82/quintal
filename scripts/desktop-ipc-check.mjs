@@ -83,17 +83,16 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     await run('fleet_status', 'fleet_status', {});
     await run('fleet_logs', 'fleet_logs', {});
     await run('repos_dir', 'repos_dir', {});
-    await run('list_repos', 'list_repos', { dir: '/tmp' });
+    await run('list_repos', 'list_repos', {});
     // pick_repos_dir is deliberately not called: it opens a native folder
     // dialog and would wait forever for a click nobody is there to make. Its
     // grant is covered instead by the Rust test every_declared_command_is_granted,
     // which checks the ACL statically against the declared command list.
     // (No backticks in this block — it lives inside a template literal.)
     await run('stop_fleet (nothing running)', 'stop_fleet', {});
-    await run('start_fleet (unregistered)', 'start_fleet', {
-      office: 'http://localhost:3000',
-      reposDir: '/tmp',
-    });
+    // Takes no arguments at all: the working directory and the office are the
+    // host's to decide, not the page's.
+    await run('start_fleet (unregistered)', 'start_fleet', {});
 
     // The gate, from the outside: a confirmation nobody earned must be refused.
     await run('confirm_backup (junk token)', 'confirm_backup', { token: 'not-a-real-token' });

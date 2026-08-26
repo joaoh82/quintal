@@ -19,6 +19,13 @@ pub struct HostState {
     pub store: SecretStore,
     /// The app data directory, for preferences that are not secrets.
     pub dir: std::path::PathBuf,
+    /// The office this host is configured for.
+    ///
+    /// The page does not get to name it. IPC is already locked to one origin,
+    /// so sending the machine credential somewhere else needs an XSS on the
+    /// office — but the credential's destination deserves the same treatment as
+    /// the command line: chosen here, not accepted from there.
+    pub office: String,
     /// The harness this machine is running, if any.
     pub fleet: Fleet,
     /// Token handed out by the last `export_backup`, spent by `confirm_backup`.
@@ -63,6 +70,7 @@ impl From<IdentityError> for HostError {
             IdentityError::Secrets(SecretsError::Locked) => "locked",
             IdentityError::BadKey => "bad_key",
             IdentityError::NoBackupYet => "no_backup",
+            IdentityError::EmptyLabel => "empty_label",
             IdentityError::WrongIdentity => "wrong_identity",
             IdentityError::Backup(Nip49Error::Undecryptable) => "bad_passphrase",
             IdentityError::Backup(Nip49Error::NotNcryptsec) => "not_a_backup",
@@ -252,16 +260,13 @@ pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
 /// here and resolves each id through the shared catalogue itself, so there is no
 /// argument on this call that could become something to execute.
 #[tauri::command]
-pub fn start_fleet(
-    state: State<'_, HostState>,
-    office: String,
-    repos_dir: Option<String>,
-) -> Result<FleetState, HostError> {
+pub fn start_fleet(state: State<'_, HostState>) -> Result<FleetState, HostError> {
     let token = machine::token(&state.store)?.ok_or(SpawnError::NotRegistered)?;
-    let dir = repos_dir
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| spawn::repos_dir(&state.dir));
-    Ok(state.fleet.start(&dir, &office, &token)?)
+    // Both the working directory and the office come from this side. The page
+    // asks to start the fleet; it does not get to say where, or where the
+    // credential is sent.
+    let dir = spawn::repos_dir(&state.dir);
+    Ok(state.fleet.start(&dir, &state.office, &token)?)
 }
 
 #[tauri::command]
@@ -287,11 +292,10 @@ pub fn repos_dir(state: State<'_, HostState>) -> String {
 /// to be typed exactly right from memory — and a typo becomes an agent rooted
 /// somewhere that does not exist.
 #[tauri::command]
-pub fn list_repos(state: State<'_, HostState>, dir: Option<String>) -> Vec<Repo> {
-    let dir = dir
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| spawn::repos_dir(&state.dir));
-    spawn::list_repos(&dir)
+pub fn list_repos(state: State<'_, HostState>) -> Vec<Repo> {
+    // Deliberately takes no path. A directory argument from the page turns a
+    // repo picker into a one-level filesystem walk of anywhere that exists.
+    spawn::list_repos(&spawn::repos_dir(&state.dir))
 }
 
 /// Ask the person to choose a repos directory.
@@ -300,14 +304,30 @@ pub fn list_repos(state: State<'_, HostState>, dir: Option<String>) -> Vec<Repo>
 /// page can ask for a folder and nothing else. `None` means the dialog was
 /// dismissed, which is an answer rather than an error.
 #[tauri::command]
-pub async fn pick_repos_dir(app: tauri::AppHandle) -> Option<String> {
+pub async fn pick_repos_dir(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+) -> Result<Option<String>, HostError> {
     use tauri_plugin_dialog::DialogExt;
 
     let (tx, rx) = std::sync::mpsc::channel();
     app.dialog().file().pick_folder(move |picked| {
         let _ = tx.send(picked);
     });
-    rx.recv().ok().flatten().map(|folder| folder.to_string())
+
+    let Some(folder) = rx.recv().ok().flatten() else {
+        // Dismissed. An answer, not a failure.
+        return Ok(None);
+    };
+
+    // Persisted here, by the command that opened the dialog. An earlier version
+    // returned the path and left storing it to the page, which quietly stored
+    // it nowhere: the button changed a label and the harness kept rooting at the
+    // old directory. Picking and remembering are one action or the feature is a
+    // decoration.
+    let chosen = folder.to_string();
+    spawn::set_repos_dir(&state.dir, std::path::Path::new(&chosen))?;
+    Ok(Some(chosen))
 }
 
 /// What the harness has said recently.

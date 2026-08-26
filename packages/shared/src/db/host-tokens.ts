@@ -148,9 +148,18 @@ export async function registerMachineForUser(
       ),
     );
 
+  // Create *before* revoking, deliberately.
+  //
+  // The other order has a failure that costs somebody their machine: revoke
+  // succeeds, the insert then fails, and the live registration is gone with
+  // nothing to replace it. This way a failure between the two leaves a second
+  // live token for the same label — both authenticate as the same machine for
+  // the same owner, so nothing is broken and the next registration tidies it.
+  // Cheaper and more portable than an interactive transaction, which libSQL
+  // over HTTP does not make free.
+  const created = await createHostToken(db, { ...input, label });
   for (const row of existing) await revokeHostToken(db, row.id);
-
-  return createHostToken(db, { ...input, label });
+  return created;
 }
 
 export async function revokeHostToken(db: Database, id: string): Promise<void> {

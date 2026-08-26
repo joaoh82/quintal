@@ -74,10 +74,7 @@ export function FleetControl() {
     setBusy(true);
     setProblem(null);
     try {
-      // The office is wherever this page came from. Taking it from the page
-      // rather than from configuration means the harness always connects to the
-      // same office the person is looking at.
-      if (what === 'start') await host.startFleet(window.location.origin);
+      if (what === 'start') await host.startFleet();
       else await host.stopFleet();
     } catch (error: unknown) {
       setProblem(describeHostFailure(error));

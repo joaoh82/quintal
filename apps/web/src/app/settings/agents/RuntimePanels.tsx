@@ -62,9 +62,11 @@ export function RuntimePanels({ hosts }: { hosts: Host[] }) {
       const picked = await host.pickReposDir();
       // Null means the dialog was dismissed. Not a failure, and not a reason to
       // change anything.
-      if (picked !== null) {
-        setLocal((was) => (was ? { ...was, reposDir: picked } : was));
-      }
+      if (picked === null) return;
+      // Re-read rather than trusting what came back: the host is what remembers
+      // the directory, so asking it again is the only way to show what is
+      // actually in effect.
+      await look();
     } catch (error: unknown) {
       setProblem(describeHostFailure(error));
     }

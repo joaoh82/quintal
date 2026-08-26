@@ -97,7 +97,7 @@ pub fn remember(store: &SecretStore, token: &str, label: &str) -> Result<(), Ide
     }
     let label = label.trim();
     if label.is_empty() {
-        return Err(IdentityError::EmptyToken);
+        return Err(IdentityError::EmptyLabel);
     }
 
     let mut blob = store.load()?;
