@@ -23,9 +23,9 @@
  *   "we don't support it" and "you can't have it" are different answers, and a
  *   runtime you can see marked unsupported beats one that silently isn't there.
  *
- * Classifications were verified against the installed CLIs on 2026-08-07. Each
- * carries the evidence so a wrong entry can be argued with rather than
- * guessed at.
+ * Every classification was verified against the CLI itself, not against its
+ * documentation. Each carries the evidence and the date it was checked, so a
+ * wrong entry can be argued with rather than guessed at.
  */
 
 export type AcpSupport =
@@ -89,6 +89,15 @@ export const RUNTIMES: readonly RuntimeSpec[] = [
     acp: { kind: 'native', args: ['acp'] },
     evidence: 'Ships an `acp` subcommand.',
     install: 'https://opencode.ai',
+  },
+  {
+    id: 'omp',
+    label: 'Oh My Pi',
+    bin: 'omp',
+    acp: { kind: 'native', args: ['acp'] },
+    evidence:
+      'Ships an `acp` subcommand. Answered an ACP `initialize` over stdio as `oh-my-pi` v18.0.3, protocol 1. Verified 2026-08-24.',
+    install: 'https://omp.sh',
   },
   {
     id: 'grok',

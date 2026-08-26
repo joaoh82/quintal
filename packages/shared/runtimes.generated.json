@@ -64,6 +64,18 @@
       "install": "https://opencode.ai"
     },
     {
+      "id": "omp",
+      "label": "Oh My Pi",
+      "bin": "omp",
+      "acp": "native",
+      "command": [
+        "omp",
+        "acp"
+      ],
+      "evidence": "Ships an `acp` subcommand. Answered an ACP `initialize` over stdio as `oh-my-pi` v18.0.3, protocol 1. Verified 2026-08-24.",
+      "install": "https://omp.sh"
+    },
+    {
       "id": "grok",
       "label": "Grok Build",
       "bin": "grok",
