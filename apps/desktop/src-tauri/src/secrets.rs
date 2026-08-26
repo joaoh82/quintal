@@ -295,6 +295,24 @@ impl SecretStore {
     /// Remove everything. Used by "sign out & wipe", which is gated in the UI.
     pub fn wipe(&self) -> Result<(), SecretsError> {
         self.locked(|| {
+            // Marker first, and its failure is fatal. This is the exact reverse
+            // of `store`, and deliberately so: the marker is what distinguishes
+            // "a key exists and the keychain is locked" from "first run", so it
+            // must never precede the secret on the way in, and never outlive it
+            // on the way out.
+            //
+            // Removing the secret first — as this did — leaves a marker with
+            // nothing behind it if anything goes wrong in between, and that
+            // state reads as a permanently locked keychain that no amount of
+            // unlocking fixes. Interrupted this way round, the worst outcome is
+            // a secret with no marker, which `ensure_marker` heals on the next
+            // load.
+            match fs::remove_file(self.marker_path()) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+
             match self.backend {
                 Backend::File => {
                     let _ = fs::remove_file(self.secrets_path());
@@ -305,7 +323,6 @@ impl SecretStore {
                     }
                 }
             }
-            let _ = fs::remove_file(self.marker_path());
             let _ = fs::remove_file(self.dir.join(EXPORTED_MARKER));
             Ok(())
         })
@@ -348,4 +365,71 @@ fn read_all(path: &Path) -> Option<String> {
     let mut out = String::new();
     file.read_to_string(&mut out).ok()?;
     Some(out)
+}
+
+#[cfg(test)]
+mod wipe_tests {
+    use super::*;
+
+    fn store() -> (tempfile::TempDir, SecretStore) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = SecretStore::with_backend(dir.path(), Backend::File).expect("a store");
+        (dir, store)
+    }
+
+    fn with_secret(store: &SecretStore) {
+        let mut blob = Blob::default();
+        blob.slots.insert("identity".into(), "nsec-ish".into());
+        store.store(&blob, "npub-ish").expect("stored");
+    }
+
+    /// The state this ordering exists to prevent.
+    ///
+    /// A marker with nothing behind it is indistinguishable from a locked
+    /// keychain, and unlike a real lock there is nothing anybody can do to
+    /// clear it. Pinned here so the meaning of the marker cannot drift.
+    #[test]
+    fn a_marker_with_no_secret_reads_as_locked() {
+        let (dir, store) = store();
+        with_secret(&store);
+        fs::remove_file(dir.path().join(SECRETS_FILE)).expect("secret removed");
+
+        assert!(matches!(store.load(), Err(SecretsError::Locked)));
+    }
+
+    #[test]
+    fn wiping_leaves_no_marker_behind() {
+        let (dir, store) = store();
+        with_secret(&store);
+
+        store.wipe().expect("wiped");
+
+        assert!(!dir.path().join(MARKER_FILE).exists(), "no marker survives");
+        assert!(
+            !dir.path().join(SECRETS_FILE).exists(),
+            "no secret survives"
+        );
+        // The whole point: what is left must look like a first run, not a lock.
+        assert!(store.load().is_ok());
+    }
+
+    /// If the marker cannot go, nothing else may either.
+    ///
+    /// Removing the secret anyway would manufacture the locked state on purpose.
+    /// A directory in the marker's place makes `remove_file` fail the same way a
+    /// permissions problem would, without needing to be root to arrange it.
+    #[test]
+    fn a_wipe_that_cannot_remove_the_marker_refuses_to_continue() {
+        let (dir, store) = store();
+        with_secret(&store);
+
+        fs::remove_file(dir.path().join(MARKER_FILE)).expect("marker removed");
+        fs::create_dir(dir.path().join(MARKER_FILE)).expect("something in its way");
+
+        assert!(store.wipe().is_err(), "the wipe must fail loudly");
+        assert!(
+            dir.path().join(SECRETS_FILE).exists(),
+            "the secret is still there, so this is recoverable rather than locked"
+        );
+    }
 }
