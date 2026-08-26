@@ -73,15 +73,14 @@ pub fn run() {
             tray::watch(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
-                match office.parse() {
-                    Ok(url) => {
-                        window.navigate(url)?;
-                    }
+                match office.parse::<tauri::Url>() {
+                    Ok(url) => wait_for_office(window, url),
                     Err(_) => {
                         // Leave the bootstrap page up rather than navigating
                         // somewhere unintended; it is the one screen that can
                         // say the office URL is wrong.
                         eprintln!("[quintal] not a usable office URL: {office}");
+                        say(&window, &format!("{office} is not a usable office URL."));
                     }
                 }
             }
@@ -100,4 +99,51 @@ pub fn run() {
                 }
             }
         });
+}
+
+/// Go to the office as soon as there is one, and say so meanwhile.
+///
+/// Navigating unconditionally is what made a stopped office look like a broken
+/// app: the webview left the bootstrap page, failed to load, and showed a blank
+/// window with nothing to read. The page already exists to say what is
+/// happening — it just needed to be given the chance.
+///
+/// It keeps looking rather than giving up once, because starting the app before
+/// the office is an ordinary order to do things in, and an app that fixes itself
+/// beats one that needs relaunching.
+fn wait_for_office(window: tauri::WebviewWindow, url: tauri::Url) {
+    std::thread::spawn(move || {
+        let mut explained = false;
+        loop {
+            if office::reachable(url.as_str()) {
+                let _ = window.navigate(url);
+                return;
+            }
+            if !explained {
+                say(
+                    &window,
+                    &format!(
+                        "Waiting for your office at {url} — nothing is answering there yet. \
+                         Start it with `pnpm dev`, or open Quintal with `pnpm desktop`, \
+                         which starts both.",
+                    ),
+                );
+                explained = true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        }
+    });
+}
+
+/// Put a line on the bootstrap page.
+///
+/// Serialised rather than interpolated: the office URL comes from a file on
+/// disk, and a URL with a quote in it should be unreadable, not executable.
+fn say(window: &tauri::WebviewWindow, message: &str) {
+    let Ok(text) = serde_json::to_string(message) else {
+        return;
+    };
+    let _ = window.eval(format!(
+        "document.getElementById('status').textContent = {text};"
+    ));
 }

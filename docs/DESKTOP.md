@@ -34,6 +34,27 @@ pnpm desktop
 Starts the office and the app together. If you already have `pnpm dev` running
 in another terminal, use `pnpm desktop:attach` instead.
 
+## The app needs an office to connect to
+
+The app is a client. It loads an office over HTTP — by default
+`http://localhost:3000` — and if nothing is answering there it has nothing to
+show. It will say so and keep looking, then go straight in the moment the office
+appears, so starting the app first is a fine order to do things in.
+
+`pnpm desktop` starts both, which is why it is the command in the README. The
+bundled `Quintal.app` starts only itself, so an office has to be running
+somewhere it can reach — `pnpm dev` locally, or a deployment.
+
+To point it at one permanently, write the URL to `office` in the app data
+directory:
+
+```bash
+echo 'https://quintal.example.com' > ~/Library/Application\ Support/sh.quintal.desktop/office
+```
+
+The app grants IPC to that one origin and no other, so changing it is a
+deliberate act rather than something a page can do to you.
+
 ## macOS permissions, and why
 
 ### The keychain
