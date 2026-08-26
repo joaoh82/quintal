@@ -18,6 +18,16 @@ fn main() {
             "confirm_backup",
             "can_wipe",
             "wipe_identity",
+            "host_status",
+            "remember_host_token",
+            "forget_host_token",
+            "start_fleet",
+            "stop_fleet",
+            "fleet_status",
+            "fleet_logs",
+            "repos_dir",
+            "list_repos",
+            "pick_repos_dir",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");

@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createAgent, findAgentIdentityById, revokeAgent, setAgentLaunch } from './agents.js';
+import {
+  createAgent,
+  findAgentIdentityById,
+  revokeAgent,
+  setAgentEnabled,
+  setAgentLaunch,
+} from './agents.js';
 import {
   createHostToken,
   fleetForHost,
   findHostByToken,
   hostMayActAs,
+  listHostTokens,
+  registerMachineForUser,
   revokeHostToken,
 } from './host-tokens.js';
 import { createTestDb, createTestUser } from './testing.js';
@@ -271,5 +279,161 @@ describe('the fleet a host pulls', () => {
     });
     const back = await fleetForHost(db, host!, 'laptop');
     assert.equal(back[0]?.repoSpec, 'api');
+  });
+});
+
+/**
+ * Registering the machine you are already signed in from.
+ *
+ * The behaviour worth pinning is the replacement: only the hash is stored, so a
+ * second call cannot hand back the token it issued the first time. Without
+ * replacing, a reinstall would quietly grow a duplicate row per machine and the
+ * Machines list would stop being something anyone could revoke from with
+ * confidence.
+ */
+describe('registering a machine from a session', () => {
+  it('issues a token that authenticates as that machine', async () => {
+    const { db, josh } = await setup();
+
+    const machine = await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+
+    const found = await findHostByToken(db, machine.token);
+    assert.equal(found?.ownerUserId, josh.id);
+    assert.equal(found?.label, 'laptop');
+    assert.equal(found?.workspaceId, josh.workspaceId);
+  });
+
+  it('replaces the machine token rather than adding a second one', async () => {
+    const { db, josh } = await setup();
+    const input = { workspaceId: josh.workspaceId, ownerUserId: josh.id, label: 'laptop' };
+
+    const first = await registerMachineForUser(db, input);
+    const second = await registerMachineForUser(db, input);
+
+    assert.notEqual(first.token, second.token, 'a fresh secret each time');
+    assert.equal(
+      await findHostByToken(db, first.token),
+      null,
+      'the superseded token stops working',
+    );
+    assert.ok(await findHostByToken(db, second.token), 'the new one works');
+
+    const live = (await listHostTokens(db, josh.workspaceId)).filter(
+      (row) => row.revokedAt === null,
+    );
+    assert.equal(live.length, 1, 'one live row per machine, not one per install');
+  });
+
+  it('does not disturb another machine belonging to the same person', async () => {
+    const { db, josh } = await setup();
+    const desktop = await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'desktop',
+    });
+
+    await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+
+    assert.ok(
+      await findHostByToken(db, desktop.token),
+      're-registering the laptop must not log the desktop out',
+    );
+  });
+
+  it("does not touch a teammate's machine of the same name", async () => {
+    const { db, josh, sam } = await setup();
+    const sams = await registerMachineForUser(db, {
+      workspaceId: sam.workspaceId,
+      ownerUserId: sam.id,
+      label: 'laptop',
+    });
+
+    await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+
+    assert.ok(
+      await findHostByToken(db, sams.token),
+      "everybody calls their machine 'laptop'; that must not revoke each other's",
+    );
+  });
+});
+
+/**
+ * Disabling an agent, end to end.
+ *
+ * The predicate is covered in `host-tokens.test.ts`; this is the round trip —
+ * flip the switch, and the machine stops being told to run it. Without that the
+ * toggle would be a checkbox that changes a column and nothing else.
+ */
+describe('turning an agent off', () => {
+  it('drops it from the fleet the machine pulls, and brings it back', async () => {
+    const { db, josh } = await setup();
+    const machine = await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+    const host = await findHostByToken(db, machine.token);
+    assert.ok(host);
+
+    const agent = await makeAgent(db, josh, 'Bob', {
+      runtimeId: 'omp',
+      repoSpec: '*',
+      hostLabel: 'laptop',
+    });
+
+    assert.equal(
+      (await fleetForHost(db, host, 'laptop')).length,
+      1,
+      'it starts out assigned',
+    );
+
+    await setAgentEnabled(db, agent.id, false);
+    assert.deepEqual(
+      await fleetForHost(db, host, 'laptop'),
+      [],
+      'a disabled agent is not something the machine should start',
+    );
+
+    await setAgentEnabled(db, agent.id, true);
+    assert.equal(
+      (await fleetForHost(db, host, 'laptop')).length,
+      1,
+      'and it comes back, because disabling is not revoking',
+    );
+  });
+
+  it('leaves the rest of the fleet alone', async () => {
+    const { db, josh } = await setup();
+    const machine = await registerMachineForUser(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+    const host = await findHostByToken(db, machine.token);
+    assert.ok(host);
+
+    const launch = { runtimeId: 'omp', repoSpec: '*', hostLabel: 'laptop' };
+    const bob = await makeAgent(db, josh, 'Bob', launch);
+    await makeAgent(db, josh, 'Alice', launch);
+
+    await setAgentEnabled(db, bob.id, false);
+
+    const fleet = await fleetForHost(db, host, 'laptop');
+    assert.deepEqual(
+      fleet.map((member) => member.name),
+      ['Alice'],
+    );
   });
 });

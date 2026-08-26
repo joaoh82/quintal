@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { SignOutButton } from '@/components/SignOutButton';
+import { AutoStartFleet } from '@/components/AutoStartFleet';
+import { MachineRegistration } from '@/components/MachineRegistration';
 import { OfficeCanvas } from '@/game/OfficeCanvas';
 import { auth } from '@/lib/auth';
 
@@ -44,6 +46,9 @@ export default async function OfficePage() {
       <div className="min-h-0 flex-1">
         <OfficeCanvas />
       </div>
+
+      <MachineRegistration />
+      <AutoStartFleet />
     </main>
   );
 }

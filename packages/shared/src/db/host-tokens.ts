@@ -111,6 +111,48 @@ export async function createHostToken(
   return { id, label, token };
 }
 
+/**
+ * Register the machine somebody is signed in from, without a copy-paste step.
+ *
+ * The `qh_` token exists because a browser office is blind: it cannot see your
+ * laptop, so the laptop proves it belongs to you by presenting a secret a human
+ * carried across. The desktop app is not blind — it already holds the identity
+ * key and is already signed in — so making it paste a token is asking a person
+ * to do a computer's job.
+ *
+ * Re-registering the same machine replaces its token rather than adding one.
+ * Only the hash is stored, so an existing token cannot be handed back; without
+ * the replacement a fresh install would silently grow a second "laptop" row
+ * every time, and a Machines list that accumulates duplicates is one nobody can
+ * use to revoke anything with confidence.
+ *
+ * Callers must reject guest sessions before calling this. A machine is a place
+ * the office may start processes, and "signed in" is not the same claim as
+ * "this computer is mine" — see the route for where that gate lives.
+ */
+export async function registerMachineForUser(
+  db: Database,
+  input: { workspaceId: string; ownerUserId: string; label: string },
+): Promise<CreatedHostToken> {
+  const label = input.label.trim().slice(0, 64) || 'this machine';
+
+  const existing = await db
+    .select({ id: hostTokens.id })
+    .from(hostTokens)
+    .where(
+      and(
+        eq(hostTokens.workspaceId, input.workspaceId),
+        eq(hostTokens.ownerUserId, input.ownerUserId),
+        eq(hostTokens.label, label),
+        isNull(hostTokens.revokedAt),
+      ),
+    );
+
+  for (const row of existing) await revokeHostToken(db, row.id);
+
+  return createHostToken(db, { ...input, label });
+}
+
 export async function revokeHostToken(db: Database, id: string): Promise<void> {
   await db
     .update(hostTokens)

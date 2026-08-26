@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 use crate::nip49::{self, Nip49Error};
 use crate::secrets::{Blob, SecretStore, SecretsError};
 
-const IDENTITY_SLOT: &str = "identity";
+pub(crate) const IDENTITY_SLOT: &str = "identity";
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityError {
@@ -31,6 +31,10 @@ pub enum IdentityError {
     WrongIdentity,
     #[error("export a backup and confirm you have stored it before wiping")]
     NoBackupYet,
+    #[error("register a machine only once this app has an identity")]
+    NoIdentityYet,
+    #[error("a host token cannot be empty")]
+    EmptyToken,
 }
 
 /// What the UI is allowed to know about the state of the key.
@@ -87,7 +91,7 @@ pub fn npub_of(pubkey: &[u8; 32]) -> Result<String, IdentityError> {
     encode_bech32("npub", pubkey)
 }
 
-fn signing_key(secret: &[u8; 32]) -> Result<SigningKey, IdentityError> {
+pub(crate) fn signing_key(secret: &[u8; 32]) -> Result<SigningKey, IdentityError> {
     SigningKey::from_bytes(secret).map_err(|_| IdentityError::BadKey)
 }
 

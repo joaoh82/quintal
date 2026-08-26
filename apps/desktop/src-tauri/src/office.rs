@@ -128,7 +128,17 @@ pub fn capability_for(office: &str) -> String {
             "allow-export-backup",
             "allow-confirm-backup",
             "allow-can-wipe",
-            "allow-wipe-identity"
+            "allow-wipe-identity",
+            "allow-host-status",
+            "allow-remember-host-token",
+            "allow-forget-host-token",
+            "allow-start-fleet",
+            "allow-stop-fleet",
+            "allow-fleet-status",
+            "allow-fleet-logs",
+            "allow-repos-dir",
+            "allow-list-repos",
+            "allow-pick-repos-dir"
         ]
     })
     .to_string()
@@ -183,6 +193,40 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(office_path(dir.path()), "https://*").unwrap();
         assert_eq!(office_url(dir.path()), DEFAULT_OFFICE);
+    }
+
+    /// Every declared command must also be granted.
+    ///
+    /// These are two lists in two files, and Tauri only complains at runtime —
+    /// a command in `build.rs` with no matching `allow-` grant is refused the
+    /// moment the office calls it, with the app otherwise looking healthy. That
+    /// exact mismatch shipped once and made sign-in impossible, so the lists are
+    /// compared here rather than trusted to review.
+    #[test]
+    fn every_declared_command_is_granted() {
+        let build_rs = include_str!("../build.rs");
+        let declared = build_rs
+            .split_once(".commands(&[")
+            .expect("build.rs declares a command list")
+            .1
+            .split_once("])")
+            .expect("the list is closed")
+            .0;
+
+        let capability = capability_for("https://office.example.com");
+        let mut checked = 0;
+        for raw in declared.split('"').skip(1).step_by(2) {
+            let permission = format!("allow-{}", raw.replace('_', "-"));
+            assert!(
+                capability.contains(&permission),
+                "`{raw}` is declared in build.rs but never granted, so calling it is refused"
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 9,
+            "expected the real command list, found {checked}"
+        );
     }
 
     #[test]

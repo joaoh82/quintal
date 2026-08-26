@@ -77,7 +77,7 @@ pub fn command_for(id: &str) -> Option<Vec<String>> {
 /// `which` is not shelled out to: that would mean handing a name to a shell,
 /// and the name comes from a catalogue but the habit is worth not forming.
 /// Walking PATH is a few lines and has no quoting rules.
-fn resolve(bin: &str) -> Option<PathBuf> {
+pub(crate) fn resolve(bin: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path).find_map(|dir| {
         let candidate = dir.join(bin);

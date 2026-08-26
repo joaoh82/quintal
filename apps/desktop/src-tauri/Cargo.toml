@@ -37,6 +37,8 @@ url = "2"
 scrypt = { version = "0.11", default-features = false }
 chacha20poly1305 = "0.10"
 unicode-normalization = "0.1"
+gethostname = "1"
+tauri-plugin-dialog = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
@@ -46,6 +48,9 @@ keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service"] }
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.189"
 
 [dev-dependencies]
 tempfile = "3"

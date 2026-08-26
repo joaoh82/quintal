@@ -65,6 +65,36 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     await run('can_wipe (before)', 'can_wipe', {});
     await run('detect_runtimes', 'detect_runtimes', {});
 
+    // Machine registration, from the outside. Reading the status before and
+    // after storing a token is the pair that matters: the office decides
+    // whether to register by reading that flag, so a status that never flips
+    // would make the app re-register on every launch and revoke its own token
+    // each time.
+    await run('host_status (fresh)', 'host_status', {});
+    await run('remember_host_token (empty)', 'remember_host_token', { token: '  ', label: 'laptop' });
+    await run('remember_host_token', 'remember_host_token', { token: 'qh_ipc_check', label: 'ipc-check-machine' });
+    await run('host_status (registered)', 'host_status', {});
+    await run('forget_host_token', 'forget_host_token', {});
+    await run('host_status (forgotten)', 'host_status', {});
+
+    // The fleet, from the outside. Nothing is spawned here — there is no
+    // harness on a CI runner — but the ACL and the guards are exactly what a
+    // command being merely *declared* fails to prove.
+    await run('fleet_status', 'fleet_status', {});
+    await run('fleet_logs', 'fleet_logs', {});
+    await run('repos_dir', 'repos_dir', {});
+    await run('list_repos', 'list_repos', { dir: '/tmp' });
+    // pick_repos_dir is deliberately not called: it opens a native folder
+    // dialog and would wait forever for a click nobody is there to make. Its
+    // grant is covered instead by the Rust test every_declared_command_is_granted,
+    // which checks the ACL statically against the declared command list.
+    // (No backticks in this block — it lives inside a template literal.)
+    await run('stop_fleet (nothing running)', 'stop_fleet', {});
+    await run('start_fleet (unregistered)', 'start_fleet', {
+      office: 'http://localhost:3000',
+      reposDir: '/tmp',
+    });
+
     // The gate, from the outside: a confirmation nobody earned must be refused.
     await run('confirm_backup (junk token)', 'confirm_backup', { token: 'not-a-real-token' });
 
@@ -128,9 +158,14 @@ const report = await new Promise((resolve, reject) => {
         ...process.env,
         QUINTAL_OFFICE_URL: ORIGIN,
         QUINTAL_SECRETS_BACKEND: 'file',
-        // Keep this run's key out of the real app data directory.
+        // Keep this run's state out of the real app data directory — including
+        // on macOS, where Tauri derives it from HOME and ignores XDG_DATA_HOME
+        // entirely. Sharing it meant this check inherited whatever the real app
+        // had left behind: a marker written by the keychain backend, with no
+        // file behind it for the file backend to find, reads as a permanently
+        // locked keychain. Every "locked" failure here was that, not a bug.
         XDG_DATA_HOME: dataDir,
-        HOME: process.env.HOME,
+        HOME: dataDir,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -188,6 +223,25 @@ const EXPECTED = {
   // Contents depend on what is installed on the machine; what must hold is
   // that the call is permitted and answers.
   'detect_runtimes': { ok: true },
+  // An identity exists by now (`get_public_key` made one), so registration is
+  // allowed; `registered` must be false until something is actually stored.
+  'host_status (fresh)': { ok: true, value: { registered: false } },
+  // A blank token is refused rather than stored: a machine holding an empty
+  // credential looks registered and can never boot anything.
+  'remember_host_token (empty)': { ok: false },
+  'remember_host_token': { ok: true },
+  'host_status (registered)': { ok: true, value: { registered: true, label: 'ipc-check-machine' } },
+  'forget_host_token': { ok: true },
+  'host_status (forgotten)': { ok: true, value: { registered: false } },
+  'fleet_status': { ok: true, value: { state: 'stopped' } },
+  // Nothing has run, so there is nothing to have said.
+  'fleet_logs': { ok: true, value: [] },
+  'repos_dir': { ok: true },
+  'list_repos': { ok: true },
+  'stop_fleet (nothing running)': { ok: false },
+  // The token was just forgotten, so this must refuse rather than start a
+  // harness with no credential — which would fail later and less clearly.
+  'start_fleet (unregistered)': { ok: false },
   'confirm_backup (junk token)': { ok: false },
   'export_backup': { ok: true },
   'import_identity': { ok: true },
@@ -222,7 +276,7 @@ for (const entry of report) {
   } else if (entry.ok !== expected.ok) {
     verdict = false;
     why = expected.ok ? `should have succeeded: ${entry.error}` : 'should have been refused';
-  } else if ('value' in expected && JSON.stringify(entry.value) !== JSON.stringify(expected.value)) {
+  } else if ('value' in expected && !matches(entry.value, expected.value)) {
     verdict = false;
     why = `expected ${JSON.stringify(expected.value)}`;
   }
@@ -230,6 +284,24 @@ for (const entry of report) {
   const detail = entry.ok ? shown : `refused (${entry.error})`;
   console.log(`  ${verdict ? 'ok  ' : 'FAIL'} ${entry.cmd} -> ${detail}${why ? ` — ${why}` : ''}`);
   if (!verdict) failed = true;
+}
+
+/**
+ * Does the answer match what was expected?
+ *
+ * A plain object expectation is checked key by key rather than whole, so a
+ * result carrying machine-specific detail (a hostname, a path) can still be
+ * pinned on the part that is actually invariant. Anything else is compared
+ * outright.
+ */
+function matches(actual, expected) {
+  const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
+  if (!isPlainObject(expected) || !isPlainObject(actual)) {
+    return JSON.stringify(actual) === JSON.stringify(expected);
+  }
+  return Object.entries(expected).every(
+    ([key, want]) => JSON.stringify(actual[key]) === JSON.stringify(want),
+  );
 }
 
 const missing = Object.keys(EXPECTED).filter((cmd) => !report.some((r) => r.cmd === cmd));

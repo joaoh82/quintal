@@ -18,6 +18,8 @@ import {
   listHostTokens,
   revokeAgent,
   revokeHostToken,
+  forgetHostReport,
+  setAgentEnabled,
   setAgentLaunch,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -250,5 +252,57 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
   }
 
   await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel });
+  revalidatePath('/settings/agents');
+}
+
+/**
+ * Turn an agent on or off without destroying it.
+ *
+ * Same gate as assigning: your own agents, or anyone's if you run the
+ * workspace. Being able to switch off somebody else's agent is a smaller power
+ * than being able to run it, but it is still theirs.
+ */
+export async function setAgentEnabledAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) throw new Error('No such agent.');
+
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    throw new Error('That is not your agent to change.');
+  }
+
+  await setAgentEnabled(db, agentId, formData.get('enabled') === 'true');
+  revalidatePath('/settings/agents');
+}
+
+/**
+ * Remove a machine's report from the office.
+ *
+ * Only your own: a report describes what somebody's computer has installed on
+ * it, and it is theirs to withdraw. It does not revoke anything — the machine
+ * reappears the next time its harness connects, which is the correct behaviour
+ * for a machine that still exists and the point of it for one that does not.
+ */
+export async function forgetHostReportAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const workspace = await ensurePersonalWorkspace(db, {
+    userId: session.user.id,
+    name: session.user.name,
+    pubkey: session.user.pubkey,
+  });
+
+  const label = String(formData.get('label') ?? '').trim();
+  if (label.length === 0) throw new Error('Which machine?');
+
+  await forgetHostReport(db, {
+    workspaceId: workspace.id,
+    ownerUserId: session.user.id,
+    label,
+  });
   revalidatePath('/settings/agents');
 }
