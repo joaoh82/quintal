@@ -50,6 +50,11 @@ pub fn run() {
             commands::set_opens_at_login,
         ])
         .setup(|app| {
+            // Before anything looks for a binary. An app launched from Finder
+            // inherits launchd's PATH, which contains none of the places agent
+            // CLIs actually live — see `runtimes::adopt_login_path`.
+            runtimes::adopt_login_path();
+
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
 

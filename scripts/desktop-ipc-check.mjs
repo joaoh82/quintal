@@ -195,6 +195,11 @@ const report = await new Promise((resolve, reject) => {
         ...process.env,
         QUINTAL_OFFICE_URL: ORIGIN,
         QUINTAL_SECRETS_BACKEND: 'file',
+        // The app asks a login shell for its PATH, because one launched from
+        // Finder inherits launchd's and would find no agent CLIs at all. Here
+        // that would run somebody's rc files for no benefit: this check wants
+        // the PATH it was given, not the one a shell would build.
+        QUINTAL_NO_LOGIN_PATH: '1',
         // Keep this run's state out of the real app data directory — including
         // on macOS, where Tauri derives it from HOME and ignores XDG_DATA_HOME
         // entirely. Sharing it meant this check inherited whatever the real app
