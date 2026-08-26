@@ -49,7 +49,7 @@ To point it at one permanently, write the URL to `office` in the app data
 directory:
 
 ```bash
-echo 'https://quintal.example.com' > ~/Library/Application\ Support/sh.quintal.desktop/office
+echo 'https://quintal.example.com' > ~/Library/Application\ Support/sh.quintal.desktop/office.txt
 ```
 
 The app grants IPC to that one origin and no other, so changing it is a
@@ -160,9 +160,10 @@ useful. An app that cannot find the one thing it spawns is not a bundle.
 
 It is compiled to a standalone executable with an embedded runtime, so nothing
 has to be installed for it to run, and it lands beside the app's own binary
-inside `Quintal.app/Contents/MacOS/`. The host looks there first, then at
-`QUINTAL_ACP_BIN`, then at PATH — so a checkout, a bundle and a globally
-installed CLI all work, in that order of preference.
+inside `Quintal.app/Contents/MacOS/`. The host checks `QUINTAL_ACP_BIN` first —
+an explicit override should win over anything found — then beside the
+executable, then PATH. So a bundle, a checkout and a globally installed CLI all
+work.
 
 Building a bundle therefore needs [bun](https://bun.sh), which does the
 compiling. It is a **build** dependency only: running Quintal, developing it and

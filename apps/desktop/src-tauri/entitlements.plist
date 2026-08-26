@@ -13,10 +13,12 @@
     Nothing about that says "entitlement", which is why it is written down here
     rather than left to be rediscovered. The webview needs JIT for the same
     reason, so this is what a Tauri app on macOS wants regardless.
+
+    `allow-jit` alone is enough — checked by signing the harness with only this
+    key and running it. `allow-unsigned-executable-memory` is broader and was
+    not needed, so it is not here.
   -->
   <key>com.apple.security.cs.allow-jit</key>
-  <true/>
-  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
   <true/>
 </dict>
 </plist>

@@ -142,6 +142,12 @@ fn wait_for_office(window: tauri::WebviewWindow, url: tauri::Url) {
 
 /// Put a line on the bootstrap page.
 ///
+/// Only lands in a bundled app, where the bootstrap page is what the webview
+/// loads first. Under `tauri dev` the webview goes straight to `devUrl`, and
+/// `tauri` itself waits for that server before launching — so there is no
+/// blank-window moment in development for this to fill, and the eval quietly
+/// finds nothing.
+///
 /// Serialised rather than interpolated: the office URL comes from a file on
 /// disk, and a URL with a quote in it should be unreadable, not executable.
 fn say(window: &tauri::WebviewWindow, message: &str) {

@@ -5,7 +5,7 @@
   "identifier": "sh.quintal.desktop",
   "build": {
     "devUrl": "http://localhost:3000",
-    "frontendDist": "../dist"
+    "frontendDist": "../bootstrap"
   },
   "app": {
     "windows": [
