@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { getHost, isHostError, type Backup } from '@/lib/host';
+import { isHostError, type Backup } from '@/lib/host';
+import { useHost } from '@/lib/use-host';
 
 /**
  * Backing up the key this computer holds.
@@ -19,7 +20,7 @@ import { getHost, isHostError, type Backup } from '@/lib/host';
  * asks first.
  */
 export function KeyBackup() {
-  const host = getHost();
+  const { host, ready } = useHost();
   const [backup, setBackup] = useState<Backup | null>(null);
   const [stored, setStored] = useState(false);
   const [canWipe, setCanWipe] = useState(false);
@@ -33,6 +34,11 @@ export function KeyBackup() {
     if (!host) return;
     void host.canWipe().then(setCanWipe).catch(() => setCanWipe(false));
   }, [host]);
+
+  // Nothing until the host has been looked for. Rendering either branch before
+  // then is what produced a hydration mismatch: the server has no `window`, so
+  // it always drew the browser branch, and the app always drew the other one.
+  if (!ready) return null;
 
   if (!host) {
     return (

@@ -1,8 +1,11 @@
 import { RUNTIMES, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
 
 import { RelativeTime } from '@/components/RelativeTime';
+import { Button } from '@/components/ui/button';
 
-interface Host {
+import { forgetHostReportAction } from './actions';
+
+export interface Host {
   label: string;
   reposDir: string;
   runtimes: RuntimeStatus[];
@@ -27,9 +30,9 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
       <section className="rounded-lg border p-4">
         <h2 className="text-sm font-semibold">Agent runtimes</h2>
         <p className="text-muted-foreground mt-1 text-xs">
-          Nothing has reported in yet. Quintal can&rsquo;t see your machine — run{' '}
-          <code className="font-mono">quintal-acp up</code> once and the agent CLIs
-          you have installed will show up here.
+          No other machine has reported in. A web page cannot see your PATH, so a
+          machine appears here once it connects — open Quintal in the desktop app
+          on it, or run <code className="font-mono">quintal-acp up</code> there.
         </p>
       </section>
     );
@@ -49,12 +52,88 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
                 repos: {host.reposDir}
               </span>
             ) : null}
+
+            {/* A machine that has gone — renamed, retired — otherwise stays here
+                forever. Forgetting is not revoking: one that still exists comes
+                straight back the next time its harness connects. */}
+            <form action={forgetHostReportAction} className="ml-2">
+              <input type="hidden" name="label" value={host.label} />
+              <Button type="submit" variant="ghost" size="sm">
+                Forget
+              </Button>
+            </form>
           </div>
 
-          <ul className="mt-3 flex flex-col gap-px">
+          <RuntimeRows runtimes={host.runtimes} />
+        </section>
+      ))}
+
+      <p className="text-muted-foreground text-xs">
+        Quintal speaks{' '}
+        <a
+          href="https://agentclientprotocol.com"
+          className="underline underline-offset-2"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          ACP
+        </a>
+        , so there is nothing to install <em>into</em> your agent CLI and nothing to
+        register. A runtime marked <strong>via adapter</strong> is wrapped by a small
+        published process that <code className="font-mono">npx</code> fetches on
+        demand. All Quintal needs from your machine is the CLI itself, installed and
+        signed in.
+      </p>
+    </div>
+  );
+}
+
+/** Where an agent is rooted, as its harness reported it. */
+export function WorkspaceBadge({
+  path,
+  rootedAtReposDir,
+}: {
+  path: string;
+  rootedAtReposDir: boolean;
+}) {
+  if (!path) return null;
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+        rootedAtReposDir
+          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+          : 'bg-muted text-muted-foreground'
+      }`}
+      title={
+        rootedAtReposDir
+          ? `Rooted at your whole repos directory — this agent can read and write every project under ${path}`
+          : `Rooted at ${path}`
+      }
+    >
+      {rootedAtReposDir ? `all repos · ${path}` : path}
+    </span>
+  );
+}
+
+export function runtimeLabel(id: string): string {
+  return runtimeById(id)?.label ?? id;
+}
+
+
+/**
+ * The catalogue, marked up with what a given machine actually has.
+ *
+ * Every runtime is listed, including the ones that cannot work: "installed, but
+ * it has no ACP mode" and "not installed" are different problems with different
+ * fixes, and a runtime you can see marked unsupported beats one that silently
+ * is not there.
+ */
+export function RuntimeRows({ runtimes }: { runtimes: RuntimeStatus[] }) {
+  return (
+    <ul className="mt-3 flex flex-col gap-px">
             {RUNTIMES.map((spec) => {
               const status =
-                host.runtimes.find((entry) => entry.id === spec.id) ??
+                runtimes.find((entry) => entry.id === spec.id) ??
                 ({ id: spec.id, installed: false, path: null } satisfies RuntimeStatus);
               const ready = isUsable(status);
               const noAcp = spec.acp.kind === 'none';
@@ -108,57 +187,6 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
                 </li>
               );
             })}
-          </ul>
-        </section>
-      ))}
-
-      <p className="text-muted-foreground text-xs">
-        Quintal speaks{' '}
-        <a
-          href="https://agentclientprotocol.com"
-          className="underline underline-offset-2"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          ACP
-        </a>
-        , so there is nothing to install <em>into</em> your agent CLI and nothing to
-        register. A runtime marked <strong>via adapter</strong> is wrapped by a small
-        published process that <code className="font-mono">npx</code> fetches on
-        demand. All Quintal needs from your machine is the CLI itself, installed and
-        signed in.
-      </p>
-    </div>
+    </ul>
   );
-}
-
-/** Where an agent is rooted, as its harness reported it. */
-export function WorkspaceBadge({
-  path,
-  rootedAtReposDir,
-}: {
-  path: string;
-  rootedAtReposDir: boolean;
-}) {
-  if (!path) return null;
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-        rootedAtReposDir
-          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-          : 'bg-muted text-muted-foreground'
-      }`}
-      title={
-        rootedAtReposDir
-          ? `Rooted at your whole repos directory — this agent can read and write every project under ${path}`
-          : `Rooted at ${path}`
-      }
-    >
-      {rootedAtReposDir ? `all repos · ${path}` : path}
-    </span>
-  );
-}
-
-export function runtimeLabel(id: string): string {
-  return runtimeById(id)?.label ?? id;
 }
