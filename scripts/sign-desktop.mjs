@@ -47,7 +47,8 @@ function identity() {
     console.error(
       'No codesigning identity found.\n' +
         'Xcode creates an "Apple Development" certificate when you sign in with an Apple ID.\n' +
-        'Without one the app still runs; macOS will just ask for your keychain password each launch.',
+        '\nWithout one, nothing here is broken: `pnpm desktop` still works, and macOS\n' +
+        'simply asks for your keychain password on each launch. See docs/DESKTOP.md.',
     );
     process.exit(1);
   }

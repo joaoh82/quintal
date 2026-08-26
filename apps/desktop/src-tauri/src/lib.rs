@@ -70,6 +70,7 @@ pub fn run() {
             });
 
             tray::build(app.handle())?;
+            tray::watch(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
                 match office.parse() {

@@ -129,6 +129,11 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
 })();
 </script></body>`;
 
+const BUNDLE_ID = 'sh.quintal.desktop';
+
+/** The repos directory seeded below, for the expectation to compare against. */
+let chosenReposDir = '';
+
 const report = await new Promise((resolve, reject) => {
   const server = createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/report') {
@@ -155,18 +160,27 @@ const report = await new Promise((resolve, reject) => {
   // one the host reports and would spawn in. The wiring from the dialog to the
   // store is the piece that once shipped doing nothing, and it is still only
   // verified by reading.
-  const chosenRepos = join(dataDir, 'chosen-repos');
-  mkdirSync(chosenRepos, { recursive: true });
-  mkdirSync(join(chosenRepos, 'a-checkout', '.git'), { recursive: true });
-  const appDir =
-    process.platform === 'darwin'
-      ? join(dataDir, 'Library', 'Application Support', 'sh.quintal.desktop')
-      : join(dataDir, '.local', 'share', 'sh.quintal.desktop');
-  mkdirSync(appDir, { recursive: true });
-  writeFileSync(
-    join(appDir, 'settings.json'),
-    JSON.stringify({ repos_dir: chosenRepos }, null, 2),
-  );
+  //
+  // Written to every location Tauri might resolve `app_data_dir` to, because
+  // guessing one is how this first shipped broken: it seeded the macOS path,
+  // passed on a Mac, and on Linux CI the host read `$XDG_DATA_HOME/<id>`, found
+  // nothing, and quietly fell back to the default. The `repos_dir` expectation
+  // is an equality check for the same reason — a seed that lands nowhere has to
+  // fail loudly rather than pass as "answered with some directory".
+  chosenReposDir = join(dataDir, 'chosen-repos');
+  mkdirSync(join(chosenReposDir, 'a-checkout', '.git'), { recursive: true });
+
+  for (const appDir of [
+    join(dataDir, BUNDLE_ID), // linux, with XDG_DATA_HOME pointed at dataDir
+    join(dataDir, '.local', 'share', BUNDLE_ID), // linux, without it
+    join(dataDir, 'Library', 'Application Support', BUNDLE_ID), // macOS
+  ]) {
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(
+      join(appDir, 'settings.json'),
+      JSON.stringify({ repos_dir: chosenReposDir }, null, 2),
+    );
+  }
   const binary = 'apps/desktop/src-tauri/target/debug/quintal-desktop';
   if (!existsSync(binary)) {
     server.close();
@@ -259,7 +273,9 @@ const EXPECTED = {
   'fleet_status': { ok: true, value: { state: 'stopped' } },
   // Nothing has run, so there is nothing to have said.
   'fleet_logs': { ok: true, value: [] },
-  'repos_dir': { ok: true },
+  // Equality, not merely "answered": a seed landing in the wrong place is
+  // exactly what this exists to catch.
+  'repos_dir': { ok: true, value: chosenReposDir },
   // The seeded checkout only exists in the *stored* directory, so finding it
   // proves the host is using that rather than the default.
   'list_repos': { ok: true, value: [{ name: 'a-checkout', git: true }] },

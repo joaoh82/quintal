@@ -93,6 +93,33 @@ fn tooltip(state: &FleetState) -> String {
     }
 }
 
+/// Keep the tray honest about a fleet that stopped on its own.
+///
+/// Everything else that changes the fleet also refreshes the tray, but a crash
+/// has no caller — the harness simply goes away. Without a poll the icon would
+/// keep claiming "running" until somebody clicked it, and the one tooltip that
+/// exists to report a crash would never be seen.
+///
+/// Cheap: `status()` is a `try_wait` on a child this process owns, and the
+/// menu is only rebuilt when the answer changes.
+pub fn watch(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut last: Option<FleetState> = None;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let Some(state) = app.try_state::<HostState>() else {
+                return;
+            };
+            let now = state.fleet.status();
+            if last.as_ref() != Some(&now) {
+                refresh(&app, &now);
+                last = Some(now);
+            }
+        }
+    });
+}
+
 fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -127,6 +154,10 @@ fn toggle_fleet(app: &AppHandle) {
 
     if let Some(message) = next {
         eprintln!("[quintal] tray: {message}");
+        // An unregistered machine or a locked keychain cannot be fixed from a
+        // menu. The window can at least say what is wrong, which beats a click
+        // that appears to do nothing.
+        show_window(app);
     }
     refresh(app, &state.fleet.status());
 }

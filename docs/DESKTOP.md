@@ -101,6 +101,35 @@ Not requested. It will be, when push-to-talk becomes a global hotkey — that
 needs to see key presses while Quintal is not focused, and macOS gates it behind
 Accessibility. There is nothing to grant until voice ships.
 
+## The menu bar
+
+Quintal keeps a menu-bar item so you can see whether your agents are running
+without keeping a window open, and stop them without finding one.
+
+It reports **state, not a count**: running, not running, or *stopped on their
+own* — which is worth saying, because agents going quiet otherwise looks the
+same as agents you stopped. How many agents are running is a fact the office
+holds, not this process; a number here would go stale the moment you enabled or
+disabled one, and a number that drifts is worse than none.
+
+**Start agents / Stop agents** does the same thing as the button in Settings →
+Agents, using the machine token and repos directory this computer already has.
+If it cannot — an unregistered machine, a locked keychain — it opens the window,
+because neither is fixable from a menu.
+
+**Quit Quintal** stops the harness on the way out, by the same path as closing
+the window.
+
+## Opening at login
+
+Off until you ask for it, in Settings → Agents. The office is where your agents
+live all day, so wanting it there when you log in is reasonable — deciding that
+for you is not.
+
+It pairs with the app starting your fleet on open: turn both on and your agents
+are in the office before you are. Turning it off removes the login item; nothing
+else about the app changes.
+
 ## Where your agents run
 
 The app runs one harness process for this computer, and that harness asks the
