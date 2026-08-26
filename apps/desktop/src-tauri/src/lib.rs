@@ -13,12 +13,19 @@ pub mod office;
 pub mod runtimes;
 pub mod secrets;
 pub mod spawn;
+pub mod tray;
 
 use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Off unless somebody turns it on: an app that adds itself to login
+        // items uninvited is a thing people uninstall.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             commands::has_identity,
             commands::detect_runtimes,
@@ -39,6 +46,8 @@ pub fn run() {
             commands::repos_dir,
             commands::list_repos,
             commands::pick_repos_dir,
+            commands::opens_at_login,
+            commands::set_opens_at_login,
         ])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -59,6 +68,8 @@ pub fn run() {
                 pending_export: std::sync::Mutex::new(None),
                 fleet: spawn::Fleet::new(),
             });
+
+            tray::build(app.handle())?;
 
             if let Some(window) = app.get_webview_window("main") {
                 match office.parse() {

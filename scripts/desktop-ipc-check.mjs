@@ -16,7 +16,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -84,6 +84,9 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     await run('fleet_logs', 'fleet_logs', {});
     await run('repos_dir', 'repos_dir', {});
     await run('list_repos', 'list_repos', {});
+    // Off unless somebody turns it on. Read rather than toggled: flipping a
+    // login item on a contributor's machine is not a test's business.
+    await run('opens_at_login', 'opens_at_login', {});
     // pick_repos_dir is deliberately not called: it opens a native folder
     // dialog and would wait forever for a click nobody is there to make. Its
     // grant is covered instead by the Rust test every_declared_command_is_granted,
@@ -143,6 +146,27 @@ const report = await new Promise((resolve, reject) => {
   server.listen(PORT);
 
   const dataDir = mkdtempSync(join(tmpdir(), 'quintal-ipc-'));
+
+  // Seed a chosen repos directory before the app starts.
+  //
+  // The picker itself cannot be driven here — it opens a native folder dialog
+  // and would wait forever for a click nobody is there to make — so this covers
+  // the half that everything else depends on: that a *stored* directory is the
+  // one the host reports and would spawn in. The wiring from the dialog to the
+  // store is the piece that once shipped doing nothing, and it is still only
+  // verified by reading.
+  const chosenRepos = join(dataDir, 'chosen-repos');
+  mkdirSync(chosenRepos, { recursive: true });
+  mkdirSync(join(chosenRepos, 'a-checkout', '.git'), { recursive: true });
+  const appDir =
+    process.platform === 'darwin'
+      ? join(dataDir, 'Library', 'Application Support', 'sh.quintal.desktop')
+      : join(dataDir, '.local', 'share', 'sh.quintal.desktop');
+  mkdirSync(appDir, { recursive: true });
+  writeFileSync(
+    join(appDir, 'settings.json'),
+    JSON.stringify({ repos_dir: chosenRepos }, null, 2),
+  );
   const binary = 'apps/desktop/src-tauri/target/debug/quintal-desktop';
   if (!existsSync(binary)) {
     server.close();
@@ -236,7 +260,10 @@ const EXPECTED = {
   // Nothing has run, so there is nothing to have said.
   'fleet_logs': { ok: true, value: [] },
   'repos_dir': { ok: true },
-  'list_repos': { ok: true },
+  // The seeded checkout only exists in the *stored* directory, so finding it
+  // proves the host is using that rather than the default.
+  'list_repos': { ok: true, value: [{ name: 'a-checkout', git: true }] },
+  'opens_at_login': { ok: true, value: false },
   'stop_fleet (nothing running)': { ok: false },
   // The token was just forgotten, so this must refuse rather than start a
   // harness with no credential — which would fail later and less clearly.

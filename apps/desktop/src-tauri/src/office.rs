@@ -138,7 +138,9 @@ pub fn capability_for(office: &str) -> String {
             "allow-fleet-logs",
             "allow-repos-dir",
             "allow-list-repos",
-            "allow-pick-repos-dir"
+            "allow-pick-repos-dir",
+            "allow-opens-at-login",
+            "allow-set-opens-at-login"
         ]
     })
     .to_string()

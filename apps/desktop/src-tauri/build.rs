@@ -28,6 +28,8 @@ fn main() {
             "repos_dir",
             "list_repos",
             "pick_repos_dir",
+            "opens_at_login",
+            "set_opens_at_login",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");
