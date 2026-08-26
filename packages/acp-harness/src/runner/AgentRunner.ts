@@ -12,7 +12,7 @@ import {
 
 import { AgentProcess } from '../acp/agent-process.js';
 import type { AgentConfig } from '../config.js';
-import { GatewayClient } from '../gateway/client.js';
+import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
 import { basePrompt } from './base-prompt.js';
 import { LOBBY_SCOPE, SessionStore } from './sessions.js';
@@ -63,10 +63,31 @@ function hostCredential(
 export class AgentRunner {
   readonly name: string;
 
-  #gateway: GatewayClient;
+  #gateway: Gateway;
   #process: AgentProcess | null = null;
   #bridge: BridgeHandle | null = null;
   readonly #sessions: SessionStore;
+  /**
+   * Scopes whose session exists but has not been told anything yet.
+   *
+   * Separate from the session book because it tracks what the *model* has been
+   * told, not what is allocated: a session can be created long before anybody
+   * speaks to it, and pre-warming relies on exactly that gap.
+   */
+  readonly #unprimed = new Set<string>();
+  /**
+   * Session creations still in flight, by scope.
+   *
+   * Without this, two callers that both find no session both make one. That was
+   * always possible and became likely the moment sessions were pre-warmed:
+   * warming is deliberately not awaited, so there is now always an in-flight
+   * creation at exactly the moment the first message tends to arrive. The loser
+   * of that race leaks a session on the agent side and starts an unprimed one
+   * on ours.
+   */
+  readonly #creating = new Map<string, Promise<string>>();
+  /** False when somebody handed us a gateway; we must not replace theirs. */
+  readonly #ownsGateway: boolean;
 
   /** Pending triggers, per scope. Drained into one prompt per turn. */
   readonly #queues = new Map<string, Trigger[]>();
@@ -92,17 +113,23 @@ export class AgentRunner {
 
   readonly #handlers: Partial<RunnerEvents> = {};
 
+  /**
+   * `gateway` is injectable so the runner can be tested at all.
+   *
+   * It defaults to a real client, so nothing outside tests passes one — but
+   * without the seam, checking anything about how a turn is run means standing
+   * up an office and a websocket, and the runner accordingly had no tests.
+   */
   constructor(
     private readonly config: AgentConfig,
     private readonly logDir?: string,
+    gateway?: Gateway,
   ) {
     this.name = config.name;
-    this.#gateway = new GatewayClient(
-      config.url,
-      config.key,
-      config.mapId,
-      hostCredential(config),
-    );
+    this.#ownsGateway = gateway === undefined;
+    this.#gateway =
+      gateway ??
+      new GatewayClient(config.url, config.key, config.mapId, hostCredential(config));
     this.#sessions = new SessionStore({
       onEvict: (record, reason) => {
         this.#log('info', `session for "${record.scope}" ended (${reason})`);
@@ -138,6 +165,11 @@ export class AgentRunner {
     await this.#startAgent();
     this.#setState('connected');
     this.#setStatus('idle');
+
+    // Not awaited: the agent is connected and usable now, and a slow handshake
+    // with its MCP server should hold nobody up. By the time somebody speaks,
+    // the expensive half is usually already done.
+    this.prewarm();
   }
 
   async stop(): Promise<void> {
@@ -190,12 +222,17 @@ export class AgentRunner {
     if (this.#stopping) return;
 
     try {
-      this.#gateway = new GatewayClient(
-        this.config.url,
-        this.config.key,
-        this.config.mapId,
-        hostCredential(this.config),
-      );
+      // Only replace a client we made. An injected gateway cannot be rebuilt
+      // from config — there is nothing here that knows how — and silently
+      // swapping in a real one would turn a test into a network call.
+      if (this.#ownsGateway) {
+        this.#gateway = new GatewayClient(
+          this.config.url,
+          this.config.key,
+          this.config.mapId,
+          hostCredential(this.config),
+        );
+      }
       await this.#connectGateway();
       this.#setState('connected');
       this.#setStatus(this.#statusLine || 'idle');
@@ -241,6 +278,9 @@ export class AgentRunner {
     const info = await proc.start();
     this.#process = proc;
     this.#sessions.clear();
+    this.#unprimed.clear();
+    // Anything still being created belongs to the process that just went away.
+    this.#creating.clear();
     this.#log(
       'info',
       `${info.agentInfo?.name ?? this.config.harness} ready (ACP v${String(info.protocolVersion)})`,
@@ -406,7 +446,10 @@ export class AgentRunner {
       case '!rotate': {
         const scope = this.#scopeOf();
         const dropped = this.#sessions.drop(scope, 'rotate');
+        this.#unprimed.delete(scope);
         this.#log('info', `rotated session for "${scope}"${dropped ? '' : ' (none live)'}`);
+        // Rebuild it now, so the next message does not pay for the rotation.
+        this.prewarm(scope);
         return true;
       }
       case '!shutdown': {
@@ -491,13 +534,22 @@ export class AgentRunner {
       steer,
     });
 
+    // A session nobody has spoken to yet gets the standing instructions on the
+    // front of this turn rather than in a turn of its own.
+    const priming = this.#unprimed.has(scope);
+    const text = priming ? `${await this.#systemPrompt()}\n\n${envelope}` : envelope;
+
     this.#responseBuffer = '';
-    this.#audit('prompt', { scope, session, envelope });
+    this.#audit('prompt', { scope, session, envelope, priming });
 
     const response = await proc.prompt({
       sessionId: session,
-      prompt: [{ type: 'text', text: envelope }],
+      prompt: [{ type: 'text', text }],
     });
+
+    // Only once it has actually landed. A failed turn leaves the session still
+    // knowing nothing, and the next one must say it all again.
+    if (priming) this.#unprimed.delete(scope);
 
     this.#speak(this.#responseBuffer);
     this.#audit('response', {
@@ -511,41 +563,49 @@ export class AgentRunner {
     // scope gets a fresh one rather than failing repeatedly.
     if (response.stopReason === 'max_tokens' || response.stopReason === 'max_turn_requests') {
       this.#sessions.drop(scope, 'rotate');
+      this.#unprimed.delete(scope);
       this.#log('info', `session recycled (${response.stopReason})`);
+      // The second latency cliff: without this, the next message mid-conversation
+      // pays the whole session-creation cost again.
+      this.prewarm(scope);
     }
   }
 
+  /**
+   * The ACP session for a scope, creating one if there is none.
+   *
+   * Creation is the expensive half and none of it is model work: the agent CLI
+   * spawns our MCP server as a subprocess and completes a handshake with it.
+   * That is why this is worth doing before anybody is waiting — see `prewarm`.
+   *
+   * It deliberately does **not** send the system prompt. That used to happen
+   * here, as its own awaited `prompt()` call, which meant the first message to
+   * an agent paid for two complete model turns: one to load the standing
+   * instructions and one to answer. The instructions now ride along with the
+   * first real turn instead, so there is one turn either way — and an agent
+   * nobody talks to costs nothing.
+   */
   async #sessionFor(scope: string): Promise<string> {
     const existing = this.#sessions.get(scope);
     if (existing) return existing.sessionId;
 
+    // Join a creation already under way rather than starting a second one.
+    const inflight = this.#creating.get(scope);
+    if (inflight) return inflight;
+
+    const creation = this.#createSession(scope);
+    this.#creating.set(scope, creation);
+    try {
+      return await creation;
+    } finally {
+      this.#creating.delete(scope);
+    }
+  }
+
+  async #createSession(scope: string): Promise<string> {
     const proc = this.#process;
     const bridge = this.#bridge;
     if (!proc || !bridge) throw new Error('agent is not running');
-
-    // Core memory is injected once, at session creation — not per turn. It is
-    // the agent's standing identity, and paying for it on every message is
-    // exactly the prompt-stuffing this design exists to avoid.
-    let core = '';
-    try {
-      core = (await this.#gateway.memoryGet('core')).content;
-    } catch (error: unknown) {
-      this.#log('warn', `could not read core memory: ${describe(error)}`);
-    }
-
-    const ready = this.#gateway.ready;
-    const system = [
-      basePrompt(),
-      '',
-      `[You]`,
-      `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
-      `You are standing in ${this.#zoneLabel()}.`,
-      core.trim().length > 0 ? `\n[Core memory]\n${core.trim()}` : '',
-      '',
-      TOOL_HINT,
-    ]
-      .filter((line) => line !== '')
-      .join('\n');
 
     const created = await proc.newSession({
       cwd: this.config.cwd,
@@ -563,17 +623,59 @@ export class AgentRunner {
     } as schema.NewSessionRequest);
 
     this.#sessions.put(scope, created.sessionId);
+    // A fresh session has been told nothing yet.
+    this.#unprimed.add(scope);
     this.#log('info', `new session for "${scope}" (${this.#sessions.size} live)`);
 
-    // The system prompt rides in as the first user turn: ACP has no dedicated
-    // system-prompt field, and every harness we tested treats an opening
-    // instruction message this way.
-    await proc.prompt({
-      sessionId: created.sessionId,
-      prompt: [{ type: 'text', text: system }],
-    });
-
     return created.sessionId;
+  }
+
+  /**
+   * The agent's standing instructions, sent once per session.
+   *
+   * Core memory is read here rather than per turn: it is the agent's identity,
+   * and paying for it on every message is exactly the prompt-stuffing this
+   * design exists to avoid.
+   */
+  async #systemPrompt(): Promise<string> {
+    let core = '';
+    try {
+      core = (await this.#gateway.memoryGet('core')).content;
+    } catch (error: unknown) {
+      this.#log('warn', `could not read core memory: ${describe(error)}`);
+    }
+
+    const ready = this.#gateway.ready;
+    return [
+      basePrompt(),
+      '',
+      `[You]`,
+      `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
+      `You are standing in ${this.#zoneLabel()}.`,
+      core.trim().length > 0 ? `\n[Core memory]\n${core.trim()}` : '',
+      '',
+      TOOL_HINT,
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
+  }
+
+  /**
+   * Get a session ready before anybody needs it.
+   *
+   * The whole point of the first message being slow was that session creation
+   * happened on the message path. Doing it on connect — and again after a
+   * session is recycled — moves a subprocess spawn and a handshake to a moment
+   * when nobody is watching.
+   *
+   * Deliberately silent. A pre-warm that fails costs nothing: the next real
+   * turn creates the session the old way, just slower.
+   */
+  prewarm(scope: string = this.#scopeOf()): void {
+    if (this.#stopping || !this.#process) return;
+    void this.#sessionFor(scope).catch((error: unknown) => {
+      this.#log('warn', `could not warm a session for "${scope}": ${describe(error)}`);
+    });
   }
 
   // --- ACP updates ---------------------------------------------------------

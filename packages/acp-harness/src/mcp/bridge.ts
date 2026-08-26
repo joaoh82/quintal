@@ -4,7 +4,7 @@ import { AddressInfo } from 'node:net';
 
 import type { AgentZone } from '@quintal/shared';
 
-import type { GatewayClient } from '../gateway/client.js';
+import type { Gateway } from '../gateway/client.js';
 
 /**
  * The link between the MCP tool server and the office.
@@ -32,7 +32,7 @@ export interface BridgeHandle {
 }
 
 export async function startBridge(
-  gateway: GatewayClient,
+  gateway: Gateway,
   onCall?: (tool: string, args: Record<string, unknown>) => void,
 ): Promise<BridgeHandle> {
   const token = randomBytes(24).toString('base64url');
@@ -112,7 +112,7 @@ export function resolveZone(zones: readonly AgentZone[], wanted: string): string
   return match.id;
 }
 
-async function dispatch(gateway: GatewayClient, call: BridgeCall): Promise<unknown> {
+async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
   switch (call.tool) {
     case 'look_around': {
       // The zone list rides along: "look at the room" reasonably includes what
