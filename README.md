@@ -66,7 +66,7 @@ There is no setup command to forget.
 | `pnpm db:generate` | Generate a migration after changing the schema |
 | `pnpm db:seed` | Create a local demo user + personal workspace (idempotent) |
 | `pnpm desktop` | Office + desktop app together (`desktop:attach` if the office is already up) |
-| `pnpm desktop:bundle` | Build a signed `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
+| `pnpm desktop:bundle` | Build a signed, self-contained `Quintal.app` (needs [bun](https://bun.sh)) — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 
 There's a [`justfile`](./justfile) with the same recipes (`just dev`, `just
 db-generate`, …) if you prefer `just`.

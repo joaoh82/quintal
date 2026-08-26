@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    The harness shipped inside this app embeds a JavaScript runtime, and the
+    hardened runtime that signing applies forbids allocating executable memory
+    unless it is asked for. Without these two the sidecar signs, verifies, and
+    then dies on its first JIT allocation:
+
+        Ran out of executable memory while allocating 128 bytes.
+
+    Nothing about that says "entitlement", which is why it is written down here
+    rather than left to be rediscovered. The webview needs JIT for the same
+    reason, so this is what a Tauri app on macOS wants regardless.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+</dict>
+</plist>

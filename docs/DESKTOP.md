@@ -151,6 +151,37 @@ It pairs with the app starting your fleet on open: turn both on and your agents
 are in the office before you are. Turning it off removes the login item; nothing
 else about the app changes.
 
+## What ships inside the app
+
+The app spawns a harness — `quintal-acp` — to run your agents, and the bundle
+carries its own copy. It has to: an app launched from Finder has neither a repo
+checkout's `node_modules/.bin` nor, on a stock macOS, a PATH containing anything
+useful. An app that cannot find the one thing it spawns is not a bundle.
+
+It is compiled to a standalone executable with an embedded runtime, so nothing
+has to be installed for it to run, and it lands beside the app's own binary
+inside `Quintal.app/Contents/MacOS/`. The host looks there first, then at
+`QUINTAL_ACP_BIN`, then at PATH — so a checkout, a bundle and a globally
+installed CLI all work, in that order of preference.
+
+Building a bundle therefore needs [bun](https://bun.sh), which does the
+compiling. It is a **build** dependency only: running Quintal, developing it and
+CI all work without it, and CI never bundles.
+
+### Why the entitlements file exists
+
+The harness embeds a JavaScript runtime, and the hardened runtime that signing
+applies forbids allocating executable memory unless asked. Without
+`com.apple.security.cs.allow-jit`, the sidecar signs, verifies, and then dies on
+its first JIT allocation:
+
+```
+Ran out of executable memory while allocating 128 bytes.
+```
+
+Nothing in that message says "entitlement", so it is written down in
+`entitlements.plist` next to the keys that fix it.
+
 ## Where your agents run
 
 The app runs one harness process for this computer, and that harness asks the
