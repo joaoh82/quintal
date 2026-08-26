@@ -60,3 +60,37 @@ export async function listHostsForWorkspace(db: Database, workspaceId: string) {
     .where(eq(agentHosts.workspaceId, workspaceId))
     .orderBy(desc(agentHosts.lastSeenAt));
 }
+
+/**
+ * Forget a machine's report.
+ *
+ * Reports arrive whenever a harness connects and nothing ever removed one, so a
+ * machine that changed name — or a laptop somebody stopped using — stayed in the
+ * office forever with no way to clear it. Scoped to the workspace and to the
+ * person who reported it, because a report says what somebody's computer has on
+ * it and is theirs to withdraw.
+ *
+ * Returns whether anything was removed, so a caller can tell "gone" from "was
+ * never yours".
+ */
+export async function forgetHostReport(
+  db: Database,
+  input: { workspaceId: string; ownerUserId: string; label: string },
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: agentHosts.id })
+    .from(agentHosts)
+    .where(
+      and(
+        eq(agentHosts.workspaceId, input.workspaceId),
+        eq(agentHosts.ownerUserId, input.ownerUserId),
+        eq(agentHosts.label, input.label),
+      ),
+    );
+
+  if (rows.length === 0) return false;
+  for (const row of rows) {
+    await db.delete(agentHosts).where(eq(agentHosts.id, row.id));
+  }
+  return true;
+}

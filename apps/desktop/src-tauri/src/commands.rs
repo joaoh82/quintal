@@ -9,11 +9,25 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::identity::{self, IdentityError, IdentityState};
+use crate::machine;
 use crate::nip49::Nip49Error;
+use crate::runtimes::{self, RuntimeStatus};
 use crate::secrets::{SecretStore, SecretsError};
+use crate::spawn::{self, Fleet, FleetState, LogLine, Repo, SpawnError};
 
 pub struct HostState {
     pub store: SecretStore,
+    /// The app data directory, for preferences that are not secrets.
+    pub dir: std::path::PathBuf,
+    /// The office this host is configured for.
+    ///
+    /// The page does not get to name it. IPC is already locked to one origin,
+    /// so sending the machine credential somewhere else needs an XSS on the
+    /// office — but the credential's destination deserves the same treatment as
+    /// the command line: chosen here, not accepted from there.
+    pub office: String,
+    /// The harness this machine is running, if any.
+    pub fleet: Fleet,
     /// Token handed out by the last `export_backup`, spent by `confirm_backup`.
     ///
     /// Confirming is what unlocks the wipe, so it must not be callable on its
@@ -33,12 +47,30 @@ pub struct HostError {
     pub message: String,
 }
 
+impl From<SpawnError> for HostError {
+    fn from(error: SpawnError) -> Self {
+        let code = match &error {
+            SpawnError::NotRegistered => "not_registered",
+            SpawnError::NoHarness => "no_harness",
+            SpawnError::AlreadyRunning => "already_running",
+            SpawnError::NotRunning => "not_running",
+            SpawnError::BadWorkspace(_) => "bad_workspace",
+            SpawnError::Io(_) => "spawn_failed",
+        };
+        HostError {
+            code: code.into(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<IdentityError> for HostError {
     fn from(error: IdentityError) -> Self {
         let code = match &error {
             IdentityError::Secrets(SecretsError::Locked) => "locked",
             IdentityError::BadKey => "bad_key",
             IdentityError::NoBackupYet => "no_backup",
+            IdentityError::EmptyLabel => "empty_label",
             IdentityError::WrongIdentity => "wrong_identity",
             IdentityError::Backup(Nip49Error::Undecryptable) => "bad_passphrase",
             IdentityError::Backup(Nip49Error::NotNcryptsec) => "not_a_backup",
@@ -157,4 +189,149 @@ pub fn wipe_identity(state: State<'_, HostState>) -> Result<(), HostError> {
     // Nothing left for a stale token to confirm.
     *state.pending_export.lock().unwrap() = None;
     Ok(())
+}
+
+/// What this machine could run.
+///
+/// Answered from the generated catalogue plus a PATH walk, so the office never
+/// has to guess and never sees a runtime that would fail at spawn time. Not
+/// cached here: the caller decides when to ask again, because "I just installed
+/// it" is a thing that happens while the app is open.
+#[tauri::command]
+pub fn detect_runtimes() -> Vec<RuntimeStatus> {
+    runtimes::detect()
+}
+
+/// What the office needs to know about this machine.
+///
+/// `registered` is the whole reason this exists: the office cannot see whether
+/// this computer already holds a host token, and asking it to register a second
+/// time would orphan the first — so the page checks here before it asks.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostStatus {
+    /// What this machine should be called, matching the harness's name for it.
+    pub label: String,
+    /// Does this machine already hold a host token?
+    pub registered: bool,
+}
+
+#[tauri::command]
+pub fn host_status(state: State<'_, HostState>) -> Result<HostStatus, HostError> {
+    // The registered name wins. Asking the OS again would let a change of
+    // network rename this computer, and agents are pinned to a machine by
+    // label — so the office would show a second machine and the fleet assigned
+    // to the first would quietly stop booting.
+    let registered = machine::registered_label(&state.store)?;
+    Ok(HostStatus {
+        label: registered.unwrap_or_else(machine::label),
+        registered: machine::token(&state.store)?.is_some(),
+    })
+}
+
+/// Keep a host token the office just issued to this machine.
+///
+/// The token arrives from the page rather than being fetched here: the office
+/// is what holds the session cookie that authorises minting one, and teaching
+/// this side to speak HTTP with the webview's cookie jar would be a second,
+/// worse copy of a thing the page already does. The page cannot *read* the
+/// token back afterwards — there is no command for that — so a later bug in the
+/// office cannot exfiltrate the credential it once handed over.
+#[tauri::command]
+pub fn remember_host_token(
+    state: State<'_, HostState>,
+    token: String,
+    label: String,
+) -> Result<(), HostError> {
+    machine::remember(&state.store, &token, &label)?;
+    Ok(())
+}
+
+/// Drop this machine's host token, so the next launch registers again.
+#[tauri::command]
+pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
+    machine::forget(&state.store)?;
+    Ok(())
+}
+
+/// Start the agents the office has assigned to this machine.
+///
+/// Takes no command and no runtime id. The harness asks the office what belongs
+/// here and resolves each id through the shared catalogue itself, so there is no
+/// argument on this call that could become something to execute.
+#[tauri::command]
+pub fn start_fleet(state: State<'_, HostState>) -> Result<FleetState, HostError> {
+    let token = machine::token(&state.store)?.ok_or(SpawnError::NotRegistered)?;
+    // Both the working directory and the office come from this side. The page
+    // asks to start the fleet; it does not get to say where, or where the
+    // credential is sent.
+    let dir = spawn::repos_dir(&state.dir);
+    Ok(state.fleet.start(&dir, &state.office, &token)?)
+}
+
+#[tauri::command]
+pub fn stop_fleet(state: State<'_, HostState>) -> Result<(), HostError> {
+    state.fleet.stop()?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn fleet_status(state: State<'_, HostState>) -> FleetState {
+    state.fleet.status()
+}
+
+/// Where this machine keeps its repositories.
+#[tauri::command]
+pub fn repos_dir(state: State<'_, HostState>) -> String {
+    spawn::repos_dir(&state.dir).display().to_string()
+}
+
+/// What is in the repos directory.
+///
+/// The office cannot see anybody's filesystem, so without this a workspace has
+/// to be typed exactly right from memory — and a typo becomes an agent rooted
+/// somewhere that does not exist.
+#[tauri::command]
+pub fn list_repos(state: State<'_, HostState>) -> Vec<Repo> {
+    // Deliberately takes no path. A directory argument from the page turns a
+    // repo picker into a one-level filesystem walk of anywhere that exists.
+    spawn::list_repos(&spawn::repos_dir(&state.dir))
+}
+
+/// Ask the person to choose a repos directory.
+///
+/// Wrapped rather than exposing the dialog plugin to the office: this way the
+/// page can ask for a folder and nothing else. `None` means the dialog was
+/// dismissed, which is an answer rather than an error.
+#[tauri::command]
+pub async fn pick_repos_dir(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+) -> Result<Option<String>, HostError> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.dialog().file().pick_folder(move |picked| {
+        let _ = tx.send(picked);
+    });
+
+    let Some(folder) = rx.recv().ok().flatten() else {
+        // Dismissed. An answer, not a failure.
+        return Ok(None);
+    };
+
+    // Persisted here, by the command that opened the dialog. An earlier version
+    // returned the path and left storing it to the page, which quietly stored
+    // it nowhere: the button changed a label and the harness kept rooting at the
+    // old directory. Picking and remembering are one action or the feature is a
+    // decoration.
+    let chosen = folder.to_string();
+    spawn::set_repos_dir(&state.dir, std::path::Path::new(&chosen))?;
+    Ok(Some(chosen))
+}
+
+/// What the harness has said recently.
+#[tauri::command]
+pub fn fleet_logs(state: State<'_, HostState>) -> Vec<LogLine> {
+    state.fleet.logs()
 }

@@ -13,7 +13,8 @@ import { auth } from '@/lib/auth';
 
 import { AgentsManager } from './AgentsManager';
 import { Machines } from './Machines';
-import { RuntimeList } from './RuntimeList';
+import { FleetControl } from './FleetControl';
+import { RuntimePanels } from './RuntimePanels';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,9 @@ export default async function AgentsSettingsPage() {
         let them into the room.
       </p>
 
-      <RuntimeList hosts={hosts} />
+      <FleetControl />
+
+      <RuntimePanels hosts={hosts} />
 
       <Machines
         machines={machines.map((row) => ({

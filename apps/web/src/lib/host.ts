@@ -39,6 +39,22 @@ export interface HostError {
   message: string;
 }
 
+/** One agent runtime, as this machine reports it. */
+export interface HostRuntime {
+  /** Matches `RuntimeSpec.id` in the shared catalogue. */
+  id: string;
+  label: string;
+  installed: boolean;
+  /** Absolute path the binary resolved to, when it did. */
+  path: string | null;
+  acp: 'native' | 'adapter' | 'none';
+  /** On PATH *and* able to speak ACP. Only a usable runtime can be started. */
+  usable: boolean;
+  /** How the classification was made, so the UI can explain rather than assert. */
+  evidence: string;
+  install: string;
+}
+
 export interface Backup {
   /** `ncryptsec1…` — the secret key, encrypted under the passphrase. */
   blob: string;
@@ -99,6 +115,106 @@ export interface HostBridge {
   canWipe(): Promise<boolean>;
   /** Forget the identity on this machine. Refused until a backup is confirmed. */
   wipeIdentity(): Promise<void>;
+
+  /**
+   * What this machine could run.
+   *
+   * Not cached by the host: "I just installed it" happens while the app is
+   * open, so the caller decides when to ask again.
+   */
+  detectRuntimes(): Promise<HostRuntime[]>;
+
+  /**
+   * This machine, as the office should record it.
+   *
+   * `registered` guards against registering twice: only the token's hash is
+   * stored server-side, so a second registration cannot return the first
+   * token — it replaces it. Asking every launch would quietly orphan whatever
+   * the previous launch stored.
+   */
+  hostStatus(): Promise<HostStatus>;
+
+  /**
+   * Keep a host token the office just minted for this machine.
+   *
+   * One-way on purpose: there is no command to read it back. The page hands the
+   * credential over and cannot retrieve it, so a later bug in the office cannot
+   * exfiltrate a token it no longer holds.
+   */
+  rememberHostToken(token: string, label: string): Promise<void>;
+
+  /** Drop this machine's token, so the next launch registers again. */
+  forgetHostToken(): Promise<void>;
+
+  /**
+   * Run the agents the office has assigned to this machine.
+   *
+   * Note what is *not* passed: no command, and no runtime id. The harness asks
+   * the office what belongs here and resolves each id through the shared
+   * catalogue itself, so nothing on this call can become something to execute.
+   */
+  /**
+   * Run the agents the office has assigned to this machine.
+   *
+   * Takes nothing. No command, no runtime id, no working directory, and not
+   * even the office URL — the host knows which office it is configured for, and
+   * the machine credential's destination is not the page's to choose.
+   */
+  startFleet(): Promise<FleetState>;
+  stopFleet(): Promise<void>;
+  fleetStatus(): Promise<FleetState>;
+  /** What the harness has said recently. Bounded; oldest lines fall off. */
+  fleetLogs(): Promise<LogLine[]>;
+
+  /** Where this machine keeps its repositories. */
+  reposDir(): Promise<string>;
+  /**
+   * What is in the repos directory.
+   *
+   * The office cannot see anybody's filesystem, so without this a workspace has
+   * to be typed exactly right from memory.
+   */
+  /** What is in the repos directory. Takes no path: see `pickReposDir`. */
+  listRepos(): Promise<Repo[]>;
+  /**
+   * Ask for a folder, and remember it.
+   *
+   * Picking and remembering are one action on the host side. Returning a path
+   * for the page to store meant it was stored nowhere, and the button changed a
+   * label while the harness kept using the old directory.
+   */
+  pickReposDir(): Promise<string | null>;
+}
+
+export interface LogLine {
+  /** `out` or `err` — agent output against the harness's own complaints. */
+  stream: string;
+  text: string;
+}
+
+export interface Repo {
+  name: string;
+  git: boolean;
+}
+
+/** What this machine's harness is doing. */
+export type FleetState =
+  | { state: 'running'; pid: number }
+  | { state: 'stopped' }
+  /** Ended on its own — worth showing, rather than agents silently going quiet. */
+  | { state: 'crashed'; code: number | null };
+
+export interface HostStatus {
+  /**
+   * What this machine is called.
+   *
+   * Once registered this is the name it registered *under*, not whatever the OS
+   * currently reports — a hostname follows the network, and agents are pinned
+   * to a machine by label.
+   */
+  label: string;
+  /** Does this machine already hold a host token? */
+  registered: boolean;
 }
 
 declare global {
@@ -155,6 +271,18 @@ function tauriBridge(): HostBridge {
     confirmBackup: (token) => call<void>('confirm_backup', { token }),
     canWipe: () => call<boolean>('can_wipe'),
     wipeIdentity: () => call<void>('wipe_identity'),
+    detectRuntimes: () => call<HostRuntime[]>('detect_runtimes'),
+    hostStatus: () => call<HostStatus>('host_status'),
+    rememberHostToken: (token, label) =>
+      call<void>('remember_host_token', { token, label }),
+    forgetHostToken: () => call<void>('forget_host_token'),
+    startFleet: () => call<FleetState>('start_fleet'),
+    stopFleet: () => call<void>('stop_fleet'),
+    fleetStatus: () => call<FleetState>('fleet_status'),
+    fleetLogs: () => call<LogLine[]>('fleet_logs'),
+    reposDir: () => call<string>('repos_dir'),
+    listRepos: () => call<Repo[]>('list_repos'),
+    pickReposDir: () => call<string | null>('pick_repos_dir'),
   };
 }
 

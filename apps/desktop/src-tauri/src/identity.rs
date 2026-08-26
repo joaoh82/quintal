@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 use crate::nip49::{self, Nip49Error};
 use crate::secrets::{Blob, SecretStore, SecretsError};
 
-const IDENTITY_SLOT: &str = "identity";
+pub(crate) const IDENTITY_SLOT: &str = "identity";
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityError {
@@ -31,6 +31,12 @@ pub enum IdentityError {
     WrongIdentity,
     #[error("export a backup and confirm you have stored it before wiping")]
     NoBackupYet,
+    #[error("register a machine only once this app has an identity")]
+    NoIdentityYet,
+    #[error("a host token cannot be empty")]
+    EmptyToken,
+    #[error("a machine needs a name")]
+    EmptyLabel,
 }
 
 /// What the UI is allowed to know about the state of the key.
@@ -87,7 +93,7 @@ pub fn npub_of(pubkey: &[u8; 32]) -> Result<String, IdentityError> {
     encode_bech32("npub", pubkey)
 }
 
-fn signing_key(secret: &[u8; 32]) -> Result<SigningKey, IdentityError> {
+pub(crate) fn signing_key(secret: &[u8; 32]) -> Result<SigningKey, IdentityError> {
     SigningKey::from_bytes(secret).map_err(|_| IdentityError::BadKey)
 }
 
@@ -205,6 +211,12 @@ pub fn load_or_create_with(
     let mut blob = store.load()?;
     if let Some(existing) = blob.slots.get(IDENTITY_SLOT) {
         let secret = decode_secret(existing)?;
+        // Heal a marker that went missing while the secret survived — see
+        // `SecretStore::ensure_marker`. Without this the drift persists until
+        // the next write, and so does the window where a locked keychain looks
+        // like a first run.
+        let signing = signing_key(&secret)?;
+        store.ensure_marker(&npub_of(&signing.verifying_key().to_bytes().into())?)?;
         return Ok(Identity {
             secret,
             ephemeral: false,
@@ -414,6 +426,59 @@ mod tests {
             first.public_key_hex().unwrap(),
             second.public_key_hex().unwrap(),
             "a second launch must not mint a second identity",
+        );
+    }
+
+    #[test]
+    fn a_marker_lost_beside_a_surviving_secret_is_put_back() {
+        // The drift is real and easy to cause: the secret lives in the OS
+        // keychain, the marker is a file, and deleting the app data directory
+        // takes one and not the other.
+        let (dir, store) = new_store();
+        let created = load_or_create_with(&store, None).unwrap();
+        let npub = created.npub().unwrap();
+
+        std::fs::remove_file(dir.path().join("identity.marker")).unwrap();
+        assert!(store.marker().is_none(), "drift established");
+
+        let again = load_or_create_with(&store, None).unwrap();
+        assert_eq!(again.npub().unwrap(), npub, "same identity, not a new one");
+        assert_eq!(
+            store.marker().as_deref(),
+            Some(npub.as_str()),
+            "and the marker describes it again",
+        );
+    }
+
+    #[test]
+    fn healing_the_marker_restores_the_locked_check() {
+        // Why the healing matters at all. With the marker gone, a keychain that
+        // will not open reads as "no key yet" and the UI offers to create one
+        // over an identity that already exists. Reading once puts the guard
+        // back.
+        let (dir, store) = new_store();
+        load_or_create_with(&store, None).unwrap();
+        std::fs::remove_file(dir.path().join("identity.marker")).unwrap();
+
+        // Before healing: secret unreadable + no marker looks like a first run.
+        let secrets = dir.path().join("secrets.json");
+        let saved = std::fs::read(&secrets).unwrap();
+        std::fs::remove_file(&secrets).unwrap();
+        assert_eq!(
+            state_with(&store, None),
+            IdentityState::None,
+            "this is the window the drift opens",
+        );
+
+        // Put the secret back, read once to heal, then take it away again.
+        std::fs::write(&secrets, &saved).unwrap();
+        load_or_create_with(&store, None).unwrap();
+        std::fs::remove_file(&secrets).unwrap();
+
+        assert_eq!(
+            state_with(&store, None),
+            IdentityState::Locked,
+            "now an unreadable secret is correctly reported as locked",
         );
     }
 

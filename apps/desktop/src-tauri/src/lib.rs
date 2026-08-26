@@ -7,16 +7,21 @@
 
 pub mod commands;
 pub mod identity;
+pub mod machine;
 pub mod nip49;
 pub mod office;
+pub mod runtimes;
 pub mod secrets;
+pub mod spawn;
 
 use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::has_identity,
+            commands::detect_runtimes,
             commands::get_public_key,
             commands::sign_challenge,
             commands::import_identity,
@@ -24,6 +29,16 @@ pub fn run() {
             commands::confirm_backup,
             commands::can_wipe,
             commands::wipe_identity,
+            commands::host_status,
+            commands::remember_host_token,
+            commands::forget_host_token,
+            commands::start_fleet,
+            commands::stop_fleet,
+            commands::fleet_status,
+            commands::fleet_logs,
+            commands::repos_dir,
+            commands::list_repos,
+            commands::pick_repos_dir,
         ])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
@@ -39,7 +54,10 @@ pub fn run() {
 
             app.manage(commands::HostState {
                 store: secrets::SecretStore::new(&dir)?,
+                dir: dir.clone(),
+                office: office.clone(),
                 pending_export: std::sync::Mutex::new(None),
+                fleet: spawn::Fleet::new(),
             });
 
             if let Some(window) = app.get_webview_window("main") {
@@ -58,6 +76,16 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Quintal desktop host");
+        .build(tauri::generate_context!())
+        .expect("error while running the Quintal desktop host")
+        .run(|app, event| {
+            // Closing the window must not leave a harness behind. The fleet is a
+            // child process of this one, and an orphan keeps agents in the office
+            // that nobody can see or stop from here.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                if let Some(state) = app.try_state::<commands::HostState>() {
+                    let _ = state.fleet.stop();
+                }
+            }
+        });
 }

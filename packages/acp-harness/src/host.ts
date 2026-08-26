@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -20,6 +20,20 @@ import { hostLabel } from './runtimes.js';
 export interface StoredHost {
   token: string;
   url: string;
+  /**
+   * Where the token came from, so a rejection can name the thing to fix.
+   *
+   * "Rejected" and "stale" look identical over HTTP — both are a 401 — but they
+   * have different fixes, and the file case is the common one: re-create the
+   * office (or the database) and every token on disk silently outlives the row
+   * it referred to. Pointing at /settings/agents is right for a revoked token
+   * and useless for an orphaned one.
+   */
+  source?: 'env' | 'file';
+  /** The file it was read from, when it came from one. */
+  path?: string;
+  /** When that file was last written. The tell for an orphaned token. */
+  writtenAt?: Date;
   /** Overrides the hostname when this machine should answer to another name. */
   label?: string;
   reposDir?: string;
@@ -35,12 +49,21 @@ export function readStoredHost(): StoredHost | null {
     return {
       token: fromEnv.trim(),
       url: process.env.QUINTAL_URL ?? 'http://localhost:3000',
+      source: 'env',
     };
   }
 
+  const path = hostFilePath();
   try {
-    const parsed = JSON.parse(readFileSync(hostFilePath(), 'utf8')) as StoredHost;
-    return typeof parsed?.token === 'string' && parsed.token.length > 0 ? parsed : null;
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as StoredHost;
+    if (typeof parsed?.token !== 'string' || parsed.token.length === 0) return null;
+    let writtenAt: Date | undefined;
+    try {
+      writtenAt = statSync(path).mtime;
+    } catch {
+      // The token is what matters; its age is a nicety.
+    }
+    return { ...parsed, source: 'file', path, writtenAt };
   } catch {
     return null;
   }
@@ -58,6 +81,34 @@ export function writeStoredHost(host: StoredHost): string {
 interface FleetResponse {
   host: { label: string; owner: string };
   agents: { agentId: string; name: string; runtimeId: string; repoSpec: string }[];
+}
+
+/**
+ * What to say when the office turns a token down.
+ *
+ * A 401 has two very different causes and the same shape on the wire: the token
+ * was revoked, or it outlived the office that issued it — the second being what
+ * happens to every stored token the moment a development database is recreated.
+ * Naming the file and when it was written lets somebody tell the two apart at a
+ * glance, which "it may have been revoked" does not.
+ */
+function staleTokenMessage(host: StoredHost): string {
+  if (host.source === 'env') {
+    return 'the office rejected the host token in QUINTAL_HOST_TOKEN. Check it is the one this office issued.';
+  }
+
+  const where = host.path ?? 'the stored host file';
+  const age =
+    host.writtenAt instanceof Date && !Number.isNaN(host.writtenAt.getTime())
+      ? ` (written ${host.writtenAt.toISOString().slice(0, 10)})`
+      : '';
+
+  return (
+    `the office rejected the host token in ${where}${age}. ` +
+    'If the office or its database was recreated since then, that token refers to a machine that no longer exists — ' +
+    'register this machine again and run `login` with the new token. ' +
+    'If you revoked it on purpose, create a new one at /settings/agents.'
+  );
 }
 
 /**
@@ -85,9 +136,7 @@ export async function fetchFleet(
   });
 
   if (response.status === 401) {
-    throw new ConfigError(
-      'the office rejected this host token — it may have been revoked. Create a new one at /settings/agents.',
-    );
+    throw new ConfigError(staleTokenMessage(host));
   }
   if (!response.ok) {
     throw new ConfigError(`the office returned ${response.status} for the fleet list`);

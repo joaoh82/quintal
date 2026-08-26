@@ -18,6 +18,8 @@ import {
   listHostTokens,
   revokeAgent,
   revokeHostToken,
+  forgetHostReport,
+  setAgentEnabled,
   setAgentLaunch,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -34,9 +36,26 @@ import { auth } from '@/lib/auth';
  * never sent again.
  */
 
+/**
+ * A signed-in, non-guest session.
+ *
+ * Everything in this file creates or destroys something durable: agents, the
+ * machine credentials that let a computer run them, and the assignments between
+ * the two. A guest link is a time-boxed visit, and none of that should outlive
+ * it.
+ *
+ * The sharpest case is the machine credential. A guest could mint a `qh_` token
+ * for their own workspace and — from the desktop app's devtools — hand it to
+ * `remember_host_token`, leaving somebody else's computer holding *their*
+ * machine token and booting *their* fleet. `POST /api/host/register` already
+ * refuses guests; this is the other door into the same room.
+ */
 async function requireSession() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) throw new Error('Not signed in.');
+  if (session.session.isGuest) {
+    throw new Error('Guests cannot manage agents or machines.');
+  }
   return session;
 }
 
@@ -250,5 +269,57 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
   }
 
   await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel });
+  revalidatePath('/settings/agents');
+}
+
+/**
+ * Turn an agent on or off without destroying it.
+ *
+ * Same gate as assigning: your own agents, or anyone's if you run the
+ * workspace. Being able to switch off somebody else's agent is a smaller power
+ * than being able to run it, but it is still theirs.
+ */
+export async function setAgentEnabledAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) throw new Error('No such agent.');
+
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    throw new Error('That is not your agent to change.');
+  }
+
+  await setAgentEnabled(db, agentId, formData.get('enabled') === 'true');
+  revalidatePath('/settings/agents');
+}
+
+/**
+ * Remove a machine's report from the office.
+ *
+ * Only your own: a report describes what somebody's computer has installed on
+ * it, and it is theirs to withdraw. It does not revoke anything — the machine
+ * reappears the next time its harness connects, which is the correct behaviour
+ * for a machine that still exists and the point of it for one that does not.
+ */
+export async function forgetHostReportAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const workspace = await ensurePersonalWorkspace(db, {
+    userId: session.user.id,
+    name: session.user.name,
+    pubkey: session.user.pubkey,
+  });
+
+  const label = String(formData.get('label') ?? '').trim();
+  if (label.length === 0) throw new Error('Which machine?');
+
+  await forgetHostReport(db, {
+    workspaceId: workspace.id,
+    ownerUserId: session.user.id,
+    label,
+  });
   revalidatePath('/settings/agents');
 }

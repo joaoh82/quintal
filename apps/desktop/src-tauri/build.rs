@@ -10,6 +10,7 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "has_identity",
+            "detect_runtimes",
             "get_public_key",
             "sign_challenge",
             "import_identity",
@@ -17,6 +18,16 @@ fn main() {
             "confirm_backup",
             "can_wipe",
             "wipe_identity",
+            "host_status",
+            "remember_host_token",
+            "forget_host_token",
+            "start_fleet",
+            "stop_fleet",
+            "fleet_status",
+            "fleet_logs",
+            "repos_dir",
+            "list_repos",
+            "pick_repos_dir",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");

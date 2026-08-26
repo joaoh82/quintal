@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { MachineRegistration } from '@/components/MachineRegistration';
 import { SignOutButton } from '@/components/SignOutButton';
 import { auth } from '@/lib/auth';
 
@@ -47,6 +48,8 @@ export default async function SettingsLayout({ children }: { children: ReactNode
       <SettingsTabs />
 
       <div className="min-h-0 flex-1">{children}</div>
+
+      <MachineRegistration />
     </div>
   );
 }

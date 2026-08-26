@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-forget-host-token"
+description = "Enables the forget_host_token command without any pre-configured scope."
+commands.allow = ["forget_host_token"]
+
+[[permission]]
+identifier = "deny-forget-host-token"
+description = "Denies the forget_host_token command without any pre-configured scope."
+commands.deny = ["forget_host_token"]

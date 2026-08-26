@@ -2,6 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
+import { RUNTIMES, acpCommandFor, runtimeById } from '@quintal/shared';
+
 /**
  * How a fleet is declared.
  *
@@ -13,12 +15,37 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 /** `repo: "*"` — root at the repos directory itself rather than one checkout. */
 export const ALL_REPOS = '*';
 
-/** Harnesses we know how to spawn without being told a command. */
-export const KNOWN_HARNESSES = ['claude-code', 'goose', 'codex', 'custom'] as const;
-export type Harness = (typeof KNOWN_HARNESSES)[number];
+/**
+ * Harnesses we know how to spawn without being told a command.
+ *
+ * Derived from the shared catalogue rather than written out here. The list used
+ * to be a hand-maintained array, and it drifted: the office listed `gemini`,
+ * `opencode` and `omp` as usable runtimes while this file had never heard of
+ * them, so the settings page said "ready" and the spawn said "unknown harness".
+ * One catalogue, one answer.
+ *
+ * `custom` is not a runtime — it is the escape hatch for a command somebody
+ * supplies themselves, so it is appended rather than found.
+ */
+export const CUSTOM_HARNESS = 'custom';
 
-export function isHarness(value: string): value is Harness {
-  return (KNOWN_HARNESSES as readonly string[]).includes(value);
+export const KNOWN_HARNESSES: readonly string[] = [
+  ...RUNTIMES.filter((runtime) => runtime.acp.kind !== 'none').map((runtime) => runtime.id),
+  CUSTOM_HARNESS,
+];
+
+/**
+ * A harness id this build can actually launch.
+ *
+ * `Harness` is a plain string now that the list is computed. The literal union
+ * it used to be looked like type safety and was not: it made `defaultCommandFor`
+ * an exhaustive switch over a list that was simply *wrong*, and exhaustiveness
+ * over the wrong set compiles perfectly.
+ */
+export type Harness = string;
+
+export function isHarness(value: string): boolean {
+  return KNOWN_HARNESSES.includes(value);
 }
 
 export interface AgentConfig {
@@ -123,20 +150,18 @@ export class ConfigError extends Error {
  * than the bare binaries. Goose speaks ACP itself.
  */
 export function defaultCommandFor(harness: Harness): string[] {
-  switch (harness) {
-    case 'claude-code':
-      // Not `@zed-industries/claude-code-acp`: that package is deprecated in
-      // favour of this one, and the old build refuses to start when it detects
-      // it is inside another Claude Code session — which is exactly what
-      // happens if you boot your fleet from a Claude Code terminal.
-      return ['npx', '-y', '@agentclientprotocol/claude-agent-acp'];
-    case 'goose':
-      return ['goose', 'acp'];
-    case 'codex':
-      return ['npx', '-y', '@agentclientprotocol/codex-acp'];
-    case 'custom':
-      throw new ConfigError('agent "custom" requires an explicit cmd');
+  if (harness === CUSTOM_HARNESS) {
+    throw new ConfigError('agent "custom" requires an explicit cmd');
   }
+
+  const spec = runtimeById(harness);
+  const command = spec ? acpCommandFor(spec) : null;
+  if (!command) {
+    throw new ConfigError(
+      `unknown harness "${harness}" — expected ${KNOWN_HARNESSES.join(' | ')}`,
+    );
+  }
+  return command;
 }
 
 /** Split a command string the way a shell would, minus the shell. */

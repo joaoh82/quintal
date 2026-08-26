@@ -21,6 +21,7 @@ import {
   assignAgentAction,
   createAgentAction,
   revokeAgentAction,
+  setAgentEnabledAction,
   type CreateAgentState,
 } from './actions';
 
@@ -250,6 +251,12 @@ function AgentRow({
 
       <span className="text-muted-foreground text-xs">{agent.ownerName}&rsquo;s</span>
 
+      {agent.hostLabel !== null && !agent.enabled && agent.revokedAt === null ? (
+        <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[11px]">
+          disabled
+        </span>
+      ) : null}
+
       {agent.status ? (
         <span className="text-muted-foreground truncate font-mono text-xs">
           {agent.status}
@@ -333,6 +340,16 @@ function AgentRow({
       >
         log
       </Link>
+
+      {canRevoke && agent.hostLabel !== null && agent.revokedAt === null ? (
+        <form action={setAgentEnabledAction}>
+          <input type="hidden" name="agentId" value={agent.id} />
+          <input type="hidden" name="enabled" value={agent.enabled ? 'false' : 'true'} />
+          <Button type="submit" variant="ghost" size="sm">
+            {agent.enabled ? 'Disable' : 'Enable'}
+          </Button>
+        </form>
+      ) : null}
 
       {canRevoke ? (
         <form action={revokeAgentAction}>

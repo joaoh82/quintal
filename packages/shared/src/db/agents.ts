@@ -254,6 +254,8 @@ export interface AgentListEntry {
   runtimeId: string | null;
   repoSpec: string | null;
   hostLabel: string | null;
+  /** Whether a host pulling its fleet should be running this. */
+  enabled: boolean;
   /** Where its harness said it is rooted. Empty until one connects. */
   workspacePath: string;
   rootedAtReposDir: boolean;
@@ -279,6 +281,7 @@ export async function listAgentsForWorkspace(
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
+      enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -316,6 +319,7 @@ export async function findAgentById(
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
+      enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
       createdAt: agents.createdAt,
@@ -431,6 +435,22 @@ export async function setAgentLaunch(
         : { hostLabel: null },
     )
     .where(eq(agents.id, agentId));
+}
+
+/**
+ * Whether a host that pulls its fleet should be running this agent.
+ *
+ * Distinct from revoking, and deliberately so: revoking destroys a credential
+ * and cannot be undone, while this is a switch. `fleetForHost` already filters
+ * on it, and the harness reconciles rather than restarts — so flipping it stops
+ * or starts one agent and leaves the rest of the fleet alone.
+ */
+export async function setAgentEnabled(
+  db: Database,
+  agentId: string,
+  enabled: boolean,
+): Promise<void> {
+  await db.update(agents).set({ enabled }).where(eq(agents.id, agentId));
 }
 
 // --- audit log -------------------------------------------------------------

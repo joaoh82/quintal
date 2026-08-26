@@ -19,6 +19,19 @@ export interface SupervisorOptions {
   plain?: boolean;
   /** Where this machine keeps repositories, reported to the office. */
   reposDir?: string;
+  /**
+   * The name the office knows this machine by.
+   *
+   * Not the OS hostname. On macOS `os.hostname()` returns the name the local
+   * network handed out, so the same computer answers to `Joaos-MacBook-Pro-2`
+   * on one network and `Joaos-MBP-2.home` on another — and reporting under the
+   * drifting one makes a second machine appear in the office beside the real
+   * registration, with the fleet still assigned to the first.
+   *
+   * Undefined when the fleet came from a local file rather than the office;
+   * there is no registration to report under, so the hostname is all there is.
+   */
+  hostLabel?: string;
 }
 
 interface Entry {
@@ -117,7 +130,10 @@ export class Supervisor {
     if (live.length === 0) return;
 
     try {
-      const host = { label: hostLabel(), reposDir: this.options.reposDir ?? '' };
+      const host = {
+        label: this.options.hostLabel ?? hostLabel(),
+        reposDir: this.options.reposDir ?? '',
+      };
       const runtimes = await detectRuntimes();
       live[0]?.reportHost({ ...host, runtimes });
       for (const runner of live.slice(1)) runner.reportHost(host);

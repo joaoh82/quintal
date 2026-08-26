@@ -20,6 +20,7 @@ import {
   isHostError,
   type IdentityState,
 } from '@/lib/host';
+import { useHost } from '@/lib/use-host';
 import {
   createIdentity,
   forgetSavedNsec,
@@ -38,6 +39,7 @@ import {
 type Mode = 'choose' | 'created' | 'import';
 
 export default function LoginPage() {
+  const { host } = useHost();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('choose');
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -209,7 +211,7 @@ export default function LoginPage() {
   }
 
   const prompt = hostPromptFor({
-    hosted: Boolean(getHost()),
+    hosted: host !== null,
     asking,
     state: hostKey,
     error: hostError,

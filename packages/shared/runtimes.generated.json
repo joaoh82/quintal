@@ -1,0 +1,97 @@
+{
+  "$comment": "Generated from packages/shared/src/runtimes.ts by scripts/emit-runtimes.mjs. Do not edit; edit the TypeScript and re-run.",
+  "runtimes": [
+    {
+      "id": "claude-code",
+      "label": "Claude Code",
+      "bin": "claude",
+      "acp": "adapter",
+      "command": [
+        "npx",
+        "-y",
+        "@agentclientprotocol/claude-agent-acp"
+      ],
+      "evidence": "Adapter published by the ACP maintainers; verified end to end.",
+      "install": "npm i -g @anthropic-ai/claude-code"
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "bin": "codex",
+      "acp": "adapter",
+      "command": [
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp"
+      ],
+      "evidence": "Adapter published by the ACP maintainers.",
+      "install": "npm i -g @openai/codex"
+    },
+    {
+      "id": "goose",
+      "label": "Goose",
+      "bin": "goose",
+      "acp": "native",
+      "command": [
+        "goose",
+        "acp"
+      ],
+      "evidence": "Ships an `acp` subcommand.",
+      "install": "https://block.github.io/goose/docs/getting-started/installation"
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini CLI",
+      "bin": "gemini",
+      "acp": "native",
+      "command": [
+        "gemini",
+        "--experimental-acp"
+      ],
+      "evidence": "`--experimental-acp` starts the agent in ACP mode.",
+      "install": "npm i -g @google/gemini-cli"
+    },
+    {
+      "id": "opencode",
+      "label": "opencode",
+      "bin": "opencode",
+      "acp": "native",
+      "command": [
+        "opencode",
+        "acp"
+      ],
+      "evidence": "Ships an `acp` subcommand.",
+      "install": "https://opencode.ai"
+    },
+    {
+      "id": "omp",
+      "label": "Oh My Pi",
+      "bin": "omp",
+      "acp": "native",
+      "command": [
+        "omp",
+        "acp"
+      ],
+      "evidence": "Ships an `acp` subcommand. Answered an ACP `initialize` over stdio as `oh-my-pi` v18.0.3, protocol 1. Verified 2026-08-24.",
+      "install": "https://omp.sh"
+    },
+    {
+      "id": "grok",
+      "label": "Grok Build",
+      "bin": "grok",
+      "acp": "none",
+      "command": null,
+      "evidence": "Emits ACP-shaped session updates as output, but exposes no ACP server mode — nothing accepts requests on stdin. Verified 2026-08-07.",
+      "install": "https://grok.com"
+    },
+    {
+      "id": "cursor",
+      "label": "Cursor",
+      "bin": "cursor-agent",
+      "acp": "none",
+      "command": null,
+      "evidence": "No ACP subcommand or flag; headless mode speaks its own stream-JSON. Verified 2026-08-07.",
+      "install": "https://cursor.com/cli"
+    }
+  ]
+}

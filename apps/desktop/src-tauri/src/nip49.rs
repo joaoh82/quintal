@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn opens_the_blob_from_the_spec() {
         let secret = decrypt(SPEC_NCRYPTSEC, SPEC_PASSWORD).expect("the NIP's own vector");
-        assert_eq!(hex::encode(&*secret), SPEC_SECRET_HEX);
+        assert_eq!(hex::encode(*secret), SPEC_SECRET_HEX);
     }
 
     #[test]
@@ -315,7 +315,7 @@ mod tests {
     fn passphrases_have_the_entropy_claimed_for_them() {
         let phrase = generate_passphrase();
         assert_eq!(phrase.split('-').count(), PASSPHRASE_WORDS);
-        assert!(PASSPHRASE_WORDS >= 6, "below six words this is guessable");
+        const { assert!(PASSPHRASE_WORDS >= 6, "below six words this is guessable") };
 
         // Not a randomness test — just that it is not returning a constant.
         let another = generate_passphrase();

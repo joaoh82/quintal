@@ -211,3 +211,38 @@ export class GatewayClient {
     this.#pending.clear();
   }
 }
+
+/**
+ * The gateway, as everything else is allowed to see it.
+ *
+ * Derived from the class with `Pick` rather than hand-written, so it cannot
+ * drift from the real thing: adding a method here that `GatewayClient` does not
+ * have is a compile error, and renaming one there breaks this immediately.
+ *
+ * It exists so `AgentRunner` can be handed a stand-in. The runner reaches the
+ * network through exactly these members, and a test that cannot replace them
+ * has to stand up a real office to check anything at all — which is why the
+ * runner had no tests before.
+ *
+ * `Pick` also drops the `#private` fields, which matters: a class with private
+ * members is matched nominally, so without this no object literal could ever
+ * satisfy the type.
+ */
+export type Gateway = Pick<
+  GatewayClient,
+  | 'ready'
+  | 'roster'
+  | 'connected'
+  | 'connect'
+  | 'leave'
+  | 'say'
+  | 'setStatus'
+  | 'hostReport'
+  | 'moveToZone'
+  | 'lookAround'
+  | 'messagesGet'
+  | 'memoryGet'
+  | 'memorySet'
+  | 'occupants'
+  | 'on'
+>;

@@ -267,7 +267,14 @@ async function main(): Promise<void> {
     return;
   }
 
-  const supervisor = new Supervisor(agents, { logDir, plain, reposDir });
+  // Report under the name the office registered, not the one the network is
+  // currently using for this machine.
+  const supervisor = new Supervisor(agents, {
+    logDir,
+    plain,
+    reposDir,
+    hostLabel: officeFleet?.label,
+  });
 
   if (command === 'status') {
     // `status` on a fleet nobody is running can only report the config; the
