@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { HOST_TOKEN_PREFIX, acpCommandFor, runtimeById } from '@quintal/shared';
 
@@ -183,6 +183,22 @@ export function toAgentConfigs(
       ? reposDir
       : resolve(reposDir, expandHome(member.repoSpec));
 
+    // The office says which repo; it does not get to say "anywhere".
+    //
+    // `repoSpec` is the one thing here that is not a catalogue id, and both
+    // `~` and a leading `/` walk straight out of the repos directory — as does
+    // `../../..`. It is the owner's own configuration, so this is not a
+    // privilege boundary so much as a blast radius: an agent is rooted where
+    // its owner said, and "where its owner said" should stay inside the
+    // directory they nominated for exactly this.
+    if (!isInside(reposDir, cwd)) {
+      skipped.push({
+        name: member.name,
+        why: `workspace "${member.repoSpec}" is outside ${reposDir}`,
+      });
+      continue;
+    }
+
     agents.push({
       name: member.name,
       // The token *is* the credential; the agent id says which agent to be.
@@ -214,3 +230,16 @@ export function labelFor(host: StoredHost): string | null {
 
 /** This machine's OS name, for the host report only. */
 export { hostLabel };
+
+/**
+ * Is `candidate` the directory `root`, or somewhere beneath it?
+ *
+ * Compared after `resolve`, so `..` segments are already collapsed — a textual
+ * check on the spec would miss `a/../../b`. The separator matters: without it
+ * `/repos-elsewhere` counts as inside `/repos`.
+ */
+function isInside(root: string, candidate: string): boolean {
+  const from = resolve(root);
+  const to = resolve(candidate);
+  return to === from || to.startsWith(from.endsWith(sep) ? from : from + sep);
+}
