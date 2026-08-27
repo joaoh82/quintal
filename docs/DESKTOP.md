@@ -49,11 +49,16 @@ guessing. Add one by URL — `http://localhost:3000` while developing, or wherev
 yours is deployed. "Add or switch office…" in Settings, and "Switch office…" in
 the menu bar, come back to it later.
 
-**An office cannot choose which office comes next.** Adding, switching and
-forgetting are granted only while *no* office is loaded — that is, while the
-picker is what you are looking at. Otherwise a page in your office could add an
-attacker's URL, switch to it, and inherit key signing on the next boot. An
-office can still ask to send you back to the picker, where you decide.
+**An office cannot introduce a new office.** Adding and forgetting are granted
+only while *no* office is loaded — that is, while the picker is what you are
+looking at. Otherwise a page in your office could add an attacker's URL, switch
+to it, and inherit key signing on the next boot.
+
+Switching is different, and allowed: it refuses any URL that is not already on
+your list, so the most an office can do with it is send you to another office
+you added yourself — somewhere you already trust with the same bridge.
+Introducing a new origin is the dangerous half, and that is what stays behind
+the picker.
 
 **Switching restarts Quintal**, deliberately. IPC is granted to exactly one
 origin at startup, so switching in place would leave the office you left still

@@ -185,13 +185,30 @@ pub fn capability_for(office: Option<&str>) -> String {
         "allow-set-opens-at-login",
         "allow-list-offices",
         "allow-open-office-picker",
+        // Safe from the office: it can only select an office already on the
+        // list, which only the picker can add to.
+        "allow-switch-office",
     ];
+    // Changing **which offices exist** is granted only when none is active,
+    // which is exactly when the picker is what is loaded.
+    //
+    // Granted to the office instead, a page there — through XSS, or because the
+    // office is hostile — could `add_office("https://attacker")`, switch to it,
+    // and inherit `sign_challenge` and `export_backup` on the next boot: the
+    // one-origin guarantee handed away by a page that was only ever supposed to
+    // ask for a signature.
+    //
+    // `switch_office` is *not* in here, and the distinction is the point. It
+    // refuses any URL that is not already in the list, so the most an office can
+    // do with it is send you to another office you added yourself — somewhere
+    // you already trust with the same bridge. Introducing a new origin is the
+    // dangerous half, and that is what stays behind the picker.
+    //
+    // Deliberately not "local only": in `tauri dev` the office *is* `devUrl`,
+    // which Tauri classifies as local, so local-only would grant these to the
+    // dev office too.
     if office.is_none() {
-        permissions.extend([
-            "allow-add-office",
-            "allow-switch-office",
-            "allow-remove-office",
-        ]);
+        permissions.extend(["allow-add-office", "allow-remove-office"]);
     }
 
     serde_json::json!({
@@ -503,29 +520,24 @@ mod tests {
     #[test]
     fn an_active_office_cannot_change_which_offices_exist() {
         let capability = capability_for(Some("https://office.example.com"));
-        for forbidden in [
-            "allow-add-office",
-            "allow-switch-office",
-            "allow-remove-office",
-        ] {
+        for forbidden in ["allow-add-office", "allow-remove-office"] {
             assert!(
                 !capability.contains(forbidden),
                 "{forbidden} must not be granted while an office is loaded"
             );
         }
-        // It may still ask to be sent to the picker, where a human decides.
+        // It may still ask to be sent to the picker, where a human decides —
+        // and may switch between offices already on the list, which cannot
+        // introduce an origin nobody chose.
         assert!(capability.contains("allow-open-office-picker"));
+        assert!(capability.contains("allow-switch-office"));
         assert!(capability.contains("allow-sign-challenge"));
     }
 
     #[test]
     fn the_picker_may_change_them_because_nothing_else_is_loaded() {
         let capability = capability_for(None);
-        for allowed in [
-            "allow-add-office",
-            "allow-switch-office",
-            "allow-remove-office",
-        ] {
+        for allowed in ["allow-add-office", "allow-remove-office"] {
             assert!(
                 capability.contains(allowed),
                 "{allowed} is the picker's job"

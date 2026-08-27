@@ -296,14 +296,17 @@ const EXPECTED = {
   // QUINTAL_OFFICE_URL supplies the active office here, so the stored list
   // starts empty — a first run, which is the picker's case.
   'list_offices': { ok: true, value: { offices: [], active: null } },
-  // Refused from here, and that is the point: this check runs with an office
-  // active (QUINTAL_OFFICE_URL), and an office may not choose which offices
-  // exist. Granting that to the office origin would let a page there add an
-  // attacker's URL, switch to it, and inherit signing on the next boot.
+  // This check runs with an office active, and an office may not change *which*
+  // offices exist — granting that would let a page there add an attacker's URL,
+  // switch to it, and inherit signing on the next boot. Both refusals come from
+  // Tauri's ACL rather than from our code.
   'add_office (bad)': { ok: false },
   'add_office': { ok: false },
-  'switch_office (not yours)': { ok: false },
   'remove_office': { ok: false },
+  // Switching *is* allowed from an office: it can only select something already
+  // on the list, so the worst it does is move you somewhere you added yourself.
+  // Refused here by our own check, because this URL is not one of them.
+  'switch_office (not yours)': { ok: false },
   'stop_fleet (nothing running)': { ok: false },
   // The token was just forgotten, so this must refuse rather than start a
   // harness with no credential — which would fail later and less clearly.
