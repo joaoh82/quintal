@@ -260,18 +260,24 @@ pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
 /// here and resolves each id through the shared catalogue itself, so there is no
 /// argument on this call that could become something to execute.
 #[tauri::command]
-pub fn start_fleet(state: State<'_, HostState>) -> Result<FleetState, HostError> {
+pub fn start_fleet(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+) -> Result<FleetState, HostError> {
     let token = machine::token(&state.store)?.ok_or(SpawnError::NotRegistered)?;
     // Both the working directory and the office come from this side. The page
     // asks to start the fleet; it does not get to say where, or where the
     // credential is sent.
     let dir = spawn::repos_dir(&state.dir);
-    Ok(state.fleet.start(&dir, &state.office, &token)?)
+    let started = state.fleet.start(&dir, &state.office, &token)?;
+    crate::tray::refresh(&app, &started);
+    Ok(started)
 }
 
 #[tauri::command]
-pub fn stop_fleet(state: State<'_, HostState>) -> Result<(), HostError> {
+pub fn stop_fleet(app: tauri::AppHandle, state: State<'_, HostState>) -> Result<(), HostError> {
     state.fleet.stop()?;
+    crate::tray::refresh(&app, &state.fleet.status());
     Ok(())
 }
 
@@ -334,4 +340,31 @@ pub async fn pick_repos_dir(
 #[tauri::command]
 pub fn fleet_logs(state: State<'_, HostState>) -> Vec<LogLine> {
     state.fleet.logs()
+}
+
+/// Whether Quintal opens when this computer starts.
+///
+/// Off until somebody asks for it. The office is where your agents live all
+/// day, so wanting it there on login is reasonable — deciding that on somebody's
+/// behalf is not.
+#[tauri::command]
+pub fn opens_at_login(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn set_opens_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), HostError> {
+    use tauri_plugin_autostart::ManagerExt;
+
+    let result = if enabled {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    };
+
+    result.map_err(|error| HostError {
+        code: "autostart".into(),
+        message: error.to_string(),
+    })
 }

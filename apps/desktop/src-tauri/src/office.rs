@@ -6,6 +6,7 @@
 //! deserves to be readable on its own.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const OFFICE_FILE: &str = "office.txt";
 const DEFAULT_OFFICE: &str = "http://localhost:3000";
@@ -138,10 +139,48 @@ pub fn capability_for(office: &str) -> String {
             "allow-fleet-logs",
             "allow-repos-dir",
             "allow-list-repos",
-            "allow-pick-repos-dir"
+            "allow-pick-repos-dir",
+            "allow-opens-at-login",
+            "allow-set-opens-at-login"
         ]
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod reachable_tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    /// The check that decides between the office and an explanation.
+    ///
+    /// A blank window is what happens when this is not consulted: the webview
+    /// leaves the bootstrap page, fails to load, and shows nothing anybody can
+    /// read.
+    #[test]
+    fn something_listening_is_reachable() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
+        let port = listener.local_addr().unwrap().port();
+        assert!(reachable(&format!("http://127.0.0.1:{port}")));
+    }
+
+    #[test]
+    fn nothing_listening_is_not() {
+        // Bound and dropped, so the port is real and free — a closed port
+        // rather than one that might belong to somebody else.
+        let port = {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
+            listener.local_addr().unwrap().port()
+        };
+        assert!(!reachable(&format!("http://127.0.0.1:{port}")));
+    }
+
+    #[test]
+    fn nonsense_is_not_reachable() {
+        for candidate in ["", "not a url", "file:///etc/passwd", "http://"] {
+            assert!(!reachable(candidate), "{candidate} must not look reachable");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -260,4 +299,31 @@ mod tests {
         assert!(!capability.contains("https://*"));
         assert!(!capability.contains("http://*"));
     }
+}
+
+/// Is anything actually listening where the office should be?
+///
+/// A TCP connect, not a request: this only has to tell "nothing is there" from
+/// "something is", and that is the difference between a window that explains
+/// itself and a blank one. An office that answers but is broken will render its
+/// own error, which is the right place for it.
+pub fn reachable(office: &str) -> bool {
+    use std::net::{TcpStream, ToSocketAddrs};
+
+    let Ok(url) = office.parse::<url::Url>() else {
+        return false;
+    };
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let Some(port) = url.port_or_known_default() else {
+        return false;
+    };
+
+    let Ok(addresses) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addresses
+        .into_iter()
+        .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok())
 }

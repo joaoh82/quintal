@@ -85,6 +85,8 @@ describe('getHost', () => {
       'reposDir',
       'listRepos',
       'pickReposDir',
+      'opensAtLogin',
+      'setOpensAtLogin',
     ] as const) {
       assert.equal(typeof host[method], 'function', `${method} is missing`);
     }

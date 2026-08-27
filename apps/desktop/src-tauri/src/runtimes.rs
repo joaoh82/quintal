@@ -128,6 +128,46 @@ pub fn detect() -> Vec<RuntimeStatus> {
 }
 
 #[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    /// The bug: a GUI launch gets launchd's PATH, which has none of the places
+    /// agent CLIs live, so every runtime read as "not installed".
+    #[test]
+    fn merging_adds_what_was_missing_and_keeps_the_order() {
+        let merged = merge_paths(
+            "/usr/bin:/bin",
+            "/opt/homebrew/bin:/usr/bin:/Users/me/.local/bin",
+        );
+        assert_eq!(
+            merged, "/usr/bin:/bin:/opt/homebrew/bin:/Users/me/.local/bin",
+            "existing entries keep deciding which binary wins"
+        );
+    }
+
+    #[test]
+    fn merging_does_not_duplicate_or_keep_empties() {
+        assert_eq!(merge_paths("/bin", "/bin"), "/bin");
+        assert_eq!(merge_paths("/bin::", ":/usr/bin:"), "/bin:/usr/bin");
+    }
+
+    #[test]
+    fn a_path_is_read_past_whatever_else_the_shell_printed() {
+        let noisy = format!("Welcome!\nsome motd\n{PATH_MARKER}/opt/homebrew/bin:/usr/bin");
+        assert_eq!(
+            extract_path(&noisy).as_deref(),
+            Some("/opt/homebrew/bin:/usr/bin"),
+        );
+    }
+
+    #[test]
+    fn nothing_useful_is_not_mistaken_for_a_path() {
+        assert_eq!(extract_path("no marker here"), None);
+        assert_eq!(extract_path(&format!("{PATH_MARKER}   ")), None);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -201,4 +241,89 @@ mod tests {
             assert!(resolve("definitely-not-a-real-binary-xyzzy").is_none());
         }
     }
+}
+
+// --- the PATH a GUI app does not get ----------------------------------------
+
+/// A marker, so the shell's own chatter cannot be mistaken for the answer.
+const PATH_MARKER: &str = "__quintal_path__";
+
+/// Adopt the `PATH` a login shell would have.
+///
+/// An app launched from Finder inherits launchd's environment, not yours. On a
+/// stock macOS that is `/usr/bin:/bin:/usr/sbin:/sbin` — and every agent CLI
+/// worth finding lives somewhere else: Homebrew, nvm, `~/.local/bin`,
+/// `~/.opencode/bin`. So the bundled app reported every runtime as "not
+/// installed" while the same code launched from a terminal found them all, and
+/// the harness it spawns could not be found either.
+///
+/// Asking the login shell is the same thing editors do for the same reason. It
+/// runs the user's rc files, which is the point: that is where the entries come
+/// from.
+///
+/// `QUINTAL_NO_LOGIN_PATH` skips it, for tests and CI that want a PATH they
+/// control and no shell startup cost.
+pub fn adopt_login_path() {
+    if std::env::var_os("QUINTAL_NO_LOGIN_PATH").is_some() {
+        return;
+    }
+    let Some(from_shell) = login_shell_path() else {
+        return;
+    };
+    let current = std::env::var("PATH").unwrap_or_default();
+    std::env::set_var("PATH", merge_paths(&current, &from_shell));
+}
+
+/// Everything in `current`, then anything in `extra` it did not already have.
+///
+/// Appended rather than prepended: a PATH somebody set deliberately keeps
+/// deciding which binary wins, and this only ever adds places to look.
+fn merge_paths(current: &str, extra: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    for entry in current.split(':').chain(extra.split(':')) {
+        if !entry.is_empty() && !out.contains(&entry) {
+            out.push(entry);
+        }
+    }
+    out.join(":")
+}
+
+fn login_shell_path() -> Option<String> {
+    let shell = std::env::var("SHELL").ok()?;
+
+    let mut child = std::process::Command::new(shell)
+        .args(["-lic", &format!("printf '{PATH_MARKER}%s' \"$PATH\"")])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // A login shell runs somebody's rc files, which can do anything at all —
+    // including block. Better to start with the PATH we have than not start.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
+
+    let mut text = String::new();
+    use std::io::Read;
+    child.stdout.take()?.read_to_string(&mut text).ok()?;
+    extract_path(&text)
+}
+
+/// Pull the PATH out of whatever else the shell decided to print.
+fn extract_path(output: &str) -> Option<String> {
+    let after = output.rsplit_once(PATH_MARKER)?.1.trim();
+    (!after.is_empty()).then(|| after.to_string())
 }

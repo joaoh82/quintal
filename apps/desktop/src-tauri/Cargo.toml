@@ -16,7 +16,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # BIP-340 Schnorr over secp256k1, pure Rust so there is no C toolchain between a
@@ -39,6 +39,7 @@ chacha20poly1305 = "0.10"
 unicode-normalization = "0.1"
 gethostname = "1"
 tauri-plugin-dialog = "2"
+tauri-plugin-autostart = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

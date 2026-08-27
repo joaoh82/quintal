@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Quintal</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: grid;
+    place-items: center;
+    font: 14px/1.5 system-ui, sans-serif;
+    background: #0b0b0c;
+    color: #a1a1aa;
+  }
+</style>
+<!--
+  The bootstrap page, and the only markup this app owns.
+
+  `apps/web` is the UI. The window is pointed at an office URL during setup and
+  this is replaced by the real app; it exists so there is something to look at
+  during the moment before that, and something to show if the office cannot be
+  reached. Anything more than that belongs in the web app, where a browser can
+  see it too.
+-->
+<p id="status">Connecting to your office…</p>

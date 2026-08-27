@@ -184,6 +184,16 @@ export interface HostBridge {
    * label while the harness kept using the old directory.
    */
   pickReposDir(): Promise<string | null>;
+
+  /**
+   * Does Quintal open when this computer starts?
+   *
+   * Off until somebody asks for it. The office is where your agents live all
+   * day, so wanting it there on login is reasonable — deciding that on
+   * somebody's behalf is not.
+   */
+  opensAtLogin(): Promise<boolean>;
+  setOpensAtLogin(enabled: boolean): Promise<void>;
 }
 
 export interface LogLine {
@@ -283,6 +293,8 @@ function tauriBridge(): HostBridge {
     reposDir: () => call<string>('repos_dir'),
     listRepos: () => call<Repo[]>('list_repos'),
     pickReposDir: () => call<string | null>('pick_repos_dir'),
+    opensAtLogin: () => call<boolean>('opens_at_login'),
+    setOpensAtLogin: (enabled) => call<void>('set_opens_at_login', { enabled }),
   };
 }
 

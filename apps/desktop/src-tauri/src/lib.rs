@@ -13,12 +13,19 @@ pub mod office;
 pub mod runtimes;
 pub mod secrets;
 pub mod spawn;
+pub mod tray;
 
 use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Off unless somebody turns it on: an app that adds itself to login
+        // items uninvited is a thing people uninstall.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .invoke_handler(tauri::generate_handler![
             commands::has_identity,
             commands::detect_runtimes,
@@ -39,8 +46,15 @@ pub fn run() {
             commands::repos_dir,
             commands::list_repos,
             commands::pick_repos_dir,
+            commands::opens_at_login,
+            commands::set_opens_at_login,
         ])
         .setup(|app| {
+            // Before anything looks for a binary. An app launched from Finder
+            // inherits launchd's PATH, which contains none of the places agent
+            // CLIs actually live — see `runtimes::adopt_login_path`.
+            runtimes::adopt_login_path();
+
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
 
@@ -60,16 +74,18 @@ pub fn run() {
                 fleet: spawn::Fleet::new(),
             });
 
+            tray::build(app.handle())?;
+            tray::watch(app.handle());
+
             if let Some(window) = app.get_webview_window("main") {
-                match office.parse() {
-                    Ok(url) => {
-                        window.navigate(url)?;
-                    }
+                match office.parse::<tauri::Url>() {
+                    Ok(url) => wait_for_office(window, url),
                     Err(_) => {
                         // Leave the bootstrap page up rather than navigating
                         // somewhere unintended; it is the one screen that can
                         // say the office URL is wrong.
                         eprintln!("[quintal] not a usable office URL: {office}");
+                        say(&window, &format!("{office} is not a usable office URL."));
                     }
                 }
             }
@@ -88,4 +104,57 @@ pub fn run() {
                 }
             }
         });
+}
+
+/// Go to the office as soon as there is one, and say so meanwhile.
+///
+/// Navigating unconditionally is what made a stopped office look like a broken
+/// app: the webview left the bootstrap page, failed to load, and showed a blank
+/// window with nothing to read. The page already exists to say what is
+/// happening — it just needed to be given the chance.
+///
+/// It keeps looking rather than giving up once, because starting the app before
+/// the office is an ordinary order to do things in, and an app that fixes itself
+/// beats one that needs relaunching.
+fn wait_for_office(window: tauri::WebviewWindow, url: tauri::Url) {
+    std::thread::spawn(move || {
+        let mut explained = false;
+        loop {
+            if office::reachable(url.as_str()) {
+                let _ = window.navigate(url);
+                return;
+            }
+            if !explained {
+                say(
+                    &window,
+                    &format!(
+                        "Waiting for your office at {url} — nothing is answering there yet. \
+                         Start it with `pnpm dev`, or open Quintal with `pnpm desktop`, \
+                         which starts both.",
+                    ),
+                );
+                explained = true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        }
+    });
+}
+
+/// Put a line on the bootstrap page.
+///
+/// Only lands in a bundled app, where the bootstrap page is what the webview
+/// loads first. Under `tauri dev` the webview goes straight to `devUrl`, and
+/// `tauri` itself waits for that server before launching — so there is no
+/// blank-window moment in development for this to fill, and the eval quietly
+/// finds nothing.
+///
+/// Serialised rather than interpolated: the office URL comes from a file on
+/// disk, and a URL with a quote in it should be unreadable, not executable.
+fn say(window: &tauri::WebviewWindow, message: &str) {
+    let Ok(text) = serde_json::to_string(message) else {
+        return;
+    };
+    let _ = window.eval(format!(
+        "document.getElementById('status').textContent = {text};"
+    ));
 }

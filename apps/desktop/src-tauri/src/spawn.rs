@@ -222,13 +222,38 @@ pub fn list_repos(repos_dir: &Path) -> Vec<Repo> {
     repos
 }
 
-/// Find the harness. `QUINTAL_ACP_BIN` wins, for development and for CI.
+/// Find the harness.
+///
+/// Beside this executable first. That is where a bundled app keeps it — the
+/// whole reason the harness is compiled into the bundle is that a packaged app
+/// has neither the repo's `node_modules/.bin` nor, launched from Finder, any
+/// PATH worth searching. Looking next to ourselves needs no environment to be
+/// right.
+///
+/// `QUINTAL_ACP_BIN` still wins, for development and CI; PATH is the last
+/// resort, for somebody running a `quintal-acp` they installed themselves.
 pub fn harness_path() -> Result<PathBuf, SpawnError> {
     if let Some(explicit) = std::env::var_os("QUINTAL_ACP_BIN") {
         let path = PathBuf::from(explicit);
         if path.is_file() {
             return Ok(path);
         }
+    }
+
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(PathBuf::from));
+    harness_beside(beside.as_deref())
+}
+
+/// The half of `harness_path` that does not depend on where this test happens
+/// to be running from — see `start_with` for why that matters.
+fn harness_beside(exe_dir: Option<&Path>) -> Result<PathBuf, SpawnError> {
+    if let Some(found) = exe_dir
+        .map(|dir| dir.join("quintal-acp"))
+        .filter(|path| path.is_file())
+    {
+        return Ok(found);
     }
     runtimes::resolve("quintal-acp").ok_or(SpawnError::NoHarness)
 }
@@ -552,6 +577,35 @@ mod tests {
     #[test]
     fn a_repos_directory_that_is_not_there_lists_nothing() {
         assert!(list_repos(Path::new("/no/such/place")).is_empty());
+    }
+
+    /// A packaged app has no PATH worth searching and no `node_modules/.bin`,
+    /// which is why the harness ships beside the executable — and why looking
+    /// there has to come before looking anywhere else.
+    #[test]
+    fn the_harness_beside_the_executable_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        let beside = fake_harness(dir.path(), "exit 0");
+        std::fs::rename(&beside, dir.path().join("quintal-acp")).expect("named");
+
+        assert_eq!(
+            harness_beside(Some(dir.path())).expect("found"),
+            dir.path().join("quintal-acp"),
+        );
+    }
+
+    #[test]
+    fn without_one_beside_us_it_falls_back_rather_than_inventing_a_path() {
+        let dir = tempfile::tempdir().unwrap();
+        // Nothing named quintal-acp here, and (in CI) none on PATH either.
+        match harness_beside(Some(dir.path())) {
+            Ok(found) => assert_ne!(
+                found,
+                dir.path().join("quintal-acp"),
+                "must not claim a file that is not there"
+            ),
+            Err(error) => assert!(matches!(error, SpawnError::NoHarness)),
+        }
     }
 
     #[test]

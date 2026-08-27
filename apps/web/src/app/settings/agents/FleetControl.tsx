@@ -27,6 +27,7 @@ export function FleetControl() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
+  const [atLogin, setAtLogin] = useState<boolean | null>(null);
   const tail = useRef<HTMLPreElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -43,6 +44,8 @@ export function FleetControl() {
 
   useEffect(() => {
     if (!host) return;
+    // Null until asked, so the checkbox is not drawn in a state nobody chose.
+    void host.opensAtLogin().then(setAtLogin).catch(() => setAtLogin(null));
     void refresh();
     const timer = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(timer);
@@ -107,6 +110,28 @@ export function FleetControl() {
         what belongs here — enabling and disabling an agent below is what decides
         that, and takes effect without restarting anything.
       </p>
+
+      {atLogin === null ? null : (
+        <label className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={atLogin}
+            onChange={(event) => {
+              const next = event.target.checked;
+              // Optimistic, then corrected: the OS is the source of truth, and
+              // a checkbox that lies about a login item is worse than a slow one.
+              setAtLogin(next);
+              void host
+                ?.setOpensAtLogin(next)
+                .catch((error: unknown) => {
+                  setProblem(describeHostFailure(error));
+                  setAtLogin(!next);
+                });
+            }}
+          />
+          Open Quintal at login, so your agents are running before you are
+        </label>
+      )}
 
       {problem ? <p className="mt-2 text-xs text-red-600">{problem}</p> : null}
 

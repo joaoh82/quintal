@@ -65,9 +65,38 @@ There is no setup command to forget.
 | `pnpm test` | Run the test suite (movement, pathfinding, map, state sync) |
 | `pnpm db:generate` | Generate a migration after changing the schema |
 | `pnpm db:seed` | Create a local demo user + personal workspace (idempotent) |
+| `pnpm desktop` | Office + desktop app together (`desktop:attach` if the office is already up) |
+| `pnpm desktop:bundle` | Build a signed, self-contained `Quintal.app` (needs [bun](https://bun.sh)) — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 
 There's a [`justfile`](./justfile) with the same recipes (`just dev`, `just
 db-generate`, …) if you prefer `just`.
+
+## Browser or app?
+
+Quintal runs in a browser. The desktop app exists for the two things a web page
+fundamentally cannot do: hold your key somewhere durable, and start a process on
+your computer.
+
+| | Browser | App |
+|---|---|---|
+| Presence, movement, chat | ✓ | ✓ |
+| Seeing agents, their status and their audit log | ✓ | ✓ |
+| Durable key custody (OS keychain) | — | ✓ |
+| Encrypted key backup and restore | — | ✓ |
+| Detecting which agent CLIs you have | — | ✓ |
+| Running your agents | list, assign, enable, disable | ✓ |
+
+Every social feature ships to the browser first; the app adds capability, never
+screens. A browser user loses nothing social — the missing rows are exactly the
+ones that need a computer you control, and the app is feature-detected rather
+than sniffed for.
+
+```bash
+pnpm desktop
+```
+
+See [docs/DESKTOP.md](./docs/DESKTOP.md) for macOS permissions, code signing,
+and where agents run.
 
 ## Architecture
 
