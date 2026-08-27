@@ -57,7 +57,7 @@
     <ul id="list"></ul>
 
     <form id="add">
-      <input id="url" placeholder="http://localhost:3000" spellcheck="false" />
+      <input id="url" value="http://localhost:3000" spellcheck="false" />
       <button type="submit">Add</button>
     </form>
     <p class="problem" id="problem" hidden></p>
@@ -97,6 +97,12 @@
 
     el('status').hidden = true;
     el('picker').hidden = false;
+    // Pre-filled and selected: localhost is the development default, and
+    // somebody arriving here from a working app should not have to retype the
+    // office they were already using.
+    const input = el('url');
+    input.focus();
+    input.select();
 
     const list = el('list');
     list.replaceChildren(
@@ -129,11 +135,15 @@
     );
   }
 
-  async function switchTo(url) {
+  async function switchTo(url, { leaving = true } = {}) {
     // Switching restarts, so the app comes up granting IPC to exactly one
     // origin. Said out loud rather than done quietly — the window vanishing is
     // alarming if nobody warned you.
-    if (!confirm(`Open ${url}?\n\nQuintal will restart.`)) return;
+    //
+    // Except when there is nothing to leave: warning somebody that their first
+    // office will restart an app they have not started using is a dialog that
+    // only ever gets clicked through.
+    if (leaving && !confirm(`Open ${url}?\n\nQuintal will restart.`)) return;
     try {
       await invoke('switch_office', { url });
     } catch (error) {
@@ -154,6 +164,7 @@
   el('add').onsubmit = async (event) => {
     event.preventDefault();
     el('problem').hidden = true;
+    const hadOffice = (await invoke('list_offices')).offices.length > 0;
     const url = el('url').value.trim();
     if (!url) return;
     try {
@@ -161,7 +172,9 @@
       el('url').value = '';
       // The first office added becomes the active one, so go straight in.
       const listed = await invoke('list_offices');
-      if (listed.active === url.replace(/\/+$/, '')) await switchTo(listed.active);
+      const added = url.replace(/\/+$/, '');
+      // The first office added becomes the active one, so go straight in.
+      if (listed.active === added) await switchTo(added, { leaving: hadOffice });
       else await render();
     } catch (error) {
       fail(error?.message ?? String(error));
