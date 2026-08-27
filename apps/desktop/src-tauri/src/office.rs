@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const OFFICE_FILE: &str = "office.txt";
+const OFFICES_FILE: &str = "offices.json";
 const DEFAULT_OFFICE: &str = "http://localhost:3000";
 
 /// Is this a URL we are willing to point a window at and grant IPC to?
@@ -61,6 +62,27 @@ fn is_loopback(host: &url::Host<&str>) -> bool {
 ///
 /// Anything unusable falls back to the default rather than being trusted: a
 /// misconfigured office should land you on localhost, not on a wildcard.
+pub fn active_office_url(dir: &Path) -> Option<String> {
+    if let Some(from_env) = std::env::var("QUINTAL_OFFICE_URL")
+        .ok()
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+    {
+        return if is_usable_office(&from_env) {
+            Some(from_env)
+        } else {
+            eprintln!("[quintal] refusing office URL {from_env:?} from the environment");
+            None
+        };
+    }
+
+    load_offices(dir)
+        .active_office()
+        .map(|office| office.url.clone())
+}
+
+/// The old single-office resolution, kept for callers that must have a URL.
+#[allow(dead_code)]
 pub fn office_url(dir: &Path) -> String {
     let raw = std::env::var("QUINTAL_OFFICE_URL")
         .ok()
@@ -97,7 +119,17 @@ pub fn office_path(dir: &Path) -> PathBuf {
 ///
 /// So the grant is built at startup from the configured office and nothing
 /// else. Changing offices means restarting, which is the right price.
-pub fn capability_for(office: &str) -> String {
+pub fn capability_for(office: Option<&str>) -> String {
+    // No office yet means a first run, and the only page there is the picker
+    // this app ships. It still needs to call commands — that is how an office
+    // gets added — so the capability exists with nothing remote in it.
+    let remote: Vec<String> = match office {
+        // Both patterns: `navigate("https://office")` lands on a URL with no
+        // path, which `{office}/*` alone does not match.
+        Some(office) => vec![office.to_string(), format!("{office}/*")],
+        None => Vec::new(),
+    };
+
     serde_json::json!({
         "identifier": "office-bridge",
         "description": "IPC for the configured office, and nothing else.",
@@ -113,9 +145,7 @@ pub fn capability_for(office: &str) -> String {
         // The only other local page is the bootstrap file this app ships,
         // which renders one paragraph and calls nothing. Excluding local buys
         // nothing and costs the whole development build.
-        // Both patterns: `navigate("https://office")` lands on a URL with no
-        // path, which `{office}/*` alone does not match.
-        "remote": { "urls": [office.to_string(), format!("{office}/*")] },
+        "remote": { "urls": remote },
         "permissions": [
             "core:default",
             // Generated from `AppManifest::commands` in build.rs. Named one by
@@ -141,10 +171,123 @@ pub fn capability_for(office: &str) -> String {
             "allow-list-repos",
             "allow-pick-repos-dir",
             "allow-opens-at-login",
-            "allow-set-opens-at-login"
+            "allow-set-opens-at-login",
+            "allow-list-offices",
+            "allow-add-office",
+            "allow-switch-office",
+            "allow-remove-office",
+            "allow-open-office-picker"
         ]
     })
     .to_string()
+}
+
+#[cfg(test)]
+mod offices_tests {
+    use super::*;
+
+    const A: &str = "https://a.example.com";
+    const B: &str = "https://b.example.com";
+
+    fn dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("tempdir")
+    }
+
+    #[test]
+    fn a_first_run_has_no_offices_and_no_active_one() {
+        let dir = dir();
+        let offices = load_offices(dir.path());
+        assert!(offices.offices.is_empty());
+        assert_eq!(offices.active, None, "which is what the picker is for");
+        assert_eq!(active_office_url(dir.path()), None);
+    }
+
+    #[test]
+    fn the_first_office_added_becomes_the_active_one() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        assert_eq!(active_office_url(dir.path()).as_deref(), Some(A));
+
+        // ...and the second does not steal it.
+        add_office(dir.path(), B, None).expect("added");
+        assert_eq!(active_office_url(dir.path()).as_deref(), Some(A));
+    }
+
+    #[test]
+    fn the_same_office_twice_is_one_office() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        // Trailing slash and whitespace are the same address, and two entries
+        // would mean two machine registrations for one place.
+        add_office(dir.path(), &format!("  {A}/  "), None).expect("added again");
+        assert_eq!(load_offices(dir.path()).offices.len(), 1);
+    }
+
+    #[test]
+    fn an_office_this_app_will_not_connect_to_is_refused() {
+        let dir = dir();
+        for bad in ["https://*", "http://example.com", "ftp://x", "not a url"] {
+            assert!(
+                add_office(dir.path(), bad, None).is_err(),
+                "{bad} must not become an office"
+            );
+        }
+        assert!(load_offices(dir.path()).offices.is_empty());
+    }
+
+    #[test]
+    fn switching_only_works_for_an_office_you_have() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        assert!(switch_office(dir.path(), B).is_err());
+
+        add_office(dir.path(), B, None).expect("added");
+        switch_office(dir.path(), B).expect("switched");
+        assert_eq!(active_office_url(dir.path()).as_deref(), Some(B));
+    }
+
+    #[test]
+    fn forgetting_the_active_office_falls_back_to_one_that_is_left() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        add_office(dir.path(), B, None).expect("added");
+        switch_office(dir.path(), B).expect("switched");
+
+        remove_office(dir.path(), B).expect("removed");
+        assert_eq!(active_office_url(dir.path()).as_deref(), Some(A));
+
+        remove_office(dir.path(), A).expect("removed");
+        assert_eq!(active_office_url(dir.path()), None, "back to the picker");
+    }
+
+    #[test]
+    fn clearing_the_active_office_keeps_the_list() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        clear_active(dir.path()).expect("cleared");
+
+        assert_eq!(active_office_url(dir.path()), None);
+        assert_eq!(load_offices(dir.path()).offices.len(), 1, "still yours");
+    }
+
+    /// Nobody should lose the office they were using because the shape of the
+    /// setting changed underneath them.
+    #[test]
+    fn a_single_office_file_is_carried_over() {
+        let dir = dir();
+        std::fs::write(office_path(dir.path()), format!("{A}/\n")).expect("written");
+
+        let offices = load_offices(dir.path());
+        assert_eq!(offices.active.as_deref(), Some(A));
+        assert_eq!(offices.offices.len(), 1);
+    }
+
+    #[test]
+    fn an_unusable_single_office_file_is_not_carried_over() {
+        let dir = dir();
+        std::fs::write(office_path(dir.path()), "https://*").expect("written");
+        assert!(load_offices(dir.path()).offices.is_empty());
+    }
 }
 
 #[cfg(test)]
@@ -252,7 +395,7 @@ mod tests {
             .expect("the list is closed")
             .0;
 
-        let capability = capability_for("https://office.example.com");
+        let capability = capability_for(Some("https://office.example.com"));
         let mut checked = 0;
         for raw in declared.split('"').skip(1).step_by(2) {
             let permission = format!("allow-{}", raw.replace('_', "-"));
@@ -270,7 +413,7 @@ mod tests {
 
     #[test]
     fn grants_the_commands_by_name_so_a_new_one_is_not_inherited() {
-        let capability = capability_for("https://office.example.com");
+        let capability = capability_for(Some("https://office.example.com"));
         for permission in [
             "allow-sign-challenge",
             "allow-export-backup",
@@ -292,7 +435,7 @@ mod tests {
 
     #[test]
     fn grants_ipc_to_one_origin_and_no_wildcard() {
-        let capability = capability_for("https://office.example.com");
+        let capability = capability_for(Some("https://office.example.com"));
         assert!(capability.contains("https://office.example.com/*"));
         // The whole point. A wildcard here would hand `sign_challenge` to any
         // page the window can reach.
@@ -326,4 +469,153 @@ pub fn reachable(office: &str) -> bool {
     addresses
         .into_iter()
         .any(|address| TcpStream::connect_timeout(&address, Duration::from_millis(400)).is_ok())
+}
+
+// --- more than one office ---------------------------------------------------
+
+/// One office this app knows about.
+///
+/// An office is an *environment*, not a preference: its own people, its own
+/// agents, its own registration of this machine. Nothing crosses between two of
+/// them, which is why they are a list you move between rather than a URL you
+/// edit — editing implies the surroundings survive the change, and they do not.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Office {
+    pub url: String,
+    /// What to call it in a list. The URL when nobody said otherwise.
+    #[serde(default)]
+    pub label: String,
+}
+
+impl Office {
+    fn new(url: String, label: Option<String>) -> Self {
+        let label = label
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .unwrap_or_else(|| url.clone());
+        Self { url, label }
+    }
+}
+
+/// Every office, and which one is live.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Offices {
+    /// Empty on a genuinely first run, which is what the picker is for.
+    #[serde(default)]
+    pub offices: Vec<Office>,
+    #[serde(default)]
+    pub active: Option<String>,
+}
+
+impl Offices {
+    pub fn active_office(&self) -> Option<&Office> {
+        let active = self.active.as_deref()?;
+        self.offices.iter().find(|office| office.url == active)
+    }
+
+    fn contains(&self, url: &str) -> bool {
+        self.offices.iter().any(|office| office.url == url)
+    }
+}
+
+fn offices_path(dir: &Path) -> PathBuf {
+    dir.join(OFFICES_FILE)
+}
+
+/// Normalise a URL the way an office is stored: origin, no trailing slash.
+///
+/// Done before anything compares two of them, because `http://x:3000` and
+/// `http://x:3000/` are the same office and would otherwise be two entries with
+/// two machine registrations.
+fn normalise(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_end_matches('/').to_string();
+    is_usable_office(&trimmed).then_some(trimmed)
+}
+
+/// Read the list, adopting an older single-office file if that is all there is.
+pub fn load_offices(dir: &Path) -> Offices {
+    if let Ok(text) = std::fs::read_to_string(offices_path(dir)) {
+        if let Ok(offices) = serde_json::from_str::<Offices>(&text) {
+            return offices;
+        }
+    }
+
+    // Migration: one office in a text file becomes a list of one. Nobody should
+    // lose the office they were using because the shape of the setting changed.
+    match std::fs::read_to_string(office_path(dir))
+        .ok()
+        .and_then(|raw| normalise(&raw))
+    {
+        Some(url) => Offices {
+            offices: vec![Office::new(url.clone(), None)],
+            active: Some(url),
+        },
+        None => Offices::default(),
+    }
+}
+
+pub fn save_offices(dir: &Path, offices: &Offices) -> std::io::Result<()> {
+    let text = serde_json::to_string_pretty(offices)
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    std::fs::write(offices_path(dir), text)
+}
+
+/// Add an office, and make it the active one when there was none.
+///
+/// Returns the normalised URL. Adding one that is already known is not an
+/// error — it is somebody pasting the same address twice, and the right answer
+/// is the office they already have.
+pub fn add_office(dir: &Path, url: &str, label: Option<String>) -> Result<String, String> {
+    let url = normalise(url).ok_or_else(|| {
+        format!("{url:?} is not an office this app will connect to. Use https, or http on this machine.")
+    })?;
+
+    let mut offices = load_offices(dir);
+    if !offices.contains(&url) {
+        offices.offices.push(Office::new(url.clone(), label));
+    }
+    if offices.active.is_none() {
+        offices.active = Some(url.clone());
+    }
+    save_offices(dir, &offices).map_err(|error| error.to_string())?;
+    Ok(url)
+}
+
+/// Make an office the active one. The caller restarts; see `capability_for`.
+pub fn switch_office(dir: &Path, url: &str) -> Result<String, String> {
+    let url = normalise(url).ok_or_else(|| format!("{url:?} is not a usable office"))?;
+    let mut offices = load_offices(dir);
+    if !offices.contains(&url) {
+        return Err(format!("{url} is not one of your offices"));
+    }
+    offices.active = Some(url.clone());
+    save_offices(dir, &offices).map_err(|error| error.to_string())?;
+    Ok(url)
+}
+
+/// Forget an office. Its machine registration goes with it.
+pub fn remove_office(dir: &Path, url: &str) -> Result<Offices, String> {
+    let url = normalise(url).ok_or_else(|| format!("{url:?} is not a usable office"))?;
+    let mut offices = load_offices(dir);
+    offices.offices.retain(|office| office.url != url);
+    if offices.active.as_deref() == Some(url.as_str()) {
+        // Whatever is left, or nothing — which lands on the picker, the same
+        // place a first run lands.
+        offices.active = offices.offices.first().map(|office| office.url.clone());
+    }
+    save_offices(dir, &offices).map_err(|error| error.to_string())?;
+    Ok(offices)
+}
+
+/// Leave every office selected but none active, so the next boot shows the
+/// picker.
+///
+/// How you get *back* to the picker once you are in an office. Clearing the
+/// active one rather than remembering "show the picker" keeps a single source
+/// of truth: the picker is simply what there is when no office is live, on a
+/// first run and on this path alike.
+pub fn clear_active(dir: &Path) -> Result<(), String> {
+    let mut offices = load_offices(dir);
+    offices.active = None;
+    save_offices(dir, &offices).map_err(|error| error.to_string())
 }

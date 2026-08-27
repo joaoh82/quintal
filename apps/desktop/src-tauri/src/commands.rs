@@ -19,13 +19,13 @@ pub struct HostState {
     pub store: SecretStore,
     /// The app data directory, for preferences that are not secrets.
     pub dir: std::path::PathBuf,
-    /// The office this host is configured for.
+    /// The office this host is configured for, or none before one is chosen.
     ///
     /// The page does not get to name it. IPC is already locked to one origin,
     /// so sending the machine credential somewhere else needs an XSS on the
     /// office — but the credential's destination deserves the same treatment as
     /// the command line: chosen here, not accepted from there.
-    pub office: String,
+    pub office: Option<String>,
     /// The harness this machine is running, if any.
     pub fleet: Fleet,
     /// Token handed out by the last `export_backup`, spent by `confirm_backup`.
@@ -51,6 +51,7 @@ impl From<SpawnError> for HostError {
     fn from(error: SpawnError) -> Self {
         let code = match &error {
             SpawnError::NotRegistered => "not_registered",
+            SpawnError::NoOffice => "no_office",
             SpawnError::NoHarness => "no_harness",
             SpawnError::AlreadyRunning => "already_running",
             SpawnError::NotRunning => "not_running",
@@ -222,10 +223,18 @@ pub fn host_status(state: State<'_, HostState>) -> Result<HostStatus, HostError>
     // network rename this computer, and agents are pinned to a machine by
     // label — so the office would show a second machine and the fleet assigned
     // to the first would quietly stop booting.
-    let registered = machine::registered_label(&state.store)?;
+    // Per office: the same laptop is registered separately in each, so "is
+    // this machine registered" is only a question you can ask about one.
+    let Some(office) = state.office.as_deref() else {
+        return Ok(HostStatus {
+            label: machine::label(),
+            registered: false,
+        });
+    };
+    let registered = machine::registered_label(&state.store, office)?;
     Ok(HostStatus {
         label: registered.unwrap_or_else(machine::label),
-        registered: machine::token(&state.store)?.is_some(),
+        registered: machine::token(&state.store, office)?.is_some(),
     })
 }
 
@@ -243,14 +252,16 @@ pub fn remember_host_token(
     token: String,
     label: String,
 ) -> Result<(), HostError> {
-    machine::remember(&state.store, &token, &label)?;
+    let office = state.office.as_deref().ok_or(SpawnError::NoOffice)?;
+    machine::remember(&state.store, office, &token, &label)?;
     Ok(())
 }
 
 /// Drop this machine's host token, so the next launch registers again.
 #[tauri::command]
 pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
-    machine::forget(&state.store)?;
+    let office = state.office.as_deref().ok_or(SpawnError::NoOffice)?;
+    machine::forget_for(&state.store, office)?;
     Ok(())
 }
 
@@ -264,12 +275,13 @@ pub fn start_fleet(
     app: tauri::AppHandle,
     state: State<'_, HostState>,
 ) -> Result<FleetState, HostError> {
-    let token = machine::token(&state.store)?.ok_or(SpawnError::NotRegistered)?;
     // Both the working directory and the office come from this side. The page
     // asks to start the fleet; it does not get to say where, or where the
     // credential is sent.
+    let office = state.office.as_deref().ok_or(SpawnError::NoOffice)?;
+    let token = machine::token(&state.store, office)?.ok_or(SpawnError::NotRegistered)?;
     let dir = spawn::repos_dir(&state.dir);
-    let started = state.fleet.start(&dir, &state.office, &token)?;
+    let started = state.fleet.start(&dir, office, &token)?;
     crate::tray::refresh(&app, &started);
     Ok(started)
 }
@@ -367,4 +379,94 @@ pub fn set_opens_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), Ho
         code: "autostart".into(),
         message: error.to_string(),
     })
+}
+
+// --- offices ----------------------------------------------------------------
+
+/// Every office this app knows about, and which one is live.
+///
+/// An office is an environment rather than a setting: its own people, its own
+/// agents, its own registration of this machine. Nothing crosses between two,
+/// which is why they are a list you move between.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficeList {
+    pub offices: Vec<crate::office::Office>,
+    pub active: Option<String>,
+}
+
+fn listed(dir: &std::path::Path) -> OfficeList {
+    let stored = crate::office::load_offices(dir);
+    OfficeList {
+        offices: stored.offices,
+        active: stored.active,
+    }
+}
+
+#[tauri::command]
+pub fn list_offices(state: State<'_, HostState>) -> OfficeList {
+    listed(&state.dir)
+}
+
+#[tauri::command]
+pub fn add_office(
+    state: State<'_, HostState>,
+    url: String,
+    label: Option<String>,
+) -> Result<OfficeList, HostError> {
+    crate::office::add_office(&state.dir, &url, label).map_err(|message| HostError {
+        code: "bad_office".into(),
+        message,
+    })?;
+    Ok(listed(&state.dir))
+}
+
+/// Make an office the live one, and restart into it.
+///
+/// The restart is the feature, not a shortcut. IPC is granted to exactly one
+/// origin at startup, so switching in place would leave the office you left
+/// still able to ask this process for a signature for the rest of the session.
+/// Coming up fresh is how "these two do not talk to each other" stays true
+/// rather than mostly true.
+#[tauri::command]
+pub fn switch_office(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+    url: String,
+) -> Result<(), HostError> {
+    crate::office::switch_office(&state.dir, &url).map_err(|message| HostError {
+        code: "bad_office".into(),
+        message,
+    })?;
+
+    // Stop the fleet before going: these agents belong to the office being
+    // left, and the next one will start its own.
+    let _ = state.fleet.stop();
+    app.restart();
+}
+
+#[tauri::command]
+pub fn remove_office(state: State<'_, HostState>, url: String) -> Result<OfficeList, HostError> {
+    crate::office::remove_office(&state.dir, &url).map_err(|message| HostError {
+        code: "bad_office".into(),
+        message,
+    })?;
+    // The machine registration for that office goes with it — it names a
+    // machine in an office this app no longer has.
+    let _ = machine::forget_for(&state.store, &url);
+    Ok(listed(&state.dir))
+}
+
+/// Go back to the office picker, restarting into it.
+#[tauri::command]
+pub fn open_office_picker(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+) -> Result<(), HostError> {
+    crate::office::clear_active(&state.dir).map_err(|message| HostError {
+        code: "bad_office".into(),
+        message,
+    })?;
+    let _ = state.fleet.stop();
+    app.restart();
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remove-office"
+description = "Enables the remove_office command without any pre-configured scope."
+commands.allow = ["remove_office"]
+
+[[permission]]
+identifier = "deny-remove-office"
+description = "Denies the remove_office command without any pre-configured scope."
+commands.deny = ["remove_office"]
