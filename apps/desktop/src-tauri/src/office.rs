@@ -76,9 +76,19 @@ pub fn active_office_url(dir: &Path) -> Option<String> {
         };
     }
 
+    // Re-validated on the way out, not trusted because it is on disk.
+    // `offices.json` is a file a person can edit, and an unchecked `https://*`
+    // becomes `https://*/*` in the grant — the wildcard this module exists to
+    // prevent. The old single-office path checked; this one has to as well.
     load_offices(dir)
         .active_office()
         .map(|office| office.url.clone())
+        .filter(|url| {
+            is_usable_office(url) || {
+                eprintln!("[quintal] refusing stored office URL {url:?}");
+                false
+            }
+        })
 }
 
 /// The old single-office resolution, kept for callers that must have a URL.
@@ -130,6 +140,60 @@ pub fn capability_for(office: Option<&str>) -> String {
         None => Vec::new(),
     };
 
+    // Changing which offices exist is granted **only when none is active**.
+    //
+    // Otherwise it is granted to the office itself, and a page there — through
+    // XSS, or because it is hostile — could `add_office("https://attacker")`,
+    // `switch_office` to it, and inherit `sign_challenge` and `export_backup`
+    // on the next boot. That is the whole one-origin guarantee handed away by a
+    // page that was only ever supposed to ask for a signature.
+    //
+    // With no active office the only thing loaded is the picker this app ships,
+    // so the commands exist exactly while the screen that uses them is up. An
+    // office can still call `open_office_picker`, which clears the active office
+    // and restarts: annoying if abused, but it lands a human on the picker
+    // rather than moving anybody's keys.
+    //
+    // Deliberately not "local only": in `tauri dev` the office *is* `devUrl`,
+    // which Tauri classifies as local, so local-only would grant these to the
+    // dev office too.
+    let mut permissions: Vec<&str> = vec![
+        "core:default",
+        // Generated from `AppManifest::commands` in build.rs. Named one by one
+        // rather than wildcarded: a command added later should have to be
+        // granted deliberately, not inherit a blanket allow.
+        "allow-has-identity",
+        "allow-detect-runtimes",
+        "allow-get-public-key",
+        "allow-sign-challenge",
+        "allow-import-identity",
+        "allow-export-backup",
+        "allow-confirm-backup",
+        "allow-can-wipe",
+        "allow-wipe-identity",
+        "allow-host-status",
+        "allow-remember-host-token",
+        "allow-forget-host-token",
+        "allow-start-fleet",
+        "allow-stop-fleet",
+        "allow-fleet-status",
+        "allow-fleet-logs",
+        "allow-repos-dir",
+        "allow-list-repos",
+        "allow-pick-repos-dir",
+        "allow-opens-at-login",
+        "allow-set-opens-at-login",
+        "allow-list-offices",
+        "allow-open-office-picker",
+    ];
+    if office.is_none() {
+        permissions.extend([
+            "allow-add-office",
+            "allow-switch-office",
+            "allow-remove-office",
+        ]);
+    }
+
     serde_json::json!({
         "identifier": "office-bridge",
         "description": "IPC for the configured office, and nothing else.",
@@ -146,38 +210,7 @@ pub fn capability_for(office: Option<&str>) -> String {
         // which renders one paragraph and calls nothing. Excluding local buys
         // nothing and costs the whole development build.
         "remote": { "urls": remote },
-        "permissions": [
-            "core:default",
-            // Generated from `AppManifest::commands` in build.rs. Named one by
-            // one rather than wildcarded: a command added later should have to
-            // be granted deliberately, not inherit a blanket allow.
-            "allow-has-identity",
-            "allow-detect-runtimes",
-            "allow-get-public-key",
-            "allow-sign-challenge",
-            "allow-import-identity",
-            "allow-export-backup",
-            "allow-confirm-backup",
-            "allow-can-wipe",
-            "allow-wipe-identity",
-            "allow-host-status",
-            "allow-remember-host-token",
-            "allow-forget-host-token",
-            "allow-start-fleet",
-            "allow-stop-fleet",
-            "allow-fleet-status",
-            "allow-fleet-logs",
-            "allow-repos-dir",
-            "allow-list-repos",
-            "allow-pick-repos-dir",
-            "allow-opens-at-login",
-            "allow-set-opens-at-login",
-            "allow-list-offices",
-            "allow-add-office",
-            "allow-switch-office",
-            "allow-remove-office",
-            "allow-open-office-picker"
-        ]
+        "permissions": permissions
     })
     .to_string()
 }
@@ -202,15 +235,55 @@ mod offices_tests {
         assert_eq!(active_office_url(dir.path()), None);
     }
 
+    /// Adding is not choosing.
+    ///
+    /// It used to be: the first office added became active, which meant the
+    /// picker hid itself because something was active while nothing had
+    /// navigated anywhere — and cancelling the restart left the app on a page
+    /// that would never move.
     #[test]
-    fn the_first_office_added_becomes_the_active_one() {
+    fn adding_an_office_does_not_make_it_the_active_one() {
         let dir = dir();
         add_office(dir.path(), A, None).expect("added");
+        assert_eq!(active_office_url(dir.path()), None);
+
+        switch_office(dir.path(), A).expect("switched");
         assert_eq!(active_office_url(dir.path()).as_deref(), Some(A));
 
-        // ...and the second does not steal it.
+        // ...and adding another does not steal it.
         add_office(dir.path(), B, None).expect("added");
         assert_eq!(active_office_url(dir.path()).as_deref(), Some(A));
+    }
+
+    /// A file a person can edit is not a file to trust.
+    #[test]
+    fn a_stored_office_that_is_not_usable_is_dropped() {
+        let dir = dir();
+        std::fs::write(
+            offices_path(dir.path()),
+            serde_json::json!({
+                "offices": [{ "url": "https://*", "label": "sneaky" }],
+                "active": "https://*",
+            })
+            .to_string(),
+        )
+        .expect("written");
+
+        assert!(load_offices(dir.path()).offices.is_empty(), "not offered");
+        assert_eq!(
+            active_office_url(dir.path()),
+            None,
+            "and never interpolated into the grant"
+        );
+    }
+
+    #[test]
+    fn removal_reports_the_normalised_url() {
+        let dir = dir();
+        add_office(dir.path(), A, None).expect("added");
+        let (removed, left) = remove_office(dir.path(), &format!("{A}/")).expect("removed");
+        assert_eq!(removed, A, "the caller keys a keychain slot on this");
+        assert!(left.offices.is_empty());
     }
 
     #[test]
@@ -395,12 +468,21 @@ mod tests {
             .expect("the list is closed")
             .0;
 
-        let capability = capability_for(Some("https://office.example.com"));
+        // The union of both configurations: with an office active, and
+        // without. Some commands are deliberately only granted in one of them
+        // — see `capability_for` — but a command granted in *neither* is one
+        // nothing can ever call.
+        let granted = format!(
+            "{}{}",
+            capability_for(Some("https://office.example.com")),
+            capability_for(None),
+        );
+
         let mut checked = 0;
         for raw in declared.split('"').skip(1).step_by(2) {
             let permission = format!("allow-{}", raw.replace('_', "-"));
             assert!(
-                capability.contains(&permission),
+                granted.contains(&permission),
                 "`{raw}` is declared in build.rs but never granted, so calling it is refused"
             );
             checked += 1;
@@ -408,6 +490,50 @@ mod tests {
         assert!(
             checked >= 9,
             "expected the real command list, found {checked}"
+        );
+    }
+
+    /// The office may not choose which office comes next.
+    ///
+    /// Granting these to the office origin means a page there — through XSS, or
+    /// because the office is hostile — can add an attacker's URL, switch to it,
+    /// and inherit `sign_challenge` and `export_backup` on the next boot. The
+    /// one-origin guarantee would be handed away by a page that was only ever
+    /// supposed to ask for a signature.
+    #[test]
+    fn an_active_office_cannot_change_which_offices_exist() {
+        let capability = capability_for(Some("https://office.example.com"));
+        for forbidden in [
+            "allow-add-office",
+            "allow-switch-office",
+            "allow-remove-office",
+        ] {
+            assert!(
+                !capability.contains(forbidden),
+                "{forbidden} must not be granted while an office is loaded"
+            );
+        }
+        // It may still ask to be sent to the picker, where a human decides.
+        assert!(capability.contains("allow-open-office-picker"));
+        assert!(capability.contains("allow-sign-challenge"));
+    }
+
+    #[test]
+    fn the_picker_may_change_them_because_nothing_else_is_loaded() {
+        let capability = capability_for(None);
+        for allowed in [
+            "allow-add-office",
+            "allow-switch-office",
+            "allow-remove-office",
+        ] {
+            assert!(
+                capability.contains(allowed),
+                "{allowed} is the picker's job"
+            );
+        }
+        assert!(
+            !capability.contains("office.example.com"),
+            "and no remote origin is granted anything at all"
         );
     }
 
@@ -535,7 +661,18 @@ fn normalise(raw: &str) -> Option<String> {
 /// Read the list, adopting an older single-office file if that is all there is.
 pub fn load_offices(dir: &Path) -> Offices {
     if let Ok(text) = std::fs::read_to_string(offices_path(dir)) {
-        if let Ok(offices) = serde_json::from_str::<Offices>(&text) {
+        if let Ok(mut offices) = serde_json::from_str::<Offices>(&text) {
+            // Filtered on the way in. A hand-edited or corrupted file should
+            // not be able to put a wildcard in front of somebody, whether it
+            // reaches the capability or only the picker.
+            offices
+                .offices
+                .retain(|office| is_usable_office(&office.url));
+            if let Some(active) = offices.active.clone() {
+                if !offices.contains(&active) {
+                    offices.active = None;
+                }
+            }
             return offices;
         }
     }
@@ -574,9 +711,10 @@ pub fn add_office(dir: &Path, url: &str, label: Option<String>) -> Result<String
     if !offices.contains(&url) {
         offices.offices.push(Office::new(url.clone(), label));
     }
-    if offices.active.is_none() {
-        offices.active = Some(url.clone());
-    }
+    // Adding an office is not choosing one. Making the first one active here
+    // was a side effect the picker then had to reason about: it hid itself
+    // because something was active, while nothing had navigated anywhere, and
+    // cancelling the restart left the app on a page that would never move.
     save_offices(dir, &offices).map_err(|error| error.to_string())?;
     Ok(url)
 }
@@ -594,7 +732,7 @@ pub fn switch_office(dir: &Path, url: &str) -> Result<String, String> {
 }
 
 /// Forget an office. Its machine registration goes with it.
-pub fn remove_office(dir: &Path, url: &str) -> Result<Offices, String> {
+pub fn remove_office(dir: &Path, url: &str) -> Result<(String, Offices), String> {
     let url = normalise(url).ok_or_else(|| format!("{url:?} is not a usable office"))?;
     let mut offices = load_offices(dir);
     offices.offices.retain(|office| office.url != url);
@@ -604,7 +742,10 @@ pub fn remove_office(dir: &Path, url: &str) -> Result<Offices, String> {
         offices.active = offices.offices.first().map(|office| office.url.clone());
     }
     save_offices(dir, &offices).map_err(|error| error.to_string())?;
-    Ok(offices)
+    // The normalised URL, because the caller uses it as a keychain slot suffix.
+    // Forgetting `https://office/` while the slot says `https://office` leaves a
+    // machine token behind for an office that is gone.
+    Ok((url, offices))
 }
 
 /// Leave every office selected but none active, so the next boot shows the

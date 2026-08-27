@@ -447,13 +447,15 @@ pub fn switch_office(
 
 #[tauri::command]
 pub fn remove_office(state: State<'_, HostState>, url: String) -> Result<OfficeList, HostError> {
-    crate::office::remove_office(&state.dir, &url).map_err(|message| HostError {
-        code: "bad_office".into(),
-        message,
-    })?;
+    let (removed, _) =
+        crate::office::remove_office(&state.dir, &url).map_err(|message| HostError {
+            code: "bad_office".into(),
+            message,
+        })?;
     // The machine registration for that office goes with it — it names a
-    // machine in an office this app no longer has.
-    let _ = machine::forget_for(&state.store, &url);
+    // machine in an office this app no longer has. Keyed on the *normalised*
+    // URL, which is what the slot was written under.
+    let _ = machine::forget_for(&state.store, &removed);
     Ok(listed(&state.dir))
 }
 

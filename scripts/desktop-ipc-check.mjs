@@ -296,12 +296,14 @@ const EXPECTED = {
   // QUINTAL_OFFICE_URL supplies the active office here, so the stored list
   // starts empty — a first run, which is the picker's case.
   'list_offices': { ok: true, value: { offices: [], active: null } },
-  // A wildcard would become a grant covering every site on the internet.
+  // Refused from here, and that is the point: this check runs with an office
+  // active (QUINTAL_OFFICE_URL), and an office may not choose which offices
+  // exist. Granting that to the office origin would let a page there add an
+  // attacker's URL, switch to it, and inherit signing on the next boot.
   'add_office (bad)': { ok: false },
-  'add_office': { ok: true },
-  // Switching is only ever to an office you already have.
+  'add_office': { ok: false },
   'switch_office (not yours)': { ok: false },
-  'remove_office': { ok: true, value: { offices: [], active: null } },
+  'remove_office': { ok: false },
   'stop_fleet (nothing running)': { ok: false },
   // The token was just forgotten, so this must refuse rather than start a
   // harness with no credential — which would fail later and less clearly.

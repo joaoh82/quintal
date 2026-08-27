@@ -93,7 +93,9 @@
 
     // With an office chosen the app is already on its way there; leave the
     // connecting line alone rather than flashing a picker nobody asked for.
-    if (listed.active) return;
+    // Once the picker is up it stays up — cancelling a switch should return you
+    // to the list, not to a page that will never navigate.
+    if (listed.active && el('picker').hidden) return;
 
     el('status').hidden = true;
     el('picker').hidden = false;
@@ -171,10 +173,10 @@
       await invoke('add_office', { url, label: null });
       el('url').value = '';
       // The first office added becomes the active one, so go straight in.
-      const listed = await invoke('list_offices');
       const added = url.replace(/\/+$/, '');
-      // The first office added becomes the active one, so go straight in.
-      if (listed.active === added) await switchTo(added, { leaving: hadOffice });
+      // Adding does not choose. On a first office there is nothing to stay for,
+      // so go straight in; otherwise show the list and let somebody pick.
+      if (!hadOffice) await switchTo(added, { leaving: false });
       else await render();
     } catch (error) {
       fail(error?.message ?? String(error));
