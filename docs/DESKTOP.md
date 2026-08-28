@@ -136,9 +136,21 @@ identifier, so it satisfies the same requirement and shares the one keychain
 grant. A rebuild replaces the signature, so re-run it when the prompt comes
 back.
 
-Both find your signing identity automatically when you have exactly one;
-otherwise set `QUINTAL_SIGNING_IDENTITY`. If you have no certificate at all, the
-app still works — macOS just keeps asking.
+Both find your signing identity automatically when you have exactly one. With
+several, they stop and ask rather than choosing:
+
+```bash
+export QUINTAL_SIGNING_IDENTITY="Apple Development: you@example.com (XXXXXXXXXX)"
+```
+
+Worth putting in your shell profile, because the choice has to stay stable. A
+keychain grant is bound to the signing certificate through the designated
+requirement, so signing with a different one is a different program as far as
+macOS is concerned — and everything you clicked "Always Allow" for gets asked
+again.
+
+If you have no certificate at all, the app still works — macOS just keeps
+asking.
 
 ### If the keychain will not open
 
