@@ -166,6 +166,19 @@ Not requested. It will be, when push-to-talk becomes a global hotkey — that
 needs to see key presses while Quintal is not focused, and macOS gates it behind
 Accessibility. There is nothing to grant until voice ships.
 
+## Inspecting it
+
+Devtools are enabled in release builds as well as development ones — right-click
+→ Inspect Element, or ⌥⌘I. Tauri ships the inspector in debug builds only unless
+asked, which meant the bundled app, the one actually used day to day, was the
+one that could not be inspected. That is backwards: the awkward bugs live
+exactly there — a blank window with no office, a runtime list empty because a
+Finder launch inherits no PATH — and reproducing them in a dev build, where the
+conditions differ, is how you end up fixing the wrong thing.
+
+Worth revisiting before there are users who are not us: it hands an inspector,
+and a window onto a privileged bridge, to whoever holds the app.
+
 ## The menu bar
 
 Quintal keeps a menu-bar item so you can see whether your agents are running

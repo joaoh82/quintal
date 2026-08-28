@@ -16,7 +16,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+# `devtools` is on for release builds too, deliberately.
+#
+# Tauri ships the inspector in debug builds only unless asked. That meant the
+# bundled app — the one actually used day to day — was the one that could not be
+# inspected, which is precisely where the awkward bugs have shown up: a blank
+# window with no office, a runtime list empty because a Finder launch has no
+# PATH. Debugging those by rebuilding in dev, where the conditions differ, is
+# how you end up fixing the wrong thing.
+#
+# Revisit before there are users who are not us: this hands an inspector, and a
+# window onto a privileged bridge, to whoever holds the app.
+tauri = { version = "2", features = ["tray-icon", "devtools"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # BIP-340 Schnorr over secp256k1, pure Rust so there is no C toolchain between a
