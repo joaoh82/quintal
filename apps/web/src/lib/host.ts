@@ -194,6 +194,34 @@ export interface HostBridge {
    */
   opensAtLogin(): Promise<boolean>;
   setOpensAtLogin(enabled: boolean): Promise<void>;
+
+  /**
+   * Every office this app knows about, and which one is live.
+   *
+   * An office is an environment rather than a setting — its own people, its own
+   * agents, its own registration of this machine — so they are a list you move
+   * between rather than a URL you edit.
+   */
+  listOffices(): Promise<OfficeList>;
+  addOffice(url: string, label?: string): Promise<OfficeList>;
+  /** Make one live. Restarts the app, so exactly one origin is ever granted. */
+  switchOffice(url: string): Promise<void>;
+  /** Forget one, and this machine's registration with it. */
+  removeOffice(url: string): Promise<OfficeList>;
+  /** Go back to the picker, restarting into it. */
+  openOfficePicker(): Promise<void>;
+}
+
+export interface Office {
+  url: string;
+  /** What to call it in a list. The URL when nobody said otherwise. */
+  label: string;
+}
+
+export interface OfficeList {
+  offices: Office[];
+  /** Null on a first run, and whenever the picker is showing. */
+  active: string | null;
 }
 
 export interface LogLine {
@@ -293,6 +321,11 @@ function tauriBridge(): HostBridge {
     reposDir: () => call<string>('repos_dir'),
     listRepos: () => call<Repo[]>('list_repos'),
     pickReposDir: () => call<string | null>('pick_repos_dir'),
+    listOffices: () => call<OfficeList>('list_offices'),
+    addOffice: (url, label) => call<OfficeList>('add_office', { url, label: label ?? null }),
+    switchOffice: (url) => call<void>('switch_office', { url }),
+    removeOffice: (url) => call<OfficeList>('remove_office', { url }),
+    openOfficePicker: () => call<void>('open_office_picker'),
     opensAtLogin: () => call<boolean>('opens_at_login'),
     setOpensAtLogin: (enabled) => call<void>('set_opens_at_login', { enabled }),
   };

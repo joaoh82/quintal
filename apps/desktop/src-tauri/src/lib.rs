@@ -48,6 +48,11 @@ pub fn run() {
             commands::pick_repos_dir,
             commands::opens_at_login,
             commands::set_opens_at_login,
+            commands::list_offices,
+            commands::add_office,
+            commands::switch_office,
+            commands::remove_office,
+            commands::open_office_picker,
         ])
         .setup(|app| {
             // Before anything looks for a binary. An app launched from Finder
@@ -58,13 +63,24 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
 
-            let office = office::office_url(&dir);
+            // The active office, or none on a first run — which is not an
+            // error, it is the picker's reason to exist.
+            let office = office::active_office_url(&dir);
 
             // Granted before the window goes anywhere: the office is the only
             // origin allowed to call this process, and it has to be in place
             // before the page it applies to has loaded.
             app.handle()
-                .add_capability(office::capability_for(&office))?;
+                .add_capability(office::capability_for(office.as_deref()))?;
+
+            // A pre-offices registration belongs to whatever office was set
+            // then, which is the one that is active now.
+            if let Some(office) = office.as_deref() {
+                let store = secrets::SecretStore::new(&dir)?;
+                if let Err(error) = machine::migrate_to(&store, office) {
+                    eprintln!("[quintal] could not carry the machine registration over: {error}");
+                }
+            }
 
             app.manage(commands::HostState {
                 store: secrets::SecretStore::new(&dir)?,
@@ -78,15 +94,19 @@ pub fn run() {
             tray::watch(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
-                match office.parse::<tauri::Url>() {
-                    Ok(url) => wait_for_office(window, url),
-                    Err(_) => {
+                match office.as_deref().map(str::parse::<tauri::Url>) {
+                    Some(Ok(url)) => wait_for_office(window, url),
+                    Some(Err(_)) => {
                         // Leave the bootstrap page up rather than navigating
                         // somewhere unintended; it is the one screen that can
                         // say the office URL is wrong.
+                        let office = office.unwrap_or_default();
                         eprintln!("[quintal] not a usable office URL: {office}");
                         say(&window, &format!("{office} is not a usable office URL."));
                     }
+                    // No office chosen yet. The bootstrap page is the picker,
+                    // and it is already showing.
+                    None => {}
                 }
             }
 

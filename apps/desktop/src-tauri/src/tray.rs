@@ -22,6 +22,7 @@ use crate::spawn::FleetState;
 /// Menu item ids. Matched on the way back in, so they live in one place.
 const OPEN: &str = "open";
 const TOGGLE: &str = "toggle-fleet";
+const OFFICES: &str = "offices";
 const QUIT: &str = "quit";
 
 pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
@@ -37,6 +38,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => show_window(app),
             TOGGLE => toggle_fleet(app),
+            OFFICES => switch_office(app),
             QUIT => {
                 // Through `exit`, so the fleet is stopped by the same teardown
                 // that closing the window uses. Killing the process here would
@@ -77,6 +79,8 @@ fn menu_for(app: &AppHandle, state: &FleetState) -> tauri::Result<Menu<Wry>> {
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, OFFICES, "Switch office…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, QUIT, "Quit Quintal", true, None::<&str>)?,
         ],
@@ -120,6 +124,19 @@ pub fn watch(app: &AppHandle) {
     });
 }
 
+/// Back to the picker. Restarts, like every office change does.
+fn switch_office(app: &AppHandle) {
+    let Some(state) = app.try_state::<HostState>() else {
+        return;
+    };
+    if let Err(error) = crate::office::clear_active(&state.dir) {
+        eprintln!("[quintal] tray: {error}");
+        return;
+    }
+    let _ = state.fleet.stop();
+    app.restart();
+}
+
 fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -136,15 +153,20 @@ fn toggle_fleet(app: &AppHandle) {
     let next = if matches!(state.fleet.status(), FleetState::Running { .. }) {
         state.fleet.stop().err().map(|error| error.to_string())
     } else {
-        match crate::machine::token(&state.store) {
-            Ok(Some(token)) => {
-                let dir = crate::spawn::repos_dir(&state.dir);
-                state
-                    .fleet
-                    .start(&dir, &state.office, &token)
-                    .err()
-                    .map(|error| error.to_string())
-            }
+        match state.office.as_deref().map_or(Ok(None), |office| {
+            crate::machine::token(&state.store, office)
+        }) {
+            Ok(Some(token)) => match state.office.as_deref() {
+                Some(office) => {
+                    let dir = crate::spawn::repos_dir(&state.dir);
+                    state
+                        .fleet
+                        .start(&dir, office, &token)
+                        .err()
+                        .map(|error| error.to_string())
+                }
+                None => Some("no office is selected".into()),
+            },
             // Nothing useful the tray can do about either: an unregistered
             // machine needs the office, and a locked keychain needs the OS.
             Ok(None) => Some("this machine has not registered with an office yet".into()),

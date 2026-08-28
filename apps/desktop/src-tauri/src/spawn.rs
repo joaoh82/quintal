@@ -57,6 +57,8 @@ const URL_ENV: &str = "QUINTAL_URL";
 pub enum SpawnError {
     #[error("this machine has not registered with an office yet")]
     NotRegistered,
+    #[error("no office is selected")]
+    NoOffice,
     #[error("{0} is not a directory this machine can work in")]
     BadWorkspace(String),
     #[error("the fleet is already running here")]

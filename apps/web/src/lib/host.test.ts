@@ -85,6 +85,11 @@ describe('getHost', () => {
       'reposDir',
       'listRepos',
       'pickReposDir',
+      'listOffices',
+      'addOffice',
+      'switchOffice',
+      'removeOffice',
+      'openOfficePicker',
       'opensAtLogin',
       'setOpensAtLogin',
     ] as const) {

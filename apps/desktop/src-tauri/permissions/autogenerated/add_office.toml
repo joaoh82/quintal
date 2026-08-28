@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-add-office"
+description = "Enables the add_office command without any pre-configured scope."
+commands.allow = ["add_office"]
+
+[[permission]]
+identifier = "deny-add-office"
+description = "Denies the add_office command without any pre-configured scope."
+commands.deny = ["add_office"]

@@ -87,6 +87,14 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // Off unless somebody turns it on. Read rather than toggled: flipping a
     // login item on a contributor's machine is not a test's business.
     await run('opens_at_login', 'opens_at_login', {});
+
+    // Offices, from the outside. Adding and listing only: switching restarts
+    // the app, which would end this check mid-run rather than test anything.
+    await run('list_offices', 'list_offices', {});
+    await run('add_office (bad)', 'add_office', { url: 'https://*' });
+    await run('add_office', 'add_office', { url: 'https://office.example.com' });
+    await run('switch_office (not yours)', 'switch_office', { url: 'https://elsewhere.example.com' });
+    await run('remove_office', 'remove_office', { url: 'https://office.example.com' });
     // pick_repos_dir is deliberately not called: it opens a native folder
     // dialog and would wait forever for a click nobody is there to make. Its
     // grant is covered instead by the Rust test every_declared_command_is_granted,
@@ -285,6 +293,20 @@ const EXPECTED = {
   // proves the host is using that rather than the default.
   'list_repos': { ok: true, value: [{ name: 'a-checkout', git: true }] },
   'opens_at_login': { ok: true, value: false },
+  // QUINTAL_OFFICE_URL supplies the active office here, so the stored list
+  // starts empty — a first run, which is the picker's case.
+  'list_offices': { ok: true, value: { offices: [], active: null } },
+  // This check runs with an office active, and an office may not change *which*
+  // offices exist — granting that would let a page there add an attacker's URL,
+  // switch to it, and inherit signing on the next boot. Both refusals come from
+  // Tauri's ACL rather than from our code.
+  'add_office (bad)': { ok: false },
+  'add_office': { ok: false },
+  'remove_office': { ok: false },
+  // Switching *is* allowed from an office: it can only select something already
+  // on the list, so the worst it does is move you somewhere you added yourself.
+  // Refused here by our own check, because this URL is not one of them.
+  'switch_office (not yours)': { ok: false },
   'stop_fleet (nothing running)': { ok: false },
   // The token was just forgotten, so this must refuse rather than start a
   // harness with no credential — which would fail later and less clearly.

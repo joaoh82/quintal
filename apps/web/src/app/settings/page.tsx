@@ -9,6 +9,7 @@ import {
 
 import { auth } from '@/lib/auth';
 
+import { Offices } from './Offices';
 import { OfficeSettingsForm } from './OfficeSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -29,5 +30,10 @@ export default async function OfficeSettingsPage() {
     }),
   ]);
 
-  return <OfficeSettingsForm settings={settings} workspaceName={workspace.name} />;
+  return (
+    <div className="flex flex-col gap-6">
+      <OfficeSettingsForm settings={settings} workspaceName={workspace.name} />
+      <Offices />
+    </div>
+  );
 }

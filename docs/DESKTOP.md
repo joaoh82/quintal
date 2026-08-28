@@ -34,6 +34,44 @@ pnpm desktop
 Starts the office and the app together. If you already have `pnpm dev` running
 in another terminal, use `pnpm desktop:attach` instead.
 
+## Offices
+
+An office is a place, not a setting. It has its own people, its own agents and
+its own registration of this machine, and two offices do not talk to each other
+— the same shape as a Slack workspace or a Buzz community. So the app keeps a
+list and you move between them.
+
+Your **identity is one key**, used everywhere. Each office knows you as its own
+user; isolation comes from the office, not from carrying separate keys.
+
+On first launch there is no office, and the app shows a picker rather than
+guessing. Add one by URL — `http://localhost:3000` while developing, or wherever
+yours is deployed. "Add or switch office…" in Settings, and "Switch office…" in
+the menu bar, come back to it later.
+
+**An office cannot introduce a new office.** Adding and forgetting are granted
+only while *no* office is loaded — that is, while the picker is what you are
+looking at. Otherwise a page in your office could add an attacker's URL, switch
+to it, and inherit key signing on the next boot.
+
+Switching is different, and allowed: it refuses any URL that is not already on
+your list, so the most an office can do with it is send you to another office
+you added yourself — somewhere you already trust with the same bridge.
+Introducing a new origin is the dangerous half, and that is what stays behind
+the picker.
+
+**Switching restarts Quintal**, deliberately. IPC is granted to exactly one
+origin at startup, so switching in place would leave the office you left still
+able to ask this process for a signature for the rest of the session. Coming up
+fresh is how "these two do not talk to each other" stays true rather than mostly
+true.
+
+Only the active office's agents run. Switching stops them; the office you arrive
+in starts its own.
+
+Forgetting an office also forgets this machine's registration with it — that
+token names a machine in an office the app no longer has.
+
 ## The app needs an office to connect to
 
 The app is a client. It loads an office over HTTP — by default
@@ -45,15 +83,9 @@ appears, so starting the app first is a fine order to do things in.
 bundled `Quintal.app` starts only itself, so an office has to be running
 somewhere it can reach — `pnpm dev` locally, or a deployment.
 
-To point it at one permanently, write the URL to `office` in the app data
-directory:
-
-```bash
-echo 'https://quintal.example.com' > ~/Library/Application\ Support/sh.quintal.desktop/office.txt
-```
-
-The app grants IPC to that one origin and no other, so changing it is a
-deliberate act rather than something a page can do to you.
+Add it in the picker. The app grants IPC to the active office's origin and no
+other, so changing it is a deliberate act rather than something a page can do to
+you.
 
 ## macOS permissions, and why
 
