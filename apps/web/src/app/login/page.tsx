@@ -495,6 +495,28 @@ export default function LoginPage() {
           Back to the landing page
         </Link>
       </p>
+
+      {/*
+        The way out of an office you cannot get into.
+        
+        Sign-in can fail for reasons that have nothing to do with your key —
+        an office reached by an address it does not trust, a deployment that has
+        moved, one that is simply broken. Without this the app boots straight
+        back into it every launch, and the only escape is a tray menu you would
+        have to know to look in. Somewhere you cannot sign in is exactly where a
+        way to leave belongs.
+      */}
+      {host ? (
+        <p className="text-muted-foreground mt-2 text-center text-sm">
+          <button
+            type="button"
+            className="hover:text-foreground underline-offset-4 hover:underline"
+            onClick={() => void host.openOfficePicker()}
+          >
+            Open a different office
+          </button>
+        </p>
+      ) : null}
     </main>
   );
 }

@@ -72,6 +72,23 @@ in starts its own.
 Forgetting an office also forgets this machine's registration with it — that
 token names a machine in an office the app no longer has.
 
+### Getting out of one
+
+Sign-in can fail for reasons that have nothing to do with your key. The clearest
+is an office reached by an address it does not trust: `http://localhost:3000`
+and `http://127.0.0.1:3000` are the same server but different *origins*, and
+sign-in is deliberately bound to the origin the office was configured with, so
+the second is refused with "Sign-in must come from this site." That check is
+there to stop a page elsewhere driving a sign-in, and it is working when it
+does this.
+
+An office can also simply be gone, or broken.
+
+Either way the app would otherwise boot back into it every launch, so there is a
+way out from both places you can get stuck: **Open a different office** under
+the sign-in card, and **Choose a different office** while it waits for one to
+answer. Both land on the picker, as does **Switch office…** in the menu bar.
+
 ## The app needs an office to connect to
 
 The app is a client. It loads an office over HTTP — by default
