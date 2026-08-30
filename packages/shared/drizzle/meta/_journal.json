@@ -71,6 +71,13 @@
       "when": 1788114741427,
       "tag": "0009_warm_husk",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788119227053,
+      "tag": "0010_illegal_longshot",
+      "breakpoints": true
     }
   ]
 }

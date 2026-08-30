@@ -5,7 +5,7 @@ import {
   ensurePersonalWorkspace,
   getDb,
   getOfficeSettings,
-  isInstanceOwner,
+  isInstanceAdmin,
 } from '@quintal/shared/db';
 
 import { auth } from '@/lib/auth';
@@ -36,8 +36,8 @@ export default async function OfficeSettingsPage() {
       pubkey: session.user.pubkey,
     }),
     // Naming the whole deployment belongs to whoever set it up, not to
-    // everybody who signs in — see `isInstanceOwner`.
-    session.session.isGuest ? false : isInstanceOwner(db, session.user.id),
+    // everybody who signs in — see `isInstanceAdmin`.
+    session.session.isGuest ? false : isInstanceAdmin(db, session.user.id),
   ]);
 
   return (

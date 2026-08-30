@@ -5,7 +5,7 @@ import {
   ensurePersonalWorkspace,
   getDb,
   getOfficeSettings,
-  isInstanceOwner,
+  isInstanceAdmin,
   renameWorkspace,
   saveOfficeSettings,
 } from '@quintal/shared/db';
@@ -36,7 +36,7 @@ export async function saveSettingsAction(
     // what somebody reads before they sign in, so this became a defacement
     // vector the moment there was a name to deface.
     const mayChangeInstance =
-      !session.session.isGuest && (await isInstanceOwner(db, session.user.id));
+      !session.session.isGuest && (await isInstanceAdmin(db, session.user.id));
 
     // The form hides these from anybody who cannot change them, so a submission
     // carrying them from somebody who cannot is a crafted one. Refused rather

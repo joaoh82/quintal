@@ -45,6 +45,20 @@ export const users = sqliteTable('users', {
   name: text('name').notNull(),
   pubkey: text('pubkey').notNull().unique(),
   /**
+   * May change settings that belong to the whole deployment.
+   *
+   * Recorded rather than worked out. The first version of this asked "who is
+   * the earliest account?" on every check, which is not a fact about the
+   * instance — it is a query whose answer moves when accounts are deleted, and
+   * it silently reassigned who was in charge the first time somebody tidied up
+   * a test user.
+   *
+   * Not a role and not a panel: the plan cuts an admin panel, and this is the
+   * smaller thing underneath it — one bit saying who may touch instance-wide
+   * settings, granted with `pnpm admin` and nowhere else for now.
+   */
+  instanceAdmin: integer('instance_admin', { mode: 'boolean' }).notNull().default(false),
+  /**
    * A line under your name, shown on your profile card. Self-asserted and
    * length-capped — it is rendered next to other people's names, so it is
    * untrusted input like any other.
