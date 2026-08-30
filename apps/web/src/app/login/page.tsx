@@ -21,6 +21,7 @@ import {
   type IdentityState,
 } from '@/lib/host';
 import { useHost } from '@/lib/use-host';
+import { WhichOffice } from '@/components/WhichOffice';
 import {
   createIdentity,
   forgetSavedNsec,
@@ -487,7 +488,9 @@ export default function LoginPage() {
         </CardContent>
       </Card>
 
-      <p className="text-muted-foreground mt-6 text-center text-sm">
+      <WhichOffice className="text-muted-foreground mt-4 text-center text-xs" />
+
+      <p className="text-muted-foreground mt-4 text-center text-sm">
         <Link
           href="/"
           className="hover:text-foreground underline-offset-4 hover:underline"
