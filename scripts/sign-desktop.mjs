@@ -23,8 +23,19 @@
  * rather than chosen silently.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import { resolveIdentity } from './signing-identity.mjs';
+
+function identity() {
+  const { identity: chosen, problem } = resolveIdentity();
+  if (problem) {
+    console.error(problem);
+    process.exit(1);
+  }
+  return chosen;
+}
 
 const BUNDLE_ID = 'sh.quintal.desktop';
 const DEFAULT_BINARY = 'apps/desktop/src-tauri/target/debug/quintal-desktop';
@@ -34,36 +45,10 @@ if (process.platform !== 'darwin') {
   process.exit(0);
 }
 
-function identity() {
-  const fromEnv = process.env.QUINTAL_SIGNING_IDENTITY ?? process.env.APPLE_SIGNING_IDENTITY;
-  if (fromEnv && fromEnv.trim().length > 0) return fromEnv.trim();
-
-  const listed = execFileSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
-    encoding: 'utf8',
-  });
-  const names = [...listed.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-
-  if (names.length === 0) {
-    console.error(
-      'No codesigning identity found.\n' +
-        'Xcode creates an "Apple Development" certificate when you sign in with an Apple ID.\n' +
-        '\nWithout one, nothing here is broken: `pnpm desktop` still works, and macOS\n' +
-        'simply asks for your keychain password on each launch. See docs/DESKTOP.md.',
-    );
-    process.exit(1);
-  }
-  if (names.length > 1) {
-    console.error(
-      `Found ${names.length} codesigning identities. Pick one:\n` +
-        names.map((name) => `  QUINTAL_SIGNING_IDENTITY="${name}"`).join('\n'),
-    );
-    process.exit(1);
-  }
-  return names[0];
-}
-
-// `--print-identity` exists so the bundle script can reuse this resolution
-// rather than making somebody paste a certificate name into an env var.
+// Prints the chosen certificate, for looking it up by hand. Nothing builds on
+// it: a shell substitution that fails still assigns an empty string and lets
+// the build carry on, which is how a clear message became `Signing with
+// identity ""` several screens later.
 if (process.argv.includes('--print-identity')) {
   process.stdout.write(identity());
   process.exit(0);

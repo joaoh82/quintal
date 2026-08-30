@@ -136,9 +136,21 @@ identifier, so it satisfies the same requirement and shares the one keychain
 grant. A rebuild replaces the signature, so re-run it when the prompt comes
 back.
 
-Both find your signing identity automatically when you have exactly one;
-otherwise set `QUINTAL_SIGNING_IDENTITY`. If you have no certificate at all, the
-app still works — macOS just keeps asking.
+Both find your signing identity automatically when you have exactly one. With
+several, they stop and ask rather than choosing:
+
+```bash
+export QUINTAL_SIGNING_IDENTITY="Apple Development: you@example.com (XXXXXXXXXX)"
+```
+
+Worth putting in your shell profile, because the choice has to stay stable. A
+keychain grant is bound to the signing certificate through the designated
+requirement, so signing with a different one is a different program as far as
+macOS is concerned — and everything you clicked "Always Allow" for gets asked
+again.
+
+If you have no certificate at all, the app still works — macOS just keeps
+asking.
 
 ### If the keychain will not open
 
@@ -153,6 +165,19 @@ a key exists, so a locked or denied keychain is reported, never worked around.
 Not requested. It will be, when push-to-talk becomes a global hotkey — that
 needs to see key presses while Quintal is not focused, and macOS gates it behind
 Accessibility. There is nothing to grant until voice ships.
+
+## Inspecting it
+
+Devtools are enabled in release builds as well as development ones — right-click
+→ Inspect Element, or ⌥⌘I. Tauri ships the inspector in debug builds only unless
+asked, which meant the bundled app, the one actually used day to day, was the
+one that could not be inspected. That is backwards: the awkward bugs live
+exactly there — a blank window with no office, a runtime list empty because a
+Finder launch inherits no PATH — and reproducing them in a dev build, where the
+conditions differ, is how you end up fixing the wrong thing.
+
+Worth revisiting before there are users who are not us: it hands an inspector,
+and a window onto a privileged bridge, to whoever holds the app.
 
 ## The menu bar
 
