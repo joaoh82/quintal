@@ -22,40 +22,52 @@ import { useHost } from '@/lib/use-host';
  */
 export function WhichOffice({ className }: { className?: string }) {
   const { host, ready } = useHost();
-  const [name, setName] = useState<string | null>(null);
+  const [shown, setShown] = useState<{ name: string | null; where: string } | null>(null);
 
   useEffect(() => {
     if (!ready) return;
-
-    // The host is asked first: it knows the label somebody chose, which the
-    // page cannot see.
-    if (!host) {
-      setName(window.location.host);
-      return;
-    }
-
     let cancelled = false;
-    void host
-      .listOffices()
-      .then((listed) => {
-        if (cancelled) return;
-        const active = listed.offices.find((office) => office.url === listed.active);
-        setName(active?.label ?? window.location.host);
-      })
-      .catch(() => {
-        if (!cancelled) setName(window.location.host);
-      });
+
+    void (async () => {
+      // What the office calls itself wins. It is the one answer everybody
+      // arriving here sees the same, which is the point of having it.
+      const named = await fetch('/api/office', { credentials: 'same-origin' })
+        .then((response) => (response.ok ? (response.json() as Promise<{ name?: string }>) : null))
+        .then((body) => (typeof body?.name === 'string' && body.name.length > 0 ? body.name : null))
+        .catch(() => null);
+
+      // Then the name you gave it in the picker, which only the host knows —
+      // useful for telling two of your own deployments apart.
+      const labelled = named
+        ? null
+        : await host
+            ?.listOffices()
+            .then((listed) => {
+              const active = listed.offices.find((office) => office.url === listed.active);
+              return active?.label ?? null;
+            })
+            .catch(() => null);
+
+      if (cancelled) return;
+      setShown({ name: named ?? labelled ?? null, where: window.location.host });
+    })();
 
     return () => {
       cancelled = true;
     };
   }, [host, ready]);
 
-  if (name === null) return null;
+  if (shown === null) return null;
 
   return (
     <p className={className ?? 'text-muted-foreground text-center text-xs'}>
-      <span className="bg-muted rounded px-1.5 py-0.5 font-mono">{name}</span>
+      {shown.name ? <span className="mr-1.5 font-medium">{shown.name}</span> : null}
+      {/*
+        The address is shown even when the office has a name. Two deployments
+        can be called the same thing, and "am I on staging or production" is
+        exactly the question this is here to answer.
+      */}
+      <span className="bg-muted rounded px-1.5 py-0.5 font-mono">{shown.where}</span>
     </p>
   );
 }

@@ -2,6 +2,7 @@
 
 import {
   SETTING_LIMITS,
+  OFFICE_NAME_MAX_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
   type OfficeSettings,
 } from '@quintal/shared';
@@ -52,9 +53,28 @@ function Field({ name, label, unit, help, value, min, max }: FieldProps) {
 export function OfficeSettingsForm({
   settings,
   workspaceName,
+  canChangeInstance,
+  host,
 }: {
   settings: OfficeSettings;
   workspaceName: string;
+  /**
+   * Whether this person may change anything instance-wide.
+   *
+   * Covers the radii as well as the name. Gating the action but showing the
+   * fields is the worse lie of the two: you edit an earshot, press Save, and
+   * are told it is live within ten seconds while nothing has changed.
+   */
+  canChangeInstance: boolean;
+  /**
+   * The address this office answers on, from the server.
+   *
+   * Read there rather than from `window`, because a `'use client'` module is
+   * still server-rendered — `typeof window === 'undefined' ? '' : …` renders
+   * empty on the server and something else on the client, which is a hydration
+   * mismatch of exactly the kind already fixed once in this codebase.
+   */
+  host: string;
 }) {
   const [state, formAction, pending] = useActionState(saveSettingsAction, INITIAL);
   const current = state.saved ?? settings;
@@ -72,10 +92,11 @@ export function OfficeSettingsForm({
         <div className="mt-3 flex flex-col gap-1 py-4 sm:flex-row sm:items-start sm:gap-6">
           <div className="sm:w-64 sm:shrink-0">
             <label htmlFor="workspaceName" className="text-sm font-medium">
-              Office name
+              Your office
             </label>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              Shown in the header and to anyone you invite.
+              Shown in the header and to anyone you invite. Yours — it is not
+              what this server is called.
             </p>
           </div>
           <Input
@@ -87,8 +108,43 @@ export function OfficeSettingsForm({
             className="sm:max-w-sm"
           />
         </div>
+
+        {/*
+          Two names, and they are genuinely different things: the one above
+          belongs to a person, this one to the deployment. The product calls
+          both an "office" — a workspace is displayed as "Josh's Office", and so
+          is the thing you pick in the app's switcher — so the labels say which
+          is which rather than pretending the collision is not there.
+        */}
+        {canChangeInstance ? (
+          <div className="mt-1 flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="sm:w-64 sm:shrink-0">
+              <label htmlFor="officeName" className="text-sm font-medium">
+                This server
+              </label>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Shown on the sign-in page, before anybody has an account here.
+                Leave it empty and the address is shown instead.
+              </p>
+            </div>
+            <Input
+              id="officeName"
+              name="officeName"
+              defaultValue={current.name}
+              maxLength={OFFICE_NAME_MAX_LENGTH}
+              placeholder={host}
+              className="sm:max-w-sm"
+            />
+          </div>
+        ) : null}
       </section>
 
+      {/*
+        Hidden rather than shown-and-refused, for the same reason the name is:
+        these apply to the whole instance, so somebody who cannot change them
+        should not be invited to try and then told it worked.
+      */}
+      {canChangeInstance ? (
       <section className="border-t pt-4">
         <h2 className="text-sm font-semibold">How the office sounds</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-xs">
@@ -127,13 +183,16 @@ export function OfficeSettingsForm({
           />
         </div>
       </section>
+      ) : null}
 
       <div className="flex items-center gap-3 border-t pt-4">
         <Button type="submit" disabled={pending}>
           {pending ? 'Saving…' : 'Save'}
         </Button>
         {state.ok ? (
-          <span className="text-xs text-emerald-600">Saved — live within 10s.</span>
+          <span className="text-xs text-emerald-600">
+            {canChangeInstance ? 'Saved — live within 10s.' : 'Saved.'}
+          </span>
         ) : null}
         {state.error ? <span className="text-xs text-rose-600">{state.error}</span> : null}
       </div>
