@@ -15,6 +15,7 @@ import {
 import {
   ensurePersonalWorkspace,
   getDb,
+  hasInstanceAdmin,
   redeemInviteLink,
   users,
   type Database,
@@ -250,7 +251,11 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           if (!user) {
             const id = randomUUID();
             const name = displayNameFromPubkey(pubkey);
-            await db.insert(users).values({ id, name, pubkey });
+            // The first account on an instance is the person standing it up,
+            // and somebody has to be able to name the place. After that, admin
+            // is granted deliberately — see `pnpm admin` — or not at all.
+            const instanceAdmin = !(await hasInstanceAdmin(db));
+            await db.insert(users).values({ id, name, pubkey, instanceAdmin });
             user = { id, name, pubkey };
           }
 

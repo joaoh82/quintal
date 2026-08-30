@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { getOfficeSettings, isInstanceOwner, saveOfficeSettings } from './settings.js';
+import { eq } from 'drizzle-orm';
+
+import { users } from './schema.js';
+import {
+  getOfficeSettings,
+  hasInstanceAdmin,
+  isInstanceAdmin,
+  listInstanceAdmins,
+  saveOfficeSettings,
+  setInstanceAdmin,
+} from './settings.js';
 import { createTestDb, createTestUser } from './testing.js';
 
 /**
@@ -43,28 +53,66 @@ describe('what this deployment calls itself', () => {
 });
 
 describe('who may change instance-wide settings', () => {
-  it('is the account that set the instance up', async () => {
+  it('is nobody until somebody is made one', async () => {
     const db = await createTestDb();
-    const first = await createTestUser(db, 'Josh');
+    const user = await createTestUser(db, 'Josh');
 
-    assert.equal(await isInstanceOwner(db, first.id), true);
+    // A flag, not a query. The version this replaces answered "are you the
+    // earliest account?", which is not a fact about the instance — it moved
+    // when accounts were deleted, and silently reassigned who was in charge
+    // the first time somebody tidied up a test user.
+    assert.equal(await isInstanceAdmin(db, user.id), false);
+    assert.equal(await hasInstanceAdmin(db), false);
   });
 
-  it('is not everybody who signs in afterwards', async () => {
+  it('is whoever was granted it, and stays that way', async () => {
     const db = await createTestDb();
     const first = await createTestUser(db, 'Josh');
     const second = await createTestUser(db, 'Sam');
 
-    assert.equal(await isInstanceOwner(db, first.id), true);
+    await setInstanceAdmin(db, second.id, true);
+
+    assert.equal(await isInstanceAdmin(db, second.id), true);
+    assert.equal(await isInstanceAdmin(db, first.id), false, 'age is not authority');
+  });
+
+  /** The failure that prompted all of this. */
+  it('does not move when an account is deleted', async () => {
+    const db = await createTestDb();
+    const earliest = await createTestUser(db, 'A stale test identity');
+    const real = await createTestUser(db, 'Josh');
+    await setInstanceAdmin(db, real.id, true);
+
+    await db.delete(users).where(eq(users.id, earliest.id));
+
     assert.equal(
-      await isInstanceOwner(db, second.id),
-      false,
-      'otherwise anybody could rename the office everyone arrives at',
+      await isInstanceAdmin(db, real.id),
+      true,
+      'tidying up an old account must not hand the instance to somebody else',
     );
   });
 
-  it('is nobody on an instance with no accounts', async () => {
+  it('can be taken away', async () => {
     const db = await createTestDb();
-    assert.equal(await isInstanceOwner(db, 'nobody'), false);
+    const user = await createTestUser(db, 'Josh');
+    await setInstanceAdmin(db, user.id, true);
+    await setInstanceAdmin(db, user.id, false);
+
+    assert.equal(await isInstanceAdmin(db, user.id), false);
+    assert.equal(await hasInstanceAdmin(db), false, 'and then nobody is in charge');
+  });
+
+  it('lists everybody who has it', async () => {
+    const db = await createTestDb();
+    const first = await createTestUser(db, 'Josh');
+    const second = await createTestUser(db, 'Sam');
+    await setInstanceAdmin(db, first.id, true);
+    await setInstanceAdmin(db, second.id, true);
+
+    const admins = await listInstanceAdmins(db);
+    assert.deepEqual(
+      admins.map((admin) => admin.name),
+      ['Josh', 'Sam'],
+    );
   });
 });

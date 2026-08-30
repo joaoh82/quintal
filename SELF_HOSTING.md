@@ -74,9 +74,27 @@ Left empty, the address is shown instead — which is also always shown alongsid
 the name, because two deployments can be called the same thing and "am I on
 staging or production" is worth being able to answer at a glance.
 
-Only the account that set the instance up can change it, along with the other
-instance-wide settings. There is no admin model yet; the earliest account stands
-in for one.
+Only an instance admin can change it, along with the other instance-wide
+settings. The first account to sign in on a fresh instance becomes one, because
+somebody has to be able to name the place.
+
+After that it is granted deliberately, from a shell on the machine:
+
+```bash
+pnpm admin                 # who is in charge
+pnpm admin grant  npub1…   # add somebody
+pnpm admin revoke npub1…   # remove somebody
+```
+
+They have to have signed in at least once — an account appears when somebody
+arrives with a key, and inventing one from a shell would put a person in the
+office who has never been to it.
+
+There is no admin panel and this is not one. It is the smaller thing underneath:
+a way to say who may touch instance-wide settings, correctable from outside the
+app. That matters because "the first account" is often not the person running
+things — on any instance that has seen testing, the earliest key may be one
+nobody uses.
 
 ## Running two offices on one machine
 

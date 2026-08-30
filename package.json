@@ -25,7 +25,8 @@
     "desktop:check": "pnpm --filter @quintal/desktop check",
     "desktop:attach": "pnpm --filter @quintal/desktop dev",
     "desktop:sign": "node scripts/sign-desktop.mjs",
-    "desktop:bundle": "pnpm --filter @quintal/shared build && pnpm --filter quintal-acp build && node scripts/build-harness-sidecar.mjs && node scripts/bundle-desktop.mjs"
+    "desktop:bundle": "pnpm --filter @quintal/shared build && pnpm --filter quintal-acp build && node scripts/build-harness-sidecar.mjs && node scripts/bundle-desktop.mjs",
+    "admin": "pnpm --filter @quintal/shared admin"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

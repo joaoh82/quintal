@@ -35,7 +35,8 @@
     "db:migrate": "tsx src/cli/migrate.ts",
     "db:seed": "tsx src/cli/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "admin": "tsx src/cli/admin.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.76",

@@ -49,22 +49,57 @@ export async function saveOfficeSettings(
 /**
  * Who is allowed to change instance-wide settings.
  *
- * There is no admin model, and this is the placeholder for one: the earliest
- * account is whoever set the instance up. Conventional for self-hosted software,
- * and considerably better than the alternative it replaces — these settings were
- * writable by *anyone with a session*, including a guest who redeemed an invite
- * link. Chat radius being defaced is a nuisance; the office's public name being
- * defaced is what somebody sees before they sign in.
+ * A recorded fact, not a question asked afresh each time. The first version of
+ * this returned "is this the earliest account?", which is not a property of the
+ * instance — it is a query whose answer moves when accounts are deleted, and it
+ * quietly reassigned who was in charge the first time somebody tidied up a test
+ * user.
  *
- * Replace this the moment there is a real notion of who runs an instance.
+ * Deliberately not a role and deliberately not a panel. The plan cuts an admin
+ * panel; this is the bit underneath one, granted with `pnpm admin`.
  */
-export async function isInstanceOwner(db: Database, userId: string): Promise<boolean> {
+export async function isInstanceAdmin(db: Database, userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ admin: users.instanceAdmin })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return rows[0]?.admin === true;
+}
+
+/** Everyone who may change instance-wide settings. */
+export async function listInstanceAdmins(
+  db: Database,
+): Promise<Array<{ id: string; name: string; pubkey: string }>> {
+  return db
+    .select({ id: users.id, name: users.name, pubkey: users.pubkey })
+    .from(users)
+    .where(eq(users.instanceAdmin, true))
+    .orderBy(asc(users.createdAt), asc(users.id));
+}
+
+export async function setInstanceAdmin(
+  db: Database,
+  userId: string,
+  admin: boolean,
+): Promise<void> {
+  await db.update(users).set({ instanceAdmin: admin }).where(eq(users.id, userId));
+}
+
+/**
+ * Is there anybody in charge yet?
+ *
+ * Used when an account is created: the first one on a fresh instance is the
+ * person setting it up, and somebody has to be able to name the place. After
+ * that, admin is granted deliberately or not at all.
+ */
+export async function hasInstanceAdmin(db: Database): Promise<boolean> {
   const rows = await db
     .select({ id: users.id })
     .from(users)
-    .orderBy(asc(users.createdAt), asc(users.id))
+    .where(eq(users.instanceAdmin, true))
     .limit(1);
 
-  const owner = rows[0]?.id;
-  return owner !== undefined && owner === userId;
+  return rows.length > 0;
 }
