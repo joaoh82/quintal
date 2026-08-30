@@ -234,6 +234,14 @@ export const inviteLinks = sqliteTable(
  */
 export const officeSettings = sqliteTable('office_settings', {
   id: text('id').primaryKey(),
+  /**
+   * What this deployment calls itself, shown before anybody signs in.
+   *
+   * Not a workspace's name — that one belongs to a person and is also displayed
+   * as an office. This belongs to the instance, and is what somebody arriving
+   * at a URL sees before they have an account here.
+   */
+  name: text('name').notNull().default(''),
   chatRadiusTiles: integer('chat_radius_tiles').notNull().default(12),
   walkUpRadiusTiles: integer('walk_up_radius_tiles').notNull().default(3),
   replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),

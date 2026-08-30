@@ -64,6 +64,13 @@
       "when": 1787498469791,
       "tag": "0008_drop_guest_memberships",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788114741427,
+      "tag": "0009_warm_husk",
+      "breakpoints": true
     }
   ]
 }

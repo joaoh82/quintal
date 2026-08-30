@@ -1,3 +1,5 @@
+import { tidyDisplayText } from './workspace.js';
+
 /**
  * Instance settings — the knobs an owner can turn without editing code.
  *
@@ -10,6 +12,18 @@
  */
 
 export interface OfficeSettings {
+  /**
+   * What this deployment calls itself, shown before anybody signs in.
+   *
+   * Distinct from a *workspace* name, which is also displayed as an office
+   * ("Josh's Office") — that one belongs to a person, this one to the whole
+   * instance. Somebody arriving at a URL needs to recognise the place before
+   * they have an account in it, and "quintal.example.com" is a poor thing to
+   * recognise a workplace by.
+   *
+   * Empty means unnamed, and the address is shown instead.
+   */
+  name: string;
   /** How far speech carries, in tiles. */
   chatRadiusTiles: number;
   /** How close counts as walking up to somebody, for unaddressed remarks. */
@@ -21,7 +35,11 @@ export interface OfficeSettings {
   replyWindowSeconds: number;
 }
 
+/** Long enough for "Rockflow Engineering", short enough to sit on a card. */
+export const OFFICE_NAME_MAX_LENGTH = 60;
+
 export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
+  name: '',
   chatRadiusTiles: 12,
   walkUpRadiusTiles: 3,
   replyWindowSeconds: 90,
@@ -43,6 +61,13 @@ function clamp(value: unknown, fallback: number, min: number, max: number): numb
 /** Coerce anything into a usable settings object. Never throws. */
 export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefined): OfficeSettings {
   return {
+    // The same containment every other name gets. This one is drawn on a page
+    // shown to people who have not signed in, so a stray bidi override here
+    // reaches further than most.
+    name: tidyDisplayText(
+      typeof raw?.name === 'string' ? raw.name : '',
+      OFFICE_NAME_MAX_LENGTH,
+    ),
     chatRadiusTiles: clamp(
       raw?.chatRadiusTiles,
       DEFAULT_OFFICE_SETTINGS.chatRadiusTiles,

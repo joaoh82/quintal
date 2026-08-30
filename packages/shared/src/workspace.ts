@@ -54,7 +54,7 @@ export const WORKSPACE_NAME_MAX_LENGTH = 60;
  * UTF-16 units and will happily cut an emoji in half and leave a lone
  * surrogate behind.
  */
-function tidy(input: string, max: number): string {
+export function tidyDisplayText(input: string, max: number): string {
   const collapsed = input
     .replace(
       /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g,
@@ -74,14 +74,14 @@ function tidy(input: string, max: number): string {
  */
 export function normaliseDisplayName(input: unknown): string | null {
   if (typeof input !== 'string') return null;
-  const name = tidy(input, DISPLAY_NAME_MAX_LENGTH);
+  const name = tidyDisplayText(input, DISPLAY_NAME_MAX_LENGTH);
   return name.length > 0 ? name : null;
 }
 
 /** A profile description fit to render. Empty means "not set". */
 export function normaliseProfileDescription(input: unknown): string {
   if (typeof input !== 'string') return '';
-  return tidy(input, PROFILE_DESCRIPTION_MAX_LENGTH);
+  return tidyDisplayText(input, PROFILE_DESCRIPTION_MAX_LENGTH);
 }
 
 /**
@@ -94,7 +94,7 @@ export function normaliseProfileDescription(input: unknown): string {
  */
 export function normaliseWorkspaceName(input: unknown): string | null {
   if (typeof input !== 'string') return null;
-  const name = tidy(input, WORKSPACE_NAME_MAX_LENGTH);
+  const name = tidyDisplayText(input, WORKSPACE_NAME_MAX_LENGTH);
   return name.length > 0 ? name : null;
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE `office_settings` ADD `name` text DEFAULT '' NOT NULL;

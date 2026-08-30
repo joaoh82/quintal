@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import {
   DEFAULT_OFFICE_SETTINGS,
@@ -6,7 +6,7 @@ import {
   type OfficeSettings,
 } from '../settings.js';
 import type { Database } from './client.js';
-import { officeSettings } from './schema.js';
+import { officeSettings, users } from './schema.js';
 
 /** The single settings row. There is exactly one, and this is its id. */
 const GLOBAL = 'global';
@@ -22,6 +22,7 @@ export async function getOfficeSettings(db: Database): Promise<OfficeSettings> {
   if (!row) return { ...DEFAULT_OFFICE_SETTINGS };
 
   return normaliseSettings({
+    name: row.name,
     chatRadiusTiles: row.chatRadiusTiles,
     walkUpRadiusTiles: row.walkUpRadiusTiles,
     replyWindowSeconds: row.replyWindowSeconds,
@@ -43,4 +44,27 @@ export async function saveOfficeSettings(
     .onConflictDoUpdate({ target: officeSettings.id, set: { ...next, updatedAt: new Date() } });
 
   return next;
+}
+
+/**
+ * Who is allowed to change instance-wide settings.
+ *
+ * There is no admin model, and this is the placeholder for one: the earliest
+ * account is whoever set the instance up. Conventional for self-hosted software,
+ * and considerably better than the alternative it replaces — these settings were
+ * writable by *anyone with a session*, including a guest who redeemed an invite
+ * link. Chat radius being defaced is a nuisance; the office's public name being
+ * defaced is what somebody sees before they sign in.
+ *
+ * Replace this the moment there is a real notion of who runs an instance.
+ */
+export async function isInstanceOwner(db: Database, userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .orderBy(asc(users.createdAt), asc(users.id))
+    .limit(1);
+
+  const owner = rows[0]?.id;
+  return owner !== undefined && owner === userId;
 }

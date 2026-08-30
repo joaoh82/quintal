@@ -64,6 +64,20 @@ expiry (72 hours by default) and a use count, redeemable at `/join/<token>`,
 and marked with a "Guest" badge everywhere they appear. Only a hash of the
 token is stored, so a link you lose track of can be revoked but never re-read.
 
+## Naming your instance
+
+Settings → Office → **This server**. It is shown on the sign-in page and the
+landing page, before anybody has an account, so somebody arriving at your URL
+recognises the place rather than reading a hostname.
+
+Left empty, the address is shown instead — which is also always shown alongside
+the name, because two deployments can be called the same thing and "am I on
+staging or production" is worth being able to answer at a glance.
+
+Only the account that set the instance up can change it, along with the other
+instance-wide settings. There is no admin model yet; the earliest account stands
+in for one.
+
 ## Running two offices on one machine
 
 Only in development, and only because it is the honest way to test that two
