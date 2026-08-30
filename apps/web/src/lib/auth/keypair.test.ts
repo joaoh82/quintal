@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   buildAuthPayload,
+  displayNameFromPubkey,
   generateSecretKey,
   getPublicKeyHex,
   npubEncode,
@@ -197,10 +198,16 @@ describe('verify', () => {
 
     const row = (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0];
     assert.ok(row, 'a user row exists for the key');
-    assert.equal(row.name, result.user.name);
-    // The name is a recognisable slice of the npub, not the raw hex.
-    assert.ok(row.name.startsWith('npub1'));
-    assert.ok(npubEncode(pubkey).startsWith(row.name.split('…')[0] ?? ''));
+
+    // Nobody has named themselves yet, and the row says exactly that. It used
+    // to store the truncated npub here, which froze a rendering into data and
+    // made a generated name impossible to tell from a chosen one.
+    assert.equal(row.name, '');
+
+    // The caller still gets something to show, derived from the key.
+    assert.equal(result.user.name, displayNameFromPubkey(pubkey));
+    assert.ok(result.user.name.startsWith('npub1'));
+    assert.ok(npubEncode(pubkey).startsWith(result.user.name.split('…')[0] ?? ''));
 
     const workspaces = await listWorkspacesForUser(db, row.id);
     assert.equal(workspaces.length, 1);

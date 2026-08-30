@@ -144,9 +144,36 @@ export function truncateNpub(npub: string): string {
   return `${npub.slice(0, 13)}…${npub.slice(-6)}`;
 }
 
-/** The name a brand-new identity gets, before anyone renames themselves. */
+/** What to call someone who has not named themselves yet. */
 export function displayNameFromPubkey(pubkeyHex: string): string {
   return truncateNpub(npubEncode(pubkeyHex));
+}
+
+/**
+ * What to call someone, given the row.
+ *
+ * A blank `name` means "not named yet", and the answer is derived here rather
+ * than stored. That direction matters: the first version wrote the truncated
+ * npub into the column at sign-up, which froze a *rendering* — ellipsis and
+ * all — into data. It could not be copied, it could not be told apart from a
+ * name somebody had actually chosen, and it stayed wrong forever, because the
+ * fallback that would have produced a better answer never ran again.
+ *
+ * Derived, it costs a bech32 encode per render and is always right.
+ */
+export function displayName(user: {
+  name?: string | null;
+  pubkey: string;
+}): string {
+  const chosen = user.name?.trim();
+  if (chosen) return chosen;
+  try {
+    return displayNameFromPubkey(user.pubkey);
+  } catch {
+    // A row with an unencodable key should still render as somebody rather
+    // than take the page down with it.
+    return 'Someone';
+  }
 }
 
 // --- the login challenge ----------------------------------------------------

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { displayNameFromPubkey } from '../identity.js';
 import {
   createAgent,
+  findAgentByKey,
   findAgentIdentityById,
+  listAgentsForWorkspace,
   revokeAgent,
   setAgentEnabled,
   setAgentLaunch,
@@ -435,5 +438,55 @@ describe('turning an agent off', () => {
       fleet.map((member) => member.name),
       ['Alice'],
     );
+  });
+});
+
+describe('the owner name on a joined row', () => {
+  /**
+   * Every one of these joins renders an owner to somebody. A blank name is not
+   * an edge case — it is what *every* account looks like the moment it is
+   * created, because sign-up no longer writes a name for you.
+   */
+  it('falls back to the npub when the owner has not named themselves', async () => {
+    const db = await createTestDb();
+    const nameless = await createTestUser(db, '');
+    const expected = displayNameFromPubkey(nameless.pubkey);
+
+    const host = await createHostToken(db, {
+      workspaceId: nameless.workspaceId,
+      ownerUserId: nameless.id,
+      label: 'laptop',
+    });
+    const resolved = await findHostByToken(db, host.token);
+    assert.equal(resolved?.ownerName, expected);
+
+    const agent = await makeAgent(db, nameless, 'Bob');
+    const identity = await findAgentIdentityById(db, agent.id);
+    assert.equal(identity?.ownerName, expected);
+
+    const byKey = await findAgentByKey(db, agent.key);
+    assert.equal(byKey?.ownerName, expected);
+  });
+
+  it('still prefers a name once one is chosen', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+    const agent = await makeAgent(db, josh, 'Bob');
+
+    assert.equal((await findAgentByKey(db, agent.key))?.ownerName, 'Josh');
+  });
+
+  it('does not leak the owner key into the agent shape', async () => {
+    // The pubkey is joined only to compute the fallback. It is public, so this
+    // is about the shape staying about the agent, not about secrecy.
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+    const agent = await makeAgent(db, josh, 'Bob');
+
+    const listed = await listAgentsForWorkspace(db, josh.workspaceId);
+    assert.ok(listed.length > 0);
+    for (const row of listed) {
+      assert.ok(!('ownerPubkey' in row), 'ownerPubkey should be stripped');
+    }
   });
 });

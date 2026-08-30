@@ -5,7 +5,7 @@ import {
   AUTH_NONCE_TTL_MS,
   AUTH_TIMESTAMP_SKEW_MS,
   buildAuthPayload,
-  displayNameFromPubkey,
+  displayName,
   isNonceHex,
   isPubkeyHex,
   isSignatureHex,
@@ -250,7 +250,13 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           let user = existing;
           if (!user) {
             const id = randomUUID();
-            const name = displayNameFromPubkey(pubkey);
+            // Blank, not the truncated npub. Nobody has named themselves at
+            // this point, and `displayName` says so at render time from the
+            // key we already have. Writing the derived string here instead
+            // would freeze one rendering into the row forever: it survives
+            // every later improvement to how keys are shown, and it makes
+            // "has this person picked a name?" unanswerable.
+            const name = '';
             // The first account on an instance is the person standing it up,
             // and somebody has to be able to name the place. After that, admin
             // is granted deliberately — see `pnpm admin` — or not at all.
@@ -314,7 +320,10 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
 
           return ctx.json({
             token: session.token,
-            user: { id: user.id, name: user.name, pubkey: user.pubkey },
+            // The effective name, not the stored one: this field exists to be
+            // rendered, and a caller holding a blank string has no way to work
+            // out what to show instead.
+            user: { id: user.id, name: displayName(user), pubkey: user.pubkey },
             isGuest,
           });
         },

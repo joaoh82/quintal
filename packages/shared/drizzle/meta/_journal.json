@@ -78,6 +78,13 @@
       "when": 1788119227053,
       "tag": "0010_illegal_longshot",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788119227054,
+      "tag": "0011_unfreeze_display_names",
+      "breakpoints": true
     }
   ]
 }

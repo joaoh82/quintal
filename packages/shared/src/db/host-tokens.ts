@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import { AGENT_KEY_BYTES, HOST_TOKEN_PREFIX } from '../agent.js';
+import { displayName } from '../identity.js';
 import type { Database } from './client.js';
 import { agents, hostTokens, users } from './schema.js';
 
@@ -191,6 +192,7 @@ export async function findHostByToken(
       workspaceId: hostTokens.workspaceId,
       ownerUserId: hostTokens.ownerUserId,
       ownerName: users.name,
+      ownerPubkey: users.pubkey,
       label: hostTokens.label,
       tokenHash: hostTokens.tokenHash,
       revokedAt: hostTokens.revokedAt,
@@ -210,7 +212,7 @@ export async function findHostByToken(
     id: row.id,
     workspaceId: row.workspaceId,
     ownerUserId: row.ownerUserId,
-    ownerName: row.ownerName,
+    ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
     label: row.label,
   };
 }

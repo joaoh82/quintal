@@ -14,6 +14,7 @@ import {
   type AgentEventKind,
   type AgentScope,
 } from '../agent.js';
+import { displayName } from '../identity.js';
 import type { Database } from './client.js';
 import { agentEvents, agentMemory, agents, memberships, users } from './schema.js';
 
@@ -148,6 +149,9 @@ export async function findAgentByKey(
       workspaceId: agents.workspaceId,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      // Joined so a blank name can fall back to the owner's npub; stripped
+      // from the result below, because the shape is about the agent.
+      ownerPubkey: users.pubkey,
       name: agents.name,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
@@ -170,7 +174,7 @@ export async function findAgentByKey(
     id: row.id,
     workspaceId: row.workspaceId,
     ownerUserId: row.ownerUserId,
-    ownerName: row.ownerName,
+    ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
     name: row.name,
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
@@ -195,6 +199,9 @@ export async function findAgentIdentityById(
       workspaceId: agents.workspaceId,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      // Joined so a blank name can fall back to the owner's npub; stripped
+      // from the result below, because the shape is about the agent.
+      ownerPubkey: users.pubkey,
       name: agents.name,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
@@ -213,7 +220,7 @@ export async function findAgentIdentityById(
     id: row.id,
     workspaceId: row.workspaceId,
     ownerUserId: row.ownerUserId,
-    ownerName: row.ownerName,
+    ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
     name: row.name,
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
@@ -278,6 +285,9 @@ export async function listAgentsForWorkspace(
       status: agents.status,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      // Joined so a blank name can fall back to the owner's npub; stripped
+      // from the result below, because the shape is about the agent.
+      ownerPubkey: users.pubkey,
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
@@ -293,8 +303,9 @@ export async function listAgentsForWorkspace(
     .where(eq(agents.workspaceId, workspaceId))
     .orderBy(desc(agents.createdAt));
 
-  return rows.map((row) => ({
+  return rows.map(({ ownerPubkey, ...row }) => ({
     ...row,
+    ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
@@ -315,6 +326,9 @@ export async function findAgentById(
       status: agents.status,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      // Joined so a blank name can fall back to the owner's npub; stripped
+      // from the result below, because the shape is about the agent.
+      ownerPubkey: users.pubkey,
       workspaceId: agents.workspaceId,
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
@@ -333,8 +347,10 @@ export async function findAgentById(
 
   const row = rows[0];
   if (!row) return null;
+  const { ownerPubkey, ...rest } = row;
   return {
-    ...row,
+    ...rest,
+    ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
