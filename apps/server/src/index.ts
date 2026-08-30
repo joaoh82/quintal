@@ -4,7 +4,7 @@ import { Server, logger } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import {
   COLYSEUS_PATH,
-  DEV_WEB_PORT,
+  devWebPort,
   HEALTH_PATH,
   ROOM_OFFICE,
 } from '@quintal/shared';
@@ -77,7 +77,7 @@ async function handleRequest(
   sendJson(res, 404, {
     code: 404,
     error: 'game server only',
-    hint: `The web app runs separately in development — try http://localhost:${DEV_WEB_PORT}`,
+    hint: `The web app runs separately in development — try http://localhost:${devWebPort()}`,
   });
 }
 
@@ -127,7 +127,7 @@ await gameServer.listen(config.port, config.host);
 logger.info(
   config.isProduction
     ? `[quintal] web + game server on http://${config.host}:${config.port} (single process)`
-    : `[quintal] game server on http://${config.host}:${config.port} — web app at http://localhost:${DEV_WEB_PORT}`,
+    : `[quintal] game server on http://${config.host}:${config.port} — web app at http://localhost:${devWebPort()}`,
 );
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

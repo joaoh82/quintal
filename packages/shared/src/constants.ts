@@ -29,6 +29,41 @@ export const DEV_GAME_PORT = 2567;
 /** Port `next dev` listens on. */
 export const DEV_WEB_PORT = 3000;
 
+/**
+ * The dev ports, which can move.
+ *
+ * Two instances on one machine is not an exotic case: it is how you check that
+ * two offices are actually separate, and how anything about multiplayer gets
+ * tested against more than one server. With the numbers baked in, the second
+ * instance collides on both ports and the only workaround — pointing a second
+ * office at `127.0.0.1` instead of `localhost` — is refused by the sign-in
+ * origin check, correctly.
+ *
+ * Read through a function rather than exported as a constant so the value is
+ * whatever the environment says *now*. These are called only from Node —
+ * `next.config.ts` and the server — so no bundler has to inline them.
+ */
+function port(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+
+  const parsed = Number(raw);
+  // A typo should not silently become port 0, which binds something arbitrary
+  // and leaves you wondering why nothing is where you put it.
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new Error(`${name} must be a port number, not ${JSON.stringify(raw)}`);
+  }
+  return parsed;
+}
+
+export function devWebPort(): number {
+  return port('QUINTAL_WEB_PORT', DEV_WEB_PORT);
+}
+
+export function devGamePort(): number {
+  return port('QUINTAL_GAME_PORT', DEV_GAME_PORT);
+}
+
 /** Default port for the unified production process. */
 export const DEFAULT_PORT = 3000;
 

@@ -1,4 +1,4 @@
-import { COLYSEUS_PATH, DEV_GAME_PORT, HEALTH_PATH } from '@quintal/shared';
+import { COLYSEUS_PATH, HEALTH_PATH, devGamePort } from '@quintal/shared';
 import { loadRootEnv } from '@quintal/shared/db';
 import type { NextConfig } from 'next';
 
@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
     // Development: `next dev` owns :3000, the game server runs on :2567.
     // Proxying (HTTP matchmaking + the WebSocket upgrade) keeps the browser on
     // one origin, so client code never needs a separate endpoint per mode.
-    const gameServer = `http://127.0.0.1:${DEV_GAME_PORT}`;
+    const gameServer = `http://127.0.0.1:${devGamePort()}`;
     return [
       {
         source: `${COLYSEUS_PATH}/:path*`,
