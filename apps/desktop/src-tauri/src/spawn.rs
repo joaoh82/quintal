@@ -371,7 +371,19 @@ impl Fleet {
             .env(TOKEN_ENV, host_token)
             .env(URL_ENV, office)
             .env(EXIT_WITH_PARENT_ENV, "1")
-            .stdin(Stdio::null())
+            // Piped, and deliberately never read or taken: this pipe is not a
+            // channel, it is a liveness signal. We hold the write end for as
+            // long as this app is alive, so when it exits — tidily, by crash,
+            // or by `kill -9` — the kernel closes it and the harness sees EOF
+            // on stdin. That is the one notification that survives every way a
+            // parent can die.
+            //
+            // The harness used to work this out from `getppid`, which is
+            // correct under Node and useless in the bundle: the compiled
+            // sidecar caches its parent pid at startup and never re-reads it,
+            // so an orphaned fleet believed its dead parent was still there
+            // and stayed in the office for hours.
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -686,6 +698,43 @@ mod tests {
             std::fs::read_to_string(&seen).expect("recorded"),
             format!("qh_secret {}", office())
         );
+        fleet
+            .stop_within(Duration::from_millis(500))
+            .expect("stopped");
+    }
+
+    /// The harness learns its host has gone by seeing EOF on stdin, so the write
+    /// end has to stay open for exactly as long as the fleet runs.
+    ///
+    /// Worth a test because both ways of getting it wrong are silent. Taking or
+    /// dropping this handle closes the pipe immediately and a healthy fleet
+    /// shuts itself down; going back to `Stdio::null()` means EOF never comes
+    /// and the fleet outlives the app — which is what shipped, and what left
+    /// three of them in the office animating agents nobody could stop.
+    #[test]
+    fn the_host_holds_the_fleets_stdin_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
+        let harness = fake_harness(
+            dir.path(),
+            &format!("printf ready > {}\nwhile :; do :; done\n", ready.display()),
+        );
+        let fleet = Fleet::new();
+
+        fleet
+            .start_with(&harness, dir.path(), office(), "qh_x")
+            .expect("started");
+        wait_for(&ready);
+
+        {
+            let running = fleet.child.lock().expect("child lock");
+            let child = running.as_ref().expect("a running child");
+            assert!(
+                child.stdin.is_some(),
+                "the write end must be held, or the fleet cannot tell that we died"
+            );
+        }
+
         fleet
             .stop_within(Duration::from_millis(500))
             .expect("stopped");

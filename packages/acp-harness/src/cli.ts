@@ -375,29 +375,69 @@ export function watchForOrphaning(
     // nothing happens.
     asked = process.env.QUINTAL_EXIT_WITH_PARENT === '1',
     ppid = () => process.ppid,
+    stdin = process.stdin as Pick<NodeJS.ReadStream, 'on' | 'resume' | 'pause'>,
     intervalMs = ORPHAN_CHECK_MS,
-  }: { asked?: boolean; ppid?: () => number; intervalMs?: number } = {},
+  }: {
+    asked?: boolean;
+    ppid?: () => number;
+    stdin?: Pick<NodeJS.ReadStream, 'on' | 'resume' | 'pause'>;
+    intervalMs?: number;
+  } = {},
 ): (() => void) | null {
   if (!asked) return null;
 
-  const started = ppid();
-  // Already orphaned before we looked: nothing to serve, so do not start.
-  if (started === 1) {
+  let done = false;
+  const gone = (why: string) => {
+    if (done) return;
+    done = true;
+    process.stdout.write(`\nthe app that started this fleet has gone (${why})\n`);
     shutdown();
+  };
+
+  // --- the signal that actually works -------------------------------------
+  //
+  // The host holds our stdin open for as long as it lives and never writes to
+  // it. So EOF here means the write end was closed, and the only thing that
+  // closes it is that process ending — by any route, including the ones that
+  // run no cleanup at all.
+  //
+  // This replaces `getppid` as the primary check because the parent pid is not
+  // reliably live. Node re-reads it; the bundled sidecar is compiled with Bun,
+  // which caches it at startup and reports the *dead* parent forever. The
+  // watch below was therefore correct in development and inert in the shipped
+  // app — three fleets outlived their host and stayed in the office, each one
+  // still animating its agents.
+  stdin.on('end', () => gone('its stdin closed'));
+  stdin.on('close', () => gone('its stdin closed'));
+  // Errors count as gone too: a pipe that cannot be read is not a parent we
+  // can still be serving.
+  stdin.on('error', () => gone('its stdin broke'));
+  // Nothing flows — and nothing fires — until the stream is resumed.
+  stdin.resume();
+
+  // --- the secondary check ------------------------------------------------
+  //
+  // Kept because it costs one timer and covers a case the pipe does not: a
+  // host that spawned us without one. Under Bun it can only ever be a no-op,
+  // so it is no longer allowed to be the only thing standing between a dead
+  // app and a fleet that keeps working.
+  const started = ppid();
+  if (started === 1) {
+    gone('it was already orphaned');
     return null;
   }
 
   const watch = setInterval(() => {
-    if (ppid() === 1 || ppid() !== started) {
-      process.stdout.write('\nthe app that started this fleet has gone\n');
-      clearInterval(watch);
-      shutdown();
-    }
+    if (ppid() === 1 || ppid() !== started) gone('it was reparented');
   }, intervalMs);
   // Unref'd: this must never be the reason the process stays up, or a harness
   // with nothing to do would outlive its own purpose waiting to notice.
   watch.unref();
-  return () => clearInterval(watch);
+
+  return () => {
+    clearInterval(watch);
+    stdin.pause();
+  };
 }
 
 main().catch((error: unknown) => {
