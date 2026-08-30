@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { devWebPort } from '@quintal/shared';
 import { getDb, schema } from '@quintal/shared/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -31,7 +32,10 @@ function resolveSecret(): string {
 
 export const auth = betterAuth({
   appName: 'Quintal',
-  baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+  // Follows the dev web port. Sign-in is bound to this origin — see the
+  // cross-origin check in the keypair plugin — so a second instance on another
+  // port would refuse its own sign-ins if this stayed pinned to 3000.
+  baseURL: process.env.BETTER_AUTH_URL ?? `http://localhost:${devWebPort()}`,
   secret: resolveSecret(),
 
   database: drizzleAdapter(getDb(), {

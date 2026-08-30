@@ -64,6 +64,24 @@ expiry (72 hours by default) and a use count, redeemable at `/join/<token>`,
 and marked with a "Guest" badge everywhere they appear. Only a hash of the
 token is stored, so a link you lose track of can be revoked but never re-read.
 
+## Running two offices on one machine
+
+Only in development, and only because it is the honest way to test that two
+offices are separate. Both dev ports move, and the sign-in origin follows the
+web port on its own:
+
+```bash
+QUINTAL_WEB_PORT=3100 QUINTAL_GAME_PORT=2667 \
+  DATABASE_URL=file:./data/second.db pnpm dev
+```
+
+Give the second one its own database, or it is one office wearing two
+addresses — same people, same agents, and nothing proved.
+
+Point the desktop app at `http://localhost:3100`. **Not** `127.0.0.1:3100`:
+that is the same server reached by a different origin, and sign-in is bound to
+the one the office was configured with, so it will be refused.
+
 ## The desktop app
 
 The app is a client, not a second server. It loads whatever office you point it

@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "node scripts/sync-map.mjs && next dev --port 3000",
+    "dev": "node scripts/sync-map.mjs && next dev --port \"${QUINTAL_WEB_PORT:-3000}\"",
     "build": "node scripts/sync-map.mjs && next build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test \"src/**/*.test.ts\""

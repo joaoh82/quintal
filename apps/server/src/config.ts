@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_PORT, DEV_GAME_PORT } from '@quintal/shared';
+import { DEFAULT_PORT, devGamePort } from '@quintal/shared';
 
 /** `apps/server` — same depth whether running from `src/` (tsx) or `dist/` (node). */
 const SERVER_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,7 +25,7 @@ export const config = {
    * alone on :2567 while `next dev` owns :3000 and proxies `/colyseus` here.
    */
   isProduction,
-  port: Number(process.env.PORT ?? (isProduction ? DEFAULT_PORT : DEV_GAME_PORT)),
+  port: Number(process.env.PORT ?? (isProduction ? DEFAULT_PORT : devGamePort())),
   host: process.env.HOST ?? '0.0.0.0',
   /** Where the built Next.js app lives. */
   webDir: process.env.QUINTAL_WEB_DIR ?? resolve(SERVER_ROOT, '../web'),
