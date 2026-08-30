@@ -53,6 +53,18 @@ const LOG_LINES: usize = 500;
 const TOKEN_ENV: &str = "QUINTAL_HOST_TOKEN";
 const URL_ENV: &str = "QUINTAL_URL";
 
+/// Asks the harness to stop when this process is no longer its parent.
+///
+/// Stopping it on the way out covers a tidy quit and nothing else: a crash, a
+/// force-quit or a kill runs no handler, and what survives is not an idle
+/// process but a whole fleet still in the office — agents nothing on the machine
+/// can see or stop. Two had accumulated before anybody noticed, and the symptom
+/// was every agent appearing twice.
+///
+/// Set only for a harness *we* spawned. One somebody runs in a terminal should
+/// outlive the shell that started it.
+const EXIT_WITH_PARENT_ENV: &str = "QUINTAL_EXIT_WITH_PARENT";
+
 #[derive(Debug, Error)]
 pub enum SpawnError {
     #[error("this machine has not registered with an office yet")]
@@ -358,6 +370,7 @@ impl Fleet {
             .current_dir(&plan.cwd)
             .env(TOKEN_ENV, host_token)
             .env(URL_ENV, office)
+            .env(EXIT_WITH_PARENT_ENV, "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

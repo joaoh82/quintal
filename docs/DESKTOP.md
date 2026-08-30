@@ -258,6 +258,16 @@ directory is skipped rather than started.
 
 ## Leaving
 
-Closing the window stops the harness. Quitting from the tray does the same, by
-the same path — an orphaned harness would keep agents in the office with nothing
-able to see or stop them.
+Closing the window stops the harness, and quitting from the tray does the same
+by the same path.
+
+That covers a tidy exit and nothing else. An app that crashes, is force-quit or
+is killed runs no handler at all, and what survives is not an idle process — it
+is a whole fleet still in the office, agents nothing on the machine can see or
+stop. They accumulate: one more duplicate set of every agent per launch.
+
+So the harness also watches from its end. A fleet started by the app exits when
+that app is no longer its parent, which covers every way the app can die
+including the ones no handler runs for. A harness you start yourself in a
+terminal is unaffected — it keeps running when the shell exits, because that is
+a reasonable thing to want.

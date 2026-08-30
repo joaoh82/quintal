@@ -62,6 +62,12 @@ Protocol:  docs/GATEWAY.md — anything speaking it is a valid agent.
 /** How often to ask the office whether the fleet changed. */
 const FLEET_POLL_MS = 15_000;
 
+/// How often to check whether the app that started us is still there.
+///
+/// Two seconds: long enough to cost nothing, short enough that a fleet does not
+/// linger in an office after the app holding it has gone.
+const ORPHAN_CHECK_MS = 2_000;
+
 interface Flags {
   [key: string]: string | boolean | undefined;
 }
@@ -338,6 +344,60 @@ async function main(): Promise<void> {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  watchForOrphaning(shutdown);
+}
+
+/**
+ * Stop when whatever started us has gone.
+ *
+ * The desktop app spawns this and stops it again when it quits, which covers
+ * the tidy case and none of the others. An app that crashes, is force-quit, or
+ * is killed runs no handler at all — and what it leaves behind is not an idle
+ * process but a *whole fleet still in the office*, agents nothing on the
+ * machine can see or stop. Two of those had accumulated before anybody noticed,
+ * and the symptom was every agent appearing twice.
+ *
+ * So the responsibility moves to this end, where it can be honoured no matter
+ * how the parent died: on Unix an orphan is reparented to init, so `ppid` of 1
+ * means there is no longer anybody to serve.
+ *
+ * Only when asked. A harness somebody started in a terminal must keep running
+ * when that shell exits — `quintal-acp up &` and closing the window is a
+ * reasonable thing to do, and it also has `ppid` 1.
+ */
+export function watchForOrphaning(
+  shutdown: () => void,
+  {
+    // Injected so this is testable without arranging a real orphaning — see
+    // `start_with` in the desktop host for the same reasoning. `process.ppid`
+    // is a getter on a global; a test that cannot move it can only assert that
+    // nothing happens.
+    asked = process.env.QUINTAL_EXIT_WITH_PARENT === '1',
+    ppid = () => process.ppid,
+    intervalMs = ORPHAN_CHECK_MS,
+  }: { asked?: boolean; ppid?: () => number; intervalMs?: number } = {},
+): (() => void) | null {
+  if (!asked) return null;
+
+  const started = ppid();
+  // Already orphaned before we looked: nothing to serve, so do not start.
+  if (started === 1) {
+    shutdown();
+    return null;
+  }
+
+  const watch = setInterval(() => {
+    if (ppid() === 1 || ppid() !== started) {
+      process.stdout.write('\nthe app that started this fleet has gone\n');
+      clearInterval(watch);
+      shutdown();
+    }
+  }, intervalMs);
+  // Unref'd: this must never be the reason the process stays up, or a harness
+  // with nothing to do would outlive its own purpose waiting to notice.
+  watch.unref();
+  return () => clearInterval(watch);
 }
 
 main().catch((error: unknown) => {
