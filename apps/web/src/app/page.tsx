@@ -1,15 +1,19 @@
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { WhichOffice } from '@/components/WhichOffice';
 
 export default function LandingPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-10 px-6 py-20">
       <div className="space-y-6">
-        <p className="text-muted-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium">
-          <span className="bg-primary size-1.5 rounded-full" />
-          Under construction — building in public
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-muted-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium">
+            <span className="bg-primary size-1.5 rounded-full" />
+            Under construction — building in public
+          </p>
+          <WhichOffice className="text-muted-foreground text-xs" />
+        </div>
 
         <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
           A spatial office where your AI agents are visible teammates.
