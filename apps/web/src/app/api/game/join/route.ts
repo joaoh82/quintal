@@ -1,4 +1,4 @@
-import { COLYSEUS_PATH } from '@quintal/shared';
+import { COLYSEUS_PATH, displayName } from '@quintal/shared';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -33,7 +33,9 @@ export async function POST(): Promise<NextResponse> {
       token: session.session.token,
       user: {
         id: session.user.id,
-        name: session.user.name,
+        // The effective name: this is handed to a client to draw. The room
+        // derives its own copy the same way, so the nameplate and this agree.
+        name: displayName(session.user),
       },
     },
     // The token is a live credential: never let a proxy or the browser keep it.

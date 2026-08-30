@@ -1,7 +1,7 @@
 'use server';
 
 import {
-  displayNameFromPubkey,
+  displayName,
   normaliseDisplayName,
   normaliseProfileDescription,
   personalWorkspaceName,
@@ -54,7 +54,11 @@ export async function saveProfileAction(
     .update(users)
     .set({ name, description })
     .where(eq(users.id, session.user.id));
-  await followOfficeName(session.user.id, session.user.name, name);
+  // The effective name, because that is what the office was named after. An
+  // unnamed account stores a blank, and comparing the office against "" would
+  // never match — so renaming yourself would quietly leave the office called
+  // after your npub.
+  await followOfficeName(session.user.id, displayName(session.user), name);
 
   // The office header, the roster and your nameplate all read this.
   revalidatePath('/settings/profile');
@@ -88,7 +92,7 @@ async function followOfficeName(
   await renameWorkspace(db, workspace.id, personalWorkspaceName(nextName));
 }
 
-/** Give the field back to the npub the account started with. */
+/** Forget the name you picked, and go back to being shown as your npub. */
 export async function resetDisplayNameAction(): Promise<SaveProfileResult> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return { ok: false, error: 'Not signed in.' };
@@ -98,7 +102,9 @@ export async function resetDisplayNameAction(): Promise<SaveProfileResult> {
 
   await getDb()
     .update(users)
-    .set({ name: displayNameFromPubkey(session.user.pubkey) })
+    // Blank rather than the derived npub, so the row goes back to saying
+    // "unnamed" instead of recording an answer that only looks like a choice.
+    .set({ name: '' })
     .where(eq(users.id, session.user.id));
 
   revalidatePath('/settings/profile');

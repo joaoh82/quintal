@@ -3,6 +3,7 @@
 import {
   DISPLAY_NAME_MAX_LENGTH,
   PROFILE_DESCRIPTION_MAX_LENGTH,
+  truncateNpub,
 } from '@quintal/shared';
 import { useState } from 'react';
 
@@ -57,6 +58,11 @@ export function ProfileForm({
             id="name"
             name="name"
             defaultValue={name}
+            // An account with no name of its own leaves this empty, so the
+            // placeholder shows what people currently see instead. Derived
+            // from a prop, not from `window` — the same field once read the
+            // host off the browser and mismatched on hydration.
+            placeholder={truncateNpub(npub)}
             maxLength={DISPLAY_NAME_MAX_LENGTH}
             disabled={busy || isGuest}
             required

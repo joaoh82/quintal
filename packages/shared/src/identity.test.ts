@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   AUTH_PAYLOAD_PREFIX,
   buildAuthPayload,
+  displayName,
   displayNameFromPubkey,
   generateSecretKey,
   getPublicKeyHex,
@@ -76,6 +77,28 @@ describe('keys', () => {
     assert.ok(name.endsWith(npub.slice(-6)));
     assert.ok(name.length < npub.length);
     assert.equal(truncateNpub('npub1short'), 'npub1short');
+  });
+
+  it('shows the name somebody chose', () => {
+    const { pubkey } = keypair();
+    assert.equal(displayName({ name: 'Josh', pubkey }), 'Josh');
+    assert.equal(displayName({ name: '  Josh  ', pubkey }), 'Josh');
+  });
+
+  it('falls back to the npub when nobody has chosen one', () => {
+    const { pubkey } = keypair();
+    const derived = displayNameFromPubkey(pubkey);
+    // Every shape a "no name" row can take, including the two that are easy
+    // to forget: whitespace somebody typed, and a column read as null.
+    assert.equal(displayName({ name: '', pubkey }), derived);
+    assert.equal(displayName({ name: '   ', pubkey }), derived);
+    assert.equal(displayName({ name: null, pubkey }), derived);
+    assert.equal(displayName({ pubkey }), derived);
+  });
+
+  it('still names somebody when the key cannot be encoded', () => {
+    // A row this broken should render as a person, not take the page down.
+    assert.equal(displayName({ name: '', pubkey: 'not-a-key' }), 'Someone');
   });
 });
 
