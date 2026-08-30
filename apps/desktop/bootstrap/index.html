@@ -46,6 +46,9 @@
 
 <main>
   <p id="status">Connecting to your office…</p>
+  <p id="escape" hidden style="text-align: center">
+    <button class="link" id="elsewhere">Choose a different office</button>
+  </p>
 
   <section id="picker" hidden>
     <h1>Which office?</h1>
@@ -95,7 +98,13 @@
     // connecting line alone rather than flashing a picker nobody asked for.
     // Once the picker is up it stays up — cancelling a switch should return you
     // to the list, not to a page that will never navigate.
-    if (listed.active && el('picker').hidden) return;
+    //
+    // An office that never answers would otherwise strand somebody here with
+    // nothing to press, so the way out is offered alongside the waiting.
+    if (listed.active && el('picker').hidden) {
+      el('escape').hidden = false;
+      return;
+    }
 
     el('status').hidden = true;
     el('picker').hidden = false;
@@ -162,6 +171,12 @@
       fail(error?.message ?? String(error));
     }
   }
+
+  // `open_office_picker` clears the active office and restarts, which lands
+  // here with the picker showing — the same place a first run lands.
+  el('elsewhere').onclick = () => {
+    void invoke('open_office_picker').catch((error) => fail(String(error)));
+  };
 
   el('add').onsubmit = async (event) => {
     event.preventDefault();
