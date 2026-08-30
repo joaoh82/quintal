@@ -18,11 +18,17 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Office settings · Quintal' };
 
 export default async function OfficeSettingsPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const requestHeaders = await headers();
+  const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session) redirect('/login');
 
+  // From the request, not from `window`: this is handed to a client component
+  // that is still server-rendered, and reading it there would render one thing
+  // on the server and another on the client.
+  const host = requestHeaders.get('host') ?? '';
+
   const db = getDb();
-  const [settings, workspace, canNameServer] = await Promise.all([
+  const [settings, workspace, canChangeInstance] = await Promise.all([
     getOfficeSettings(db),
     ensurePersonalWorkspace(db, {
       userId: session.user.id,
@@ -39,7 +45,8 @@ export default async function OfficeSettingsPage() {
       <OfficeSettingsForm
         settings={settings}
         workspaceName={workspace.name}
-        canNameServer={canNameServer}
+        canChangeInstance={canChangeInstance}
+        host={host}
       />
       <Offices />
     </div>

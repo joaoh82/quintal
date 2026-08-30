@@ -53,18 +53,28 @@ function Field({ name, label, unit, help, value, min, max }: FieldProps) {
 export function OfficeSettingsForm({
   settings,
   workspaceName,
-  canNameServer,
+  canChangeInstance,
+  host,
 }: {
   settings: OfficeSettings;
   workspaceName: string;
   /**
-   * Whether this person may name the whole deployment.
+   * Whether this person may change anything instance-wide.
    *
-   * Instance-wide settings belong to whoever set the instance up. Showing the
-   * field to everybody and refusing the save would be a worse lie than not
-   * showing it.
+   * Covers the radii as well as the name. Gating the action but showing the
+   * fields is the worse lie of the two: you edit an earshot, press Save, and
+   * are told it is live within ten seconds while nothing has changed.
    */
-  canNameServer: boolean;
+  canChangeInstance: boolean;
+  /**
+   * The address this office answers on, from the server.
+   *
+   * Read there rather than from `window`, because a `'use client'` module is
+   * still server-rendered — `typeof window === 'undefined' ? '' : …` renders
+   * empty on the server and something else on the client, which is a hydration
+   * mismatch of exactly the kind already fixed once in this codebase.
+   */
+  host: string;
 }) {
   const [state, formAction, pending] = useActionState(saveSettingsAction, INITIAL);
   const current = state.saved ?? settings;
@@ -106,7 +116,7 @@ export function OfficeSettingsForm({
           is the thing you pick in the app's switcher — so the labels say which
           is which rather than pretending the collision is not there.
         */}
-        {canNameServer ? (
+        {canChangeInstance ? (
           <div className="mt-1 flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="sm:w-64 sm:shrink-0">
               <label htmlFor="officeName" className="text-sm font-medium">
@@ -122,13 +132,19 @@ export function OfficeSettingsForm({
               name="officeName"
               defaultValue={current.name}
               maxLength={OFFICE_NAME_MAX_LENGTH}
-              placeholder={typeof window === 'undefined' ? '' : window.location.host}
+              placeholder={host}
               className="sm:max-w-sm"
             />
           </div>
         ) : null}
       </section>
 
+      {/*
+        Hidden rather than shown-and-refused, for the same reason the name is:
+        these apply to the whole instance, so somebody who cannot change them
+        should not be invited to try and then told it worked.
+      */}
+      {canChangeInstance ? (
       <section className="border-t pt-4">
         <h2 className="text-sm font-semibold">How the office sounds</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-xs">
@@ -167,13 +183,16 @@ export function OfficeSettingsForm({
           />
         </div>
       </section>
+      ) : null}
 
       <div className="flex items-center gap-3 border-t pt-4">
         <Button type="submit" disabled={pending}>
           {pending ? 'Saving…' : 'Save'}
         </Button>
         {state.ok ? (
-          <span className="text-xs text-emerald-600">Saved — live within 10s.</span>
+          <span className="text-xs text-emerald-600">
+            {canChangeInstance ? 'Saved — live within 10s.' : 'Saved.'}
+          </span>
         ) : null}
         {state.error ? <span className="text-xs text-rose-600">{state.error}</span> : null}
       </div>
