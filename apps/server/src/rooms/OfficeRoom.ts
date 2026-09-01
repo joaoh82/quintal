@@ -934,7 +934,7 @@ export class OfficeRoom extends Room<OfficeState> {
     markSeen(session.identity.id);
 
     try {
-      const row = await getAgentMemory(getDb(), session.identity.id, slug);
+      const row = await getAgentMemory(getDb(), session.identity.id, this.#workspaceId, slug);
       const result: MemoryGetResult = {
         slug,
         content: row?.content ?? '',

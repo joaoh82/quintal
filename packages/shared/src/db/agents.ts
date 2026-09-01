@@ -480,6 +480,10 @@ export async function recordAgentEvent(
   await db.insert(agentEvents).values({
     id: newId(),
     agentId,
+    // Derived here rather than passed in. A caller that had to supply the
+    // office could supply the wrong one; a subquery against the agent being
+    // written about cannot.
+    workspaceId: sql`(select ${agents.workspaceId} from ${agents} where ${agents.id} = ${agentId})`,
     kind,
     payload: payload ?? null,
   });
@@ -493,11 +497,19 @@ export interface AgentEventPage {
 export async function listAgentEvents(
   db: Database,
   agentId: string,
+  workspaceId: string,
   options: { kind?: string; limit?: number; before?: number } = {},
 ): Promise<AgentEventPage> {
   const limit = Math.min(Math.max(options.limit ?? 100, 1), 200);
 
-  const filters = [eq(agentEvents.agentId, agentId)];
+  // Both, always. The agent id alone would be enough today, because an agent
+  // belongs to one office — but that is a fact a caller has to know, and the
+  // point of the column is that a reader cannot forget it. An id from another
+  // office returns nothing here rather than its log.
+  const filters = [
+    eq(agentEvents.agentId, agentId),
+    eq(agentEvents.workspaceId, workspaceId),
+  ];
   if (options.kind) filters.push(eq(agentEvents.kind, options.kind));
   if (options.before !== undefined) {
     filters.push(sql`${agentEvents.createdAt} < ${options.before}`);
@@ -524,11 +536,14 @@ export async function listAgentEvents(
 export async function listAgentEventKinds(
   db: Database,
   agentId: string,
+  workspaceId: string,
 ): Promise<string[]> {
   const rows = await db
     .selectDistinct({ kind: agentEvents.kind })
     .from(agentEvents)
-    .where(eq(agentEvents.agentId, agentId));
+    .where(
+      and(eq(agentEvents.agentId, agentId), eq(agentEvents.workspaceId, workspaceId)),
+    );
   return rows.map((row) => row.kind).sort();
 }
 
@@ -555,6 +570,7 @@ export class MemorySlugError extends Error {
 export async function getAgentMemory(
   db: Database,
   agentId: string,
+  workspaceId: string,
   slug: string,
 ): Promise<{ slug: string; content: string; updatedAt: number } | null> {
   if (!isValidMemorySlug(slug)) throw new MemorySlugError(slug);
@@ -562,7 +578,13 @@ export async function getAgentMemory(
   const rows = await db
     .select()
     .from(agentMemory)
-    .where(and(eq(agentMemory.agentId, agentId), eq(agentMemory.slug, slug)))
+    .where(
+      and(
+        eq(agentMemory.agentId, agentId),
+        eq(agentMemory.workspaceId, workspaceId),
+        eq(agentMemory.slug, slug),
+      ),
+    )
     .limit(1);
 
   const row = rows[0];
@@ -589,7 +611,12 @@ export async function setAgentMemory(
 
   await db
     .insert(agentMemory)
-    .values({ agentId, slug, content })
+    .values({
+      agentId,
+      workspaceId: sql`(select ${agents.workspaceId} from ${agents} where ${agents.id} = ${agentId})`,
+      slug,
+      content,
+    })
     .onConflictDoUpdate({
       target: [agentMemory.agentId, agentMemory.slug],
       set: { content, updatedAt: new Date() },
@@ -601,11 +628,14 @@ export async function setAgentMemory(
 export async function listAgentMemorySlugs(
   db: Database,
   agentId: string,
+  workspaceId: string,
 ): Promise<Array<{ slug: string; bytes: number; updatedAt: number }>> {
   const rows = await db
     .select()
     .from(agentMemory)
-    .where(eq(agentMemory.agentId, agentId));
+    .where(
+      and(eq(agentMemory.agentId, agentId), eq(agentMemory.workspaceId, workspaceId)),
+    );
 
   return rows.map((row) => ({
     slug: row.slug,

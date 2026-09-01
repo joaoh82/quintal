@@ -88,8 +88,11 @@ export default async function AgentLogPage({ params, searchParams }: LogPageProp
   if (!allowed) notFound();
 
   const [{ events, hasMore }, kinds] = await Promise.all([
-    listAgentEvents(db, id, { kind, limit: 100 }),
-    listAgentEventKinds(db, id),
+    // The agent's own office, taken from the agent rather than the URL — the
+    // second lock behind `canAdministerAgent`, so an id belonging to another
+    // office reads back nothing instead of its log.
+    listAgentEvents(db, id, agent.workspaceId, { kind, limit: 100 }),
+    listAgentEventKinds(db, id, agent.workspaceId),
   ]);
 
   return (
