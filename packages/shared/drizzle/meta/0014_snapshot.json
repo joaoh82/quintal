@@ -191,13 +191,6 @@
             "kind"
           ],
           "isUnique": false
-        },
-        "agent_events_workspace_idx": {
-          "name": "agent_events_workspace_idx",
-          "columns": [
-            "workspace_id"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {

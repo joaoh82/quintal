@@ -478,7 +478,13 @@ export const agentEvents = sqliteTable(
     // kind; this index serves both.
     index('agent_events_agent_created_idx').on(table.agentId, table.createdAt),
     index('agent_events_kind_idx').on(table.kind),
-    index('agent_events_workspace_idx').on(table.workspaceId),
+    // Deliberately no index on `workspaceId` alone. It is low cardinality, and
+    // with one the planner picked it for `listAgentEventKinds` — scanning every
+    // event in the office and then filtering by agent, where the composite
+    // above finds the agent's rows directly. It helped no query that exists and
+    // made one worse. A whole-office query, if it ever arrives, wants
+    // `(workspaceId, createdAt)`; the only other reader is a workspace delete
+    // cascading, which is rare enough not to pay for on every write.
   ],
 );
 

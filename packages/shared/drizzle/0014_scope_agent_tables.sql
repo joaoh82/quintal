@@ -35,8 +35,7 @@ ALTER TABLE `__new_agent_events` RENAME TO `agent_events`;
 CREATE INDEX `agent_events_agent_created_idx` ON `agent_events` (`agent_id`,`created_at`);
 --> statement-breakpoint
 CREATE INDEX `agent_events_kind_idx` ON `agent_events` (`kind`);
---> statement-breakpoint
-CREATE INDEX `agent_events_workspace_idx` ON `agent_events` (`workspace_id`);
+
 --> statement-breakpoint
 
 CREATE TABLE `__new_agent_memory` (
