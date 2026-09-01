@@ -52,11 +52,16 @@ function Field({ name, label, unit, help, value, min, max }: FieldProps) {
 
 export function OfficeSettingsForm({
   settings,
+  instanceName,
   workspaceName,
   canChangeInstance,
+  canChangeOffice,
   host,
 }: {
+  /** How this office's room behaves. The owner's to tune. */
   settings: OfficeSettings;
+  /** What the whole deployment calls itself. Only an instance admin's to set. */
+  instanceName: string;
   workspaceName: string;
   /**
    * Whether this person may change anything instance-wide.
@@ -66,6 +71,11 @@ export function OfficeSettingsForm({
    * are told it is live within ten seconds while nothing has changed.
    */
   canChangeInstance: boolean;
+  /**
+   * Whether this person may tune this office. Everybody but a guest — a guest
+   * is here for one visit and the room is not theirs to reshape.
+   */
+  canChangeOffice: boolean;
   /**
    * The address this office answers on, from the server.
    *
@@ -130,7 +140,7 @@ export function OfficeSettingsForm({
             <Input
               id="officeName"
               name="officeName"
-              defaultValue={current.name}
+              defaultValue={instanceName}
               maxLength={OFFICE_NAME_MAX_LENGTH}
               placeholder={host}
               className="sm:max-w-sm"
@@ -140,17 +150,20 @@ export function OfficeSettingsForm({
       </section>
 
       {/*
-        Hidden rather than shown-and-refused, for the same reason the name is:
-        these apply to the whole instance, so somebody who cannot change them
-        should not be invited to try and then told it worked.
+        No longer behind the instance gate. These used to apply to every office
+        on the deployment, because rooms were keyed by map alone and shared one
+        settings row; now a room belongs to one office, so tuning it is the
+        owner's business. Guests still cannot — the server refuses them, and
+        this is hidden rather than shown-and-refused so nobody is invited to try
+        and then told it worked.
       */}
-      {canChangeInstance ? (
+      {canChangeOffice ? (
       <section className="border-t pt-4">
-        <h2 className="text-sm font-semibold">How the office sounds</h2>
+        <h2 className="text-sm font-semibold">How this office sounds</h2>
         <p className="text-muted-foreground mt-1 max-w-2xl text-xs">
           These take effect within about ten seconds — no restart, nobody gets
-          disconnected. They apply to the whole instance: office rooms are keyed
-          by map, not by workspace, so everyone signed in shares one office.
+          disconnected. They apply to <strong>this office only</strong>; another
+          office on the same deployment keeps its own.
         </p>
 
         <div className="mt-3">
@@ -191,7 +204,7 @@ export function OfficeSettingsForm({
         </Button>
         {state.ok ? (
           <span className="text-xs text-emerald-600">
-            {canChangeInstance ? 'Saved — live within 10s.' : 'Saved.'}
+            {canChangeOffice ? 'Saved — live within 10s.' : 'Saved.'}
           </span>
         ) : null}
         {state.error ? <span className="text-xs text-rose-600">{state.error}</span> : null}

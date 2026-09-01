@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import {
   ensurePersonalWorkspace,
   getDb,
+  getInstanceSettings,
   getOfficeSettings,
   isInstanceAdmin,
 } from '@quintal/shared/db';
@@ -28,13 +29,17 @@ export default async function OfficeSettingsPage() {
   const host = requestHeaders.get('host') ?? '';
 
   const db = getDb();
-  const [settings, workspace, canChangeInstance] = await Promise.all([
-    getOfficeSettings(db),
-    ensurePersonalWorkspace(db, {
-      userId: session.user.id,
-      name: session.user.name,
-      pubkey: session.user.pubkey,
-    }),
+  const workspace = await ensurePersonalWorkspace(db, {
+    userId: session.user.id,
+    name: session.user.name,
+    pubkey: session.user.pubkey,
+  });
+
+  // Two different things, from two different places: how *this office* works,
+  // and what the *deployment* calls itself.
+  const [settings, instance, canChangeInstance] = await Promise.all([
+    getOfficeSettings(db, workspace.id),
+    getInstanceSettings(db),
     // Naming the whole deployment belongs to whoever set it up, not to
     // everybody who signs in — see `isInstanceAdmin`.
     session.session.isGuest ? false : isInstanceAdmin(db, session.user.id),
@@ -44,8 +49,10 @@ export default async function OfficeSettingsPage() {
     <div className="flex flex-col gap-6">
       <OfficeSettingsForm
         settings={settings}
+        instanceName={instance.name}
         workspaceName={workspace.name}
         canChangeInstance={canChangeInstance}
+        canChangeOffice={!session.session.isGuest}
         host={host}
       />
       <Offices />

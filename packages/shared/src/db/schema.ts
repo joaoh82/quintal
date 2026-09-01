@@ -260,7 +260,7 @@ export const inviteLinks = sqliteTable(
  * Instance settings. One row, id 'global' — see `settings.ts` for why these are
  * not per-workspace yet.
  */
-export const officeSettings = sqliteTable('office_settings', {
+export const instanceSettings = sqliteTable('instance_settings', {
   id: text('id').primaryKey(),
   /**
    * What this deployment calls itself, shown before anybody signs in.
@@ -270,6 +270,27 @@ export const officeSettings = sqliteTable('office_settings', {
    * at a URL sees before they have an account here.
    */
   name: text('name').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .default(now)
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+/**
+ * How one office's room behaves.
+ *
+ * Keyed by workspace, because an office is a workspace. These used to live in a
+ * single 'global' row alongside the instance name, which meant every office on
+ * a deployment shared them — how close you had to stand to be heard was a
+ * property of the server rather than of your office.
+ *
+ * A missing row means defaults, so an office does not need one until somebody
+ * changes something.
+ */
+export const officeSettings = sqliteTable('office_settings', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
   chatRadiusTiles: integer('chat_radius_tiles').notNull().default(12),
   walkUpRadiusTiles: integer('walk_up_radius_tiles').notNull().default(3),
   replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),
@@ -482,3 +503,4 @@ export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type AgentMemory = typeof agentMemory.$inferSelect;
 export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
+export type InstanceSettingsRow = typeof instanceSettings.$inferSelect;

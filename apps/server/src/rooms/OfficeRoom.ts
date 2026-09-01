@@ -175,6 +175,11 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #awaitingReply = new Map<string, Map<string, number>>();
 
   override onCreate(options: OfficeRoomOptions): void {
+    // Set here rather than on the first join: the room *is* one office, and its
+    // settings are read before anybody has authenticated. `filterBy` guarantees
+    // every later join carries the same value, and `onAuth` refuses one that
+    // does not.
+    this.#workspaceId = typeof options.workspaceId === 'string' ? options.workspaceId : '';
     const mapId = typeof options.mapId === 'string' ? options.mapId : 'hq';
     this.#map = loadOfficeMap(mapId);
 
@@ -713,7 +718,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
   async #refreshSettings(): Promise<void> {
     try {
-      this.#settings = await getOfficeSettings(getDb());
+      this.#settings = await getOfficeSettings(getDb(), this.#workspaceId);
     } catch (error: unknown) {
       logger.error('[office] could not read settings', error);
     }

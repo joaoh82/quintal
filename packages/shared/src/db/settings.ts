@@ -1,28 +1,69 @@
 import { asc, eq } from 'drizzle-orm';
 
 import {
+  DEFAULT_INSTANCE_SETTINGS,
   DEFAULT_OFFICE_SETTINGS,
+  normaliseInstanceSettings,
   normaliseSettings,
+  type InstanceSettings,
   type OfficeSettings,
 } from '../settings.js';
 import type { Database } from './client.js';
-import { officeSettings, users } from './schema.js';
+import { instanceSettings, officeSettings, users } from './schema.js';
 
-/** The single settings row. There is exactly one, and this is its id. */
+/** The single instance-settings row. There is exactly one, and this is its id. */
 const GLOBAL = 'global';
 
-export async function getOfficeSettings(db: Database): Promise<OfficeSettings> {
+export async function getInstanceSettings(db: Database): Promise<InstanceSettings> {
+  const rows = await db
+    .select()
+    .from(instanceSettings)
+    .where(eq(instanceSettings.id, GLOBAL))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return { ...DEFAULT_INSTANCE_SETTINGS };
+  return normaliseInstanceSettings({ name: row.name });
+}
+
+export async function saveInstanceSettings(
+  db: Database,
+  input: Partial<InstanceSettings>,
+): Promise<InstanceSettings> {
+  const current = await getInstanceSettings(db);
+  const next = normaliseInstanceSettings({ ...current, ...input });
+
+  await db
+    .insert(instanceSettings)
+    .values({ id: GLOBAL, ...next })
+    .onConflictDoUpdate({ target: instanceSettings.id, set: { ...next, updatedAt: new Date() } });
+
+  return next;
+}
+
+/**
+ * How one office's room behaves.
+ *
+ * No row means defaults: an office does not need one until somebody changes
+ * something, and a missing row must never mean a room with a chat radius of
+ * zero where nobody can hear anybody.
+ */
+export async function getOfficeSettings(
+  db: Database,
+  workspaceId: string,
+): Promise<OfficeSettings> {
+  if (workspaceId.length === 0) return { ...DEFAULT_OFFICE_SETTINGS };
+
   const rows = await db
     .select()
     .from(officeSettings)
-    .where(eq(officeSettings.id, GLOBAL))
+    .where(eq(officeSettings.workspaceId, workspaceId))
     .limit(1);
 
   const row = rows[0];
   if (!row) return { ...DEFAULT_OFFICE_SETTINGS };
 
   return normaliseSettings({
-    name: row.name,
     chatRadiusTiles: row.chatRadiusTiles,
     walkUpRadiusTiles: row.walkUpRadiusTiles,
     replyWindowSeconds: row.replyWindowSeconds,
@@ -31,17 +72,21 @@ export async function getOfficeSettings(db: Database): Promise<OfficeSettings> {
 
 export async function saveOfficeSettings(
   db: Database,
+  workspaceId: string,
   input: Partial<OfficeSettings>,
 ): Promise<OfficeSettings> {
-  const current = await getOfficeSettings(db);
+  const current = await getOfficeSettings(db, workspaceId);
   // Clamped here as well as in the form: a settings endpoint is an input like
   // any other, and a chat radius of 10^9 is a denial-of-service on the room.
   const next = normaliseSettings({ ...current, ...input });
 
   await db
     .insert(officeSettings)
-    .values({ id: GLOBAL, ...next })
-    .onConflictDoUpdate({ target: officeSettings.id, set: { ...next, updatedAt: new Date() } });
+    .values({ workspaceId, ...next })
+    .onConflictDoUpdate({
+      target: officeSettings.workspaceId,
+      set: { ...next, updatedAt: new Date() },
+    });
 
   return next;
 }
