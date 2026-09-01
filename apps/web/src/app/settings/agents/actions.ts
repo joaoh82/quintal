@@ -21,6 +21,7 @@ import {
   forgetHostReport,
   setAgentEnabled,
   setAgentLaunch,
+  setAgentProfile,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -119,6 +120,10 @@ export async function createAgentAction(
       ownerUserId: session.user.id,
       name,
       spriteKey,
+      // Normalised again inside `createAgent`; passed raw so there is one place
+      // that decides what a description and an instruction may contain.
+      description: String(formData.get('description') ?? ''),
+      instructions: String(formData.get('instructions') ?? ''),
       scopes: scopes.length > 0 ? scopes : DEFAULT_AGENT_SCOPES,
       ...(wantsLaunch ? { launch: { runtimeId, repoSpec, hostLabel } } : {}),
     });
@@ -131,6 +136,43 @@ export async function createAgentAction(
       error: error instanceof Error ? error.message : 'Could not create the agent.',
     };
   }
+}
+
+/**
+ * Change what an agent says it is, and how it was told to behave.
+ *
+ * Same gate as revoking and assigning: your own agents, or anyone's if you run
+ * the office. Rewriting somebody else's agent's instructions would be a way to
+ * change what their agent does while their name stays on it.
+ */
+export async function saveAgentProfileAction(formData: FormData): Promise<void> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) throw new Error('No such agent.');
+
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    throw new Error('That is not your agent to change.');
+  }
+
+  // Absent means "leave it alone" — `setAgentProfile` reads undefined that way,
+  // so a form that posts only one field cannot blank the other.
+  const field = (name: string): string | undefined => {
+    const raw = formData.get(name);
+    return raw === null ? undefined : String(raw);
+  };
+
+  await setAgentProfile(db, agentId, {
+    description: field('description'),
+    instructions: field('instructions'),
+  });
+
+  revalidatePath('/settings/agents');
+  // The office reads both on connect, so a change lands for anybody joining
+  // now; agents already in the room pick it up on their next connect.
+  revalidatePath('/office');
 }
 
 export async function revokeAgentAction(formData: FormData): Promise<void> {

@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  AGENT_DESCRIPTION_MAX_LENGTH,
+  AGENT_INSTRUCTIONS_MAX_LENGTH,
   AGENT_SCOPES,
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
@@ -21,6 +23,7 @@ import {
   assignAgentAction,
   createAgentAction,
   revokeAgentAction,
+  saveAgentProfileAction,
   setAgentEnabledAction,
   type CreateAgentState,
 } from './actions';
@@ -127,6 +130,38 @@ export function AgentsManager({
               ))}
             </div>
           </fieldset>
+
+          <label className="flex w-full flex-col gap-1">
+            <span className="text-xs font-medium">
+              Description <span className="text-muted-foreground">— optional</span>
+            </span>
+            <Input
+              name="description"
+              placeholder="Reviews pull requests and keeps an eye on CI"
+              maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
+              className="w-full"
+            />
+            <span className="text-muted-foreground text-xs">
+              One line, shown on its card in the office. For people, not the model.
+            </span>
+          </label>
+
+          <label className="flex w-full flex-col gap-1">
+            <span className="text-xs font-medium">
+              Instructions <span className="text-muted-foreground">— optional</span>
+            </span>
+            <textarea
+              name="instructions"
+              rows={4}
+              maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
+              placeholder={'Be terse.\nAnswer in Portuguese.\nAlways link the PR you are talking about.'}
+              className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px]"
+            />
+            <span className="text-muted-foreground text-xs">
+              Goes into its system prompt, above anything it has worked out for
+              itself. This is the part it cannot overwrite.
+            </span>
+          </label>
 
           <Button type="submit" disabled={pending}>
             {pending ? 'Creating…' : 'Create agent'}
@@ -358,6 +393,48 @@ function AgentRow({
             Revoke
           </Button>
         </form>
+      ) : null}
+
+      {/*
+        Collapsed by default. Instructions are prose and the row is a list; a
+        four-line textarea open on every agent turns a roster into a form.
+      */}
+      {canRevoke && agent.revokedAt === null ? (
+        <details className="w-full pt-2">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            Description and instructions
+          </summary>
+          <form action={saveAgentProfileAction} className="mt-2 flex flex-col gap-2">
+            <input type="hidden" name="agentId" value={agent.id} />
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium">Description</span>
+              <Input
+                name="description"
+                defaultValue={agent.description}
+                maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
+                placeholder="Reviews pull requests and keeps an eye on CI"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium">Instructions</span>
+              <textarea
+                name="instructions"
+                rows={4}
+                defaultValue={agent.instructions}
+                maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
+                className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px]"
+              />
+              <span className="text-muted-foreground text-xs">
+                Takes effect the next time this agent connects.
+              </span>
+            </label>
+            <div>
+              <Button type="submit" size="sm" variant="outline">
+                Save
+              </Button>
+            </div>
+          </form>
+        </details>
       ) : null}
     </li>
   );

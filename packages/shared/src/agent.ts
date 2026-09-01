@@ -8,6 +8,8 @@
  * feature.
  */
 
+import { tidyDisplayText } from './workspace.js';
+
 /**
  * What an agent is allowed to do to the world. Reading the room and using its
  * own memory are not scoped: those don't change anything anyone else can see.
@@ -110,6 +112,8 @@ export function isValidMemorySlug(slug: string): boolean {
 export const AGENT_EVENT_KINDS = [
   'agent.created',
   'agent.revoked',
+  /** Its owner changed what it says it is, or how it was told to behave. */
+  'agent.profile_changed',
   'session.connected',
   'session.disconnected',
   'session.rejected',
@@ -152,6 +156,63 @@ export const DEFAULT_AGENT_SPRITE: AgentSpriteKey = 'slate';
 
 export function isAgentSpriteKey(value: string): value is AgentSpriteKey {
   return (AGENT_SPRITE_KEYS as readonly string[]).includes(value);
+}
+
+/** One line about what an agent does, shown on its card. */
+export const AGENT_DESCRIPTION_MAX_LENGTH = 280;
+
+/**
+ * How long an owner's instructions to their agent may be.
+ *
+ * Larger than a description because this is prose with a job to do, and small
+ * enough that it cannot crowd out the conversation it is prepended to — the
+ * system prompt is paid for on every priming turn.
+ */
+export const AGENT_INSTRUCTIONS_MAX_LENGTH = 2_000;
+
+/**
+ * What an agent's owner says it does, for people to read.
+ *
+ * Display text, so it gets the same containment as every other name and label:
+ * newlines collapsed, bidi controls stripped. It is drawn on a card next to
+ * other people's, and a description that can reach into the row below it is a
+ * description that can impersonate one.
+ */
+export function normaliseAgentDescription(input: unknown): string {
+  if (typeof input !== 'string') return '';
+  return tidyDisplayText(input, AGENT_DESCRIPTION_MAX_LENGTH);
+}
+
+/**
+ * What an agent's owner tells it to be, for the model to read.
+ *
+ * Deliberately *not* `tidyDisplayText`. Instructions are prose — "be terse;
+ * answer in Portuguese; always link the PR" reads as lines, and collapsing
+ * them into one paragraph would be editing somebody's meaning to satisfy a
+ * renderer that never sees this. It goes into a system prompt, not onto a card.
+ *
+ * Still contained, because unbounded text in a prompt is its own problem:
+ * control characters other than newline and tab are stripped, runs of blank
+ * lines collapse, and the whole thing is clamped by code point so an emoji
+ * cannot be cut in half.
+ *
+ * Not a trust boundary. The owner writes this for their own agent, so there is
+ * nobody to defend them from here — the cap is about cost and legibility.
+ */
+export function normaliseAgentInstructions(input: unknown): string {
+  if (typeof input !== 'string') return '';
+  const cleaned = input
+    .replace(/\r\n?/g, '\n')
+    .replace(
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g,
+      '',
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const points = Array.from(cleaned);
+  return points.length > AGENT_INSTRUCTIONS_MAX_LENGTH
+    ? points.slice(0, AGENT_INSTRUCTIONS_MAX_LENGTH).join('')
+    : cleaned;
 }
 
 /** Agent names are shown next to human ones, so hold them to the same shape. */

@@ -653,13 +653,27 @@ export class AgentRunner {
     }
 
     const ready = this.#gateway.ready;
+    const instructions = ready?.instructions ?? '';
     return [
       basePrompt(),
       '',
       `[You]`,
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
       `You are standing in ${this.#zoneLabel()}.`,
-      core.trim().length > 0 ? `\n[Core memory]\n${core.trim()}` : '',
+      // Two authors, kept apart and labelled as such.
+      //
+      // Instructions come from the owner and are not the agent's to change;
+      // core memory is what the agent worked out for itself and writes with
+      // `memory_set`. Merging them into one block would leave the model unable
+      // to tell a standing directive from its own note — and able to overwrite
+      // the directive by writing the note.
+      //
+      // Owner first, deliberately: on the rare occasion the two conflict, the
+      // person accountable for this agent wins.
+      instructions.trim().length > 0
+        ? `\n[Your owner's instructions]\n${instructions.trim()}`
+        : '',
+      core.trim().length > 0 ? `\n[Core memory — your own notes]\n${core.trim()}` : '',
       '',
       TOOL_HINT,
     ]

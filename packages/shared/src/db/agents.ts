@@ -9,6 +9,8 @@ import {
   DEFAULT_AGENT_SCOPES,
   isValidMemorySlug,
   memoryLimitFor,
+  normaliseAgentDescription,
+  normaliseAgentInstructions,
   normaliseAgentName,
   parseScopes,
   type AgentEventKind,
@@ -55,6 +57,10 @@ export interface CreateAgentInput {
   ownerUserId: string;
   name: string;
   spriteKey: string;
+  /** One line about what it does, shown on its card. */
+  description?: string;
+  /** How it should behave, prepended to its system prompt. */
+  instructions?: string;
   scopes?: readonly AgentScope[];
   /**
    * How a host should launch this agent, when the office defines it.
@@ -85,6 +91,8 @@ export async function createAgent(
     ownerUserId: input.ownerUserId,
     name: normaliseAgentName(input.name),
     spriteKey: input.spriteKey,
+    description: normaliseAgentDescription(input.description),
+    instructions: normaliseAgentInstructions(input.instructions),
     apiKeyHash: hashAgentKey(key),
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
     ...(input.launch
@@ -104,6 +112,51 @@ export async function createAgent(
   });
 
   return { id, name: normaliseAgentName(input.name), key };
+}
+
+/**
+ * Change what an agent's owner says it is and how it should behave.
+ *
+ * Normalised here as well as in the form, for the same reason every other
+ * write is: a server action is an input like any other, and instructions go
+ * straight into a prompt paid for on every priming turn.
+ *
+ * Recorded as an event, because changing what an agent was told to be is a
+ * thing somebody may need to explain later — the log already carries who
+ * created and revoked it.
+ */
+export async function setAgentProfile(
+  db: Database,
+  agentId: string,
+  input: { description?: string; instructions?: string },
+): Promise<{ description: string; instructions: string }> {
+  const rows = await db
+    .select({ description: agents.description, instructions: agents.instructions })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+
+  // An absent field means "leave it alone", not "clear it".
+  const next = {
+    description:
+      input.description === undefined
+        ? current.description
+        : normaliseAgentDescription(input.description),
+    instructions:
+      input.instructions === undefined
+        ? current.instructions
+        : normaliseAgentInstructions(input.instructions),
+  };
+
+  await db.update(agents).set(next).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.profile_changed', {
+    descriptionBytes: Buffer.byteLength(next.description, 'utf8'),
+    instructionsBytes: Buffer.byteLength(next.instructions, 'utf8'),
+  });
+
+  return next;
 }
 
 export async function revokeAgent(
@@ -127,6 +180,10 @@ export interface AgentIdentity {
   ownerUserId: string;
   ownerName: string;
   name: string;
+  /** One line about what it does, for people. */
+  description: string;
+  /** How its owner told it to behave, for the model. */
+  instructions: string;
   spriteKey: string;
   scopes: AgentScope[];
   status: string;
@@ -153,6 +210,8 @@ export async function findAgentByKey(
       // from the result below, because the shape is about the agent.
       ownerPubkey: users.pubkey,
       name: agents.name,
+      description: agents.description,
+      instructions: agents.instructions,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
@@ -176,6 +235,8 @@ export async function findAgentByKey(
     ownerUserId: row.ownerUserId,
     ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
     name: row.name,
+    description: row.description,
+    instructions: row.instructions,
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
     status: row.status,
@@ -203,6 +264,8 @@ export async function findAgentIdentityById(
       // from the result below, because the shape is about the agent.
       ownerPubkey: users.pubkey,
       name: agents.name,
+      description: agents.description,
+      instructions: agents.instructions,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
@@ -222,6 +285,8 @@ export async function findAgentIdentityById(
     ownerUserId: row.ownerUserId,
     ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
     name: row.name,
+    description: row.description,
+    instructions: row.instructions,
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
     status: row.status,
@@ -252,6 +317,10 @@ export interface AgentListEntry {
   id: string;
   workspaceId: string;
   name: string;
+  /** One line its owner wrote about what it does. */
+  description: string;
+  /** How its owner told it to behave. Editable from the agents list. */
+  instructions: string;
   spriteKey: string;
   scopes: AgentScope[];
   status: string;
@@ -280,6 +349,8 @@ export async function listAgentsForWorkspace(
       id: agents.id,
       workspaceId: agents.workspaceId,
       name: agents.name,
+      description: agents.description,
+      instructions: agents.instructions,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
@@ -321,6 +392,8 @@ export async function findAgentById(
     .select({
       id: agents.id,
       name: agents.name,
+      description: agents.description,
+      instructions: agents.instructions,
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
