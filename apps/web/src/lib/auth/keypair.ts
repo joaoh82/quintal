@@ -131,6 +131,12 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             input: false,
             defaultValue: false,
           },
+          /** The one office a guest link admits them to. Null for a member. */
+          guestWorkspaceId: {
+            type: 'string' as const,
+            required: false,
+            input: false,
+          },
         },
       },
     },
@@ -275,6 +281,7 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           });
 
           let isGuest = false;
+          let guestWorkspaceId: string | null = null;
           if (inviteToken !== undefined) {
             const redeemed = await redeemInviteLink(db, inviteToken);
             if (!redeemed.ok) {
@@ -299,6 +306,9 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             // decoration. Until then no room is scoped, so there is nothing
             // for a membership to unlock.
             isGuest = true;
+            // The grant the room gate reads. Bounded by the session, so a
+            // forwarded link cannot become a standing key to the place.
+            guestWorkspaceId = redeemed.link.workspaceId;
           }
 
           // `overrideAll` is not optional here: without it Better Auth applies
@@ -307,7 +317,7 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           const session = await ctx.context.internalAdapter.createSession(
             user.id,
             false,
-            { isGuest },
+            { isGuest, guestWorkspaceId },
             true,
           );
           if (!session) {

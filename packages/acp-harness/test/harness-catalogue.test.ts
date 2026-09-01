@@ -77,7 +77,7 @@ describe('the harness and the office agree on what can be run', () => {
 describe('where an agent is allowed to work', () => {
   const host = { token: 'qh_x', url: 'http://localhost:3000' };
   const fleet = (repoSpec: string) => ({
-    host: { label: 'laptop', owner: 'Josh' },
+    host: { label: 'laptop', owner: 'Josh', workspaceId: 'ws_test' },
     agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', repoSpec }],
   });
 

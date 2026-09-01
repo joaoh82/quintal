@@ -1,4 +1,5 @@
 import { COLYSEUS_PATH, displayName } from '@quintal/shared';
+import { ensurePersonalWorkspace, getDb } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -27,10 +28,29 @@ export async function POST(): Promise<NextResponse> {
     return NextResponse.json({ error: 'not signed in' }, { status: 401 });
   }
 
+  // Which office this ticket is for, decided here rather than by the client.
+  // A guest goes to the one their link admitted them to; everybody else to
+  // their own. The room proves it again from the session either way — this is
+  // convenience, not the gate.
+  const workspaceId = session.session.isGuest
+    ? session.session.guestWorkspaceId
+    : (
+        await ensurePersonalWorkspace(getDb(), {
+          userId: session.user.id,
+          name: session.user.name,
+          pubkey: session.user.pubkey,
+        })
+      ).id;
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: 'no office for this session' }, { status: 403 });
+  }
+
   return NextResponse.json(
     {
       wsUrl: COLYSEUS_PATH,
       token: session.session.token,
+      workspaceId,
       user: {
         id: session.user.id,
         // The effective name: this is handed to a client to draw. The room

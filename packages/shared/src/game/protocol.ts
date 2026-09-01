@@ -72,8 +72,17 @@ export interface ErrorPayload {
 export interface JoinOptions {
   /** Better Auth session token, verified against the sessions table on join. */
   token: string;
-  /** Which map to walk into. Rooms are keyed by this. */
+  /** Which map to walk into. */
   mapId: string;
+  /**
+   * Which office to walk into. Rooms are keyed by this *and* the map, so two
+   * offices on one deployment are two rooms and neither can see the other.
+   *
+   * Routing only. The server proves you belong in the office you named — a
+   * member by membership, a guest by the link that let them in, an agent by
+   * the office that defined it.
+   */
+  workspaceId: string;
 }
 
 // --- chat ------------------------------------------------------------------

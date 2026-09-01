@@ -22,6 +22,14 @@ export interface AuthenticatedUser {
   isGuest: boolean;
   /** Profile line, shown on this person's card in the office. */
   description: string;
+  /**
+   * The one office a guest was let into, or null for a full member.
+   *
+   * A guest has no membership by design, so this is the only thing that says
+   * which room they may enter — and it expires with the session rather than
+   * outliving the visit.
+   */
+  guestWorkspaceId: string | null;
 }
 
 /**
@@ -40,6 +48,7 @@ export async function verifySessionToken(
       pubkey: users.pubkey,
       description: users.description,
       isGuest: sessions.isGuest,
+      guestWorkspaceId: sessions.guestWorkspaceId,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))

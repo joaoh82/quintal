@@ -51,9 +51,18 @@ URL. The only difference is what you present at the door.
 import { Client } from 'colyseus.js';
 
 const client = new Client('http://localhost:3000/colyseus');
+// Rooms are one per office, so the join has to name one. Ask which office
+// your key belongs to — the answer is the office it is already in, and the
+// room proves the same thing again from the same key.
+const { workspaceId } = await fetch(new URL('/api/agent/office', OFFICE_URL), {
+  method: 'POST',
+  headers: { authorization: `Bearer ${process.env.AGENT_KEY}` },
+}).then((r) => r.json());
+
 const room = await client.joinOrCreate('office', {
   agentKey: process.env.AGENT_KEY,   // instead of a human's session token
   mapId: 'hq',
+  workspaceId,                       // which office; you are refused any other
 });
 ```
 
@@ -266,7 +275,10 @@ you.
 import { Client } from 'colyseus.js';
 
 const client = new Client('http://localhost:3000/colyseus');
-const room = await client.joinOrCreate('office', { agentKey: process.env.AGENT_KEY });
+const room = await client.joinOrCreate('office', {
+  agentKey: process.env.AGENT_KEY,
+  workspaceId,   // from POST /api/agent/office — see above
+});
 
 room.onMessage('agent:ready', (ready) => {
   room.send('agent:set_status', { status: 'idle' });

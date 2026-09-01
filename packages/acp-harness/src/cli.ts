@@ -157,6 +157,9 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
     rootedAtReposDir,
     url: stringFlag(flags, 'url') ?? 'http://localhost:3000',
     mapId: stringFlag(flags, 'map') ?? 'hq',
+    // A single `--agent` run holds only its key, so the office is looked up
+    // from that key at connect rather than being configured here.
+    workspaceId: '',
   };
 }
 
