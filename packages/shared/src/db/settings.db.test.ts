@@ -101,6 +101,31 @@ describe('how an office works', () => {
     assert.equal(saved.chatRadiusTiles, 40);
   });
 
+  /**
+   * A partial save must not reset what it did not mention.
+   *
+   * `saveOfficeSettings` merges over the current row, and the action feeds it
+   * the current value for any field the form omitted. Both halves matter: a
+   * form that posts only one radius, or a crafted request that posts none,
+   * must leave the rest of the office exactly as it was.
+   */
+  it('leaves untouched settings alone when only one is saved', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+
+    await saveOfficeSettings(db, josh.workspaceId, {
+      chatRadiusTiles: 30,
+      walkUpRadiusTiles: 8,
+      replyWindowSeconds: 120,
+    });
+    await saveOfficeSettings(db, josh.workspaceId, { chatRadiusTiles: 25 });
+
+    const settings = await getOfficeSettings(db, josh.workspaceId);
+    assert.equal(settings.chatRadiusTiles, 25);
+    assert.equal(settings.walkUpRadiusTiles, 8, 'a partial save is not a reset');
+    assert.equal(settings.replyWindowSeconds, 120, 'a partial save is not a reset');
+  });
+
   it('answers with defaults when no office was named', async () => {
     const db = await createTestDb();
     assert.deepEqual(await getOfficeSettings(db, ''), {

@@ -263,9 +263,11 @@ export class OfficeRoom extends Room<OfficeState> {
     if (workspaceId.length === 0) {
       throw new ServerError(ErrorCode.AUTH_FAILED, 'No office was named in this join.');
     }
-    if (this.#workspaceId.length === 0) this.#workspaceId = workspaceId;
     // Belt and braces behind `filterBy`: if routing ever put two offices in one
-    // room, this refuses rather than quietly merging them.
+    // room, this refuses rather than quietly merging them. Deliberately no
+    // "adopt it if unset" fallback — the room's office is decided in `onCreate`,
+    // and a line that took it from whoever joined first would let a claim
+    // become the answer.
     if (workspaceId !== this.#workspaceId) {
       throw new ServerError(ErrorCode.AUTH_FAILED, 'That is not this office.');
     }

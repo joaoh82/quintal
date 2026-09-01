@@ -65,12 +65,27 @@ export async function saveSettingsAction(
       return { ok: false, error: 'Guests cannot change how this office works.' };
     }
 
-    // Clamped here as well as in the form: the browser is not the authority on
-    // what a sane chat radius is.
+    // An absent field means "leave this alone", and saying so takes real care.
+    //
+    // `Number(null)` is 0, not NaN, so reading the form directly would turn a
+    // submission that merely omitted these into a reset — to the *floor*,
+    // earshot 2 and a reply window of 0. Handing NaN to `normaliseSettings`
+    // instead is not the fix either: `clamp` falls back to
+    // DEFAULT_OFFICE_SETTINGS, so an office that had been tuned would quietly
+    // go back to 12/3/90. Neither is what an omitted field should mean.
+    //
+    // So the current value is the fallback, chosen before normalising. What
+    // *is* present still gets clamped, because the browser is not the authority
+    // on what a sane chat radius is.
+    const current = await getOfficeSettings(db, workspace.id);
+    const given = (field: string, fallback: number): number => {
+      const raw = formData.get(field);
+      return raw === null ? fallback : Number(raw);
+    };
     const next = normaliseSettings({
-      chatRadiusTiles: Number(formData.get('chatRadiusTiles')),
-      walkUpRadiusTiles: Number(formData.get('walkUpRadiusTiles')),
-      replyWindowSeconds: Number(formData.get('replyWindowSeconds')),
+      chatRadiusTiles: given('chatRadiusTiles', current.chatRadiusTiles),
+      walkUpRadiusTiles: given('walkUpRadiusTiles', current.walkUpRadiusTiles),
+      replyWindowSeconds: given('replyWindowSeconds', current.replyWindowSeconds),
     });
 
     // The office is a place, not a person: it starts out named after whoever

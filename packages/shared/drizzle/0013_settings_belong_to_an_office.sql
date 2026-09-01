@@ -11,7 +11,7 @@
 CREATE TABLE `instance_settings` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text DEFAULT '' NOT NULL,
-	`updated_at` integer DEFAULT (unixepoch() * 1000) NOT NULL
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
 
@@ -27,7 +27,7 @@ CREATE TABLE `__new_office_settings` (
 	`chat_radius_tiles` integer DEFAULT 12 NOT NULL,
 	`walk_up_radius_tiles` integer DEFAULT 3 NOT NULL,
 	`reply_window_seconds` integer DEFAULT 90 NOT NULL,
-	`updated_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `workspaces`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -39,7 +39,7 @@ SELECT
   COALESCE(o.`chat_radius_tiles`, 12),
   COALESCE(o.`walk_up_radius_tiles`, 3),
   COALESCE(o.`reply_window_seconds`, 90),
-  COALESCE(o.`updated_at`, unixepoch() * 1000)
+  COALESCE(o.`updated_at`, cast(unixepoch('subsecond') * 1000 as integer))
 FROM `workspaces` w
 LEFT JOIN `office_settings` o ON o.`id` = 'global';
 --> statement-breakpoint
