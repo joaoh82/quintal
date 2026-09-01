@@ -52,6 +52,8 @@ export class GatewayClient {
     private readonly url: string,
     private readonly agentKey: string,
     private readonly mapId: string,
+    /** Which office's room to join. Empty when the key alone decides. */
+    private readonly workspaceId: string,
     /** Machine credential, when this agent was defined in the office. */
     private readonly host?: { token: string; agentId: string },
   ) {}
@@ -72,7 +74,37 @@ export class GatewayClient {
     return this.#room !== null;
   }
 
+  /**
+   * The office to join.
+   *
+   * Office-defined agents are told by the fleet response. An agent holding
+   * only its own key has to ask, because the room has to be named before the
+   * server can authenticate anything — that is the routing layer, not a
+   * policy. The office proves the same fact again from the same key on join.
+   */
+  async #office(): Promise<string> {
+    if (this.workspaceId.length > 0) return this.workspaceId;
+
+    const response = await fetch(new URL('/api/agent/office', this.url), {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.agentKey}` },
+    });
+    if (!response.ok) {
+      throw new Error(
+        response.status === 401
+          ? 'That agent key is unknown or revoked.'
+          : `Could not find this agent's office (${response.status}).`,
+      );
+    }
+    const body = (await response.json()) as { workspaceId?: unknown };
+    if (typeof body.workspaceId !== 'string' || body.workspaceId.length === 0) {
+      throw new Error("The office did not say which office this agent is in.");
+    }
+    return body.workspaceId;
+  }
+
   async connect(): Promise<AgentReadyPayload> {
+    const workspaceId = await this.#office();
     const client = new Client(new URL('/colyseus', this.url).toString());
     const room = await client.joinOrCreate('office', {
       // Exactly one credential travels: a host token identifies the machine
@@ -82,6 +114,7 @@ export class GatewayClient {
         ? { hostToken: this.host.token, agentId: this.host.agentId }
         : { agentKey: this.agentKey }),
       mapId: this.mapId,
+      workspaceId,
     });
     this.#room = room;
 

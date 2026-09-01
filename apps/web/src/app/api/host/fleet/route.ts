@@ -41,7 +41,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const label = (request.nextUrl.searchParams.get('host') ?? host.label).trim();
 
   return NextResponse.json({
-    host: { label, owner: host.ownerName },
+    // The office this machine's agents belong to. Rooms are per-office, so a
+    // harness that did not know this could only guess which one to join.
+    host: { label, owner: host.ownerName, workspaceId: host.workspaceId },
     agents: await fleetForHost(getDb(), host, label),
   });
 }

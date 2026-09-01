@@ -82,6 +82,14 @@ export interface AgentConfig {
   rootedAtReposDir: boolean;
   url: string;
   mapId: string;
+  /**
+   * The office this agent belongs to. Rooms are per-office, so without it a
+   * join has no room to ask for — and the office refuses one that guesses.
+   *
+   * Empty for a standalone `--agent` run, where the office resolves it from
+   * the agent key rather than being told.
+   */
+  workspaceId: string;
 }
 
 export interface FleetConfig {
@@ -275,6 +283,7 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
       rootedAtReposDir,
       url,
       mapId,
+      workspaceId: '',
     } satisfies AgentConfig;
   });
 

@@ -13,6 +13,8 @@ import { Client, type Room } from 'colyseus.js';
 export interface JoinTicket {
   wsUrl: string;
   token: string;
+  /** The office this ticket admits you to. Chosen by the server, not here. */
+  workspaceId: string;
 }
 
 export class NotSignedInError extends Error {
@@ -47,6 +49,12 @@ export async function joinOffice(
   const endpoint = new URL(ticket.wsUrl, window.location.origin).toString();
   const client = new Client(endpoint);
 
-  const options: JoinOptions = { token: ticket.token, mapId };
+  // `workspaceId` picks the room; the server proves you belong in it. Two
+  // offices on one deployment are two rooms, and neither can see the other.
+  const options: JoinOptions = {
+    token: ticket.token,
+    mapId,
+    workspaceId: ticket.workspaceId,
+  };
   return client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
 }

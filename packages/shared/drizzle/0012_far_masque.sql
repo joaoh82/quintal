@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `guest_workspace_id` text REFERENCES workspaces(id);

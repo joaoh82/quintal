@@ -120,7 +120,7 @@ const gameServer = new Server({
 
 // Keyed by mapId: everyone asking for the same map lands in the same room,
 // and a second map creates a second room rather than sharing one.
-gameServer.define(ROOM_OFFICE, OfficeRoom).filterBy(['mapId']);
+gameServer.define(ROOM_OFFICE, OfficeRoom).filterBy(['workspaceId', 'mapId']);
 
 await gameServer.listen(config.port, config.host);
 

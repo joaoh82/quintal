@@ -74,6 +74,8 @@ import {
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
 
+import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
+
 import {
   allowChat,
   allowMove,
@@ -93,6 +95,13 @@ import { ChatLog, type RoomMessage } from './chat-log.js';
 
 interface OfficeRoomOptions {
   mapId?: unknown;
+  /**
+   * Which office this room is. Routing only — `filterBy` puts callers asking
+   * for the same value in the same room, and nothing more. It is not a
+   * permission: a caller can ask for any workspace id it likes, so `onAuth`
+   * proves the claim before anybody is let in.
+   */
+  workspaceId?: unknown;
   token?: unknown;
   agentKey?: unknown;
   /** A machine's credential, used with `agentId` instead of an agent key. */
@@ -233,7 +242,29 @@ export class OfficeRoom extends Room<OfficeState> {
    * running an office-defined agent presents `{ hostToken, agentId }`; a human
    * presents a Better Auth session token. Anything else is turned away.
    */
+  /**
+   * The office this room belongs to, learned from the first join that created
+   * it and identical for every later one — `filterBy` guarantees that.
+   */
+  #workspaceId = '';
+
   override async onAuth(_client: Client, options: OfficeRoomOptions): Promise<JoinAuth> {
+    // An office is a workspace. One room per office, and nothing crosses:
+    // agents belong to the office that defined them, people to the office they
+    // are a member of. Before this, rooms were keyed by map alone, so every
+    // workspace on a deployment shared one room — you could see, address and
+    // talk to agents somebody else owned, in an office you had no part in.
+    const workspaceId = typeof options.workspaceId === 'string' ? options.workspaceId : '';
+    if (workspaceId.length === 0) {
+      throw new ServerError(ErrorCode.AUTH_FAILED, 'No office was named in this join.');
+    }
+    if (this.#workspaceId.length === 0) this.#workspaceId = workspaceId;
+    // Belt and braces behind `filterBy`: if routing ever put two offices in one
+    // room, this refuses rather than quietly merging them.
+    if (workspaceId !== this.#workspaceId) {
+      throw new ServerError(ErrorCode.AUTH_FAILED, 'That is not this office.');
+    }
+
     // ServerError, not Error: a plain throw reaches the client as an empty
     // 4213 with no message, which for a documented public protocol means an
     // agent developer gets a bare number and no idea what they did wrong.
@@ -247,6 +278,9 @@ export class OfficeRoom extends Room<OfficeState> {
           'Unknown or revoked host token, or that agent is not yours. Manage machines at /settings/agents.',
         );
       }
+      if (!agentBelongsToOffice(identity, workspaceId)) {
+        throw new ServerError(ErrorCode.AUTH_FAILED, 'That agent belongs to another office.');
+      }
       return { kind: 'agent', identity };
     }
 
@@ -258,6 +292,9 @@ export class OfficeRoom extends Room<OfficeState> {
           'Unknown or revoked agent key. Create one at /settings/agents.',
         );
       }
+      if (!agentBelongsToOffice(identity, workspaceId)) {
+        throw new ServerError(ErrorCode.AUTH_FAILED, 'That agent belongs to another office.');
+      }
       return { kind: 'agent', identity };
     }
 
@@ -265,6 +302,19 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!user) {
       throw new ServerError(ErrorCode.AUTH_FAILED, 'No valid session. Sign in again.');
     }
+
+    // A guest has no membership on purpose, so their one office is the one
+    // their link was for. A member's is any they belong to. Either way the
+    // claim is proved here, never taken from the join.
+    if (!(await mayEnterOffice(user, workspaceId))) {
+      throw new ServerError(
+        ErrorCode.AUTH_FAILED,
+        user.isGuest
+          ? 'That guest link was for a different office.'
+          : 'You are not a member of this office.',
+      );
+    }
+
     return {
       kind: 'human',
       userId: user.userId,

@@ -132,7 +132,7 @@ describe('displayNameFor', () => {
   it('uses the name when there is one', () => {
     const pubkey = getPublicKeyHex(generateSecretKey());
     assert.equal(
-      displayNameFor({ userId: 'u', name: '  Ada  ', pubkey, isGuest: false, description: '' }),
+      displayNameFor({ userId: 'u', name: '  Ada  ', pubkey, isGuest: false, description: '', guestWorkspaceId: null }),
       'Ada',
     );
   });
@@ -142,7 +142,7 @@ describe('displayNameFor', () => {
     // "Someone" is not an acceptable answer while a key is available.
     const pubkey = getPublicKeyHex(generateSecretKey());
 
-    const name = displayNameFor({ userId: 'u', name: '', pubkey, isGuest: false, description: '' });
+    const name = displayNameFor({ userId: 'u', name: '', pubkey, isGuest: false, description: '', guestWorkspaceId: null });
 
     assert.ok(name.startsWith('npub1'));
     assert.ok(npubEncode(pubkey).endsWith(name.slice(-6)));
@@ -150,7 +150,7 @@ describe('displayNameFor', () => {
 
   it('never returns an empty label, even for a nonsense key', () => {
     assert.equal(
-      displayNameFor({ userId: 'u', name: '', pubkey: 'garbage', isGuest: false, description: '' }),
+      displayNameFor({ userId: 'u', name: '', pubkey: 'garbage', isGuest: false, description: '', guestWorkspaceId: null }),
       'Someone',
     );
   });

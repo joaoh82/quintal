@@ -129,7 +129,13 @@ export class AgentRunner {
     this.#ownsGateway = gateway === undefined;
     this.#gateway =
       gateway ??
-      new GatewayClient(config.url, config.key, config.mapId, hostCredential(config));
+      new GatewayClient(
+        config.url,
+        config.key,
+        config.mapId,
+        config.workspaceId,
+        hostCredential(config),
+      );
     this.#sessions = new SessionStore({
       onEvict: (record, reason) => {
         this.#log('info', `session for "${record.scope}" ended (${reason})`);
@@ -230,6 +236,7 @@ export class AgentRunner {
           this.config.url,
           this.config.key,
           this.config.mapId,
+          this.config.workspaceId,
           hostCredential(this.config),
         );
       }

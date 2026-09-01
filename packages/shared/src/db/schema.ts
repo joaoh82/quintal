@@ -101,6 +101,20 @@ export const sessions = sqliteTable(
      * visit that earned it.
      */
     isGuest: integer('is_guest', { mode: 'boolean' }).notNull().default(false),
+    /**
+     * The one office a guest was let into.
+     *
+     * A guest has no membership on purpose — a membership outlives the visit,
+     * and a forwarded link would become a standing key to the place. So the
+     * grant lives here, bounded by the session, and the room gate reads it.
+     *
+     * This is the other half of that decision finally landing: until offices
+     * were scoped there was no gate to read it, because every room held every
+     * workspace at once.
+     */
+    guestWorkspaceId: text('guest_workspace_id').references(() => workspaces.id, {
+      onDelete: 'cascade',
+    }),
   },
   (table) => [index('sessions_user_id_idx').on(table.userId)],
 );
