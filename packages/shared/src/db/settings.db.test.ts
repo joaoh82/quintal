@@ -5,10 +5,12 @@ import { eq } from 'drizzle-orm';
 
 import { users } from './schema.js';
 import {
+  getInstanceSettings,
   getOfficeSettings,
   hasInstanceAdmin,
   isInstanceAdmin,
   listInstanceAdmins,
+  saveInstanceSettings,
   saveOfficeSettings,
   setInstanceAdmin,
 } from './settings.js';
@@ -25,30 +27,112 @@ import { createTestDb, createTestUser } from './testing.js';
 describe('what this deployment calls itself', () => {
   it('is empty until somebody names it, and the address stands in', async () => {
     const db = await createTestDb();
-    assert.equal((await getOfficeSettings(db)).name, '');
+    assert.equal((await getInstanceSettings(db)).name, '');
   });
 
   it('is kept, and contained like every other name', async () => {
     const db = await createTestDb();
 
-    const saved = await saveOfficeSettings(db, { name: '  Rockflow  ' });
+    const saved = await saveInstanceSettings(db, { name: '  Rockflow  ' });
     assert.equal(saved.name, 'Rockflow');
-    assert.equal((await getOfficeSettings(db)).name, 'Rockflow');
+    assert.equal((await getInstanceSettings(db)).name, 'Rockflow');
 
     // Drawn on a page shown to people who have not signed in, so a bidi
     // override here reaches further than most.
-    const nasty = await saveOfficeSettings(db, { name: 'Rock‮flow\nInc' });
+    const nasty = await saveInstanceSettings(db, { name: 'Rock\u202eflow\nInc' });
     assert.equal(nasty.name, 'Rock flow Inc');
   });
+});
 
-  it('does not disturb the other settings', async () => {
+/**
+ * How one office's room behaves.
+ *
+ * These used to sit in the same 'global' row as the deployment's name, so every
+ * office on a deployment shared them: changing how far speech carried in your
+ * office changed it in everybody's. An office is a workspace, and this is a
+ * property of the office.
+ */
+describe('how an office works', () => {
+  it('starts from defaults, without needing a row', async () => {
     const db = await createTestDb();
-    await saveOfficeSettings(db, { chatRadiusTiles: 20 });
-    await saveOfficeSettings(db, { name: 'Rockflow' });
+    const josh = await createTestUser(db, 'Josh');
 
-    const settings = await getOfficeSettings(db);
-    assert.equal(settings.chatRadiusTiles, 20, 'a rename is not a reset');
-    assert.equal(settings.name, 'Rockflow');
+    // A missing row must mean defaults, never zeroes — an office where nobody
+    // can hear anybody is worse than one nobody has tuned.
+    const settings = await getOfficeSettings(db, josh.workspaceId);
+    assert.equal(settings.chatRadiusTiles, 12);
+    assert.equal(settings.walkUpRadiusTiles, 3);
+    assert.equal(settings.replyWindowSeconds, 90);
+  });
+
+  it('keeps what an office chose', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+
+    await saveOfficeSettings(db, josh.workspaceId, { chatRadiusTiles: 20 });
+    assert.equal((await getOfficeSettings(db, josh.workspaceId)).chatRadiusTiles, 20);
+    // Saving one value must not reset the others.
+    assert.equal((await getOfficeSettings(db, josh.workspaceId)).walkUpRadiusTiles, 3);
+  });
+
+  /** The whole point of the change. */
+  it('does not leak into another office', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+    const other = await createTestUser(db, 'Sam');
+
+    await saveOfficeSettings(db, josh.workspaceId, { chatRadiusTiles: 40 });
+
+    assert.equal(
+      (await getOfficeSettings(db, other.workspaceId)).chatRadiusTiles,
+      12,
+      "tuning your office must not reach into somebody else's",
+    );
+  });
+
+  it('clamps what it is given, because a form is not the authority', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+
+    // A chat radius of 10^9 is a denial-of-service on the room.
+    const saved = await saveOfficeSettings(db, josh.workspaceId, {
+      chatRadiusTiles: 1_000_000_000,
+    });
+    assert.equal(saved.chatRadiusTiles, 40);
+  });
+
+  /**
+   * A partial save must not reset what it did not mention.
+   *
+   * `saveOfficeSettings` merges over the current row, and the action feeds it
+   * the current value for any field the form omitted. Both halves matter: a
+   * form that posts only one radius, or a crafted request that posts none,
+   * must leave the rest of the office exactly as it was.
+   */
+  it('leaves untouched settings alone when only one is saved', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+
+    await saveOfficeSettings(db, josh.workspaceId, {
+      chatRadiusTiles: 30,
+      walkUpRadiusTiles: 8,
+      replyWindowSeconds: 120,
+    });
+    await saveOfficeSettings(db, josh.workspaceId, { chatRadiusTiles: 25 });
+
+    const settings = await getOfficeSettings(db, josh.workspaceId);
+    assert.equal(settings.chatRadiusTiles, 25);
+    assert.equal(settings.walkUpRadiusTiles, 8, 'a partial save is not a reset');
+    assert.equal(settings.replyWindowSeconds, 120, 'a partial save is not a reset');
+  });
+
+  it('answers with defaults when no office was named', async () => {
+    const db = await createTestDb();
+    assert.deepEqual(await getOfficeSettings(db, ''), {
+      chatRadiusTiles: 12,
+      walkUpRadiusTiles: 3,
+      replyWindowSeconds: 90,
+    });
   });
 });
 

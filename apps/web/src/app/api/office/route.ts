@@ -1,4 +1,4 @@
-import { getDb, getOfficeSettings } from '@quintal/shared/db';
+import { getDb, getInstanceSettings } from '@quintal/shared/db';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -10,12 +10,11 @@ export const dynamic = 'force-dynamic';
  * be able to recognise the place *before* they sign in — that is the whole
  * point of the name — so it cannot sit behind a session.
  *
- * Nothing else goes here. Instance settings include radii that describe how the
- * room behaves, and while none of that is secret, a public endpoint should
- * return the one field it exists to answer rather than everything the table
- * happens to hold.
+ * Nothing else goes here, and now there is nothing else to leak: the radii that
+ * describe how a room behaves moved to the office they belong to, and this
+ * table holds only the deployment's name.
  */
 export async function GET(): Promise<NextResponse> {
-  const settings = await getOfficeSettings(getDb());
+  const settings = await getInstanceSettings(getDb());
   return NextResponse.json({ name: settings.name });
 }

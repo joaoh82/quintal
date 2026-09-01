@@ -7,6 +7,7 @@ import {
   getOfficeSettings,
   isInstanceAdmin,
   renameWorkspace,
+  saveInstanceSettings,
   saveOfficeSettings,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -30,58 +31,78 @@ export async function saveSettingsAction(
 
     const db = getDb();
 
-    // Instance-wide settings, and until this they were writable by anybody with
-    // a session — a guest who redeemed an invite link included. A chat radius
-    // being changed under everyone is a nuisance; the office's public name is
-    // what somebody reads before they sign in, so this became a defacement
-    // vector the moment there was a name to deface.
+    // The deployment's name, and until PR #31 it was writable by anybody with a
+    // session — a guest who redeemed an invite link included. It is what
+    // somebody reads before they sign in, so it was a defacement vector the
+    // moment there was a name to deface.
     const mayChangeInstance =
       !session.session.isGuest && (await isInstanceAdmin(db, session.user.id));
 
-    // The form hides these from anybody who cannot change them, so a submission
-    // carrying them from somebody who cannot is a crafted one. Refused rather
-    // than quietly dropped: silently ignoring half a form and reporting success
-    // is the failure this whole change is about.
-    const instanceFields = [
-      'officeName',
-      'chatRadiusTiles',
-      'walkUpRadiusTiles',
-      'replyWindowSeconds',
-    ];
-    const attemptedInstance = instanceFields.some((field) => formData.get(field) !== null);
-    if (attemptedInstance && !mayChangeInstance) {
+    // The office is yours, so its room is yours to tune. This used to sit
+    // behind the instance-admin gate with the deployment name, because every
+    // office shared one row and one radius; now that a room belongs to one
+    // office, how close you stand to be heard is the owner's call.
+    const workspace = await ensurePersonalWorkspace(db, {
+      userId: session.user.id,
+      name: session.user.name,
+      pubkey: session.user.pubkey,
+    });
+    const mayChangeOffice = !session.session.isGuest;
+
+    // The form hides what somebody cannot change, so a submission carrying it
+    // anyway is a crafted one. Refused rather than quietly dropped: silently
+    // ignoring half a form and reporting success is the failure this whole
+    // gate is about.
+    if (formData.get('officeName') !== null && !mayChangeInstance) {
       return {
         ok: false,
-        error: 'Only the account that set this instance up can change these.',
+        error: 'Only the account that set this instance up can change that.',
       };
     }
 
-    // Clamped here as well as in the form: the browser is not the authority on
-    // what a sane chat radius is.
+    const officeFields = ['chatRadiusTiles', 'walkUpRadiusTiles', 'replyWindowSeconds'];
+    if (officeFields.some((field) => formData.get(field) !== null) && !mayChangeOffice) {
+      return { ok: false, error: 'Guests cannot change how this office works.' };
+    }
+
+    // An absent field means "leave this alone", and saying so takes real care.
+    //
+    // `Number(null)` is 0, not NaN, so reading the form directly would turn a
+    // submission that merely omitted these into a reset — to the *floor*,
+    // earshot 2 and a reply window of 0. Handing NaN to `normaliseSettings`
+    // instead is not the fix either: `clamp` falls back to
+    // DEFAULT_OFFICE_SETTINGS, so an office that had been tuned would quietly
+    // go back to 12/3/90. Neither is what an omitted field should mean.
+    //
+    // So the current value is the fallback, chosen before normalising. What
+    // *is* present still gets clamped, because the browser is not the authority
+    // on what a sane chat radius is.
+    const current = await getOfficeSettings(db, workspace.id);
+    const given = (field: string, fallback: number): number => {
+      const raw = formData.get(field);
+      return raw === null ? fallback : Number(raw);
+    };
     const next = normaliseSettings({
-      name: String(formData.get('officeName') ?? ''),
-      chatRadiusTiles: Number(formData.get('chatRadiusTiles')),
-      walkUpRadiusTiles: Number(formData.get('walkUpRadiusTiles')),
-      replyWindowSeconds: Number(formData.get('replyWindowSeconds')),
+      chatRadiusTiles: given('chatRadiusTiles', current.chatRadiusTiles),
+      walkUpRadiusTiles: given('walkUpRadiusTiles', current.walkUpRadiusTiles),
+      replyWindowSeconds: given('replyWindowSeconds', current.replyWindowSeconds),
     });
 
     // The office is a place, not a person: it starts out named after whoever
     // owns it, and renaming it here is what stops it referring to anybody.
     const name = formData.get('workspaceName');
     if (typeof name === 'string') {
-      const workspace = await ensurePersonalWorkspace(db, {
-        userId: session.user.id,
-        name: session.user.name,
-        pubkey: session.user.pubkey,
-      });
       const renamed = await renameWorkspace(db, workspace.id, name);
       if (!renamed) return { ok: false, error: 'An office needs a name.' };
     }
 
-    // Your own office keeps its name either way — that one is yours.
-    const saved = mayChangeInstance
-      ? await saveOfficeSettings(db, next)
-      : await getOfficeSettings(db);
+    if (formData.get('officeName') !== null) {
+      await saveInstanceSettings(db, { name: String(formData.get('officeName') ?? '') });
+    }
+
+    const saved = mayChangeOffice
+      ? await saveOfficeSettings(db, workspace.id, next)
+      : await getOfficeSettings(db, workspace.id);
     revalidatePath('/settings');
     revalidatePath('/office');
     return { ok: true, saved };

@@ -1,17 +1,22 @@
 import { tidyDisplayText } from './workspace.js';
 
 /**
- * Instance settings — the knobs an owner can turn without editing code.
+ * Two different things that both used to be called "office settings".
  *
- * These are **instance-wide, not per-workspace**, and that is a limitation
- * rather than a decision: office rooms are currently keyed by map id alone, so
- * everyone signed in shares one office regardless of which workspace they
- * belong to. Until rooms are workspace-scoped there is no coherent place to
- * hang a per-workspace radius. When that changes, this table grows a
- * `workspace_id` and the room reads its own.
+ * `InstanceSettings` belong to the deployment: one name, shown to somebody who
+ * has not signed in yet. `OfficeSettings` belong to one office, and describe
+ * how its room behaves.
+ *
+ * They were one row because rooms were keyed by map alone, so every workspace
+ * shared one room and there was nowhere coherent to hang a per-office radius.
+ * The old comment here said as much, and said this table would grow a
+ * `workspace_id` once rooms were scoped. Rooms are scoped now, so it has —
+ * how close you stand to be heard is a property of your office, not of the
+ * server it happens to run on.
  */
 
-export interface OfficeSettings {
+/** Settings that belong to the whole deployment. */
+export interface InstanceSettings {
   /**
    * What this deployment calls itself, shown before anybody signs in.
    *
@@ -24,6 +29,10 @@ export interface OfficeSettings {
    * Empty means unnamed, and the address is shown instead.
    */
   name: string;
+}
+
+/** Settings that belong to one office, and describe how its room behaves. */
+export interface OfficeSettings {
   /** How far speech carries, in tiles. */
   chatRadiusTiles: number;
   /** How close counts as walking up to somebody, for unaddressed remarks. */
@@ -38,8 +47,9 @@ export interface OfficeSettings {
 /** Long enough for "Rockflow Engineering", short enough to sit on a card. */
 export const OFFICE_NAME_MAX_LENGTH = 60;
 
+export const DEFAULT_INSTANCE_SETTINGS: InstanceSettings = { name: '' };
+
 export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
-  name: '',
   chatRadiusTiles: 12,
   walkUpRadiusTiles: 3,
   replyWindowSeconds: 90,
@@ -58,8 +68,10 @@ function clamp(value: unknown, fallback: number, min: number, max: number): numb
   return Math.min(max, Math.max(min, parsed));
 }
 
-/** Coerce anything into a usable settings object. Never throws. */
-export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefined): OfficeSettings {
+/** Coerce anything into usable instance settings. Never throws. */
+export function normaliseInstanceSettings(
+  raw: Partial<InstanceSettings> | null | undefined,
+): InstanceSettings {
   return {
     // The same containment every other name gets. This one is drawn on a page
     // shown to people who have not signed in, so a stray bidi override here
@@ -68,6 +80,12 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
       typeof raw?.name === 'string' ? raw.name : '',
       OFFICE_NAME_MAX_LENGTH,
     ),
+  };
+}
+
+/** Coerce anything into usable office settings. Never throws. */
+export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefined): OfficeSettings {
+  return {
     chatRadiusTiles: clamp(
       raw?.chatRadiusTiles,
       DEFAULT_OFFICE_SETTINGS.chatRadiusTiles,
