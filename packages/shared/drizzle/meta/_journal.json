@@ -99,6 +99,13 @@
       "when": 1788278492238,
       "tag": "0013_settings_belong_to_an_office",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1788278492239,
+      "tag": "0014_scope_agent_tables",
+      "breakpoints": true
     }
   ]
 }

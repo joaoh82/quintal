@@ -455,6 +455,18 @@ export const agentEvents = sqliteTable(
     agentId: text('agent_id')
       .notNull()
       .references(() => agents.id, { onDelete: 'cascade' }),
+    /**
+     * The office this event happened in.
+     *
+     * Redundant with the agent, and deliberately so. Scoping used to be
+     * transitive — every reader happened to go through `agents`, which carries
+     * the workspace — which made isolation a convention that one forgotten
+     * join would break silently. Written from the agent in the same statement
+     * that inserts the row, so the two cannot disagree.
+     */
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
     kind: text('kind').notNull(),
     payload: text('payload', { mode: 'json' }).$type<unknown>(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })
@@ -466,6 +478,13 @@ export const agentEvents = sqliteTable(
     // kind; this index serves both.
     index('agent_events_agent_created_idx').on(table.agentId, table.createdAt),
     index('agent_events_kind_idx').on(table.kind),
+    // Deliberately no index on `workspaceId` alone. It is low cardinality, and
+    // with one the planner picked it for `listAgentEventKinds` — scanning every
+    // event in the office and then filtering by agent, where the composite
+    // above finds the agent's rows directly. It helped no query that exists and
+    // made one worse. A whole-office query, if it ever arrives, wants
+    // `(workspaceId, createdAt)`; the only other reader is a workspace delete
+    // cascading, which is rare enough not to pay for on every write.
   ],
 );
 
@@ -480,6 +499,10 @@ export const agentMemory = sqliteTable(
     agentId: text('agent_id')
       .notNull()
       .references(() => agents.id, { onDelete: 'cascade' }),
+    /** The office this memory belongs to — see `agentEvents.workspaceId`. */
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
     slug: text('slug').notNull(),
     content: text('content').notNull().default(''),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
