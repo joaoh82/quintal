@@ -48,12 +48,28 @@ interface Entry {
  * restart. Deliberately ignores `key`/`hostToken` — a rotated credential is a
  * reconnect concern, not a reason to drop a session mid-turn.
  */
-function sameLaunch(a: AgentConfig, b: AgentConfig): boolean {
+/**
+ * Is this the same agent, configured the same way?
+ *
+ * Not just "launched the same way", which is what this used to ask. An agent
+ * learns what it is — its owner's instructions, its description — from
+ * `agent:ready`, at connect. So a running agent whose profile was edited keeps
+ * the old one until something restarts it, and comparing only the spawn
+ * arguments meant nothing ever did.
+ *
+ * That had a second symptom which looked unrelated: disabling an agent and
+ * enabling it again inside one poll interval left the fleet list unchanged, so
+ * reconcile saw the same launch and let it keep running. The obvious way to
+ * apply an edit — toggle it off and on — was therefore also the way to appear
+ * to do nothing.
+ */
+export function sameAgent(a: AgentConfig, b: AgentConfig): boolean {
   return (
     a.cwd === b.cwd &&
     a.url === b.url &&
     a.mapId === b.mapId &&
-    a.command.join(' ') === b.command.join(' ')
+    a.command.join(' ') === b.command.join(' ') &&
+    a.profile === b.profile
   );
 }
 
@@ -161,7 +177,7 @@ export class Supervisor {
 
     for (const [name, entry] of [...this.#entries]) {
       const config = wanted.get(name);
-      if (config && sameLaunch(config, entry.config)) continue;
+      if (config && sameAgent(config, entry.config)) continue;
 
       await entry.runner.stop().catch(() => {});
       this.#entries.delete(name);

@@ -160,6 +160,9 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
     // A single `--agent` run holds only its key, so the office is looked up
     // from that key at connect rather than being configured here.
     workspaceId: '',
+    // Nothing to compare: a single `--agent` run is configured here, not in an
+    // office, so there is no profile that can change underneath it.
+    profile: '',
   };
 }
 

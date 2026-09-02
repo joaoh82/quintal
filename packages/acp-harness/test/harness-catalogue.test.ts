@@ -78,7 +78,7 @@ describe('where an agent is allowed to work', () => {
   const host = { token: 'qh_x', url: 'http://localhost:3000' };
   const fleet = (repoSpec: string) => ({
     host: { label: 'laptop', owner: 'Josh', workspaceId: 'ws_test' },
-    agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', repoSpec }],
+    agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', repoSpec, profile: 'p1' }],
   });
 
   it('accepts a repo under the repos directory', () => {

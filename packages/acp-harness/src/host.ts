@@ -80,7 +80,13 @@ export function writeStoredHost(host: StoredHost): string {
 
 interface FleetResponse {
   host: { label: string; owner: string; workspaceId: string };
-  agents: { agentId: string; name: string; runtimeId: string; repoSpec: string }[];
+  agents: {
+    agentId: string;
+    name: string;
+    runtimeId: string;
+    repoSpec: string;
+    profile: string;
+  }[];
 }
 
 /**
@@ -212,6 +218,7 @@ export function toAgentConfigs(
       url: host.url,
       mapId,
       workspaceId: fleet.host.workspaceId,
+      profile: member.profile ?? '',
     });
   }
 

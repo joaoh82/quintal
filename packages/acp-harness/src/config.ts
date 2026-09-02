@@ -90,6 +90,15 @@ export interface AgentConfig {
    * the agent key rather than being told.
    */
   workspaceId: string;
+  /**
+   * A fingerprint of the description and instructions the office holds for this
+   * agent, or empty when it was not defined in an office.
+   *
+   * Compared, never read. An agent is told what it is in `agent:ready`, at
+   * connect — so when its owner edits that, the only way a *running* agent
+   * learns is by being restarted, and this is what tells the supervisor to.
+   */
+  profile: string;
 }
 
 export interface FleetConfig {
@@ -284,6 +293,7 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
       url,
       mapId,
       workspaceId: '',
+      profile: '',
     } satisfies AgentConfig;
   });
 

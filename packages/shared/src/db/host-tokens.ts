@@ -170,6 +170,21 @@ export async function revokeHostToken(db: Database, id: string): Promise<void> {
     .where(and(eq(hostTokens.id, id), isNull(hostTokens.revokedAt)));
 }
 
+/**
+ * Collapse an agent's owner-written profile into something comparable.
+ *
+ * Not a security hash and not stored — a short digest is enough to answer "did
+ * this change?", which is the only question asked of it.
+ */
+function profileFingerprint(description: string, instructions: string): string {
+  return createHash('sha256')
+    .update(description)
+    .update('\u0000')
+    .update(instructions)
+    .digest('hex')
+    .slice(0, 16);
+}
+
 export interface HostIdentity {
   id: string;
   workspaceId: string;
@@ -239,6 +254,14 @@ export interface FleetMember {
   runtimeId: string;
   /** As written: a repo name, `*`, or an absolute path. Resolved on the host. */
   repoSpec: string;
+  /**
+   * A fingerprint of what its owner says this agent is.
+   *
+   * Here so a running harness can notice that it changed. The instructions the
+   * model is actually given travel in `agent:ready`; this is only ever compared,
+   * never read as content — which is why it is a digest and not the text.
+   */
+  profile: string;
 }
 
 /**
@@ -262,6 +285,8 @@ export async function fleetForHost(
       name: agents.name,
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
+      description: agents.description,
+      instructions: agents.instructions,
       hostLabel: agents.hostLabel,
       enabled: agents.enabled,
       revokedAt: agents.revokedAt,
@@ -290,6 +315,17 @@ export async function fleetForHost(
     .map((row) => ({
       agentId: row.agentId,
       name: row.name,
+      /**
+       * A fingerprint of what its owner says this agent is, so a harness can
+       * tell that it changed.
+       *
+       * A fingerprint rather than the text, deliberately. The instructions the
+       * model is actually given arrive in `agent:ready`, and two copies of the
+       * same string travelling by different routes is an invitation to read the
+       * wrong one. This cannot be mistaken for content: comparing it is the only
+       * thing it is good for.
+       */
+      profile: profileFingerprint(row.description, row.instructions),
       runtimeId: row.runtimeId,
       repoSpec: row.repoSpec,
     }));
