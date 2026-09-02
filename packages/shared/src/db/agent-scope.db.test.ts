@@ -3,12 +3,14 @@ import { describe, it } from 'node:test';
 
 import {
   createAgent,
+  findAgentIdentityById,
   getAgentMemory,
   listAgentEventKinds,
   listAgentEvents,
   listAgentMemorySlugs,
   recordAgentEvent,
   setAgentMemory,
+  setAgentProfile,
 } from './agents.js';
 import { agentEvents, agentMemory } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
@@ -137,5 +139,92 @@ describe("an agent's memory belongs to its office", () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.content, 'second');
     assert.equal(rows[0]?.workspaceId, bob.workspaceId);
+  });
+});
+
+describe('what an owner says an agent is', () => {
+  it('is stored, normalised, from the moment it is created', async () => {
+    const db = await createTestDb();
+    const owner = await createTestUser(db, 'Josh');
+    const created = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+      description: 'Reviews PRs\nand watches CI',
+      instructions: 'Be terse.\nAnswer in Portuguese.',
+    });
+
+    const agent = await findAgentIdentityById(db, created.id);
+    // The description is one line; the instructions keep theirs.
+    assert.equal(agent?.description, 'Reviews PRs and watches CI');
+    assert.equal(agent?.instructions, 'Be terse.\nAnswer in Portuguese.');
+  });
+
+  it('defaults to empty rather than to a placeholder', async () => {
+    const db = await createTestDb();
+    const owner = await createTestUser(db, 'Josh');
+    const created = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+    });
+
+    const agent = await findAgentIdentityById(db, created.id);
+    assert.equal(agent?.description, '');
+    assert.equal(agent?.instructions, '');
+  });
+
+  it('changes one field without clearing the other', async () => {
+    const db = await createTestDb();
+    const owner = await createTestUser(db, 'Josh');
+    const created = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+      description: 'Reviews PRs',
+      instructions: 'Be terse.',
+    });
+
+    // An absent field means "leave it alone" — the same rule the office
+    // settings form needed, and for the same reason.
+    await setAgentProfile(db, created.id, { description: 'Watches CI' });
+
+    const agent = await findAgentIdentityById(db, created.id);
+    assert.equal(agent?.description, 'Watches CI');
+    assert.equal(agent?.instructions, 'Be terse.', 'a partial save is not a reset');
+  });
+
+  it('can be cleared deliberately, which is not the same as omitting it', async () => {
+    const db = await createTestDb();
+    const owner = await createTestUser(db, 'Josh');
+    const created = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+      instructions: 'Be terse.',
+    });
+
+    await setAgentProfile(db, created.id, { instructions: '' });
+    assert.equal((await findAgentIdentityById(db, created.id))?.instructions, '');
+  });
+
+  it('records the change, because being told to be something is auditable', async () => {
+    const db = await createTestDb();
+    const owner = await createTestUser(db, 'Josh');
+    const created = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+    });
+
+    await setAgentProfile(db, created.id, { instructions: 'Be terse.' });
+
+    const kinds = await listAgentEventKinds(db, created.id, owner.workspaceId);
+    assert.ok(kinds.includes('agent.profile_changed'));
   });
 });

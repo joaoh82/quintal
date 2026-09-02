@@ -133,6 +133,16 @@ export interface AgentReadyPayload {
   agentId: string;
   sessionId: string;
   name: string;
+  /** One line its owner wrote about what it does. Shown on its card. */
+  description: string;
+  /**
+   * How its owner told it to behave.
+   *
+   * Sent here rather than fetched by the harness so it reaches every agent the
+   * same way — one holding only its own key has no other channel — and so a
+   * change lands on the next connect without waiting for a fleet poll.
+   */
+  instructions: string;
   /** The human accountable for this agent — the only one who may steer it. */
   ownerUserId: string;
   ownerName: string;

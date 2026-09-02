@@ -328,6 +328,24 @@ export const agents = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     spriteKey: text('sprite_key').notNull().default('slate'),
+    /**
+     * One line about what this agent does, written by its owner.
+     *
+     * For people: it sits on the agent's card next to its name, the way a
+     * human's profile line does. Display text, contained like every other label.
+     */
+    description: text('description').notNull().default(''),
+    /**
+     * How its owner told it to behave, prepended to its system prompt.
+     *
+     * A different thing from `description` and from core memory, and the three
+     * are kept apart on purpose. A description is a label humans read. This is
+     * a directive the model reads. Core memory is what the agent worked out for
+     * itself. Same prompt, three authors — collapsing them would mean a
+     * personality note is also a nameplate, and that an agent could rewrite
+     * what its owner told it to be.
+     */
+    instructions: text('instructions').notNull().default(''),
     apiKeyHash: text('api_key_hash').notNull().unique(),
     /** JSON array of AgentScope. Text, because SQLite has no array type. */
     scopes: text('scopes', { mode: 'json' })
