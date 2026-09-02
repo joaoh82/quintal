@@ -37,6 +37,12 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
       'Drops the conversation context here and begins a new one. Use it when an agent has gone in circles, or before switching it to unrelated work.',
   },
   {
+    name: 'remember',
+    summary: 'Write something into the agent\u2019s core memory',
+    detail:
+      'Appends a line to what this agent carries into every conversation, and keeps it across restarts. Use it when you want something to stick rather than hoping the agent writes it down itself.',
+  },
+  {
     name: 'shutdown',
     summary: 'Bring the agent home',
     detail:
@@ -61,6 +67,15 @@ export interface ParsedCommand {
   name: string;
   /** Lowercased name from an `@mention`, or null for "everyone who hears this". */
   target: string | null;
+  /**
+   * Everything after the verb and the optional `@mention`.
+   *
+   * Empty for the commands that take nothing. `!remember` is the first that
+   * carries text, and it has to survive verbatim: what somebody wants an agent
+   * to remember is prose, and trimming it to a token would change what they
+   * said.
+   */
+  body: string;
   known: boolean;
 }
 
@@ -71,7 +86,20 @@ export function parseAgentCommand(text: string): ParsedCommand | null {
   const name = (/^!([\p{L}\p{N}_-]*)/u.exec(trimmed)?.[1] ?? '').toLowerCase();
   if (name.length === 0) return null;
 
-  return { name, target: mentionedNames(trimmed)[0] ?? null, known: isAgentCommand(name) };
+  const rest = trimmed.slice(1 + name.length);
+
+  // A target only counts immediately after the verb.
+  //
+  // It used to be the first `@mention` anywhere in the message, which was
+  // harmless while every command was a bare verb. `!remember` carries prose,
+  // and prose names people: `!remember ask @sam before deploying` would have
+  // been read as a command aimed at Sam, so every agent not called Sam would
+  // drop the note on the floor without saying anything.
+  const leading = /^\s*@([\p{L}\p{N}_-]+)/u.exec(rest);
+  const target = leading?.[1]?.toLowerCase() ?? null;
+  const body = rest.slice(leading?.[0].length ?? 0).trim();
+
+  return { name, target, body, known: isAgentCommand(name) };
 }
 
 /**

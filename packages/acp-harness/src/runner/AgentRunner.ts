@@ -459,6 +459,16 @@ export class AgentRunner {
         this.prewarm(scope);
         return true;
       }
+      case '!remember': {
+        if (parsed.body.length === 0) {
+          this.#log('warn', '!remember needs something to remember');
+          return true;
+        }
+        // Not awaited inline: a command handler that blocks would hold up the
+        // chat loop for a round trip to the office.
+        void this.#writeCoreMemory(parsed.body);
+        return true;
+      }
       case '!shutdown': {
         this.#log('info', 'shutdown requested by owner');
         void this.stop().then(() => process.exit(0));
@@ -679,6 +689,39 @@ export class AgentRunner {
     ]
       .filter((line) => line !== '')
       .join('\n');
+  }
+
+  /**
+   * Write a line into core memory, on the owner's say-so.
+   *
+   * Appended, never replaced. `memory_set` takes the whole slug, so writing the
+   * new note alone would silently erase everything the agent had already
+   * learned — the second `!remember` would undo the first.
+   *
+   * Existing sessions are already primed, and the system prompt is only sent
+   * once per session. So the scopes are marked unprimed afterwards: without
+   * that, a note written now would not reach the model until the session
+   * rotated, which is exactly the "did it actually remember?" doubt this
+   * command exists to remove.
+   */
+  async #writeCoreMemory(note: string): Promise<void> {
+    try {
+      const existing = (await this.#gateway.memoryGet('core')).content;
+      const next = existing.trim().length > 0 ? `${existing.trim()}\n${note}` : note;
+
+      await this.#gateway.memorySet('core', next);
+
+      // Every scope, not just this one: core memory is the agent's, not the
+      // room's, and a note written in the lobby belongs in the focus room too.
+      for (const scope of this.#sessions.scopes()) this.#unprimed.add(scope);
+
+      this.#log('info', `remembered: ${note}`);
+    } catch (error: unknown) {
+      // Said out loud rather than only logged. The owner asked for something to
+      // be kept; silence would look exactly like success.
+      this.#log('warn', `could not remember that: ${describe(error)}`);
+      this.#speak('I could not write that to memory, so it will not survive a restart.');
+    }
   }
 
   /**

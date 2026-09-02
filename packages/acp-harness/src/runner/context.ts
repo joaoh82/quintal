@@ -94,12 +94,23 @@ export function buildEnvelope(input: EnvelopeInput): string {
 }
 
 /**
- * The one-line reminder of the tool surface, appended to the system prompt at
- * session creation. A line, not a manual: the tools describe themselves through
- * MCP, and repeating their schemas here would be paying for them twice.
+ * What the model is told about its tools, and when to reach for one.
+ *
+ * The list alone was not enough. `memory_set` was available from the start and
+ * never once used: an owner would say "always greet people in Portuguese", the
+ * model would agree, and the promise lived in the ACP session until it rotated
+ * or the app restarted. The table was empty on a database that had been in use
+ * for a week, which is what a tool nobody is told to reach for looks like.
+ *
+ * So the memory line says when, not just what. `!remember` covers the case
+ * where the owner wants certainty rather than a good chance.
  */
-export const TOOL_HINT =
-  'Tools available now: look_around, who_is_here, messages_get, memory_get, memory_set.';
+export const TOOL_HINT = [
+  'Tools available now: look_around, who_is_here, messages_get, memory_get, memory_set.',
+  'When someone asks you to remember something, or tells you how they want you to',
+  'work from now on, write it to core memory with memory_set — agreeing in',
+  'conversation does not persist it, and it will be gone the next time you start.',
+].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */
 export function selectWindow(
