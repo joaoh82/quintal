@@ -425,7 +425,8 @@ function AgentRow({
                 className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px]"
               />
               <span className="text-muted-foreground text-xs">
-                Takes effect the next time this agent connects.
+                Applied within about 15 seconds — the agent restarts to pick it
+                up, so anything it was in the middle of is dropped.
               </span>
             </label>
             <div>
