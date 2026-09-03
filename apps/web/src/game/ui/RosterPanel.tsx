@@ -180,6 +180,16 @@ function AgentCard({ agent, onClose }: { agent: RosterEntry; onClose: () => void
         </button>
       </div>
 
+      {/*
+        Above the facts, the same as a person's card. What an agent is for reads
+        as a title — "Senior Software Engineer", "reviews PRs and watches CI" —
+        and a title belongs next to the name, not filed under `owner` and
+        `scopes` with the machinery.
+      */}
+      {agent.description ? (
+        <p className="text-[11px] leading-relaxed text-white/75">{agent.description}</p>
+      ) : null}
+
       <dl className="flex flex-col gap-1 text-[11px]">
         <div className="flex gap-2">
           <dt className="w-14 shrink-0 text-white/40">owner</dt>
