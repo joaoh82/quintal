@@ -130,12 +130,21 @@ async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
           'you do not have the "move" scope, so you cannot walk. Say so plainly and ask to be moved.',
         );
       }
+      const note =
+        'You walk at human speed along a real path — you are not there yet. Carry on; the room will show you arriving.';
+
+      // A person wins over a zone when both are given. "Come to me, I am in the
+      // Focus Room" names a room only as a hint about where the person is, and
+      // walking to the room while they move away is the wrong reading.
+      const person = String(call.args.person ?? '').trim();
+      if (person.length > 0) {
+        gateway.moveToPerson(person);
+        return { walking_to: person, note };
+      }
+
       const zoneId = resolveZone(gateway.ready?.zones ?? [], String(call.args.zone ?? ''));
       gateway.moveToZone(zoneId);
-      return {
-        walking_to: zoneId,
-        note: 'You walk at human speed along a real path — you are not there yet. Carry on; the room will show you arriving.',
-      };
+      return { walking_to: zoneId, note };
     }
 
     case 'set_status': {

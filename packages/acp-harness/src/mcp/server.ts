@@ -59,18 +59,25 @@ const TOOLS = [
   {
     name: 'move_to',
     description:
-      'Walk to a zone. Give its id or its human label ("focus", "Focus Room") — ' +
-      'call look_around if you are unsure which exist. You walk at human speed ' +
-      'along a real path and arrive seconds later, so this returns before you ' +
-      'get there; it is a request to walk, not teleportation. Use it when ' +
-      'somebody asks you to come somewhere, or when your work belongs in a ' +
-      'particular room. Do not wander on your own.',
+      'Walk somewhere. Name either a person or a zone. ' +
+      'Use `person` when somebody asks you to come to them — "come here", ' +
+      '"can you join me" — and you will stop beside them wherever they are, ' +
+      'in a room or not. Use `zone` for a place: its id or human label ' +
+      '("focus", "Focus Room"); call look_around if you are unsure which ' +
+      'exist. You walk at human speed along a real path and arrive seconds ' +
+      'later, so this returns before you get there; it is a request to walk, ' +
+      'not teleportation. Do not wander on your own.',
     inputSchema: {
       type: 'object',
       properties: {
+        person: {
+          type: 'string',
+          description:
+            'Somebody in the office, by the name you see them under. You stop ' +
+            'next to them; you do not need to know where they are.',
+        },
         zone: { type: 'string', description: 'Zone id or human label.' },
       },
-      required: ['zone'],
       additionalProperties: false,
     },
   },

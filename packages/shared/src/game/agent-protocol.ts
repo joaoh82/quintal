@@ -71,8 +71,20 @@ export interface AgentHostReportPayload {
  * usually what you want: zone ids are stable, tile coordinates are not.
  */
 export type AgentMoveToPayload =
-  | { zoneId: string; x?: never; y?: never }
-  | { x: number; y: number; zoneId?: never };
+  | { zoneId: string; person?: never; x?: never; y?: never }
+  | { x: number; y: number; zoneId?: never; person?: never }
+  /**
+   * Walk to whoever this names, rather than to a room.
+   *
+   * Resolved by the office, not by the agent. The office knows where everybody
+   * is and which tiles are free, and "come here" should not require the agent
+   * to work out a tile next to somebody — that is how an agent ends up standing
+   * on top of the person who called it, or inside a wall.
+   *
+   * Matched by display name, the same way an `@mention` is, so there is one
+   * notion of "who did you mean" rather than two that can disagree.
+   */
+  | { person: string; zoneId?: never; x?: never; y?: never };
 
 export interface AgentSetStatusPayload {
   status: string;
