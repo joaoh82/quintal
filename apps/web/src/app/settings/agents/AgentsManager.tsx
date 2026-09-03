@@ -24,6 +24,7 @@ import {
   createAgentAction,
   revokeAgentAction,
   saveAgentProfileAction,
+  type SaveAgentProfileState,
   setAgentEnabledAction,
   type CreateAgentState,
 } from './actions';
@@ -404,39 +405,80 @@ function AgentRow({
           <summary className="text-muted-foreground cursor-pointer text-xs">
             Description and instructions
           </summary>
-          <form action={saveAgentProfileAction} className="mt-2 flex flex-col gap-2">
-            <input type="hidden" name="agentId" value={agent.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">Description</span>
-              <Input
-                name="description"
-                defaultValue={agent.description}
-                maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
-                placeholder="Reviews pull requests and keeps an eye on CI"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium">Instructions</span>
-              <textarea
-                name="instructions"
-                rows={4}
-                defaultValue={agent.instructions}
-                maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
-                className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px]"
-              />
-              <span className="text-muted-foreground text-xs">
-                Applied within about 15 seconds — the agent restarts to pick it
-                up, so anything it was in the middle of is dropped.
-              </span>
-            </label>
-            <div>
-              <Button type="submit" size="sm" variant="outline">
-                Save
-              </Button>
-            </div>
-          </form>
+          <AgentProfileForm agent={agent} />
         </details>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Editing what an agent is, with something to show for it.
+ *
+ * Its own component so each row owns its result: one `useActionState` shared
+ * across the list would show "Saved" under every agent when one was saved.
+ *
+ * Saving used to say nothing at all. The action returned void, the form had no
+ * state, and a failure threw — so clicking Save looked identical whether it had
+ * worked, been refused, or never reached the server. That matters more here
+ * than on most forms, because the effect is deliberately not instant: the agent
+ * is restarted by its host on the next fleet poll, and without a word from the
+ * form there is no way to tell "waiting" from "broken".
+ */
+function AgentProfileForm({ agent }: { agent: AgentListEntry }) {
+  const [state, formAction, pending] = useActionState(saveAgentProfileAction, {
+    ok: false,
+  } as SaveAgentProfileState);
+
+  // Guard against a result from a different row, which cannot happen while the
+  // state is per-component but would be silent if that ever changed.
+  const mine = state.agentId === agent.id;
+
+  return (
+    <form action={formAction} className="mt-2 flex flex-col gap-2">
+      <input type="hidden" name="agentId" value={agent.id} />
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">Description</span>
+        <Input
+          name="description"
+          defaultValue={agent.description}
+          maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
+          placeholder="Reviews pull requests and keeps an eye on CI"
+          disabled={pending}
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">Instructions</span>
+        <textarea
+          name="instructions"
+          rows={4}
+          defaultValue={agent.instructions}
+          maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
+          disabled={pending}
+          className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50"
+        />
+      </label>
+      <div className="flex items-center gap-3">
+        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+          {pending ? 'Saving…' : 'Save'}
+        </Button>
+        {mine && state.ok ? (
+          <span className="text-xs text-emerald-600">
+            Saved — {agent.name} restarts within about 15 seconds to pick it up.
+          </span>
+        ) : null}
+        {mine && state.error ? (
+          <span className="text-destructive text-xs" role="alert">
+            {state.error}
+          </span>
+        ) : null}
+      </div>
+      {!mine || !state.ok ? (
+        <span className="text-muted-foreground text-xs">
+          Applied by restarting the agent, so anything it was in the middle of is
+          dropped.
+        </span>
+      ) : null}
+    </form>
   );
 }

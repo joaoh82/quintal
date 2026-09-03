@@ -145,16 +145,29 @@ export async function createAgentAction(
  * the office. Rewriting somebody else's agent's instructions would be a way to
  * change what their agent does while their name stays on it.
  */
-export async function saveAgentProfileAction(formData: FormData): Promise<void> {
+export interface SaveAgentProfileState {
+  ok: boolean;
+  error?: string;
+  /** The agent the last save was for, so one row's result cannot show on another. */
+  agentId?: string;
+}
+
+export async function saveAgentProfileAction(
+  _previous: SaveAgentProfileState,
+  formData: FormData,
+): Promise<SaveAgentProfileState> {
   const session = await requireSession();
   const db = getDb();
 
   const agentId = String(formData.get('agentId') ?? '');
   const agent = await findAgentById(db, agentId);
-  if (!agent) throw new Error('No such agent.');
+  // Returned rather than thrown. A thrown server action reaches the person as
+  // a blank screen or nothing at all, and "nothing happened" is exactly what
+  // this form was already guilty of.
+  if (!agent) return { ok: false, error: 'No such agent.', agentId };
 
   if (!(await canAdministerAgent(db, session.user.id, agent))) {
-    throw new Error('That is not your agent to change.');
+    return { ok: false, error: 'That is not your agent to change.', agentId };
   }
 
   // Absent means "leave it alone" — `setAgentProfile` reads undefined that way,
@@ -171,8 +184,9 @@ export async function saveAgentProfileAction(formData: FormData): Promise<void> 
 
   revalidatePath('/settings/agents');
   // The office reads both on connect, so a change lands for anybody joining
-  // now; agents already in the room pick it up on their next connect.
+  // now; a running agent is restarted by its host on the next fleet poll.
   revalidatePath('/office');
+  return { ok: true, agentId };
 }
 
 export async function revokeAgentAction(formData: FormData): Promise<void> {
