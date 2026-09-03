@@ -39,8 +39,16 @@ interface ChatPanelProps {
   onFocusChange: (focused: boolean) => void;
 }
 
+/**
+ * A clock time for today, the date as well for anything older. History means
+ * the log can now open on yesterday, and "09:12" alone would read as this
+ * morning.
+ */
 function timeOf(sentAt: number): string {
-  return new Date(sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const when = new Date(sentAt);
+  const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (when.toDateString() === new Date().toDateString()) return time;
+  return `${when.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
 /**

@@ -15,6 +15,8 @@ export const ClientMessage = {
   Chat: 'chat',
   /** Update the presence line under the avatar. */
   SetStatus: 'status',
+  /** What was said in a zone before I arrived. Answered with `history`. */
+  HistoryGet: 'history_get',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -29,6 +31,13 @@ export const ServerMessage = {
    * map, which Colyseus replays to callbacks registered at any point.
    */
   Chat: 'chat',
+  /**
+   * A page of a zone's transcript, in reply to `history_get`.
+   *
+   * Requested rather than pushed on join, for the reason above: the client has
+   * to be listening before the server speaks.
+   */
+  History: 'history',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
 } as const;
@@ -55,12 +64,33 @@ export interface StatusPayload {
 }
 
 export interface ChatBroadcastPayload {
-  /** Session id of the speaker — match it against room state for position. */
+  /**
+   * Session id of the speaker — match it against room state for position. In
+   * a `history` page it is their stable id instead: sessions do not outlive
+   * the room, and a transcript does.
+   */
   from: string;
   fromName: string;
   fromKind: PlayerKind;
   text: string;
   sentAt: number;
+}
+
+export interface HistoryGetPayload {
+  /** Which zone. Defaults to the one you are standing in. */
+  zoneId?: string;
+  /** Only messages before this time (ms since epoch), to page back. */
+  before?: number;
+  /** How many. Clamped to CHAT_LOG_LIMIT. */
+  n?: number;
+}
+
+export interface HistoryPayload {
+  zoneId: string;
+  /** Oldest first. */
+  messages: ChatBroadcastPayload[];
+  /** There is more before the first message here. */
+  hasMore: boolean;
 }
 
 export interface ErrorPayload {
@@ -100,7 +130,10 @@ export const CHAT_MAX_LENGTH = 280;
 /** How long a speech bubble stays up. */
 export const CHAT_BUBBLE_MS = 6_000;
 
-/** How many messages the nearby-chat panel keeps. Chat is ephemeral: no DB. */
+/**
+ * How many messages the nearby-chat panel keeps in memory, and the most one
+ * `history_get` returns. Everything older is on the server.
+ */
 export const CHAT_LOG_LIMIT = 50;
 
 // --- connection ------------------------------------------------------------

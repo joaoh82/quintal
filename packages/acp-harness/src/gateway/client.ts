@@ -6,6 +6,7 @@ import {
   type AgentMentionEvent,
   type AgentOccupant,
   type AgentHostReportPayload,
+  type AgentMessagesGetPayload,
   type AgentReadyPayload,
   type AgentResultPayload,
   type AgentRosterEvent,
@@ -204,8 +205,10 @@ export class GatewayClient {
     return this.#request<LookAroundResult>(AgentMessage.LookAround, {});
   }
 
-  messagesGet(scope: 'nearby' | 'zone', n: number): Promise<MessagesGetResult> {
-    return this.#request<MessagesGetResult>(AgentMessage.MessagesGet, { scope, n });
+  messagesGet(
+    query: Pick<AgentMessagesGetPayload, 'scope' | 'zoneId' | 'n' | 'before'>,
+  ): Promise<MessagesGetResult> {
+    return this.#request<MessagesGetResult>(AgentMessage.MessagesGet, query);
   }
 
   memoryGet(slug: string): Promise<MemoryGetResult> {

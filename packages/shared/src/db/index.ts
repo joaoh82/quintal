@@ -8,6 +8,7 @@ export * from './env.js';
 export * from './host-tokens.js';
 export * from './hosts.js';
 export * from './invites.js';
+export * from './messages.js';
 export * from './migrate.js';
 export * from './schema.js';
 export * from './settings.js';

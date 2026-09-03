@@ -9,9 +9,11 @@ import {
   AGENT_STATUS_MAX_LENGTH,
   AgentMessage,
   AgentServerMessage,
+  CHAT_LOG_LIMIT,
   CHAT_MAX_LENGTH,
   ClientMessage,
   DEFAULT_OFFICE_SETTINGS,
+  FLOOR_ZONE_ID,
   MESSAGES_GET_MAX,
   OfficePlayer,
   OfficeState,
@@ -50,6 +52,8 @@ import {
   type ChatSendPayload,
   type Direction,
   type ErrorPayload,
+  type HistoryGetPayload,
+  type HistoryPayload,
   type InputPayload,
   type LookAroundResult,
   type MapZone,
@@ -66,11 +70,18 @@ import {
 import {
   MemoryLimitError,
   MemorySlugError,
+  ensureZoneConversations,
   getAgentMemory,
   getDb,
   getOfficeSettings,
+  mentionsOf,
+  recentMessages,
+  recentMessagesNear,
+  recordMessage,
   setAgentMemory,
   type AgentIdentity,
+  type MessagePage,
+  type StoredMessage,
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
 import { tileBeside } from '@quintal/shared';
@@ -92,7 +103,6 @@ import {
 } from '../agents/gateway.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
-import { ChatLog, type RoomMessage } from './chat-log.js';
 
 interface OfficeRoomOptions {
   mapId?: unknown;
@@ -154,7 +164,14 @@ export class OfficeRoom extends Room<OfficeState> {
   #map!: OfficeMap;
   readonly #sims = new Map<string, PlayerSim>();
   readonly #chatLimiter = new ChatRateLimiter();
-  readonly #chatLog = new ChatLog();
+  /**
+   * zoneId -> conversation id, for every zone on this map in this office.
+   *
+   * A promise because it is filled from the database when the room opens and
+   * the first message can arrive before that returns. Anything that needs a
+   * conversation awaits it; nothing else waits on it.
+   */
+  #conversations: Promise<ReadonlyMap<string, string>> = Promise.resolve(new Map());
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
@@ -188,6 +205,8 @@ export class OfficeRoom extends Room<OfficeState> {
     state.mapId = mapId;
     this.state = state;
 
+    this.#conversations = this.#openConversations(mapId);
+
     this.setPatchRate(TICK_MS);
     this.setSimulationInterval((deltaMs) => this.#tick(deltaMs), TICK_MS);
 
@@ -203,6 +222,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.SetStatus, (client, payload: StatusPayload) =>
       this.#onStatus(client, payload?.status),
+    );
+    this.onMessage(ClientMessage.HistoryGet, (client, payload: HistoryGetPayload) =>
+      void this.#onHistoryGet(client, payload),
     );
 
     // --- agent protocol (docs/GATEWAY.md) ---
@@ -660,19 +682,9 @@ export class OfficeRoom extends Room<OfficeState> {
     const sentAt = Date.now();
     const tile = this.#tileOf(speaker);
     const radius = this.#settings.chatRadiusTiles;
-
-    const record: RoomMessage = {
-      from: sessionId,
-      fromUserId: speaker.userId,
-      fromName: speaker.name,
-      fromKind: speaker.kind,
-      text,
-      sentAt,
-      x: speaker.x,
-      y: speaker.y,
-      zoneId: zoneAt(this.#map, tile.x, tile.y)?.id ?? null,
-    };
-    this.#chatLog.push(record);
+    const zoneId = zoneAt(this.#map, tile.x, tile.y)?.id ?? FLOOR_ZONE_ID;
+    /** Stable ids of everyone this line addressed by name. */
+    const mentioned: string[] = [];
 
     const humanPayload: ChatBroadcastPayload = {
       from: sessionId,
@@ -729,7 +741,118 @@ export class OfficeRoom extends Room<OfficeState> {
       if (byName && !withinEarshot && listenerId !== sessionId) {
         this.#oweReply(listenerId, sessionId, sentAt);
       }
+      if (byName && listenerId !== sessionId) mentioned.push(listener.userId);
     }
+
+    // After delivery, not before: the people in the room should never wait on
+    // a disk. A write that fails is logged and the words were still heard.
+    void this.#keep(zoneId, {
+      fromId: speaker.userId,
+      fromKind: speaker.kind,
+      fromName: speaker.name,
+      text,
+      sentAt,
+      x: speaker.x,
+      y: speaker.y,
+      mentions: mentioned,
+    });
+  }
+
+  // --- history -------------------------------------------------------------
+
+  /**
+   * Open this office's transcript for every zone on the map.
+   *
+   * A room that cannot reach the database still opens — people can talk, they
+   * just are not being written down, and the log says so once rather than on
+   * every line.
+   */
+  async #openConversations(mapId: string): Promise<ReadonlyMap<string, string>> {
+    try {
+      return await ensureZoneConversations(getDb(), this.#workspaceId, mapId, this.#map.zones);
+    } catch (error: unknown) {
+      logger.error('[office] could not open conversations; chat will not be kept', error);
+      return new Map();
+    }
+  }
+
+  async #keep(zoneId: string, message: Omit<Parameters<typeof recordMessage>[1], 'conversationId'>): Promise<void> {
+    const conversationId = (await this.#conversations).get(zoneId);
+    if (!conversationId) return;
+    try {
+      await recordMessage(getDb(), { conversationId, ...message });
+    } catch (error: unknown) {
+      logger.error('[office] could not keep a message', error);
+    }
+  }
+
+  /** A zone id somebody sent, or the zone they stand in, or the floor. */
+  #zoneIdFor(player: OfficePlayer, requested: unknown): string | null {
+    if (typeof requested === 'string' && requested.length > 0) {
+      if (requested === FLOOR_ZONE_ID) return requested;
+      return this.#map.zones.some((zone) => zone.id === requested) ? requested : null;
+    }
+    const tile = this.#tileOf(player);
+    return zoneAt(this.#map, tile.x, tile.y)?.id ?? FLOOR_ZONE_ID;
+  }
+
+  /**
+   * What was said in a zone before somebody arrived.
+   *
+   * Any zone in the office, not only the one they stand in — a transcript is
+   * for the people who were not there. Requested by the client once it is
+   * listening, because a message sent from `onJoin` is sent to nobody.
+   */
+  async #onHistoryGet(client: Client, payload: HistoryGetPayload): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const zoneId = this.#zoneIdFor(player, payload?.zoneId);
+    if (zoneId === null) {
+      this.#sendError(client, 'invalid_message', 'No such zone.');
+      return;
+    }
+    const conversationId = (await this.#conversations).get(zoneId);
+    if (!conversationId) return;
+
+    const before = Number(payload?.before);
+    const limit = Math.min(Math.max(Number(payload?.n) || CHAT_LOG_LIMIT, 1), CHAT_LOG_LIMIT);
+    try {
+      const page = await recentMessages(getDb(), conversationId, {
+        workspaceId: this.#workspaceId,
+        limit,
+        ...(Number.isFinite(before) && before > 0 ? { before } : {}),
+      });
+      client.send(ServerMessage.History, {
+        zoneId,
+        hasMore: page.hasMore,
+        messages: page.messages.map((message) => ({
+          from: message.fromId,
+          fromName: message.fromName,
+          fromKind: message.fromKind,
+          text: message.text,
+          sentAt: message.sentAt,
+        })),
+      } satisfies HistoryPayload);
+    } catch (error: unknown) {
+      logger.error('[office] could not read history', error);
+    }
+  }
+
+  #toChatEvent(message: StoredMessage, listener: OfficePlayer): AgentChatEvent {
+    const distance =
+      message.x === null || message.y === null
+        ? 0
+        : Math.hypot(message.x - listener.x, message.y - listener.y) / this.#map.tileSize;
+    return {
+      from: message.fromId,
+      fromUserId: message.fromId,
+      fromName: message.fromName,
+      fromKind: message.fromKind,
+      text: message.text,
+      distance: round(distance),
+      sentAt: message.sentAt,
+    };
   }
 
   /** Record that `speaker` owes `listener` a reply they can actually hear. */
@@ -929,42 +1052,74 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#reply(client, payload?.requestId, result);
   }
 
-  #onAgentMessagesGet(client: Client, payload: AgentMessagesGetPayload): void {
+  /**
+   * Read what was said.
+   *
+   * This used to be limited to what the agent could plausibly have heard, on
+   * the grounds that an agent must not be a way to read the office from a
+   * corner of it. Now that a transcript is kept and any member can open any
+   * zone's, that limit protected nothing a person could not already do — so
+   * an agent reads by the same rule a person does. Private zones will gate
+   * both alike when they gate anything.
+   */
+  async #onAgentMessagesGet(client: Client, payload: AgentMessagesGetPayload): Promise<void> {
     const session = this.#agentSession(client);
     const player = this.state.players.get(client.sessionId);
     if (!session || !player) return;
 
-    const scope = payload?.scope === 'zone' ? 'zone' : 'nearby';
+    const scope =
+      payload?.scope === 'zone' || payload?.scope === 'mentions' ? payload.scope : 'nearby';
     const limit = Math.min(Math.max(Number(payload?.n) || MESSAGES_GET_MAX, 1), MESSAGES_GET_MAX);
+    const before = Number(payload?.before);
+    const paging = Number.isFinite(before) && before > 0 ? { before } : {};
     audit(session.identity.id, 'command.messages_get', { scope, n: limit });
     markSeen(session.identity.id);
 
-    const tile = this.#tileOf(player);
-    const myZone = zoneAt(this.#map, tile.x, tile.y)?.id ?? null;
-
-    // Only what this agent could plausibly have heard. An agent must not be a
-    // way to read the whole office from a corner of it.
-    const matches = this.#chatLog.recent((message) => {
-      if (scope === 'zone') return myZone !== null && message.zoneId === myZone;
-      return (
-        Math.hypot(message.x - player.x, message.y - player.y) / this.#map.tileSize <=
-        this.#settings.chatRadiusTiles
-      );
-    }, limit);
+    const db = getDb();
+    const workspaceId = this.#workspaceId;
+    let zoneId: string | null = null;
+    let page: MessagePage;
+    try {
+      if (scope === 'mentions') {
+        page = await mentionsOf(db, session.identity.id, { workspaceId, limit, ...paging });
+      } else if (scope === 'zone') {
+        zoneId = this.#zoneIdFor(player, payload?.zoneId);
+        if (zoneId === null) {
+          this.#replyError(client, payload?.requestId, {
+            code: 'not_found',
+            message: 'No such zone.',
+          });
+          return;
+        }
+        const conversationId = (await this.#conversations).get(zoneId);
+        page = conversationId
+          ? await recentMessages(db, conversationId, { workspaceId, limit, ...paging })
+          : { messages: [], hasMore: false };
+      } else {
+        page = await recentMessagesNear(db, {
+          workspaceId,
+          mapId: this.state.mapId,
+          x: player.x,
+          y: player.y,
+          radius: this.#settings.chatRadiusTiles * this.#map.tileSize,
+          limit,
+          ...paging,
+        });
+      }
+    } catch (error: unknown) {
+      logger.error('[office] could not read messages', error);
+      this.#replyError(client, payload?.requestId, {
+        code: 'unavailable',
+        message: 'Could not read messages.',
+      });
+      return;
+    }
 
     const result: MessagesGetResult = {
       scope,
-      messages: matches.map((message) => ({
-        from: message.from,
-        fromUserId: message.fromUserId,
-        fromName: message.fromName,
-        fromKind: message.fromKind,
-        text: message.text,
-        distance: round(
-          Math.hypot(message.x - player.x, message.y - player.y) / this.#map.tileSize,
-        ),
-        sentAt: message.sentAt,
-      })),
+      zoneId,
+      hasMore: page.hasMore,
+      messages: page.messages.map((message) => this.#toChatEvent(message, player)),
     };
     this.#reply(client, payload?.requestId, result);
   }
@@ -1202,7 +1357,8 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
-    this.#chatLog.forget(sessionId);
+    // Nothing about what they said is forgotten. It used to be: leaving the
+    // room erased your lines from everybody else's history.
   }
 
   #tileOf(player: OfficePlayer): TilePoint {

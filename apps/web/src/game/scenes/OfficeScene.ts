@@ -15,6 +15,7 @@ import {
   type Direction,
   type ErrorPayload,
   type GameBridge,
+  type HistoryPayload,
   type MapZone,
   type MoveIntent,
   type OfficeMap,
@@ -175,6 +176,13 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage(ServerMessage.Error, (error: ErrorPayload) => {
       this.#bridge.emit('notice', { code: error.code, message: error.message });
     });
+
+    room.onMessage(ServerMessage.History, (history: HistoryPayload) => {
+      this.#bridge.emit('history', history);
+    });
+    // Asked for here, after the handler exists, and not pushed by the server on
+    // join — a message sent before anybody is listening is sent to nobody.
+    room.send(ClientMessage.HistoryGet, {});
 
     // Schema callbacks go through a proxy in 0.16 rather than living on the
     // schema instances themselves.

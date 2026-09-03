@@ -135,6 +135,19 @@ export default function OfficeGame() {
       gameBridge.on('chat', (message) =>
         setMessages((prev) => [...prev, message].slice(-CHAT_LOG_LIMIT)),
       ),
+      // What was said before we were listening goes in front of what we have
+      // heard since. A line can be in both — said after we joined, before the
+      // page came back — and a message read from history carries a different
+      // `from` than the same message heard live, so identity is the words.
+      gameBridge.on('history', ({ messages: earlier }) =>
+        setMessages((prev) => {
+          const heard = new Set(prev.map((m) => `${m.sentAt} ${m.fromName} ${m.text}`));
+          const unseen = earlier.filter(
+            (m) => !heard.has(`${m.sentAt} ${m.fromName} ${m.text}`),
+          );
+          return [...unseen, ...prev].slice(-CHAT_LOG_LIMIT);
+        }),
+      ),
       gameBridge.on('connection', ({ status, detail }) => {
         setConnection(status);
         setConnectionDetail(detail ?? '');
