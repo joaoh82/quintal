@@ -73,6 +73,7 @@ import {
   type AgentIdentity,
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
+import { tileBeside } from '@quintal/shared';
 
 import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
 
@@ -495,6 +496,42 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /** Walk to the middle of a named zone. The agent-facing way to say "go here". */
+  /**
+   * Walk to whoever this names, stopping beside them.
+   *
+   * Resolved here because the office is the only thing that knows where people
+   * are. Matching is by display name and case-insensitive, the same rule
+   * `@mentions` use — an agent told "come to Dpr010" should not have to care
+   * about capitalisation any more than a person does.
+   *
+   * Tiles already claimed by somebody else are excluded, so two agents called
+   * at once do not both aim at the same square.
+   */
+  walkToPerson(sessionId: string, name: string): boolean {
+    const wanted = name.trim().toLowerCase();
+    if (wanted.length === 0) return false;
+
+    let target: { x: number; y: number } | null = null;
+    const taken = new Set<string>();
+    for (const [id, player] of this.state.players) {
+      const tile = {
+        x: Math.floor(player.x / this.#map.tileSize),
+        y: Math.floor(player.y / this.#map.tileSize),
+      };
+      taken.add(`${tile.x},${tile.y}`);
+      // Not the caller itself: an agent asked to come to somebody with its own
+      // name would otherwise route to where it already stands and look stuck.
+      if (id !== sessionId && player.name.trim().toLowerCase() === wanted) {
+        target = tile;
+      }
+    }
+    if (!target) return false;
+
+    const beside = tileBeside(this.#map, target.x, target.y, taken);
+    if (!beside) return false;
+    return this.walkTo(sessionId, beside.x, beside.y);
+  }
+
   walkToZone(sessionId: string, zoneId: string): boolean {
     const zone = this.#map.zones.find((candidate) => candidate.id === zoneId);
     if (!zone) return false;
@@ -794,14 +831,18 @@ export class OfficeRoom extends Room<OfficeState> {
     const routed =
       typeof payload?.zoneId === 'string'
         ? this.walkToZone(client.sessionId, payload.zoneId)
-        : this.walkTo(client.sessionId, Number(payload?.x), Number(payload?.y));
+        : typeof payload?.person === 'string'
+          ? this.walkToPerson(client.sessionId, payload.person)
+          : this.walkTo(client.sessionId, Number(payload?.x), Number(payload?.y));
 
     if (!routed) {
       this.#denyAgent(
         client,
         session,
         'unroutable',
-        'No route to that destination, or it does not exist.',
+        typeof payload?.person === 'string'
+          ? `Nobody called "${payload.person}" is here, or there is nowhere to stand beside them.`
+          : 'No route to that destination, or it does not exist.',
       );
     }
   }

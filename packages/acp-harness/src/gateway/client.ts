@@ -185,6 +185,11 @@ export class GatewayClient {
     this.#room?.send(AgentMessage.MoveTo, { zoneId });
   }
 
+  /** Walk to whoever this names. The office resolves it and picks the tile. */
+  moveToPerson(person: string): void {
+    this.#room?.send(AgentMessage.MoveTo, { person });
+  }
+
   hostReport(payload: AgentHostReportPayload): void {
     this.#room?.send(AgentMessage.HostReport, payload);
   }
@@ -272,6 +277,7 @@ export type Gateway = Pick<
   | 'setStatus'
   | 'hostReport'
   | 'moveToZone'
+  | 'moveToPerson'
   | 'lookAround'
   | 'messagesGet'
   | 'memoryGet'

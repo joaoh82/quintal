@@ -94,6 +94,53 @@ export function isWalkable(map: OfficeMap, x: number, y: number): boolean {
   return map.walkable[y * map.width + x] === true;
 }
 
+/**
+ * A walkable tile to stand on when you have been asked to come to somebody.
+ *
+ * Not their tile — two people do not share one, and an agent that routed onto
+ * the person who called it would either fail to arrive or look like it had
+ * walked through them. This returns the nearest free tile *beside* them.
+ *
+ * Searched in rings outward, so the answer is the closest one rather than
+ * whichever direction happens to be checked first: being asked to come here and
+ * arriving four tiles away because north was scanned before south is the kind
+ * of thing nobody reports as a bug and everybody notices.
+ *
+ * `occupied` keeps two agents from being sent to the same tile when both are
+ * called at once. Null when there is genuinely nowhere to stand — a person
+ * boxed into a corner — which the caller should report rather than paper over.
+ */
+export function tileBeside(
+  map: OfficeMap,
+  x: number,
+  y: number,
+  occupied: ReadonlySet<string> = new Set(),
+  maxRings = 4,
+): { x: number; y: number } | null {
+  for (let ring = 1; ring <= maxRings; ring += 1) {
+    const candidates: Array<{ x: number; y: number }> = [];
+    for (let dx = -ring; dx <= ring; dx += 1) {
+      for (let dy = -ring; dy <= ring; dy += 1) {
+        // Only the edge of this ring; the inside was covered by earlier ones.
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        candidates.push({ x: x + dx, y: y + dy });
+      }
+    }
+    // Closest first within the ring, so a diagonal never beats an orthogonal
+    // neighbour at the same ring distance.
+    candidates.sort(
+      (a, b) =>
+        (a.x - x) ** 2 + (a.y - y) ** 2 - ((b.x - x) ** 2 + (b.y - y) ** 2),
+    );
+    for (const tile of candidates) {
+      if (!isWalkable(map, tile.x, tile.y)) continue;
+      if (occupied.has(`${tile.x},${tile.y}`)) continue;
+      return tile;
+    }
+  }
+  return null;
+}
+
 /** First spawn point of a kind, falling back to the middle of the map. */
 export function spawnFor(map: OfficeMap, kind: PlayerKind): SpawnPoint {
   const found = map.spawns.find((spawn) => spawn.kind === kind);
