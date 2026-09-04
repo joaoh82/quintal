@@ -45,3 +45,34 @@ first block (tile indices 23–26, 50–53, 77–80).
 `packages/shared/maps/hq.json` is Quintal's own work (AGPL-3.0, like the rest of
 the repo), authored against the tileset above. It's a standard
 [Tiled](https://www.mapeditor.org/) map — open it in Tiled and edit away.
+
+## Emotes
+
+**`emotes/kenney-emotes-32.png`**
+
+- Source: [Emotes Pack](https://kenney.nl/assets/emotes-pack) v1.0 by
+  [Kenney](https://kenney.nl) (2018)
+- License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+
+**How this file was derived.** The pack ships 30 balloons in 8 styles as
+16×16 PNGs. We took **Pixel / Style 1** (the square balloon with a tail — the
+one that sits naturally over a 32px sprite), picked the 21 we use, upscaled each
+×2 with **nearest-neighbour** to 32×32, and packed them into a 7×3 sheet. The
+order on the sheet is the order in `EMOTE_FRAMES` in
+`packages/shared/src/emotes.ts`; change one and regenerate the other.
+
+To reproduce, with the pack unzipped at `assets/kenney_emotes-pack/`:
+
+```python
+from PIL import Image
+src = "assets/kenney_emotes-pack/PNG/Pixel/Style 1"
+order = ["dots1","dots2","dots3","idea","question","cross","alert","sleeps",
+         "faceHappy","faceSad","faceAngry","laugh","heart","heartBroken","swirl",
+         "star","music","drop","cash","exclamation","cloud"]
+cols, size = 7, 32
+sheet = Image.new("RGBA", (cols * size, ((len(order) + cols - 1) // cols) * size))
+for i, name in enumerate(order):
+    im = Image.open(f"{src}/emote_{name}.png").convert("RGBA").resize((size, size), Image.NEAREST)
+    sheet.paste(im, ((i % cols) * size, (i // cols) * size))
+sheet.save("apps/web/public/assets/emotes/kenney-emotes-32.png")
+```

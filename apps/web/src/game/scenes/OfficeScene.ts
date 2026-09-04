@@ -48,6 +48,7 @@ import {
   CAMERA_LERP,
   CAMERA_ZOOM,
   CHARACTER_FRAMES,
+  EMOTE_SIZE,
   DEBUG_COLORS,
   PATHS,
   RECONCILE_LERP,
@@ -115,6 +116,10 @@ export class OfficeScene extends Phaser.Scene {
   preload(): void {
     this.load.image(ASSETS.tileset, PATHS.tileset);
     this.load.tilemapTiledJSON(ASSETS.map, PATHS.map);
+    this.load.spritesheet(ASSETS.emotes, PATHS.emotes, {
+      frameWidth: EMOTE_SIZE,
+      frameHeight: EMOTE_SIZE,
+    });
     // The character shares the tileset image; load it again as a spritesheet so
     // frame indices line up with the sheet's tile indices.
     this.load.spritesheet(`${ASSETS.tileset}-frames`, PATHS.tileset, {
@@ -169,6 +174,7 @@ export class OfficeScene extends Phaser.Scene {
     for (const avatar of this.#avatars.values()) {
       if (avatar !== this.#self) avatar.interpolate(now);
       avatar.tickBubble(now);
+      avatar.tickEmote(now);
     }
 
     this.#publishTile();

@@ -46,3 +46,6 @@ apps/desktop/src-tauri/gen/schemas/
 # The harness compiled into the desktop bundle. Built per target triple by
 # scripts/build-harness-sidecar.mjs; not something to keep in git.
 apps/desktop/src-tauri/binaries/
+
+# Raw asset packs dropped at the repo root for derivation — see apps/web/public/assets/CREDITS.md
+/assets/

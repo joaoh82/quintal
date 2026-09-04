@@ -55,6 +55,7 @@ function fakeGateway(handlers: Handlers): Gateway {
     leave: async () => {},
     say: () => {},
     setStatus: () => {},
+    emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
     lookAround: async () => ({}),

@@ -47,6 +47,7 @@ function fakeGateway(handlers: Handlers, statuses: string[]): Gateway {
     setStatus: (status: string) => {
       statuses.push(status);
     },
+    emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
     lookAround: async () => ({}),

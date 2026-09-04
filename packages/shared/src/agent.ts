@@ -127,6 +127,7 @@ export const AGENT_EVENT_KINDS = [
   'command.say',
   'command.move_to',
   'command.set_status',
+  'command.emote',
   'command.look_around',
   'command.messages_get',
   'command.memory_get',

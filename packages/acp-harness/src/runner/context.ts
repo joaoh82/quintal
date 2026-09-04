@@ -136,7 +136,7 @@ export function buildEnvelope(input: EnvelopeInput): string {
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: look_around, who_is_here, messages_get, memory_get, memory_set.',
+  'Tools available now: look_around, who_is_here, messages_get, memory_get, memory_set, emote.',
   'When someone asks you to remember something, or tells you how they want you to',
   'work from now on, write it to core memory with memory_set — agreeing in',
   'conversation does not persist it, and it will be gone the next time you start.',

@@ -2,12 +2,19 @@
 export const ASSETS = {
   tileset: 'kenney-rpg-urban-32',
   map: 'hq',
+  emotes: 'kenney-emotes-32',
 } as const;
 
 export const PATHS = {
   tileset: '/assets/tilesets/kenney-rpg-urban-32.png',
   map: '/assets/maps/hq.json',
+  emotes: '/assets/emotes/kenney-emotes-32.png',
 } as const;
+
+/** Emote sheet frames are this big; the frame index comes from `emoteFrames`. */
+export const EMOTE_SIZE = 32;
+/** How fast the thinking dots cycle. */
+export const EMOTE_FRAME_MS = 350;
 
 // Walking speed lives in `@quintal/shared` (movement.ts): the server simulates
 // with it and the client predicts with it, so there must be exactly one copy.

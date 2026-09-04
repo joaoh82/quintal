@@ -1,13 +1,15 @@
 import {
   CHAT_BUBBLE_MS,
   INTERPOLATION_DELAY_MS,
+  emoteFrames,
+  isEmote,
   type Direction,
   type OfficePlayer,
   type PlayerKind,
 } from '@quintal/shared';
 import * as Phaser from 'phaser';
 
-import { ASSETS, CHARACTER_FRAMES } from './constants';
+import { ASSETS, CHARACTER_FRAMES, EMOTE_FRAME_MS } from './constants';
 
 /** One position the server told us about, with the time we heard it. */
 interface Snapshot {
@@ -90,6 +92,13 @@ export class Avatar {
   readonly #statusLine: Phaser.GameObjects.Text | null = null;
   #bubble: Phaser.GameObjects.Text | null = null;
   #bubbleUntil = 0;
+  /** Agents only: the balloon over the head, and what it is showing. */
+  #emoteSprite: Phaser.GameObjects.Sprite | null = null;
+  #emote = '';
+  #emoteUntil = 0;
+  #emoteFrames: number[] = [];
+  #emoteIndex = 0;
+  #emoteFrameAt = 0;
 
   readonly #snapshots: Snapshot[] = [];
   #facing: Direction = 'down';
@@ -142,6 +151,14 @@ export class Avatar {
         .setOrigin(0.5, 1)
         .setDepth(19)
         .setVisible(player.status.length > 0);
+      // The balloon: up and to the right of the nameplate, above a speech
+      // bubble, so a laugh and the line that caused it can both be read.
+      this.#emoteSprite = scene.add
+        .sprite(player.x + 16, player.y - 40, ASSETS.emotes, 0)
+        .setOrigin(0.5, 1)
+        .setDepth(31)
+        .setVisible(false);
+      this.setEmote(player.emote, player.emoteUntil);
     }
 
     this.#snapshots.push({
@@ -183,6 +200,44 @@ export class Avatar {
       this.#label.setText(this.#labelText());
       this.#statusLine?.setText(this.#status).setVisible(this.#status.length > 0);
     }
+    if (this.#emote !== player.emote || this.#emoteUntil !== player.emoteUntil) {
+      this.setEmote(player.emote, player.emoteUntil);
+    }
+  }
+
+  /**
+   * Show a balloon, or none. `until` is ms since epoch, 0 for "until
+   * replaced". The office brings a timed balloon down on its own; the client
+   * also hides it on time so a late patch does not leave it up a second long.
+   */
+  setEmote(emote: string, until: number): void {
+    this.#emote = emote;
+    this.#emoteUntil = until;
+    if (!this.#emoteSprite) return;
+    this.#emoteFrames = isEmote(emote) ? emoteFrames(emote) : [];
+    this.#emoteIndex = 0;
+    const first = this.#emoteFrames[0];
+    if (first === undefined) {
+      this.#emoteSprite.setVisible(false);
+      return;
+    }
+    this.#emoteSprite.setFrame(first).setVisible(true);
+  }
+
+  /** Advance a multi-frame balloon, and drop a timed one when its time is up. */
+  tickEmote(now: number = performance.now()): void {
+    const sprite = this.#emoteSprite;
+    if (!sprite || !sprite.visible) return;
+    if (this.#emoteUntil !== 0 && Date.now() >= this.#emoteUntil) {
+      sprite.setVisible(false);
+      return;
+    }
+    if (this.#emoteFrames.length < 2) return;
+    if (now - this.#emoteFrameAt < EMOTE_FRAME_MS) return;
+    this.#emoteFrameAt = now;
+    this.#emoteIndex = (this.#emoteIndex + 1) % this.#emoteFrames.length;
+    const frame = this.#emoteFrames[this.#emoteIndex];
+    if (frame !== undefined) sprite.setFrame(frame);
   }
 
   /** Move a remote avatar to where it was `INTERPOLATION_DELAY_MS` ago. */
@@ -217,6 +272,7 @@ export class Avatar {
     this.#ring?.setPosition(x, y + 6);
     this.#statusLine?.setPosition(x, y - 12);
     if (this.#bubble) this.#bubble.setPosition(x, y - 36);
+    this.#emoteSprite?.setPosition(x + 16, y - 40);
   }
 
   setFacing(dir: Direction, moving: boolean): void {
@@ -255,6 +311,7 @@ export class Avatar {
     this.#ring?.destroy();
     this.#statusLine?.destroy();
     this.#bubble?.destroy();
+    this.#emoteSprite?.destroy();
   }
 
   /**

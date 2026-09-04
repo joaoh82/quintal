@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 
-import type { AgentZone } from '@quintal/shared';
+import { CHOSEN_EMOTES, type AgentZone } from '@quintal/shared';
 
 import type { Gateway } from '../gateway/client.js';
 
@@ -213,6 +213,16 @@ async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
         String(call.args.slug ?? ''),
         String(call.args.content ?? ''),
       );
+
+    case 'emote': {
+      const emote = String(call.args.emote ?? '');
+      if (!(CHOSEN_EMOTES as readonly string[]).includes(emote)) {
+        throw new Error(`"${emote}" is not an emote you can choose`);
+      }
+      // No ttl: the office's default for a reaction.
+      gateway.emote(emote);
+      return { ok: true };
+    }
 
     default:
       throw new Error(`unknown tool "${call.tool}"`);

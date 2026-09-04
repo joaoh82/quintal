@@ -53,6 +53,13 @@ export class OfficePlayer extends Schema {
   /** For agents: comma-joined scopes, so the profile card can show them. */
   scopes = '';
   /**
+   * The balloon over the head — an emote id from the catalogue, or empty.
+   * Server-owned: an agent asks, the office validates, everybody draws it.
+   */
+  emote = '';
+  /** When the balloon comes down, ms since epoch. 0 means "when cleared". */
+  emoteUntil = 0;
+  /**
    * For humans: arrived through a guest link rather than with their own
    * identity. Shown as a badge, because "who is this person and should they be
    * hearing this" is a question the room has to answer visually — the same
@@ -86,6 +93,8 @@ defineTypes(OfficePlayer, {
   ownerName: 'string',
   ownerUserId: 'string',
   scopes: 'string',
+  emote: 'string',
+  emoteUntil: 'number',
   isGuest: 'boolean',
   description: 'string',
   pubkey: 'string',

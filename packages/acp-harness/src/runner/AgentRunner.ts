@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
 import {
+  emoteForStatus,
   isAddressed,
   parseAgentCommand,
   type RuntimeStatus,
@@ -112,6 +113,8 @@ export class AgentRunner {
    * launch, which is the only way the model changes.
    */
   #modelRefusal: string | null = null;
+  /** The balloon last asked for, so the same one is not sent twice. */
+  #emoteLine = '';
 
   #busy = false;
   #currentScope: string | null = null;
@@ -986,6 +989,20 @@ export class AgentRunner {
     if (this.#statusLine === effective) return;
     this.#statusLine = effective;
     this.#gateway.setStatus(effective === 'idle' ? '' : effective);
+    // The same state, as a balloon. Derived here so every status the runner
+    // narrates gets its glyph without anybody remembering to ask for one.
+    this.#setEmote(emoteForStatus(effective));
+  }
+
+  /**
+   * A balloon that reflects a state stays up until the state changes — ttl 0
+   * — and comes down by being replaced with nothing. Deduplicated so a status
+   * that flips between two tool lines does not re-send the same lightbulb.
+   */
+  #setEmote(emote: string): void {
+    if (this.#emoteLine === emote) return;
+    this.#emoteLine = emote;
+    this.#gateway.emote(emote, 0);
   }
 
   #setState(state: RunnerState): void {
