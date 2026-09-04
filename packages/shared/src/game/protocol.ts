@@ -77,7 +77,11 @@ export interface ChatBroadcastPayload {
 }
 
 export interface HistoryGetPayload {
-  /** Which zone. Defaults to the one you are standing in. */
+  /**
+   * A zone's transcript. Omit it for what you could have heard from where
+   * you stand — the nearby-chat box is an earshot box, and on arrival it
+   * should hold what earshot would have held, whichever zones that crosses.
+   */
   zoneId?: string;
   /** Only messages before this time (ms since epoch), to page back. */
   before?: number;
@@ -86,7 +90,8 @@ export interface HistoryGetPayload {
 }
 
 export interface HistoryPayload {
-  zoneId: string;
+  /** The zone read, or null for an earshot read. */
+  zoneId: string | null;
   /** Oldest first. */
   messages: ChatBroadcastPayload[];
   /** There is more before the first message here. */

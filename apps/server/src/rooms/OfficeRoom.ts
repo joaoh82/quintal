@@ -797,32 +797,50 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
-   * What was said in a zone before somebody arrived.
+   * What was said before somebody arrived.
    *
-   * Any zone in the office, not only the one they stand in — a transcript is
-   * for the people who were not there. Requested by the client once it is
-   * listening, because a message sent from `onJoin` is sent to nobody.
+   * Two reads. With no zone named: what they could have heard from where they
+   * stand, across zones — the first version read the transcript of the zone
+   * they spawned in, which is the lobby, and the lobby is where nobody talks.
+   * The box in the corner is an earshot box, and on arrival it should hold
+   * what earshot would have held. With a zone named: that zone's transcript,
+   * any zone in the office — a transcript is for the people who were not
+   * there. Requested by the client once it is listening, because a message
+   * sent from `onJoin` is sent to nobody.
    */
   async #onHistoryGet(client: Client, payload: HistoryGetPayload): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
-    const zoneId = this.#zoneIdFor(player, payload?.zoneId);
-    if (zoneId === null) {
-      this.#sendError(client, 'invalid_message', 'No such zone.');
-      return;
-    }
-    const conversationId = (await this.#conversations).get(zoneId);
-    if (!conversationId) return;
-
     const before = Number(payload?.before);
     const limit = Math.min(Math.max(Number(payload?.n) || CHAT_LOG_LIMIT, 1), CHAT_LOG_LIMIT);
+    const paging = Number.isFinite(before) && before > 0 ? { before } : {};
+    const workspaceId = this.#workspaceId;
+
+    let zoneId: string | null = null;
+    let page: MessagePage;
     try {
-      const page = await recentMessages(getDb(), conversationId, {
-        workspaceId: this.#workspaceId,
-        limit,
-        ...(Number.isFinite(before) && before > 0 ? { before } : {}),
-      });
+      if (typeof payload?.zoneId === 'string' && payload.zoneId.length > 0) {
+        zoneId = this.#zoneIdFor(player, payload.zoneId);
+        if (zoneId === null) {
+          this.#sendError(client, 'invalid_message', 'No such zone.');
+          return;
+        }
+        const conversationId = (await this.#conversations).get(zoneId);
+        page = conversationId
+          ? await recentMessages(getDb(), conversationId, { workspaceId, limit, ...paging })
+          : { messages: [], hasMore: false };
+      } else {
+        page = await recentMessagesNear(getDb(), {
+          workspaceId,
+          mapId: this.state.mapId,
+          x: player.x,
+          y: player.y,
+          radius: this.#settings.chatRadiusTiles * this.#map.tileSize,
+          limit,
+          ...paging,
+        });
+      }
       client.send(ServerMessage.History, {
         zoneId,
         hasMore: page.hasMore,
