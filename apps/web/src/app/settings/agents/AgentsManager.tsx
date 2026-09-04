@@ -78,13 +78,18 @@ function ModelSelect({
   const models = status?.models ?? null;
   const known = models !== null && models.choices.some((choice) => choice.id === value);
   const runtime = runtimeById(runtimeId);
+  // A choice already saved that the list does not (yet) contain stays
+  // selectable, so saving the row for another reason does not throw it away.
+  // The action accepts it as unchanged; only a *new* choice must be on the
+  // machine's list.
+  const keep = value.length > 0 && !known;
 
   return (
     <select
       name="modelId"
-      value={known ? value : ''}
+      value={known || keep ? value : ''}
       onChange={(event) => onChange(event.target.value)}
-      disabled={hostLabel.length === 0 || models === null}
+      disabled={hostLabel.length === 0 || (models === null && !keep)}
       title={
         hostLabel.length === 0
           ? 'Pick a machine first'
@@ -107,6 +112,12 @@ function ModelSelect({
             : `default`
           : `default${models.current ? ` (${models.choices.find((c) => c.id === models.current)?.label ?? models.current})` : ''}`}
       </option>
+      {keep ? (
+        <option value={value}>
+          {value}
+          {models === null ? ' — not on this machine’s list' : ' — not verified'}
+        </option>
+      ) : null}
       {models?.choices.map((choice) => (
         <option key={choice.id} value={choice.id}>
           {choice.label}

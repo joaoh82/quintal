@@ -108,7 +108,9 @@ export const PROBE_TIMEOUT_MS = 25_000;
  * model option is reported as "no choice", which is true as far as the
  * office is concerned.
  */
-export async function probeModels(command: string[]): Promise<RuntimeModels | null> {
+export async function probeModels(
+  command: string[],
+): Promise<RuntimeModels | null | undefined> {
   const cwd = mkdtempSync(join(tmpdir(), 'quintal-probe-'));
   const proc = new AgentProcess({
     command,
@@ -117,21 +119,25 @@ export async function probeModels(command: string[]): Promise<RuntimeModels | nu
     onPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
   });
 
-  const attempt = (async () => {
+  // Three answers, kept apart. A list: it offers these. Null: it answered and
+  // offers no choice. Undefined: it never answered — a cold `npx` on a slow
+  // network, a crash — and "not asked" is the honest report, so the office
+  // keeps waiting rather than showing "no choice" for a runtime that has one.
+  const attempt = (async (): Promise<RuntimeModels | null | undefined> => {
     await proc.start();
     const session = await proc.newSession({ cwd, mcpServers: [] } as schema.NewSessionRequest);
     return modelOption((session as { configOptions?: unknown }).configOptions);
-  })();
+  })().catch((): undefined => undefined);
+  // The catch above also keeps a rejection that lands *after* the deadline
+  // won the race from surfacing as unhandled on the host process.
 
   let timer: NodeJS.Timeout | undefined;
-  const deadline = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
+  const deadline = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), PROBE_TIMEOUT_MS);
   });
 
   try {
     return await Promise.race([attempt, deadline]);
-  } catch {
-    return null;
   } finally {
     clearTimeout(timer);
     proc.stop();

@@ -104,6 +104,14 @@ export class AgentRunner {
   readonly #history = new Map<string, AgentChatEvent[]>();
   /** channel id -> what it is, from every channel line seen, for naming a scope. */
   readonly #channelRefs = new Map<string, ChannelRef>();
+  /**
+   * Set when the runtime did not offer the model the owner chose. A standing
+   * state, not a moment: it holds the nameplate against the idle reset every
+   * turn ends with, and stops each new message opening another session that
+   * would only be refused again. Cleared by a restart with a different
+   * launch, which is the only way the model changes.
+   */
+  #modelRefusal: string | null = null;
 
   #busy = false;
   #currentScope: string | null = null;
@@ -672,6 +680,11 @@ export class AgentRunner {
     const existing = this.#sessions.get(scope);
     if (existing) return existing.sessionId;
 
+    // Already refused once: the runtime's list does not change between
+    // messages, and opening a session per message to be told so again would
+    // pile up abandoned sessions in the agent process.
+    if (this.#modelRefusal !== null) throw new Error(this.#modelRefusal);
+
     // Join a creation already under way rather than starting a second one.
     const inflight = this.#creating.get(scope);
     if (inflight) return inflight;
@@ -732,11 +745,15 @@ export class AgentRunner {
 
     const choice = pickModel((created as { configOptions?: unknown }).configOptions, wanted);
     if (!choice) {
-      this.#setStatus(`no model "${wanted}" here`);
+      this.#modelRefusal = `no model "${wanted}" here`;
+      this.#setStatus(this.#modelRefusal);
       this.#log(
         'error',
         `the office asked for model "${wanted}", which ${this.config.harness} did not offer — refusing to run on a different one`,
       );
+      // The session that was opened to find this out is not kept; nothing
+      // will be said in it.
+      proc.cancel(created.sessionId);
       throw new Error(`model "${wanted}" is not offered by ${this.config.harness}`);
     }
 
@@ -746,6 +763,7 @@ export class AgentRunner {
       type: 'id',
       value: choice.value,
     } as schema.SetSessionConfigOptionRequest);
+    this.#modelRefusal = null;
     this.#log('info', `model set to ${wanted}`);
   }
 
@@ -960,9 +978,14 @@ export class AgentRunner {
   }
 
   #setStatus(status: string): void {
-    if (this.#statusLine === status) return;
-    this.#statusLine = status;
-    this.#gateway.setStatus(status === 'idle' ? '' : status);
+    // A refusal outranks idle. Every turn ends by resetting to idle, and a
+    // refused turn ending that way would show a plain idle agent that
+    // silently never answers — the reason it will not is the one line an
+    // owner needs to read on the nameplate.
+    const effective = status === 'idle' && this.#modelRefusal !== null ? this.#modelRefusal : status;
+    if (this.#statusLine === effective) return;
+    this.#statusLine = effective;
+    this.#gateway.setStatus(effective === 'idle' ? '' : effective);
   }
 
   #setState(state: RunnerState): void {

@@ -170,7 +170,10 @@ export class Supervisor {
           const spec = runtimeById(status.id);
           const command = spec ? acpCommandFor(spec) : null;
           if (!command) return status;
-          return { ...status, models: await probeModels(command) };
+          const models = await probeModels(command);
+          // A probe that never answered leaves the key off: "not asked" is
+          // what the office should show, not "offers no choice".
+          return models === undefined ? status : { ...status, models };
         }),
       );
       const stillLive = runners.find((runner) => runner.connected);

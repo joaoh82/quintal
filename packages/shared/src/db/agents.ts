@@ -533,7 +533,10 @@ export async function setAgentLaunch(
             hostLabel: launch.hostLabel,
             modelId: launch.modelId ? launch.modelId.slice(0, 128) : null,
           }
-        : { hostLabel: null },
+        : // Unassigning keeps runtime and repo so re-enabling is one field, but
+          // not the model: it was chosen for a machine, and the next machine
+          // may not offer it.
+          { hostLabel: null, modelId: null },
     )
     .where(eq(agents.id, agentId));
 }

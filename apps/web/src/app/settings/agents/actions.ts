@@ -79,9 +79,15 @@ async function modelFor(
   hostLabel: string,
   runtimeId: string,
   raw: FormDataEntryValue | null,
+  /** What the agent already had. Keeping it needs no report; only a change does. */
+  current: string | null = null,
 ): Promise<{ modelId: string | null } | { error: string }> {
   const modelId = String(raw ?? '').trim();
   if (modelId.length === 0) return { modelId: null };
+  // Saving the row for another reason — a repo, a machine — must not cost the
+  // owner a choice they already made, even while the machine has not reported
+  // its list yet. Re-choosing the same model is not a new claim about it.
+  if (modelId === current) return { modelId };
 
   const host = (await listHostsForWorkspace(db, workspaceId)).find(
     (row) => row.label === hostLabel,
@@ -366,7 +372,16 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
     throw new Error('Say which repo it works in, or * for all of them.');
   }
 
-  const model = await modelFor(db, agent.workspaceId, hostLabel, runtimeId, formData.get('modelId'));
+  const model = await modelFor(
+    db,
+    agent.workspaceId,
+    hostLabel,
+    runtimeId,
+    formData.get('modelId'),
+    // Only a choice made for the same machine and runtime carries over: a
+    // model id is meaningful to one runtime on one machine.
+    agent.hostLabel === hostLabel && agent.runtimeId === runtimeId ? agent.modelId : null,
+  );
   if ('error' in model) throw new Error(model.error);
 
   await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel, modelId: model.modelId });

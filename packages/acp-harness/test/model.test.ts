@@ -130,7 +130,7 @@ describe('running on the chosen model', () => {
       sentAt: Date.now(),
       distance: 1,
     });
-    return { record, statuses };
+    return { record, statuses, handlers };
   }
 
   it('sets the model after the session opens and before the first prompt', async () => {
@@ -154,17 +154,38 @@ describe('running on the chosen model', () => {
     assert.ok(!requests(record).some((r) => r.method === 'session/set_config_option'));
   });
 
-  it('refuses to run on a model it was not offered, and says so', async () => {
-    const { record, statuses } = await start('sonnet', 'opus');
+  it('refuses to run on a model it was not offered, and keeps saying so', async () => {
+    const { record, statuses, handlers } = await start('sonnet', 'opus');
     await settle();
 
     assert.ok(
       !requests(record).some((r) => r.method === 'session/prompt'),
       'no turn was paid for on the wrong model',
     );
+    // Not merely said at some point: still on the nameplate after the turn
+    // ended and the usual reset to idle ran. That reset is where the first
+    // version lost it, and an idle agent that never answers explains nothing.
     assert.ok(
-      statuses.some((status) => status.includes('opus')),
-      `the status line names the missing model: ${JSON.stringify(statuses)}`,
+      (statuses.at(-1) ?? '').includes('opus'),
+      `the status line still names the missing model: ${JSON.stringify(statuses)}`,
     );
+
+    // A second message must not open a second session to be refused again.
+    const sessions = requests(record).filter((r) => r.method === 'session/new').length;
+    handlers.chat?.({
+      text: 'Bob, still there?',
+      fromUserId: 'user-1',
+      fromName: 'Josh',
+      fromKind: 'human',
+      sentAt: Date.now() + 1,
+      distance: 1,
+    });
+    await settle();
+    assert.equal(
+      requests(record).filter((r) => r.method === 'session/new').length,
+      sessions,
+      'the refusal is remembered, not rediscovered per message',
+    );
+    assert.ok((statuses.at(-1) ?? '').includes('opus'), 'and the nameplate still says why');
   });
 });
