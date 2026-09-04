@@ -8,6 +8,7 @@ import {
   commandQueryAt,
   mentionQueryAt,
   parseAgentCommand,
+  channelLabel,
   type ChannelRef,
   type ChatBroadcastPayload,
   type RosterEntry,
@@ -213,9 +214,9 @@ export function ChatPanel({
               aria-selected={active?.id === channel.id}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => onSelectChannel(channel.id)}
-              className={`rounded px-1.5 py-0.5 whitespace-nowrap ${active?.id === channel.id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}
+              className={`rounded px-1.5 py-0.5 whitespace-nowrap ${active?.id === channel.id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'} ${channel.kind === 'dm' ? 'italic' : ''}`}
             >
-              #{channel.slug}
+              {channelLabel(channel)}
             </button>
           ))}
         </div>
@@ -226,9 +227,11 @@ export function ChatPanel({
       >
         {messages.length === 0 ? (
           <p className="text-[11px] text-white/40">
-            {active
-              ? `Nothing in #${active.slug} yet. Enter to post; every member reads it.`
-              : 'Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.'}
+            {active?.kind === 'dm'
+              ? `Nothing between you and ${active.name} yet. Only the two of you read this.`
+              : active
+                ? `Nothing in ${channelLabel(active)} yet. Enter to post; every member reads it.`
+                : 'Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.'}
           </p>
         ) : (
           messages.map((message) => (
@@ -312,9 +315,11 @@ export function ChatPanel({
         maxLength={CHAT_MAX_LENGTH}
         placeholder={
           focused
-            ? active
-              ? `Post in #${active.slug} — Esc to walk`
-              : 'Say something — Esc to walk'
+            ? active?.kind === 'dm'
+              ? `Message ${active.name} — Esc to walk`
+              : active
+                ? `Post in ${channelLabel(active)} — Esc to walk`
+                : 'Say something — Esc to walk'
             : 'Enter to chat'
         }
         onChange={(event) => {

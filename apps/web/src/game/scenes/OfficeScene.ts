@@ -16,6 +16,8 @@ import {
   type ChannelsPayload,
   type ChatBroadcastPayload,
   type Direction,
+  type DmOpenPayload,
+  type DmOpenedPayload,
   type ErrorPayload,
   type GameBridge,
   type HistoryGetPayload,
@@ -190,6 +192,9 @@ export class OfficeScene extends Phaser.Scene {
     });
     room.onMessage(ServerMessage.Channels, (channels: ChannelsPayload) => {
       this.#bridge.emit('channels', channels);
+    });
+    room.onMessage(ServerMessage.DmOpened, (opened: DmOpenedPayload) => {
+      this.#bridge.emit('dmOpened', opened);
     });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
@@ -427,6 +432,11 @@ export class OfficeScene extends Phaser.Scene {
     this.#room.send(ClientMessage.HistoryGet, { channelId } satisfies HistoryGetPayload);
   }
 
+  /** Open a direct message with somebody. The office answers with `dm_opened`. */
+  openDm(memberId: string): void {
+    this.#room.send(ClientMessage.DmOpen, { memberId } satisfies DmOpenPayload);
+  }
+
   // --- presentation --------------------------------------------------------
 
   #createAnimations(): void {
@@ -474,6 +484,7 @@ export class OfficeScene extends Phaser.Scene {
         status: player.status,
         isSelf: sessionId === this.#selfId,
         ownerName: player.ownerName,
+        ownerUserId: player.ownerUserId,
         scopes: player.scopes ? player.scopes.split(',') : [],
         identityId: player.userId,
         lastActionAt: this.#lastAction.get(sessionId) ?? 0,

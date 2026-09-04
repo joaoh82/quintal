@@ -9,6 +9,7 @@ import {
   type AgentChannelChatEvent,
   type AgentChatEvent,
   type AgentMentionEvent,
+  type ChannelRef,
 } from '@quintal/shared';
 
 import { AgentProcess } from '../acp/agent-process.js';
@@ -100,8 +101,8 @@ export class AgentRunner {
   readonly #queues = new Map<string, Trigger[]>();
   /** Conversation history per scope, for the pushed window. */
   readonly #history = new Map<string, AgentChatEvent[]>();
-  /** channel id -> slug, from every channel line seen, for naming a scope. */
-  readonly #channelSlugs = new Map<string, string>();
+  /** channel id -> what it is, from every channel line seen, for naming a scope. */
+  readonly #channelRefs = new Map<string, ChannelRef>();
 
   #busy = false;
   #currentScope: string | null = null;
@@ -432,7 +433,7 @@ export class AgentRunner {
    */
   #onChannelChat(message: AgentChannelChatEvent): void {
     const scope = `${CHANNEL_SCOPE}${message.channel.id}`;
-    this.#channelSlugs.set(message.channel.id, message.channel.slug);
+    this.#channelRefs.set(message.channel.id, message.channel);
     const asChat: AgentChatEvent = {
       from: message.from,
       fromUserId: message.fromUserId,
@@ -456,17 +457,20 @@ export class AgentRunner {
       fromKind: message.fromKind,
       text: message.text,
       distance: null,
-      channel: message.channel.slug,
+      channel: message.channel,
       sentAt: message.sentAt,
     });
   }
 
-  /** The channel a scope is, or null for a spatial scope. */
-  #channelOf(scope: string): { id: string; slug: string } | null {
+  /** The channel or DM a scope is, or null for a spatial scope. */
+  #channelOf(scope: string): ChannelRef | null {
     if (!scope.startsWith(CHANNEL_SCOPE)) return null;
     const id = scope.slice(CHANNEL_SCOPE.length);
-    const known = this.#gateway.channels().find((channel) => channel.id === id);
-    return { id, slug: known?.slug ?? this.#channelSlugs.get(id) ?? id };
+    return (
+      this.#gateway.channels().find((channel) => channel.id === id) ??
+      this.#channelRefs.get(id) ??
+      { id, kind: 'channel', name: id, slug: id }
+    );
   }
 
   /**
@@ -606,7 +610,7 @@ export class AgentRunner {
     const envelope = buildEnvelope({
       agentName: ready.name,
       zoneLabel: this.#zoneLabel(),
-      ...(channel ? { channel: channel.slug } : {}),
+      ...(channel ? { channel } : {}),
       triggers,
       window: selectWindow(this.#history.get(scope) ?? [], triggerTimes),
       steer,

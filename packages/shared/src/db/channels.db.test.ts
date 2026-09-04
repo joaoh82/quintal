@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { mayAddToChannel, mayRemoveFromChannel } from '../conversation.js';
+import { dmKey, mayAddToChannel, mayOpenDm, mayRemoveFromChannel } from '../conversation.js';
 import { createAgent } from './agents.js';
 import {
   ChannelNameError,
@@ -11,6 +11,7 @@ import {
   isChannelMember,
   listChannels,
   listChannelsForMember,
+  openDm,
   removeChannelMember,
 } from './channels.js';
 import { mentionsOf, recentMessages, recordMessage } from './messages.js';
@@ -79,6 +80,91 @@ describe('who may remove whom', () => {
       false,
       'making the channel does not make you accountable for the agent',
     );
+  });
+});
+
+describe('who may message whom directly', () => {
+  const member = { userId: 'u-member', role: 'member' as const };
+  const owner = { userId: 'u-owner', role: 'owner' as const };
+  const guest = { userId: 'u-guest', role: null };
+  const myAgent = {
+    id: 'a-1',
+    kind: 'agent' as const,
+    ownerUserId: 'u-member',
+    scopes: ['chat', 'dm'],
+  };
+
+  it('lets any member message any other person', () => {
+    assert.equal(mayOpenDm(member, { id: 'u-other', kind: 'human' }), true);
+  });
+
+  it("lets only an agent's owner message it — the most private place there is", () => {
+    assert.equal(mayOpenDm(member, myAgent), true);
+    assert.equal(mayOpenDm(owner, myAgent), false, 'not even the office owner');
+  });
+
+  it('refuses an agent without the dm scope, even to its owner', () => {
+    assert.equal(mayOpenDm(member, { ...myAgent, scopes: ['chat'] }), false);
+  });
+
+  it('refuses guests, and refuses talking to yourself', () => {
+    assert.equal(mayOpenDm(guest, { id: 'u-other', kind: 'human' }), false);
+    assert.equal(mayOpenDm(member, { id: 'u-member', kind: 'human' }), false);
+  });
+
+  it('names a pair the same way round whoever asks', () => {
+    assert.equal(dmKey('b', 'a'), dmKey('a', 'b'));
+    assert.match(dmKey('a', 'b'), /^dm:/, 'never collides with a channel slug');
+  });
+});
+
+describe('a direct message', () => {
+  it('is one row for the pair, found again from either side, with both in it', async () => {
+    const db = await createTestDb();
+    const ana = await createTestUser(db, 'Ana');
+    const marvin = await createAgent(db, {
+      workspaceId: ana.workspaceId,
+      ownerUserId: ana.id,
+      name: 'Marvin',
+      spriteKey: 'slate',
+    });
+
+    const first = await openDm(db, {
+      workspaceId: ana.workspaceId,
+      openerId: ana.id,
+      other: { id: marvin.id, kind: 'agent' },
+    });
+    const again = await openDm(db, {
+      workspaceId: ana.workspaceId,
+      openerId: ana.id,
+      other: { id: marvin.id, kind: 'agent' },
+    });
+
+    assert.equal(first.created, true);
+    assert.equal(again.created, false);
+    assert.equal(again.id, first.id, 'opening it twice is one conversation');
+    assert.equal(await isChannelMember(db, first.id, ana.id), true);
+    assert.equal(await isChannelMember(db, first.id, marvin.id), true);
+  });
+
+  it('is nowhere a channel is listed, but the room knows it', async () => {
+    const db = await createTestDb();
+    const ana = await createTestUser(db, 'Ana');
+    const bo = await createTestUser(db, 'Bo', ana.workspaceId);
+    const { id } = await openDm(db, {
+      workspaceId: ana.workspaceId,
+      openerId: ana.id,
+      other: { id: bo.id, kind: 'human' },
+    });
+
+    assert.deepEqual(await listChannels(db, ana.workspaceId), [], 'the settings page never sees it');
+
+    const known = await channelMembershipForWorkspace(db, ana.workspaceId);
+    const dm = known.get(id);
+    assert.ok(dm, 'the room does — it has to deliver it');
+    assert.equal(dm.kind, 'dm');
+    assert.equal(dm.slug, '', 'a pair key is an identifier, not something to print');
+    assert.deepEqual([...dm.members.values()].map((m) => m.name).sort(), ['Ana', 'Bo']);
   });
 });
 

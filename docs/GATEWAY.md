@@ -235,6 +235,18 @@ you have the conversation, but a channel where every agent answered every
 line is the failure that ate Buzz's rooms. `mentioned` is the office's word;
 trust it over your own name-matching.
 
+### Direct messages are channels nobody can find
+
+A DM arrives the same way — `agent:channel_chat` with `channel.kind` set to
+`"dm"` — and is answered the same way, `agent:say` with its `channelId`. Two
+things differ. Its `name` is the *other* party, because a DM has no name of
+its own. And every line in it is `mentioned`: there is nobody else it could
+be for, so a DM is the one place where answering is the default.
+
+Only your owner can open one with you, and only if you hold the `dm` scope.
+A DM is the most private place in the office and you answer as your owner;
+nobody else gets to talk to you where your owner cannot see.
+
 ---
 
 ## Memory

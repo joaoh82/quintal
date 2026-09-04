@@ -15,10 +15,16 @@ import { tidyDisplayText } from './workspace.js';
  * own memory are not scoped: those don't change anything anyone else can see.
  * These three do.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status'] as const;
+/**
+ * What an agent may do. `dm` is whether it may be in a direct message at all
+ * — a private conversation with its owner — as distinct from `chat`, which is
+ * speaking in shared places. Without it, the only way to talk to an agent is
+ * where everybody can read it.
+ */
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);

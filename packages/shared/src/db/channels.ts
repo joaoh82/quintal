@@ -2,7 +2,13 @@ import { randomBytes } from 'node:crypto';
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 
-import { CHANNEL_NAME_MAX_LENGTH, channelSlug, type ChannelRef } from '../conversation.js';
+import {
+  CHANNEL_NAME_MAX_LENGTH,
+  channelSlug,
+  dmKey,
+  type ChannelRef,
+  type ConversationKind,
+} from '../conversation.js';
 import { displayName } from '../identity.js';
 import type { PlayerKind } from '../player.js';
 import type { Database } from './client.js';
@@ -94,7 +100,73 @@ export async function createChannel(
     addedBy: input.createdBy,
   });
 
-  return { id, name, slug };
+  return { id, kind: 'channel', name, slug };
+}
+
+/**
+ * Open — or find — the direct message between two members.
+ *
+ * A DM is a conversation of kind `dm` whose `slug` is `dmKey(a, b)`, so the
+ * same pair always lands on the same row whichever of them asks. Members are
+ * fixed at creation: the two of them. It is never listed where channels are.
+ *
+ * Authorisation is the caller's — `mayOpenDm` — for the usual reason: this
+ * function does not know who is asking, only who is being connected.
+ */
+export async function openDm(
+  db: Database,
+  input: {
+    workspaceId: string;
+    openerId: string;
+    other: { id: string; kind: PlayerKind };
+  },
+): Promise<{ id: string; created: boolean }> {
+  const key = dmKey(input.openerId, input.other.id);
+
+  const existing = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.workspaceId, input.workspaceId), eq(conversations.slug, key)))
+    .limit(1);
+
+  let id = existing[0]?.id;
+  const created = id === undefined;
+  if (id === undefined) {
+    id = newId();
+    await db
+      .insert(conversations)
+      .values({
+        id,
+        workspaceId: input.workspaceId,
+        kind: 'dm',
+        name: '',
+        slug: key,
+        createdBy: input.openerId,
+      })
+      .onConflictDoNothing();
+    // Lost a race to the other party opening the same DM: take theirs.
+    const won = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(eq(conversations.workspaceId, input.workspaceId), eq(conversations.slug, key)))
+      .limit(1);
+    id = won[0]?.id ?? id;
+  }
+
+  await db
+    .insert(conversationMembers)
+    .values([
+      { conversationId: id, memberId: input.openerId, memberKind: 'human', addedBy: input.openerId },
+      {
+        conversationId: id,
+        memberId: input.other.id,
+        memberKind: input.other.kind,
+        addedBy: input.openerId,
+      },
+    ])
+    .onConflictDoNothing();
+
+  return { id, created };
 }
 
 export async function findChannel(
@@ -120,7 +192,7 @@ export async function findChannel(
     .limit(1);
   const row = rows[0];
   if (!row || row.slug === null) return null;
-  return { id: row.id, name: row.name, slug: row.slug, createdBy: row.createdBy };
+  return { id: row.id, kind: 'channel', name: row.name, slug: row.slug, createdBy: row.createdBy };
 }
 
 /**
@@ -185,18 +257,31 @@ async function membersOf(
   return byChannel;
 }
 
-/** Every channel in an office, with members. For the settings page. */
+/**
+ * Every channel in an office, with members. For the settings page — which is
+ * why DMs are not in it: a DM is a channel nobody can find, and "nobody" has
+ * to include the office's admin page, or it is not private.
+ */
 export async function listChannels(db: Database, workspaceId: string): Promise<ChannelSummary[]> {
+  return listConversationsWithMembers(db, workspaceId, ['channel']);
+}
+
+async function listConversationsWithMembers(
+  db: Database,
+  workspaceId: string,
+  kinds: readonly Exclude<ConversationKind, 'zone'>[],
+): Promise<ChannelSummary[]> {
   const rows = await db
     .select({
       id: conversations.id,
+      kind: conversations.kind,
       name: conversations.name,
       slug: conversations.slug,
       createdBy: conversations.createdBy,
       createdAt: conversations.createdAt,
     })
     .from(conversations)
-    .where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.kind, 'channel')))
+    .where(and(eq(conversations.workspaceId, workspaceId), inArray(conversations.kind, [...kinds])))
     .orderBy(asc(conversations.createdAt));
 
   const members = await membersOf(
@@ -205,12 +290,18 @@ export async function listChannels(db: Database, workspaceId: string): Promise<C
   );
 
   return rows
-    .filter((row): row is typeof row & { slug: string } => row.slug !== null)
+    .filter(
+      (row): row is typeof row & { slug: string; kind: 'channel' | 'dm' } =>
+        row.slug !== null && row.kind !== 'zone',
+    )
     .map((row) => ({
       id: row.id,
+      kind: row.kind,
       workspaceId,
       name: row.name,
-      slug: row.slug,
+      // A DM's slug is its pair key, which is an identifier and not a name;
+      // nothing should ever print it.
+      slug: row.kind === 'dm' ? '' : row.slug,
       createdBy: row.createdBy,
       createdAt: row.createdAt.getTime(),
       members: members.get(row.id) ?? [],
@@ -218,22 +309,24 @@ export async function listChannels(db: Database, workspaceId: string): Promise<C
 }
 
 /**
- * Membership of every channel in an office, keyed by channel — what a room
- * needs to decide who is told about a message, in one query rather than one
- * per line said.
+ * Membership of every channel *and DM* in an office, keyed by conversation —
+ * what a room needs to decide who is told about a message, in one query
+ * rather than one per line said. DMs are here because the room delivers
+ * them; the settings page does not get this list.
  */
 export async function channelMembershipForWorkspace(
   db: Database,
   workspaceId: string,
 ): Promise<Map<string, ChannelRef & { members: Map<string, ChannelMember> }>> {
-  const channels = await listChannels(db, workspaceId);
+  const all = await listConversationsWithMembers(db, workspaceId, ['channel', 'dm']);
   const out = new Map<string, ChannelRef & { members: Map<string, ChannelMember> }>();
-  for (const channel of channels) {
-    out.set(channel.id, {
-      id: channel.id,
-      name: channel.name,
-      slug: channel.slug,
-      members: new Map(channel.members.map((member) => [member.id, member])),
+  for (const conversation of all) {
+    out.set(conversation.id, {
+      id: conversation.id,
+      kind: conversation.kind,
+      name: conversation.name,
+      slug: conversation.slug,
+      members: new Map(conversation.members.map((member) => [member.id, member])),
     });
   }
   return out;
@@ -259,7 +352,7 @@ export async function listChannelsForMember(
     .orderBy(asc(conversations.createdAt));
   return rows
     .filter((row): row is typeof row & { slug: string } => row.slug !== null)
-    .map((row) => ({ id: row.id, name: row.name, slug: row.slug }));
+    .map((row) => ({ id: row.id, kind: 'channel' as const, name: row.name, slug: row.slug }));
 }
 
 export async function isChannelMember(

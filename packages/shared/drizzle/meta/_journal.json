@@ -127,6 +127,13 @@
       "when": 1788512488050,
       "tag": "0017_channels_name_their_members",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788512489050,
+      "tag": "0018_agents_may_be_messaged",
+      "breakpoints": true
     }
   ]
 }

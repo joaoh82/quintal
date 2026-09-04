@@ -50,10 +50,16 @@ import {
   type AgentRosterEvent,
   type AgentSayPayload,
   type AgentSetStatusPayload,
+  mayOpenDm,
+  type ChannelActor,
   type ChannelChatPayload,
   type ChannelChatSendPayload,
   type ChannelRef,
+  type ChannelSubject,
   type ChannelsPayload,
+  type DmOpenPayload,
+  type DmOpenedPayload,
+  type MembershipRole,
   type ChatBroadcastPayload,
   type ChatSendPayload,
   type Direction,
@@ -78,10 +84,13 @@ import {
   MemorySlugError,
   channelMembershipForWorkspace,
   ensureZoneConversations,
+  findAgentById,
+  findMembership,
   getAgentMemory,
   getDb,
   getOfficeSettings,
   mentionsOf,
+  openDm,
   recentMessages,
   recentMessagesNear,
   recordMessage,
@@ -248,6 +257,9 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#onChannelChat(client, payload),
     );
     this.onMessage(ClientMessage.ChannelsGet, (client) => this.#sendChannels(client.sessionId));
+    this.onMessage(ClientMessage.DmOpen, (client, payload: DmOpenPayload) =>
+      void this.#onDmOpen(client, payload),
+    );
 
     // --- agent protocol (docs/GATEWAY.md) ---
     this.onMessage(AgentMessage.Say, (client, payload: AgentSayPayload) =>
@@ -424,6 +436,7 @@ export class OfficeRoom extends Room<OfficeState> {
         status: identity.status,
         description: identity.description,
         ownerName: identity.ownerName,
+        ownerUserId: identity.ownerUserId,
         scopes: identity.scopes,
       }),
     );
@@ -702,6 +715,67 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#deliverChannelChat(client.sessionId, speaker, channel, text);
   }
 
+  /**
+   * Open a direct message with somebody, from the roster.
+   *
+   * The rule is `mayOpenDm`, and the facts it needs come from the database
+   * rather than the room: the other party need not be in the room — you can
+   * message an agent that is asleep, and it reads the line when it wakes.
+   * The membership cache is refreshed at once rather than on the next poll,
+   * so the tab appears when you click and not ten seconds later.
+   */
+  async #onDmOpen(client: Client, payload: DmOpenPayload): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.#agents.has(client.sessionId)) return;
+    const memberId = String(payload?.memberId ?? '');
+    if (memberId.length === 0) return;
+
+    const db = getDb();
+    try {
+      const membership = player.isGuest
+        ? null
+        : await findMembership(db, player.userId, this.#workspaceId);
+      const actor: ChannelActor = {
+        userId: player.userId,
+        role: (membership?.role as MembershipRole | undefined) ?? null,
+      };
+
+      let subject: ChannelSubject | null = null;
+      const agent = await findAgentById(db, memberId);
+      if (agent) {
+        if (agent.workspaceId === this.#workspaceId && agent.revokedAt === null) {
+          subject = {
+            id: agent.id,
+            kind: 'agent',
+            ownerUserId: agent.ownerUserId,
+            scopes: agent.scopes,
+          };
+        }
+      } else if (await findMembership(db, memberId, this.#workspaceId)) {
+        subject = { id: memberId, kind: 'human' };
+      }
+
+      if (!subject || !mayOpenDm(actor, subject)) {
+        this.#sendError(client, 'unauthorised', 'You cannot message them.');
+        return;
+      }
+
+      const { id } = await openDm(db, {
+        workspaceId: this.#workspaceId,
+        openerId: player.userId,
+        other: { id: subject.id, kind: subject.kind },
+      });
+      await this.#refreshChannels();
+      const channel = this.#channels.get(id);
+      if (!channel) return;
+      client.send(ServerMessage.DmOpened, {
+        channel: this.#refFor(channel, player.userId),
+      } satisfies DmOpenedPayload);
+    } catch (error: unknown) {
+      logger.error('[office] could not open a direct message', error);
+    }
+  }
+
   /** Length and rate checks shared by everything a person can type. Null = refused. */
   #acceptHumanText(client: Client, rawText: unknown): string | null {
     const text = String(rawText ?? '').trim();
@@ -823,15 +897,32 @@ export class OfficeRoom extends Room<OfficeState> {
     for (const sessionId of this.state.players.keys()) this.#sendChannels(sessionId);
   }
 
-  /** The channels one person or agent is in. */
+  /** The channels and DMs one person or agent is in, as they should see them. */
   #channelsFor(memberId: string): ChannelRef[] {
     const mine: ChannelRef[] = [];
     for (const channel of this.#channels.values()) {
-      if (channel.members.has(memberId)) {
-        mine.push({ id: channel.id, name: channel.name, slug: channel.slug });
-      }
+      if (channel.members.has(memberId)) mine.push(this.#refFor(channel, memberId));
     }
     return mine;
+  }
+
+  /**
+   * A conversation as one member sees it. A channel looks the same to
+   * everybody; a DM is named after the *other* party, so the same row is
+   * "Marvin" to Josh and "Josh" to Marvin.
+   */
+  #refFor(
+    channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
+    viewerId: string,
+  ): ChannelRef {
+    if (channel.kind !== 'dm') {
+      return { id: channel.id, kind: channel.kind, name: channel.name, slug: channel.slug };
+    }
+    let other = 'somebody';
+    for (const member of channel.members.values()) {
+      if (member.id !== viewerId) other = member.name;
+    }
+    return { id: channel.id, kind: 'dm', name: other, slug: '' };
   }
 
   /** A channel this member is in, by id — or null, which covers "no such channel" too. */
@@ -854,7 +945,9 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!client || !player) return;
 
     const channels = this.#channelsFor(player.userId);
-    const signature = channels.map((channel) => `${channel.id}:${channel.slug}`).join(',');
+    const signature = channels
+      .map((channel) => `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}`)
+      .join(',');
     if (this.#channelsSent.get(sessionId) === signature) return;
     this.#channelsSent.set(sessionId, signature);
 
@@ -887,16 +980,18 @@ export class OfficeRoom extends Room<OfficeState> {
 
     // Mentions resolve against the channel's members, present or not: a
     // member who is not in the room right now can still be told later that
-    // they were named, which is what the mention index is for.
+    // they were named, which is what the mention index is for. In a DM every
+    // line is addressed to the other party by construction — there is nobody
+    // else it could be for.
     const addressed = mentionedNames(text);
     const mentioned = new Set<string>();
     for (const member of channel.members.values()) {
-      if (member.id !== speaker.userId && addressed.includes(member.name.toLowerCase())) {
+      if (member.id === speaker.userId) continue;
+      if (channel.kind === 'dm' || addressed.includes(member.name.toLowerCase())) {
         mentioned.add(member.id);
       }
     }
 
-    const ref: ChannelRef = { id: channel.id, name: channel.name, slug: channel.slug };
     const line = {
       from: sessionId,
       fromUserId: speaker.userId,
@@ -911,6 +1006,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const target = this.clients.getById(listenerId);
       if (!target) continue;
 
+      const ref = this.#refFor(channel, listener.userId);
       if (this.#agents.has(listenerId)) {
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
@@ -1151,7 +1247,13 @@ export class OfficeRoom extends Room<OfficeState> {
         return;
       }
       this.#deliverChannelChat(client.sessionId, speaker, channel, text);
-      audit(session.identity.id, 'effect.posted', { text, channel: channel.slug });
+      audit(session.identity.id, 'effect.posted', {
+        text,
+        kind: channel.kind,
+        // A DM's slug is a pair key, not a name; the log gets the kind and
+        // the conversation id, which is what "which DM" actually means.
+        channel: channel.kind === 'dm' ? channel.id : channel.slug,
+      });
       return;
     }
 

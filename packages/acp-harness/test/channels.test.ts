@@ -27,7 +27,9 @@ interface Handlers {
   chat?: (message: unknown) => void;
 }
 
-const ENGINEERING = { id: 'ch-1', name: 'Engineering', slug: 'engineering' };
+const ENGINEERING = { id: 'ch-1', kind: 'channel', name: 'Engineering', slug: 'engineering' };
+/** As the agent sees it: named after the other party. */
+const DM_WITH_JOSH = { id: 'dm-1', kind: 'dm', name: 'Josh', slug: '' };
 
 function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined]>): Gateway {
   const ready = {
@@ -37,7 +39,7 @@ function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined
     ownerName: 'Josh',
     description: '',
     instructions: '',
-    channels: [ENGINEERING],
+    channels: [ENGINEERING, DM_WITH_JOSH],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {
@@ -57,7 +59,7 @@ function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined
     memoryGet: async () => ({ content: '' }),
     memorySet: async () => ({ ok: true }),
     occupants: () => [],
-    channels: () => [ENGINEERING],
+    channels: () => [ENGINEERING, DM_WITH_JOSH],
     on: (event: string, handler: unknown) => {
       (handlers as Record<string, unknown>)[event] = handler;
     },
@@ -106,10 +108,10 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 400));
 let clock = Date.now();
 
 /** Each line a second after the last: the window excludes lines by time. */
-function line(text: string, mentioned: boolean) {
+function line(text: string, mentioned: boolean, channel = ENGINEERING) {
   clock += 1_000;
   return {
-    channel: ENGINEERING,
+    channel,
     from: 's-1',
     fromUserId: 'user-1',
     fromName: 'Josh',
@@ -177,6 +179,23 @@ describe('an agent in a channel', () => {
 
     await until(() => said.length > 0, 'a reply');
     assert.equal(said[0]?.[1], ENGINEERING.id, 'the reply is posted to the channel, not spoken');
+  });
+
+  it('treats a direct message as addressed, and answers only the sender', async () => {
+    const { handlers, record, said } = await start();
+
+    // No name in it. In a DM there is nobody else it could be for, and the
+    // office says so with `mentioned`.
+    handlers.channelChat?.(line('are you there?', true, DM_WITH_JOSH));
+    await until(() => prompts(record).length > 0, 'a turn');
+
+    const text = prompts(record)[0] ?? '';
+    assert.match(text, /direct message with Josh/, 'the model is told this is private');
+    assert.match(text, /Only the two of you read this/);
+    assert.doesNotMatch(text, /#engineering/, 'a DM is not a channel turn');
+
+    await until(() => said.length > 0, 'a reply');
+    assert.equal(said[0]?.[1], DM_WITH_JOSH.id, 'the reply goes back into the DM');
   });
 
   it('answers a walk-up out loud, as before', async () => {

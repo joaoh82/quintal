@@ -30,6 +30,8 @@ export interface OfficeSession {
   sayInChannel(channelId: string, text: string): void;
   /** Ask for a channel's recent transcript. Arrives as a `history` bridge event. */
   loadChannelHistory(channelId: string): void;
+  /** Open a direct message with a person or agent. Arrives as a `dmOpened` bridge event. */
+  openDm(memberId: string): void;
   destroy(): void;
 }
 
@@ -135,6 +137,9 @@ export async function createGame(
     },
     loadChannelHistory(channelId) {
       scene()?.loadChannelHistory(channelId);
+    },
+    openDm(memberId) {
+      scene()?.openDm(memberId);
     },
     destroy() {
       closedByUs = true;

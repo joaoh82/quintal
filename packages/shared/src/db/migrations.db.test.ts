@@ -7,9 +7,10 @@ import { describe, it } from 'node:test';
 import { eq, sql } from 'drizzle-orm';
 
 import { generateSecretKey, getPublicKeyHex, npubEncode } from '../identity.js';
-import { users } from './schema.js';
+import { agents, users } from './schema.js';
 import { createTestDb } from './testing.js';
 import { MIGRATIONS_FOLDER } from './url.js';
+import { ensurePersonalWorkspace } from './workspaces.js';
 
 /**
  * Data migrations, run against rows shaped the way the old code left them.
@@ -93,5 +94,54 @@ describe('0011 — unfreezing display names', () => {
     await runMigration(db, '0011_unfreeze_display_names');
 
     assert.equal(await nameOf(db, josh.id), 'Josh');
+  });
+});
+
+describe('0018 — letting existing agents be messaged', () => {
+  async function scopesOf(
+    db: Awaited<ReturnType<typeof createTestDb>>,
+    id: string,
+  ): Promise<unknown> {
+    const rows = await db.select({ scopes: agents.scopes }).from(agents).where(eq(agents.id, id));
+    return rows[0]?.scopes;
+  }
+
+  async function insertAgent(
+    db: Awaited<ReturnType<typeof createTestDb>>,
+    scopes: string,
+  ): Promise<string> {
+    const owner = await insertUser(db, 'Owner');
+    const id = randomBytes(8).toString('hex');
+    // Raw SQL, deliberately: the column is typed as JSON and the whole point
+    // is what the migration does to rows written before `dm` existed —
+    // including a row that is not well-formed JSON at all.
+    await db.run(
+      sql`insert into agents (id, workspace_id, owner_user_id, name, sprite_key, api_key_hash, scopes)
+          values (${id}, ${(await ensurePersonalWorkspace(db, { userId: owner.id, name: 'Owner', pubkey: owner.pubkey })).id},
+                  ${owner.id}, 'Bot', 'slate', ${randomBytes(8).toString('hex')}, ${scopes})`,
+    );
+    return id;
+  }
+
+  it('adds dm to an agent that predates the scope, once', async () => {
+    const db = await createTestDb();
+    const old = await insertAgent(db, '["chat","move"]');
+    const already = await insertAgent(db, '["chat","dm"]');
+
+    await runMigration(db, '0018_agents_may_be_messaged');
+    await runMigration(db, '0018_agents_may_be_messaged');
+
+    assert.deepEqual(await scopesOf(db, old), ['chat', 'move', 'dm']);
+    assert.deepEqual(await scopesOf(db, already), ['chat', 'dm'], 'not added twice');
+  });
+
+  it('leaves a malformed scopes column alone rather than inventing one', async () => {
+    const db = await createTestDb();
+    const broken = await insertAgent(db, 'not json');
+
+    await runMigration(db, '0018_agents_may_be_messaged');
+
+    const rows = await db.run(sql`select scopes from agents where id = ${broken}`);
+    assert.equal(rows.rows[0]?.['scopes'], 'not json');
   });
 });

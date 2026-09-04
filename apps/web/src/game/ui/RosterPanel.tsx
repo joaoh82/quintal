@@ -34,6 +34,20 @@ function sinceLabel(at: number): string {
 interface RosterPanelProps {
   players: RosterEntry[];
   connection: ConnectionStatus;
+  /** Open a direct message with this occupant. */
+  onMessage: (entry: RosterEntry) => void;
+}
+
+/**
+ * Whether the viewer may message this occupant, by the same rule the office
+ * applies — so the button is only drawn where pressing it would work.
+ * Anybody who is not you, for a person. For an agent: yours, and one that is
+ * allowed to be messaged at all.
+ */
+function canMessage(viewer: RosterEntry | undefined, entry: RosterEntry): boolean {
+  if (!viewer || entry.isSelf || viewer.isGuest) return false;
+  if (entry.kind === 'human') return true;
+  return entry.ownerUserId === viewer.identityId && entry.scopes.includes('dm');
 }
 
 /**
@@ -44,12 +58,20 @@ interface RosterPanelProps {
  * "what is my fleet doing" without reading past the humans, and every agent
  * line carries whose it is.
  */
-export function RosterPanel({ players, connection }: RosterPanelProps) {
+export function RosterPanel({ players, connection, onMessage }: RosterPanelProps) {
   const [openCard, setOpenCard] = useState<string | null>(null);
 
   const humans = players.filter((player) => player.kind === 'human');
   const agents = players.filter((player) => player.kind === 'agent');
   const selected = players.find((player) => player.sessionId === openCard) ?? null;
+  const viewer = players.find((player) => player.isSelf);
+  const messageAction =
+    selected && canMessage(viewer, selected)
+      ? () => {
+          onMessage(selected);
+          setOpenCard(null);
+        }
+      : null;
 
   return (
     <aside className="pointer-events-auto flex w-60 flex-col gap-2">
@@ -150,9 +172,17 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
 
       {selected ? (
         selected.kind === 'agent' ? (
-          <AgentCard agent={selected} onClose={() => setOpenCard(null)} />
+          <AgentCard
+            agent={selected}
+            onClose={() => setOpenCard(null)}
+            onMessage={messageAction}
+          />
         ) : (
-          <PersonCard person={selected} onClose={() => setOpenCard(null)} />
+          <PersonCard
+            person={selected}
+            onClose={() => setOpenCard(null)}
+            onMessage={messageAction}
+          />
         )
       ) : null}
     </aside>
@@ -163,7 +193,15 @@ export function RosterPanel({ players, connection }: RosterPanelProps) {
  * What an agent is, in one card: whose it is, what it's doing, what it's allowed
  * to do, and a way straight to everything it has ever done.
  */
-function AgentCard({ agent, onClose }: { agent: RosterEntry; onClose: () => void }) {
+function AgentCard({
+  agent,
+  onClose,
+  onMessage,
+}: {
+  agent: RosterEntry;
+  onClose: () => void;
+  onMessage: (() => void) | null;
+}) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-sky-400/25 bg-[#0b2942]/85 p-3 text-white backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
@@ -211,14 +249,25 @@ function AgentCard({ agent, onClose }: { agent: RosterEntry; onClose: () => void
         </div>
       </dl>
 
-      <a
-        href={`/settings/agents/${agent.identityId}/log`}
-        target="_blank"
-        rel="noreferrer"
-        className="rounded border border-sky-400/30 px-2 py-1 text-center text-[11px] text-sky-200 hover:bg-sky-400/10"
-      >
-        Audit log →
-      </a>
+      <div className="flex gap-2">
+        {onMessage ? (
+          <button
+            type="button"
+            onClick={onMessage}
+            className="flex-1 rounded border border-sky-400/30 px-2 py-1 text-center text-[11px] text-sky-200 hover:bg-sky-400/10"
+          >
+            Message
+          </button>
+        ) : null}
+        <a
+          href={`/settings/agents/${agent.identityId}/log`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex-1 rounded border border-sky-400/30 px-2 py-1 text-center text-[11px] text-sky-200 hover:bg-sky-400/10"
+        >
+          Audit log →
+        </a>
+      </div>
     </div>
   );
 }
@@ -232,7 +281,15 @@ function AgentCard({ agent, onClose }: { agent: RosterEntry; onClose: () => void
  * thing. That is the whole reason it is here rather than floating over their
  * head, where nobody would read it.
  */
-function PersonCard({ person, onClose }: { person: RosterEntry; onClose: () => void }) {
+function PersonCard({
+  person,
+  onClose,
+  onMessage,
+}: {
+  person: RosterEntry;
+  onClose: () => void;
+  onMessage: (() => void) | null;
+}) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-white/15 bg-black/80 p-3 text-white backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
@@ -270,6 +327,16 @@ function PersonCard({ person, onClose }: { person: RosterEntry; onClose: () => v
           </dd>
         </div>
       </dl>
+
+      {onMessage ? (
+        <button
+          type="button"
+          onClick={onMessage}
+          className="rounded border border-white/20 px-2 py-1 text-center text-[11px] text-white/85 hover:bg-white/10"
+        >
+          Message
+        </button>
+      ) : null}
     </div>
   );
 }

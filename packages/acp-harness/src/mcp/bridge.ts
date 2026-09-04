@@ -181,12 +181,19 @@ async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
       const n = Math.min(Math.max(Number(call.args.n) || 20, 1), 50);
       const before = Number(call.args.before);
       // The model knows channels by name — that is what the envelope shows it —
-      // and the office by id. Accept either; resolve the name here.
+      // and the office by id. Accept either; resolve the name here. A DM has
+      // no slug and is known by the other party's name.
       const wanted = typeof call.args.channel === 'string' ? call.args.channel.trim() : '';
       const slug = wanted.replace(/^#/, '').toLowerCase();
       const channelId =
-        gateway.channels().find((channel) => channel.id === wanted || channel.slug === slug)
-          ?.id ?? wanted;
+        gateway
+          .channels()
+          .find(
+            (channel) =>
+              channel.id === wanted ||
+              (channel.kind === 'channel' && channel.slug === slug) ||
+              (channel.kind === 'dm' && channel.name.toLowerCase() === slug),
+          )?.id ?? wanted;
       return gateway.messagesGet({
         scope,
         n,

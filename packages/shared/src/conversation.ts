@@ -27,12 +27,38 @@ export const FLOOR_ZONE_LABEL = 'the open floor';
 
 // --- channels --------------------------------------------------------------
 
-/** A channel as a client needs to know it: enough to name it and post to it. */
+/**
+ * A conversation with members, as a client needs to know it: enough to name
+ * it and post to it. Zones are not these — a zone has no members.
+ */
 export interface ChannelRef {
   id: string;
+  kind: 'channel' | 'dm';
+  /**
+   * A channel's name as written. For a DM, the *other* party's name — a DM
+   * has no name of its own, so the office fills this in for whoever is being
+   * told about it.
+   */
   name: string;
-  /** What it is called in an `@`-less world: `engineering`, rendered `#engineering`. */
+  /** A channel's identifier: `engineering`, rendered `#engineering`. Empty for a DM. */
   slug: string;
+}
+
+/** How to print one in a tab or a prompt: `#engineering`, or the other person. */
+export function channelLabel(ref: Pick<ChannelRef, 'kind' | 'name' | 'slug'>): string {
+  return ref.kind === 'dm' ? ref.name : `#${ref.slug}`;
+}
+
+/**
+ * The identity of a direct message between two members, stored in `slug`.
+ *
+ * Deterministic, so opening "the DM with Marvin" twice finds the same row —
+ * the unique index on (office, slug) does the finding. Sorted, so it does not
+ * matter who opened it. The prefix keeps it out of the namespace a channel
+ * name could ever land in, since a slug never contains a colon.
+ */
+export function dmKey(a: string, b: string): string {
+  return `dm:${[a, b].sort().join(':')}`;
 }
 
 export const CHANNEL_NAME_MAX_LENGTH = 40;
@@ -55,12 +81,35 @@ export interface ChannelActor {
   role: MembershipRole | null;
 }
 
-/** Somebody being added to, or removed from, a channel. */
+/** Somebody being added to, or removed from, a channel — or messaged directly. */
 export interface ChannelSubject {
   id: string;
   kind: PlayerKind;
   /** For an agent: `users.id` of the person accountable for it. */
   ownerUserId?: string | null;
+  /** For an agent: what it is allowed to do. Needed to answer `mayOpenDm`. */
+  scopes?: readonly string[];
+}
+
+/**
+ * May this person open a direct message with this member?
+ *
+ * With a person: any member of the office, with any member. With an agent:
+ * **its owner, and nobody else** — the same rule as adding it to a channel,
+ * for the same reason. A DM is the most private place there is, and an agent
+ * answers as its owner; a colleague talking to my agent where I cannot see it
+ * is exactly what the channel rule exists to prevent, only more so. The agent
+ * also has to have the `dm` scope: an owner can make one that lives only in
+ * public.
+ *
+ * Nobody messages themselves, and guests message nobody.
+ */
+export function mayOpenDm(actor: ChannelActor, subject: ChannelSubject): boolean {
+  if (actor.role === null) return false;
+  if (subject.id === actor.userId) return false;
+  if (subject.kind === 'human') return true;
+  if (subject.ownerUserId !== actor.userId) return false;
+  return (subject.scopes ?? []).includes('dm');
 }
 
 /**
