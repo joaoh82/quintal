@@ -8,6 +8,7 @@ import {
   commandQueryAt,
   mentionQueryAt,
   parseAgentCommand,
+  type ChannelRef,
   type ChatBroadcastPayload,
   type RosterEntry,
 } from '@quintal/shared';
@@ -30,7 +31,13 @@ type PickerItem =
   | { kind: 'command'; key: string; name: string; summary: string };
 
 interface ChatPanelProps {
+  /** The transcript of the selected tab: nearby, or one channel. */
   messages: ChatBroadcastPayload[];
+  /** The channels this person is in. No tabs are drawn when there are none. */
+  channels: ChannelRef[];
+  /** The selected tab — a channel id, or null for nearby. */
+  activeChannel: string | null;
+  onSelectChannel: (channelId: string | null) => void;
   /** True while the input owns the keyboard. */
   focused: boolean;
   /** Everyone in the room, for @ autocomplete. */
@@ -64,6 +71,9 @@ function timeOf(sentAt: number): string {
  */
 export function ChatPanel({
   messages,
+  channels,
+  activeChannel,
+  onSelectChannel,
   focused,
   roster,
   onSend,
@@ -173,15 +183,52 @@ export function ChatPanel({
     onFocusChange(false);
   };
 
+  const active = channels.find((channel) => channel.id === activeChannel) ?? null;
+
   return (
     <div className="pointer-events-auto relative flex w-72 flex-col overflow-visible rounded-lg border border-white/10 bg-black/65 text-white backdrop-blur-sm">
+      {channels.length > 0 ? (
+        // The corner box is the "where you stand" view; a channel tab is the
+        // same box pointed at a place you are in by membership instead. The
+        // overlay will grow this into a real transcript; for now, tabs.
+        <div
+          role="tablist"
+          className="flex gap-1 overflow-x-auto border-b border-white/10 px-2 pt-1.5 pb-1 text-[11px]"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active === null}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onSelectChannel(null)}
+            className={`rounded px-1.5 py-0.5 ${active === null ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}
+          >
+            nearby
+          </button>
+          {channels.map((channel) => (
+            <button
+              key={channel.id}
+              type="button"
+              role="tab"
+              aria-selected={active?.id === channel.id}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSelectChannel(channel.id)}
+              className={`rounded px-1.5 py-0.5 whitespace-nowrap ${active?.id === channel.id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}
+            >
+              #{channel.slug}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div
         ref={logRef}
         className="flex max-h-40 min-h-16 flex-col gap-1 overflow-y-auto px-3 py-2 text-xs"
       >
         {messages.length === 0 ? (
           <p className="text-[11px] text-white/40">
-            Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.
+            {active
+              ? `Nothing in #${active.slug} yet. Enter to post; every member reads it.`
+              : 'Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.'}
           </p>
         ) : (
           messages.map((message) => (
@@ -263,7 +310,13 @@ export function ChatPanel({
         ref={inputRef}
         value={draft}
         maxLength={CHAT_MAX_LENGTH}
-        placeholder={focused ? 'Say something — Esc to walk' : 'Enter to chat'}
+        placeholder={
+          focused
+            ? active
+              ? `Post in #${active.slug} — Esc to walk`
+              : 'Say something — Esc to walk'
+            : 'Enter to chat'
+        }
         onChange={(event) => {
           setDraft(event.target.value);
           setCaret(event.target.selectionStart ?? event.target.value.length);

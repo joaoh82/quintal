@@ -1,3 +1,4 @@
+import type { ChannelRef } from '../conversation.js';
 import type { Direction, PlayerKind } from '../player.js';
 
 /**
@@ -17,6 +18,10 @@ export const ClientMessage = {
   SetStatus: 'status',
   /** What was said in a zone before I arrived. Answered with `history`. */
   HistoryGet: 'history_get',
+  /** Say something in a channel I am a member of. Not spatial: no bubble, no earshot. */
+  ChannelChat: 'channel_chat',
+  /** Which channels am I in. Answered with `channels`, and again whenever that changes. */
+  ChannelsGet: 'channels_get',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -38,6 +43,10 @@ export const ServerMessage = {
    * to be listening before the server speaks.
    */
   History: 'history',
+  /** Somebody posted in a channel you are in. */
+  ChannelChat: 'channel_chat',
+  /** The channels you are in. In reply to `channels_get`, and whenever it changes. */
+  Channels: 'channels',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
 } as const;
@@ -83,6 +92,8 @@ export interface HistoryGetPayload {
    * should hold what earshot would have held, whichever zones that crosses.
    */
   zoneId?: string;
+  /** A channel's transcript instead. You have to be a member. Wins over `zoneId`. */
+  channelId?: string;
   /** Only messages before this time (ms since epoch), to page back. */
   before?: number;
   /** How many. Clamped to CHAT_LOG_LIMIT. */
@@ -90,12 +101,29 @@ export interface HistoryGetPayload {
 }
 
 export interface HistoryPayload {
-  /** The zone read, or null for an earshot read. */
+  /** The zone read, or null for an earshot or channel read. */
   zoneId: string | null;
+  /** The channel read, or null for a spatial read. */
+  channelId: string | null;
   /** Oldest first. */
   messages: ChatBroadcastPayload[];
   /** There is more before the first message here. */
   hasMore: boolean;
+}
+
+export interface ChannelChatSendPayload {
+  channelId: string;
+  text: string;
+}
+
+/** A line in a channel. Same shape as spatial chat plus where it was said. */
+export interface ChannelChatPayload extends ChatBroadcastPayload {
+  channel: ChannelRef;
+}
+
+export interface ChannelsPayload {
+  /** The channels this client is a member of. */
+  channels: ChannelRef[];
 }
 
 export interface ErrorPayload {

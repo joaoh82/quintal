@@ -3,6 +3,7 @@
  * use `@quintal/shared` for the types and constants the browser needs.
  */
 export * from './agents.js';
+export * from './channels.js';
 export * from './client.js';
 export * from './env.js';
 export * from './host-tokens.js';

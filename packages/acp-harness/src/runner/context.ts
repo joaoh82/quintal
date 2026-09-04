@@ -25,14 +25,23 @@ export interface Trigger {
   fromName: string;
   fromKind: 'human' | 'agent';
   text: string;
-  /** Tiles away, or null for a mention from across the map. */
+  /** Tiles away, or null for a mention from across the map or a channel. */
   distance: number | null;
+  /** The channel this was posted in, by slug, when it was not said aloud. */
+  channel?: string;
   sentAt: number;
 }
 
 export interface EnvelopeInput {
   agentName: string;
   zoneLabel: string;
+  /**
+   * The channel this turn is in, by slug, when it is a channel turn. What is
+   * said in reply goes to the channel, not into the air around the agent,
+   * and the model is told so — a reply nobody nearby can hear is a different
+   * situation from a reply everybody nearby can.
+   */
+  channel?: string;
   /** Triggering messages, oldest first. */
   triggers: Trigger[];
   /** Recent conversation, oldest first, excluding the triggers. */
@@ -44,9 +53,11 @@ export interface EnvelopeInput {
 function describeSender(trigger: Trigger): string {
   const kind = trigger.fromKind === 'agent' ? 'agent' : 'human';
   const where =
-    trigger.distance === null
-      ? 'mentioned you from elsewhere'
-      : `${trigger.distance} tiles away`;
+    trigger.channel !== undefined
+      ? `in #${trigger.channel}`
+      : trigger.distance === null
+        ? 'mentioned you from elsewhere'
+        : `${trigger.distance} tiles away`;
   return `${trigger.fromName} (${kind}, ${where})`;
 }
 
@@ -60,7 +71,16 @@ export function buildEnvelope(input: EnvelopeInput): string {
   const lines: string[] = [];
 
   lines.push('[Context]');
-  lines.push(`You are ${input.agentName}, in ${input.zoneLabel}.`);
+  if (input.channel !== undefined) {
+    lines.push(
+      `You are ${input.agentName}, standing in ${input.zoneLabel}, reading the #${input.channel} channel.`,
+    );
+    lines.push(
+      'Your reply is posted to the channel — every member reads it, wherever they are. Nobody nearby hears it.',
+    );
+  } else {
+    lines.push(`You are ${input.agentName}, in ${input.zoneLabel}.`);
+  }
 
   if (input.window.length > 0) {
     lines.push('');

@@ -107,6 +107,7 @@ const TOOLS = [
     description:
       'Read what was said. "nearby" is what you could hear from where you stand; ' +
       '"zone" is a zone\'s transcript (yours, or any zone by id from look_around); ' +
+      '"channel" is a channel you are a member of (by name, e.g. "engineering"); ' +
       '"mentions" is every message that addressed you by name, wherever it was said. ' +
       'History is kept across restarts. Use this when someone refers to something ' +
       'said before you were asked, rather than guessing; pass "before" (the sentAt ' +
@@ -114,8 +115,16 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        scope: { type: 'string', enum: ['nearby', 'zone', 'mentions'], default: 'nearby' },
+        scope: {
+          type: 'string',
+          enum: ['nearby', 'zone', 'channel', 'mentions'],
+          default: 'nearby',
+        },
         zone: { type: 'string', description: 'With scope "zone": a zone id.' },
+        channel: {
+          type: 'string',
+          description: 'With scope "channel": the channel, by name (without the #) or id.',
+        },
         n: { type: 'number', minimum: 1, maximum: 50, default: 20 },
         before: { type: 'number', description: 'Only messages sent before this time (ms).' },
       },

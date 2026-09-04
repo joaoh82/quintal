@@ -560,6 +560,13 @@ export const conversations = sqliteTable(
     zoneId: text('zone_id'),
     /** The zone's label, or a channel's name. Display only. */
     name: text('name').notNull().default(''),
+    /**
+     * For `channel`: the name as an identifier — `#engineering` — unique in
+     * its office. Null for zones, whose identity is the map and zone id.
+     */
+    slug: text('slug'),
+    /** For `channel`: who made it. Null for zones, which nobody made. */
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },
   (table) => [
@@ -567,6 +574,36 @@ export const conversations = sqliteTable(
     // map and zone, and SQLite treats nulls as distinct in a unique index, so
     // any number of channels fit under it without colliding.
     uniqueIndex('conversations_zone_idx').on(table.workspaceId, table.mapId, table.zoneId),
+    // One channel per name per office, by the same null-is-distinct rule.
+    uniqueIndex('conversations_slug_idx').on(table.workspaceId, table.slug),
+  ],
+);
+
+/**
+ * Who is in a channel.
+ *
+ * Zones have no rows here — whoever stands in one is in it. A channel names
+ * its members, and a member is a person or an agent by stable id. `addedBy`
+ * is kept because the rule for agents is that only their owner may add them,
+ * and a rule worth having is worth being able to audit.
+ */
+export const conversationMembers = sqliteTable(
+  'conversation_members',
+  {
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    /** `users.id` or `agents.id`. */
+    memberId: text('member_id').notNull(),
+    memberKind: text('member_kind', { enum: ['human', 'agent'] }).notNull(),
+    /** `users.id` of whoever added them — themselves, when they joined. */
+    addedBy: text('added_by').notNull(),
+    addedAt: integer('added_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.memberId] }),
+    // "Which channels am I in" is asked on every join.
+    index('conversation_members_member_idx').on(table.memberId),
   ],
 );
 
@@ -650,6 +687,7 @@ export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type AgentMemory = typeof agentMemory.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
+export type ConversationMember = typeof conversationMembers.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
 export type InstanceSettingsRow = typeof instanceSettings.$inferSelect;

@@ -6,6 +6,7 @@ import {
   isAddressed,
   parseAgentCommand,
   type RuntimeStatus,
+  type AgentChannelChatEvent,
   type AgentChatEvent,
   type AgentMentionEvent,
 } from '@quintal/shared';
@@ -16,6 +17,12 @@ import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
 import { basePrompt } from './base-prompt.js';
 import { LOBBY_SCOPE, SessionStore } from './sessions.js';
+
+/**
+ * Scope prefix for a channel. Zones are scoped by zone id; a channel scope
+ * cannot collide with one because no zone id carries a colon.
+ */
+const CHANNEL_SCOPE = 'channel:';
 import {
   MAX_BATCH,
   TOOL_HINT,
@@ -93,6 +100,8 @@ export class AgentRunner {
   readonly #queues = new Map<string, Trigger[]>();
   /** Conversation history per scope, for the pushed window. */
   readonly #history = new Map<string, AgentChatEvent[]>();
+  /** channel id -> slug, from every channel line seen, for naming a scope. */
+  readonly #channelSlugs = new Map<string, string>();
 
   #busy = false;
   #currentScope: string | null = null;
@@ -197,6 +206,7 @@ export class AgentRunner {
     });
     this.#gateway.on('chat', (message) => this.#onChat(message, message.distance));
     this.#gateway.on('mention', (message) => this.#onMention(message));
+    this.#gateway.on('channelChat', (message) => this.#onChannelChat(message));
     this.#gateway.on('error', (error) => {
       this.#log('warn', `office refused something: [${error.code}] ${error.message}`);
       if (error.message.toLowerCase().includes('revoked')) void this.stop();
@@ -335,7 +345,7 @@ export class AgentRunner {
     // Never answer yourself.
     if (message.fromUserId === ready.agentId) return;
 
-    if (this.#handleOwnerCommand(message)) return;
+    if (this.#handleOwnerCommand(message, scope)) return;
 
     // "@me yes" / "@me no" answers an outstanding permission question rather
     // than starting a turn about it.
@@ -412,13 +422,61 @@ export class AgentRunner {
   }
 
   /**
+   * A line in a channel we are in.
+   *
+   * Every line is remembered, in the channel's own scope, so the window a
+   * turn is given holds the conversation. Only a line that names us starts a
+   * turn — the office decides that, not a distance, because a channel has no
+   * distances. Everything else is the quiet an agent in a channel is
+   * supposed to keep.
+   */
+  #onChannelChat(message: AgentChannelChatEvent): void {
+    const scope = `${CHANNEL_SCOPE}${message.channel.id}`;
+    this.#channelSlugs.set(message.channel.id, message.channel.slug);
+    const asChat: AgentChatEvent = {
+      from: message.from,
+      fromUserId: message.fromUserId,
+      fromName: message.fromName,
+      fromKind: message.fromKind,
+      text: message.text,
+      distance: 0,
+      sentAt: message.sentAt,
+    };
+    this.#remember(scope, asChat);
+
+    const ready = this.#gateway.ready;
+    if (!ready) return;
+    if (message.fromUserId === ready.agentId) return;
+    if (this.#handleOwnerCommand(asChat, scope)) return;
+    if (!message.mentioned) return;
+
+    this.#enqueue(scope, {
+      fromUserId: message.fromUserId,
+      fromName: message.fromName,
+      fromKind: message.fromKind,
+      text: message.text,
+      distance: null,
+      channel: message.channel.slug,
+      sentAt: message.sentAt,
+    });
+  }
+
+  /** The channel a scope is, or null for a spatial scope. */
+  #channelOf(scope: string): { id: string; slug: string } | null {
+    if (!scope.startsWith(CHANNEL_SCOPE)) return null;
+    const id = scope.slice(CHANNEL_SCOPE.length);
+    const known = this.#gateway.channels().find((channel) => channel.id === id);
+    return { id, slug: known?.slug ?? this.#channelSlugs.get(id) ?? id };
+  }
+
+  /**
    * `!cancel`, `!rotate`, `!shutdown` — owner only.
    *
    * Checked against `ownerUserId`, never the display name: names are editable,
    * so name matching would let anyone in the workspace shut down somebody
    * else's agent by renaming themselves.
    */
-  #handleOwnerCommand(message: AgentChatEvent): boolean {
+  #handleOwnerCommand(message: AgentChatEvent, scope: string): boolean {
     const parsed = parseAgentCommand(message.text);
     if (!parsed) return false;
 
@@ -451,7 +509,8 @@ export class AgentRunner {
         return true;
       }
       case '!rotate': {
-        const scope = this.#scopeOf();
+        // The scope the command arrived in: `!rotate` in a channel rotates
+        // the channel's session, not the one for wherever we are standing.
         const dropped = this.#sessions.drop(scope, 'rotate');
         this.#unprimed.delete(scope);
         this.#log('info', `rotated session for "${scope}"${dropped ? '' : ' (none live)'}`);
@@ -466,7 +525,7 @@ export class AgentRunner {
         }
         // Not awaited inline: a command handler that blocks would hold up the
         // chat loop for a round trip to the office.
-        void this.#writeCoreMemory(parsed.body);
+        void this.#writeCoreMemory(parsed.body, scope);
         return true;
       }
       case '!shutdown': {
@@ -543,9 +602,11 @@ export class AgentRunner {
     this.#currentAcpSession = session;
 
     const triggerTimes = new Set(triggers.map((t) => t.sentAt));
+    const channel = this.#channelOf(scope);
     const envelope = buildEnvelope({
       agentName: ready.name,
       zoneLabel: this.#zoneLabel(),
+      ...(channel ? { channel: channel.slug } : {}),
       triggers,
       window: selectWindow(this.#history.get(scope) ?? [], triggerTimes),
       steer,
@@ -568,7 +629,7 @@ export class AgentRunner {
     // knowing nothing, and the next one must say it all again.
     if (priming) this.#unprimed.delete(scope);
 
-    this.#speak(this.#responseBuffer);
+    this.#speak(this.#responseBuffer, scope);
     this.#audit('response', {
       scope,
       session,
@@ -704,7 +765,7 @@ export class AgentRunner {
    * rotated, which is exactly the "did it actually remember?" doubt this
    * command exists to remove.
    */
-  async #writeCoreMemory(note: string): Promise<void> {
+  async #writeCoreMemory(note: string, scope: string = this.#scopeOf()): Promise<void> {
     try {
       const existing = (await this.#gateway.memoryGet('core')).content;
       const next = existing.trim().length > 0 ? `${existing.trim()}\n${note}` : note;
@@ -720,7 +781,7 @@ export class AgentRunner {
       // Said out loud rather than only logged. The owner asked for something to
       // be kept; silence would look exactly like success.
       this.#log('warn', `could not remember that: ${describe(error)}`);
-      this.#speak('I could not write that to memory, so it will not survive a restart.');
+      this.#speak('I could not write that to memory, so it will not survive a restart.', scope);
     }
   }
 
@@ -833,7 +894,14 @@ export class AgentRunner {
 
   // --- outbound ------------------------------------------------------------
 
-  #speak(text: string): void {
+  /**
+   * Say what the turn produced — aloud, or into the channel the turn was in.
+   *
+   * The reply goes where the question came from. A channel turn answered
+   * out loud would be heard by whoever happens to stand nearby and by nobody
+   * in the channel, which is the wrong audience twice.
+   */
+  #speak(text: string, scope: string = this.#scopeOf()): void {
     const trimmed = text.trim();
     if (trimmed.length === 0) {
       // Silence is a valid answer, and often the right one.
@@ -841,11 +909,12 @@ export class AgentRunner {
       return;
     }
 
+    const channelId = this.#channelOf(scope)?.id;
     const bubbles = toBubbles(trimmed);
     for (const [index, bubble] of bubbles.entries()) {
       // The office rate-limits agents to one message every 2s; pace ourselves
       // rather than earning refusals we would then have to retry.
-      setTimeout(() => this.#gateway.say(bubble), index * 2100);
+      setTimeout(() => this.#gateway.say(bubble, channelId), index * 2100);
     }
   }
 

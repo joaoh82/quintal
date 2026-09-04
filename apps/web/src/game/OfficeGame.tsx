@@ -2,6 +2,7 @@
 
 import {
   CHAT_LOG_LIMIT,
+  type ChannelRef,
   type ChatBroadcastPayload,
   type ConnectionStatus,
   type MapZone,
@@ -32,6 +33,21 @@ const INITIAL_HUD: Hud = {
 };
 
 /**
+ * What was said before we were listening goes in front of what we have heard
+ * since. A line can be in both — said after we joined, before the page came
+ * back — and a message read from history carries a different `from` than the
+ * same message heard live, so identity is the words.
+ */
+function prependHistory(
+  heard: ChatBroadcastPayload[],
+  earlier: ChatBroadcastPayload[],
+): ChatBroadcastPayload[] {
+  const seen = new Set(heard.map((m) => `${m.sentAt} ${m.fromName} ${m.text}`));
+  const unseen = earlier.filter((m) => !seen.has(`${m.sentAt} ${m.fromName} ${m.text}`));
+  return [...unseen, ...heard].slice(-CHAT_LOG_LIMIT);
+}
+
+/**
  * Hosts the Phaser canvas and the overlays around it.
  *
  * The game is created once and torn down on unmount. React StrictMode mounts
@@ -51,6 +67,14 @@ export default function OfficeGame() {
   const [hud, setHud] = useState<Hud>(INITIAL_HUD);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [messages, setMessages] = useState<ChatBroadcastPayload[]>([]);
+  /** The channels we are in, as the office last reported them. */
+  const [channels, setChannels] = useState<ChannelRef[]>([]);
+  /** Which tab the chat box shows: a channel id, or null for nearby. */
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
+  /** Per-channel transcript, as much as we have seen or loaded. */
+  const [channelLog, setChannelLog] = useState<Record<string, ChatBroadcastPayload[]>>({});
+  /** Channels whose history we have asked for — asked once, not per tab switch. */
+  const loadedChannels = useRef(new Set<string>());
   const [connection, setConnection] = useState<ConnectionStatus>('connecting');
   const [connectionDetail, setConnectionDetail] = useState<string>('');
   const [notice, setNotice] = useState<string>('');
@@ -139,15 +163,32 @@ export default function OfficeGame() {
       // heard since. A line can be in both — said after we joined, before the
       // page came back — and a message read from history carries a different
       // `from` than the same message heard live, so identity is the words.
-      gameBridge.on('history', ({ messages: earlier }) =>
-        setMessages((prev) => {
-          const heard = new Set(prev.map((m) => `${m.sentAt} ${m.fromName} ${m.text}`));
-          const unseen = earlier.filter(
-            (m) => !heard.has(`${m.sentAt} ${m.fromName} ${m.text}`),
-          );
-          return [...unseen, ...prev].slice(-CHAT_LOG_LIMIT);
-        }),
+      gameBridge.on('history', ({ channelId, messages: earlier }) => {
+        if (channelId !== null) {
+          setChannelLog((prev) => ({
+            ...prev,
+            [channelId]: prependHistory(prev[channelId] ?? [], earlier),
+          }));
+          return;
+        }
+        setMessages((prev) => prependHistory(prev, earlier));
+      }),
+      gameBridge.on('channelChat', (message) =>
+        setChannelLog((prev) => ({
+          ...prev,
+          [message.channel.id]: [...(prev[message.channel.id] ?? []), message].slice(
+            -CHAT_LOG_LIMIT,
+          ),
+        })),
       ),
+      gameBridge.on('channels', ({ channels: mine }) => {
+        setChannels(mine);
+        // A tab for a channel we were taken out of is a tab that can never
+        // send again; fall back to nearby rather than leave it selected.
+        setActiveChannel((current) =>
+          current !== null && !mine.some((channel) => channel.id === current) ? null : current,
+        );
+      }),
       gameBridge.on('connection', ({ status, detail }) => {
         setConnection(status);
         setConnectionDetail(detail ?? '');
@@ -191,8 +232,20 @@ export default function OfficeGame() {
     sessionRef.current?.setInputCaptured(chatFocused);
   }, [chatFocused]);
 
-  const send = useCallback((text: string) => {
-    sessionRef.current?.say(text);
+  const send = useCallback(
+    (text: string) => {
+      if (activeChannel !== null) sessionRef.current?.sayInChannel(activeChannel, text);
+      else sessionRef.current?.say(text);
+    },
+    [activeChannel],
+  );
+
+  const selectChannel = useCallback((channelId: string | null) => {
+    setActiveChannel(channelId);
+    if (channelId !== null && !loadedChannels.current.has(channelId)) {
+      loadedChannels.current.add(channelId);
+      sessionRef.current?.loadChannelHistory(channelId);
+    }
   }, []);
 
   const reconnecting = connection === 'reconnecting' || connection === 'connecting';
@@ -207,7 +260,10 @@ export default function OfficeGame() {
 
       <div className="pointer-events-none absolute bottom-10 left-3">
         <ChatPanel
-          messages={messages}
+          messages={activeChannel !== null ? (channelLog[activeChannel] ?? []) : messages}
+          channels={channels}
+          activeChannel={activeChannel}
+          onSelectChannel={selectChannel}
           focused={chatFocused}
           roster={roster}
           onSend={send}

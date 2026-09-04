@@ -26,6 +26,10 @@ export interface OfficeSession {
   setInputCaptured(captured: boolean): void;
   /** Say something in the room. */
   say(text: string): void;
+  /** Post in a channel you are in. Nobody nearby hears it; every member reads it. */
+  sayInChannel(channelId: string, text: string): void;
+  /** Ask for a channel's recent transcript. Arrives as a `history` bridge event. */
+  loadChannelHistory(channelId: string): void;
   destroy(): void;
 }
 
@@ -125,6 +129,12 @@ export async function createGame(
     },
     say(text) {
       scene()?.say(text);
+    },
+    sayInChannel(channelId, text) {
+      scene()?.sayInChannel(channelId, text);
+    },
+    loadChannelHistory(channelId) {
+      scene()?.loadChannelHistory(channelId);
     },
     destroy() {
       closedByUs = true;

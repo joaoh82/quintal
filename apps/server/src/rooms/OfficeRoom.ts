@@ -34,6 +34,8 @@ import {
   isAddressed,
   mentionedNames,
   zoneAt,
+  type AgentChannelChatEvent,
+  type AgentChannelsEvent,
   type AgentChatEvent,
   type AgentErrorPayload,
   type AgentLookAroundPayload,
@@ -48,6 +50,10 @@ import {
   type AgentRosterEvent,
   type AgentSayPayload,
   type AgentSetStatusPayload,
+  type ChannelChatPayload,
+  type ChannelChatSendPayload,
+  type ChannelRef,
+  type ChannelsPayload,
   type ChatBroadcastPayload,
   type ChatSendPayload,
   type Direction,
@@ -70,6 +76,7 @@ import {
 import {
   MemoryLimitError,
   MemorySlugError,
+  channelMembershipForWorkspace,
   ensureZoneConversations,
   getAgentMemory,
   getDb,
@@ -80,6 +87,7 @@ import {
   recordMessage,
   setAgentMemory,
   type AgentIdentity,
+  type ChannelMember,
   type MessagePage,
   type StoredMessage,
 } from '@quintal/shared/db';
@@ -172,6 +180,16 @@ export class OfficeRoom extends Room<OfficeState> {
    * conversation awaits it; nothing else waits on it.
    */
   #conversations: Promise<ReadonlyMap<string, string>> = Promise.resolve(new Map());
+
+  /**
+   * Every channel in this office and who is in it, refreshed on the settings
+   * cadence. Membership is changed from the settings page, in another
+   * process in development, so this polls like everything else that is.
+   */
+  #channels: ReadonlyMap<string, ChannelRef & { members: ReadonlyMap<string, ChannelMember> }> =
+    new Map();
+  /** sessionId -> the channel list last sent to it, so a change is sent once. */
+  readonly #channelsSent = new Map<string, string>();
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
@@ -226,6 +244,10 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.HistoryGet, (client, payload: HistoryGetPayload) =>
       void this.#onHistoryGet(client, payload),
     );
+    this.onMessage(ClientMessage.ChannelChat, (client, payload: ChannelChatSendPayload) =>
+      this.#onChannelChat(client, payload),
+    );
+    this.onMessage(ClientMessage.ChannelsGet, (client) => this.#sendChannels(client.sessionId));
 
     // --- agent protocol (docs/GATEWAY.md) ---
     this.onMessage(AgentMessage.Say, (client, payload: AgentSayPayload) =>
@@ -254,7 +276,11 @@ export class OfficeRoom extends Room<OfficeState> {
     );
 
     void this.#refreshSettings();
-    this.#settingsTimer = setInterval(() => void this.#refreshSettings(), 10_000);
+    void this.#refreshChannels();
+    this.#settingsTimer = setInterval(() => {
+      void this.#refreshSettings();
+      void this.#refreshChannels();
+    }, 10_000);
 
     this.#heartbeatTimer = setInterval(() => this.#sendHeartbeats(), AGENT_HEARTBEAT_MS);
     this.#revocationTimer = setInterval(
@@ -432,6 +458,7 @@ export class OfficeRoom extends Room<OfficeState> {
       tile: spawn,
       zoneId: zone?.id ?? null,
       zones: this.#map.zones.map((z) => ({ id: z.id, label: z.label, kind: z.kind })),
+      channels: this.#channelsFor(identity.id),
       serverTime: Date.now(),
       limits: {
         chatIntervalMs: AGENT_CHAT_INTERVAL_MS,
@@ -652,8 +679,33 @@ export class OfficeRoom extends Room<OfficeState> {
     const speaker = this.state.players.get(client.sessionId);
     if (!speaker) return;
 
+    const text = this.#acceptHumanText(client, rawText);
+    if (text === null) return;
+
+    this.#deliverChat(client.sessionId, speaker, text);
+  }
+
+  #onChannelChat(client: Client, payload: ChannelChatSendPayload): void {
+    const speaker = this.state.players.get(client.sessionId);
+    if (!speaker) return;
+    if (this.#sims.get(client.sessionId)?.agent) return; // agents post via agent:say
+
+    const channel = this.#channelFor(speaker.userId, payload?.channelId);
+    if (!channel) {
+      this.#sendError(client, 'unauthorised', 'Not a channel you are in.');
+      return;
+    }
+
+    const text = this.#acceptHumanText(client, payload?.text);
+    if (text === null) return;
+
+    this.#deliverChannelChat(client.sessionId, speaker, channel, text);
+  }
+
+  /** Length and rate checks shared by everything a person can type. Null = refused. */
+  #acceptHumanText(client: Client, rawText: unknown): string | null {
     const text = String(rawText ?? '').trim();
-    if (text.length === 0) return;
+    if (text.length === 0) return null;
 
     if (text.length > CHAT_MAX_LENGTH) {
       this.#sendError(
@@ -661,16 +713,16 @@ export class OfficeRoom extends Room<OfficeState> {
         'invalid_message',
         `Messages are limited to ${CHAT_MAX_LENGTH} characters.`,
       );
-      return;
+      return null;
     }
 
     if (!this.#chatLimiter.tryConsume(client.sessionId)) {
       const retryAfter = this.#chatLimiter.retryAfterSeconds(client.sessionId);
       this.#sendError(client, 'rate_limited', `Slow down — try again in ${retryAfter}s.`);
-      return;
+      return null;
     }
 
-    this.#deliverChat(client.sessionId, speaker, text);
+    return text;
   }
 
   /**
@@ -758,6 +810,135 @@ export class OfficeRoom extends Room<OfficeState> {
     });
   }
 
+  // --- channels ------------------------------------------------------------
+
+  async #refreshChannels(): Promise<void> {
+    try {
+      this.#channels = await channelMembershipForWorkspace(getDb(), this.#workspaceId);
+    } catch (error: unknown) {
+      logger.error('[office] could not read channels', error);
+      return;
+    }
+    // Anyone whose list changed hears about it; anyone whose list did not, does not.
+    for (const sessionId of this.state.players.keys()) this.#sendChannels(sessionId);
+  }
+
+  /** The channels one person or agent is in. */
+  #channelsFor(memberId: string): ChannelRef[] {
+    const mine: ChannelRef[] = [];
+    for (const channel of this.#channels.values()) {
+      if (channel.members.has(memberId)) {
+        mine.push({ id: channel.id, name: channel.name, slug: channel.slug });
+      }
+    }
+    return mine;
+  }
+
+  /** A channel this member is in, by id — or null, which covers "no such channel" too. */
+  #channelFor(memberId: string, channelId: unknown) {
+    if (typeof channelId !== 'string' || channelId.length === 0) return null;
+    const channel = this.#channels.get(channelId);
+    return channel?.members.has(memberId) ? channel : null;
+  }
+
+  /**
+   * Tell one client which channels it is in, if that changed since last time.
+   *
+   * Sent on request and on every refresh, but only when different: a list
+   * that arrives every ten seconds unchanged is a list clients learn to
+   * ignore, and then miss the one that matters.
+   */
+  #sendChannels(sessionId: string): void {
+    const client = this.clients.getById(sessionId);
+    const player = this.state.players.get(sessionId);
+    if (!client || !player) return;
+
+    const channels = this.#channelsFor(player.userId);
+    const signature = channels.map((channel) => `${channel.id}:${channel.slug}`).join(',');
+    if (this.#channelsSent.get(sessionId) === signature) return;
+    this.#channelsSent.set(sessionId, signature);
+
+    if (this.#agents.has(sessionId)) {
+      client.send(AgentServerMessage.Channels, { channels } satisfies AgentChannelsEvent);
+    } else {
+      client.send(ServerMessage.Channels, { channels } satisfies ChannelsPayload);
+    }
+  }
+
+  /**
+   * Post a line in a channel: every member in the room is told, wherever
+   * they stand, and the line is kept for the members who are not.
+   *
+   * Not spatial, deliberately. No bubble, no earshot, no reply-debt — a
+   * channel is a place you are in by membership, not by standing somewhere,
+   * and mixing the two would make "who heard that" unanswerable.
+   *
+   * Agents are told whether the line named them. They wake for mentions and
+   * for nothing else, but they are told everything, so the window their next
+   * turn is given has the conversation the mention was part of.
+   */
+  #deliverChannelChat(
+    sessionId: string,
+    speaker: OfficePlayer,
+    channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
+    text: string,
+  ): void {
+    const sentAt = Date.now();
+
+    // Mentions resolve against the channel's members, present or not: a
+    // member who is not in the room right now can still be told later that
+    // they were named, which is what the mention index is for.
+    const addressed = mentionedNames(text);
+    const mentioned = new Set<string>();
+    for (const member of channel.members.values()) {
+      if (member.id !== speaker.userId && addressed.includes(member.name.toLowerCase())) {
+        mentioned.add(member.id);
+      }
+    }
+
+    const ref: ChannelRef = { id: channel.id, name: channel.name, slug: channel.slug };
+    const line = {
+      from: sessionId,
+      fromUserId: speaker.userId,
+      fromName: speaker.name,
+      fromKind: speaker.kind,
+      text,
+      sentAt,
+    };
+
+    for (const [listenerId, listener] of this.state.players) {
+      if (!channel.members.has(listener.userId)) continue;
+      const target = this.clients.getById(listenerId);
+      if (!target) continue;
+
+      if (this.#agents.has(listenerId)) {
+        target.send(AgentServerMessage.ChannelChat, {
+          channel: ref,
+          ...line,
+          mentioned: mentioned.has(listener.userId),
+        } satisfies AgentChannelChatEvent);
+      } else {
+        target.send(ServerMessage.ChannelChat, {
+          channel: ref,
+          from: line.from,
+          fromName: line.fromName,
+          fromKind: line.fromKind,
+          text,
+          sentAt,
+        } satisfies ChannelChatPayload);
+      }
+    }
+
+    void this.#keepIn(channel.id, {
+      fromId: speaker.userId,
+      fromKind: speaker.kind,
+      fromName: speaker.name,
+      text,
+      sentAt,
+      mentions: [...mentioned],
+    });
+  }
+
   // --- history -------------------------------------------------------------
 
   /**
@@ -776,9 +957,19 @@ export class OfficeRoom extends Room<OfficeState> {
     }
   }
 
-  async #keep(zoneId: string, message: Omit<Parameters<typeof recordMessage>[1], 'conversationId'>): Promise<void> {
+  async #keep(
+    zoneId: string,
+    message: Omit<Parameters<typeof recordMessage>[1], 'conversationId'>,
+  ): Promise<void> {
     const conversationId = (await this.#conversations).get(zoneId);
     if (!conversationId) return;
+    await this.#keepIn(conversationId, message);
+  }
+
+  async #keepIn(
+    conversationId: string,
+    message: Omit<Parameters<typeof recordMessage>[1], 'conversationId'>,
+  ): Promise<void> {
     try {
       await recordMessage(getDb(), { conversationId, ...message });
     } catch (error: unknown) {
@@ -818,9 +1009,18 @@ export class OfficeRoom extends Room<OfficeState> {
     const workspaceId = this.#workspaceId;
 
     let zoneId: string | null = null;
+    let channelId: string | null = null;
     let page: MessagePage;
     try {
-      if (typeof payload?.zoneId === 'string' && payload.zoneId.length > 0) {
+      if (typeof payload?.channelId === 'string' && payload.channelId.length > 0) {
+        const channel = this.#channelFor(player.userId, payload.channelId);
+        if (!channel) {
+          this.#sendError(client, 'unauthorised', 'Not a channel you are in.');
+          return;
+        }
+        channelId = channel.id;
+        page = await recentMessages(getDb(), channel.id, { workspaceId, limit, ...paging });
+      } else if (typeof payload?.zoneId === 'string' && payload.zoneId.length > 0) {
         zoneId = this.#zoneIdFor(player, payload.zoneId);
         if (zoneId === null) {
           this.#sendError(client, 'invalid_message', 'No such zone.');
@@ -843,6 +1043,7 @@ export class OfficeRoom extends Room<OfficeState> {
       }
       client.send(ServerMessage.History, {
         zoneId,
+        channelId,
         hasMore: page.hasMore,
         messages: page.messages.map((message) => ({
           from: message.fromId,
@@ -940,6 +1141,17 @@ export class OfficeRoom extends Room<OfficeState> {
     const waitMs = allowChat(session, Date.now());
     if (waitMs > 0) {
       this.#denyAgent(client, session, 'rate_limited', 'Agents may speak once every 2s.', waitMs);
+      return;
+    }
+
+    if (typeof payload?.channelId === 'string' && payload.channelId.length > 0) {
+      const channel = this.#channelFor(speaker.userId, payload.channelId);
+      if (!channel) {
+        this.#denyAgent(client, session, 'not_found', 'Not a channel you are in.');
+        return;
+      }
+      this.#deliverChannelChat(client.sessionId, speaker, channel, text);
+      audit(session.identity.id, 'effect.posted', { text, channel: channel.slug });
       return;
     }
 
@@ -1086,7 +1298,9 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!session || !player) return;
 
     const scope =
-      payload?.scope === 'zone' || payload?.scope === 'mentions' ? payload.scope : 'nearby';
+      payload?.scope === 'zone' || payload?.scope === 'mentions' || payload?.scope === 'channel'
+        ? payload.scope
+        : 'nearby';
     const limit = Math.min(Math.max(Number(payload?.n) || MESSAGES_GET_MAX, 1), MESSAGES_GET_MAX);
     const before = Number(payload?.before);
     const paging = Number.isFinite(before) && before > 0 ? { before } : {};
@@ -1096,10 +1310,22 @@ export class OfficeRoom extends Room<OfficeState> {
     const db = getDb();
     const workspaceId = this.#workspaceId;
     let zoneId: string | null = null;
+    let channelId: string | null = null;
     let page: MessagePage;
     try {
       if (scope === 'mentions') {
         page = await mentionsOf(db, session.identity.id, { workspaceId, limit, ...paging });
+      } else if (scope === 'channel') {
+        const channel = this.#channelFor(session.identity.id, payload?.channelId);
+        if (!channel) {
+          this.#replyError(client, payload?.requestId, {
+            code: 'not_found',
+            message: 'Not a channel you are in.',
+          });
+          return;
+        }
+        channelId = channel.id;
+        page = await recentMessages(db, channel.id, { workspaceId, limit, ...paging });
       } else if (scope === 'zone') {
         zoneId = this.#zoneIdFor(player, payload?.zoneId);
         if (zoneId === null) {
@@ -1136,6 +1362,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const result: MessagesGetResult = {
       scope,
       zoneId,
+      channelId,
       hasMore: page.hasMore,
       messages: page.messages.map((message) => this.#toChatEvent(message, player)),
     };
@@ -1375,6 +1602,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
+    this.#channelsSent.delete(sessionId);
     // Nothing about what they said is forgotten. It used to be: leaving the
     // room erased your lines from everybody else's history.
   }

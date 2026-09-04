@@ -173,15 +173,27 @@ async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
 
     case 'messages_get': {
       const scope =
-        call.args.scope === 'zone' || call.args.scope === 'mentions' ? call.args.scope : 'nearby';
+        call.args.scope === 'zone' ||
+        call.args.scope === 'mentions' ||
+        call.args.scope === 'channel'
+          ? call.args.scope
+          : 'nearby';
       const n = Math.min(Math.max(Number(call.args.n) || 20, 1), 50);
       const before = Number(call.args.before);
+      // The model knows channels by name — that is what the envelope shows it —
+      // and the office by id. Accept either; resolve the name here.
+      const wanted = typeof call.args.channel === 'string' ? call.args.channel.trim() : '';
+      const slug = wanted.replace(/^#/, '').toLowerCase();
+      const channelId =
+        gateway.channels().find((channel) => channel.id === wanted || channel.slug === slug)
+          ?.id ?? wanted;
       return gateway.messagesGet({
         scope,
         n,
         ...(typeof call.args.zone === 'string' && call.args.zone.length > 0
           ? { zoneId: call.args.zone }
           : {}),
+        ...(channelId.length > 0 ? { channelId } : {}),
         ...(Number.isFinite(before) && before > 0 ? { before } : {}),
       });
     }
