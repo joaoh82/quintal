@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'node:test';
 
-import { createInviteLink, ensureMembership, redeemInviteLink } from './invites.js';
-import { users } from './schema.js';
+import { createInviteLink, redeemInviteLink } from './invites.js';
+import { memberships, users } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
 import {
   ensurePersonalWorkspace,
@@ -16,6 +16,21 @@ import {
   workspaceNameFollows,
 } from '../workspace.js';
 import { generateSecretKey, getPublicKeyHex } from '../identity.js';
+
+/**
+ * A membership row, written directly. Nothing in production makes one for a
+ * guest any more — a visit is carried by the session — so the tests that
+ * need a second membership say so themselves rather than through a helper
+ * that would imply the product still does this.
+ */
+async function addMember(
+  db: Awaited<ReturnType<typeof createTestDb>>,
+  workspaceId: string,
+  userId: string,
+  role: 'owner' | 'admin' | 'member',
+): Promise<void> {
+  await db.insert(memberships).values({ id: randomUUID(), workspaceId, userId, role });
+}
 
 /**
  * Which workspace is "yours".
@@ -54,11 +69,7 @@ describe('ensurePersonalWorkspace', () => {
     const guest = await newUserRow(db);
 
     const own = await ensurePersonalWorkspace(db, { userId: guest.id, pubkey: guest.pubkey });
-    await ensureMembership(db, {
-      workspaceId: host.workspaceId,
-      userId: guest.id,
-      role: 'member',
-    });
+    await addMember(db, host.workspaceId, guest.id, 'member');
 
     const resolved = await ensurePersonalWorkspace(db, {
       userId: guest.id,
@@ -82,11 +93,7 @@ describe('ensurePersonalWorkspace', () => {
     });
     const redeemed = await redeemInviteLink(db, token);
     assert.ok(redeemed.ok);
-    await ensureMembership(db, {
-      workspaceId: redeemed.link.workspaceId,
-      userId: guest.id,
-      role: redeemed.link.role,
-    });
+    await addMember(db, redeemed.link.workspaceId, guest.id, redeemed.link.role);
 
     const resolved = await ensurePersonalWorkspace(db, {
       userId: guest.id,
@@ -112,8 +119,8 @@ describe('ensurePersonalWorkspace', () => {
     const a = await createTestUser(db, 'A');
     const b = await createTestUser(db, 'B');
 
-    await ensureMembership(db, { workspaceId: a.workspaceId, userId: owner.id, role: 'member' });
-    await ensureMembership(db, { workspaceId: b.workspaceId, userId: owner.id, role: 'admin' });
+    await addMember(db, a.workspaceId, owner.id, 'member');
+    await addMember(db, b.workspaceId, owner.id, 'admin');
 
     for (let i = 0; i < 3; i += 1) {
       const resolved = await ensurePersonalWorkspace(db, { userId: owner.id });

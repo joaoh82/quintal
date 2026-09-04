@@ -167,3 +167,12 @@ export async function renameWorkspace(
 
   return { ...current, name, slug };
 }
+
+/** One office by id, or null. The lookup a session's guest grant resolves through. */
+export async function findWorkspaceById(
+  db: Database,
+  workspaceId: string,
+): Promise<Workspace | null> {
+  const rows = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  return rows[0] ?? null;
+}

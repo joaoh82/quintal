@@ -1,5 +1,4 @@
 import {
-  ensurePersonalWorkspace,
   findMembership,
   getDb,
   listAgentsForWorkspace,
@@ -10,8 +9,10 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
+import { currentOffice } from '@/lib/workspace';
 
 import { Channels } from './Channels';
+import { Visiting } from '../Visiting';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,11 +23,12 @@ export default async function ChannelsSettingsPage() {
   if (!session) redirect('/login');
 
   const db = getDb();
-  const workspace = await ensurePersonalWorkspace(db, {
-    userId: session.user.id,
-    name: session.user.name,
-    pubkey: session.user.pubkey,
-  });
+  const here = await currentOffice(db, session);
+  if (!here) redirect('/login');
+  // Channels are places you are put by members; a guest cannot be, so the
+  // directory would be a list of doors that do not open.
+  if (here.role === 'guest') return <Visiting office={here.workspace.name} what="channels" />;
+  const { workspace } = here;
 
   const [channels, people, agents, membership] = await Promise.all([
     listChannels(db, workspace.id),

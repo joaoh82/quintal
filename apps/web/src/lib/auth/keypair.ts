@@ -300,11 +300,9 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             // visit, so minting one turns a link bounded by an expiry and a
             // use count into a standing credential — a leaked ephemeral key
             // would walk back in with no invite at all. The grant belongs to
-            // the session, which expires on its own; the session-scoped grant
-            // and the room gate that reads it land together when offices
-            // become workspace-scoped, because a grant nothing checks is
-            // decoration. Until then no room is scoped, so there is nothing
-            // for a membership to unlock.
+            // the session, which expires on its own, and the room gate reads
+            // it — `mayEnterOffice` — so a guest is in exactly one office for
+            // exactly as long as the session lasts.
             isGuest = true;
             // The grant the room gate reads. Bounded by the session, so a
             // forwarded link cannot become a standing key to the place.
@@ -314,9 +312,14 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           // `overrideAll` is not optional here: without it Better Auth applies
           // the declared default for `isGuest` *after* the override, and every
           // guest session comes out marked as a normal one.
+          //
+          // The second argument is Better Auth's "don't remember me": a guest
+          // session lasts a day rather than the thirty a member's does. The
+          // badge and the access should die together, and a visit that could
+          // be resumed for a month is not a visit.
           const session = await ctx.context.internalAdapter.createSession(
             user.id,
-            false,
+            isGuest,
             { isGuest, guestWorkspaceId },
             true,
           );
