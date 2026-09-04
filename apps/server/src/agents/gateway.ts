@@ -1,6 +1,7 @@
 import { logger } from '@colyseus/core';
 import {
   AGENT_CHAT_INTERVAL_MS,
+  AGENT_EMOTE_INTERVAL_MS,
   AGENT_MOVE_INTERVAL_MS,
   type AgentEventKind,
   type AgentScope,
@@ -30,6 +31,7 @@ export interface AgentSession {
   /** Last time each rate-limited verb was allowed through. */
   lastChatAt: number;
   lastMoveAt: number;
+  lastEmoteAt: number;
 }
 
 export async function authenticateAgent(key: unknown): Promise<AgentIdentity | null> {
@@ -84,6 +86,17 @@ export function allowMove(session: AgentSession, now: number): number {
   const wait = session.lastMoveAt + AGENT_MOVE_INTERVAL_MS - now;
   if (wait > 0) return wait;
   session.lastMoveAt = now;
+  return 0;
+}
+
+/**
+ * Balloons change with every status the harness narrates, which is often
+ * during a turn; the limit is a flicker guard, not a budget.
+ */
+export function allowEmote(session: AgentSession, now: number): number {
+  const wait = session.lastEmoteAt + AGENT_EMOTE_INTERVAL_MS - now;
+  if (wait > 0) return wait;
+  session.lastEmoteAt = now;
   return 0;
 }
 

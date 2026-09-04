@@ -57,6 +57,7 @@ function fakeGateway(handlers: Handlers, seed = '') {
     leave: async () => {},
     say: () => {},
     setStatus: () => {},
+    emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
     lookAround: async () => ({}),

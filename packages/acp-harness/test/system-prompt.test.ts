@@ -55,6 +55,7 @@ function fakeGateway(handlers: Handlers, instructions: string, core: string): Ga
     leave: async () => {},
     say: () => {},
     setStatus: () => {},
+    emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
     lookAround: async () => ({}),

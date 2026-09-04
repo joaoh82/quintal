@@ -4,6 +4,7 @@ import {
   type AgentChannelChatEvent,
   type AgentChannelsEvent,
   type AgentChatEvent,
+  type AgentEmotePayload,
   type AgentErrorPayload,
   type AgentMentionEvent,
   type AgentOccupant,
@@ -224,6 +225,18 @@ export class GatewayClient {
     this.#room?.send(AgentMessage.SetStatus, { status });
   }
 
+  /**
+   * A balloon over the head, or none. `ttlMs` 0 keeps it up until the next
+   * call — for balloons that reflect a state — and omitted takes the office's
+   * default for a reaction.
+   */
+  emote(emote: string, ttlMs?: number): void {
+    this.#room?.send(AgentMessage.Emote, {
+      emote,
+      ...(ttlMs !== undefined ? { ttlMs } : {}),
+    } satisfies AgentEmotePayload);
+  }
+
   // --- queries -------------------------------------------------------------
 
   lookAround(): Promise<LookAroundResult> {
@@ -303,6 +316,7 @@ export type Gateway = Pick<
   | 'leave'
   | 'say'
   | 'setStatus'
+  | 'emote'
   | 'hostReport'
   | 'moveToZone'
   | 'moveToPerson'

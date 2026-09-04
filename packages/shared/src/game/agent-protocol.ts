@@ -30,6 +30,8 @@ export const AgentMessage = {
   MoveTo: 'agent:move_to',
   /** Set the presence line under the nameplate. */
   SetStatus: 'agent:set_status',
+  /** Put a balloon over your head — an emote id from the catalogue — or clear it. */
+  Emote: 'agent:emote',
   /** Who and what is around me right now. */
   LookAround: 'agent:look_around',
   /** Recent messages this agent could legitimately have heard. */
@@ -59,6 +61,17 @@ export interface AgentSayPayload {
    * they stand.
    */
   channelId?: string;
+}
+
+export interface AgentEmotePayload {
+  /** A catalogue id (`EMOTE_IDS`), or empty to take the balloon down. */
+  emote: string;
+  /**
+   * How long it stays up, ms. Omitted: the default for a chosen balloon.
+   * 0: until you clear it — for balloons that reflect a state, like thinking.
+   * Clamped to `EMOTE_TTL_MAX_MS`.
+   */
+  ttlMs?: number;
 }
 
 export interface AgentHostReportPayload {

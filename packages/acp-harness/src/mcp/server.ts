@@ -1,3 +1,4 @@
+import { CHOSEN_EMOTES } from '@quintal/shared';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -155,6 +156,22 @@ const TOOLS = [
         content: { type: 'string' },
       },
       required: ['slug', 'content'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'emote',
+    description:
+      'Put a small balloon over your head for a few seconds — a reaction to ' +
+      'something said to you: laugh at a joke, look sad at an insult, a heart ' +
+      'for thanks. Sparingly, and only in reaction; never as decoration. Your ' +
+      'thinking and working balloons are shown for you.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        emote: { type: 'string', enum: [...CHOSEN_EMOTES] },
+      },
+      required: ['emote'],
       additionalProperties: false,
     },
   },

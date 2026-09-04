@@ -52,6 +52,7 @@ function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined
       said.push([text, channelId]);
     },
     setStatus: () => {},
+    emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
     lookAround: async () => ({}),

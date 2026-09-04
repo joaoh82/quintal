@@ -13,8 +13,11 @@ import {
   CHAT_MAX_LENGTH,
   ClientMessage,
   DEFAULT_OFFICE_SETTINGS,
+  EMOTE_TTL_DEFAULT_MS,
+  EMOTE_TTL_MAX_MS,
   FLOOR_ZONE_ID,
   MESSAGES_GET_MAX,
+  isEmote,
   OfficePlayer,
   OfficeState,
   RECONNECTION_SECONDS,
@@ -37,6 +40,7 @@ import {
   type AgentChannelChatEvent,
   type AgentChannelsEvent,
   type AgentChatEvent,
+  type AgentEmotePayload,
   type AgentErrorPayload,
   type AgentLookAroundPayload,
   type AgentMemoryGetPayload,
@@ -116,6 +120,7 @@ import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
 
 import {
   allowChat,
+  allowEmote,
   allowMove,
   audit,
   authenticateAgent,
@@ -213,6 +218,7 @@ export class OfficeRoom extends Room<OfficeState> {
    * person: a transcript you have open, not a wiretap on the office.
    */
   readonly #followed = new Map<string, string>();
+  #nextEmoteSweep = 0;
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
@@ -293,6 +299,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(AgentMessage.SetStatus, (client, payload: AgentSetStatusPayload) =>
       this.#onAgentSetStatus(client, payload),
+    );
+    this.onMessage(AgentMessage.Emote, (client, payload: AgentEmotePayload) =>
+      this.#onAgentEmote(client, payload),
     );
     this.onMessage(AgentMessage.LookAround, (client, payload: AgentLookAroundPayload) =>
       this.#onAgentLookAround(client, payload),
@@ -464,7 +473,7 @@ export class OfficeRoom extends Room<OfficeState> {
       }),
     );
 
-    const session: AgentSession = { identity, lastChatAt: 0, lastMoveAt: 0 };
+    const session: AgentSession = { identity, lastChatAt: 0, lastMoveAt: 0, lastEmoteAt: 0 };
     this.#sims.set(client.sessionId, {
       intent: { x: 0, y: 0 },
       path: [],
@@ -632,6 +641,13 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #tick(deltaMs: number): void {
     const deltaSeconds = deltaMs / 1000;
+
+    // Once a second, not once a tick: a balloon's lifetime is seconds.
+    const now = Date.now();
+    if (now >= this.#nextEmoteSweep) {
+      this.#nextEmoteSweep = now + 1_000;
+      this.#sweepEmotes(now);
+    }
 
     for (const [sessionId, sim] of this.#sims) {
       const player = this.state.players.get(sessionId);
@@ -1460,6 +1476,61 @@ export class OfficeRoom extends Room<OfficeState> {
       persistStatus(session.identity.id, status);
       audit(session.identity.id, 'effect.status_changed', { status });
       this.#broadcastRosterToAgents();
+    }
+  }
+
+  /**
+   * A balloon over the head.
+   *
+   * Under the `status` scope — it is the status line in a glyph — and only
+   * ever a catalogue id, because a balloon is a picture the office draws for
+   * everybody and an agent does not get to draw arbitrary things. The office
+   * owns the timer too: a balloon with a TTL comes down here, on the tick,
+   * so a client that joined late agrees with one that saw it go up.
+   */
+  #onAgentEmote(client: Client, payload: AgentEmotePayload): void {
+    const session = this.#agentSession(client);
+    const player = this.state.players.get(client.sessionId);
+    if (!session || !player) return;
+
+    const emote = String(payload?.emote ?? '').trim();
+    if (emote.length > 0 && !isEmote(emote)) {
+      this.#denyAgent(client, session, 'invalid_payload', `"${emote}" is not an emote.`);
+      return;
+    }
+    if (!hasScope(session.identity, 'status')) {
+      this.#denyAgent(client, session, 'missing_scope', 'This agent has no "status" scope.');
+      return;
+    }
+    const waitMs = allowEmote(session, Date.now());
+    if (waitMs > 0) {
+      this.#denyAgent(client, session, 'rate_limited', 'Too many balloons.', waitMs);
+      return;
+    }
+
+    const ttlRaw = payload?.ttlMs;
+    const ttlMs =
+      ttlRaw === undefined
+        ? EMOTE_TTL_DEFAULT_MS
+        : Math.min(Math.max(Number(ttlRaw) || 0, 0), EMOTE_TTL_MAX_MS);
+    const until = emote.length === 0 || ttlMs === 0 ? 0 : Date.now() + ttlMs;
+
+    if (player.emote !== emote) player.emote = emote;
+    if (player.emoteUntil !== until) player.emoteUntil = until;
+    // Only the chosen ones are worth a log line; the derived ones follow the
+    // status changes that are already logged.
+    if (ttlRaw === undefined && emote.length > 0) {
+      audit(session.identity.id, 'command.emote', { emote });
+    }
+  }
+
+  /** Bring down balloons whose time is up. Called from the tick, once a second. */
+  #sweepEmotes(now: number): void {
+    for (const player of this.state.players.values()) {
+      if (player.emoteUntil !== 0 && player.emoteUntil <= now) {
+        player.emote = '';
+        player.emoteUntil = 0;
+      }
     }
   }
 
