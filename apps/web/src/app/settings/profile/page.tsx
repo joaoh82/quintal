@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
 
+import { OverlayKeyField } from './OverlayKeyField';
 import { ProfileForm } from './ProfileForm';
 
 export const dynamic = 'force-dynamic';
@@ -26,12 +27,15 @@ export default async function ProfilePage() {
   if (!row) redirect('/login');
 
   return (
-    <ProfileForm
-      name={row.name}
-      description={row.description}
-      npub={npubEncode(row.pubkey)}
-      pubkey={row.pubkey}
-      isGuest={session.session.isGuest}
-    />
+    <div className="space-y-6">
+      <ProfileForm
+        name={row.name}
+        description={row.description}
+        npub={npubEncode(row.pubkey)}
+        pubkey={row.pubkey}
+        isGuest={session.session.isGuest}
+      />
+      <OverlayKeyField />
+    </div>
   );
 }

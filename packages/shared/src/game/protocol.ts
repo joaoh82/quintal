@@ -24,6 +24,16 @@ export const ClientMessage = {
   ChannelsGet: 'channels_get',
   /** Open a direct message with somebody. Answered with `dm_opened`, then `channels`. */
   DmOpen: 'dm_open',
+  /**
+   * Read a zone live, wherever I stand. Lines said there arrive as `zone_chat`
+   * until I follow another zone, or null. One zone at a time: it is a
+   * transcript you have open, not a wiretap on the office.
+   */
+  FollowZone: 'follow_zone',
+  /** Join a channel by its slug. Answered with `channels`. */
+  ChannelJoin: 'channel_join',
+  /** Leave a channel. Answered with `channels`. */
+  ChannelLeave: 'channel_leave',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -51,6 +61,8 @@ export const ServerMessage = {
   Channels: 'channels',
   /** The DM you asked for is open; here it is, so you can switch to it. */
   DmOpened: 'dm_opened',
+  /** Somebody spoke in the zone you are following. Sent whether or not you also heard it. */
+  ZoneChat: 'zone_chat',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
 } as const;
@@ -128,11 +140,32 @@ export interface ChannelChatPayload extends ChatBroadcastPayload {
 export interface ChannelsPayload {
   /** The channels and DMs this client is a member of. */
   channels: ChannelRef[];
+  /** Channels in the office this client could join. Never DMs. */
+  available: ChannelRef[];
 }
 
 export interface DmOpenPayload {
   /** `users.id` or `agents.id` of who you want to talk to. */
-  memberId: string;
+  memberId?: string;
+  /** Or their display name, as typed after `/msg`. Must match exactly one member. */
+  name?: string;
+}
+
+export interface FollowZonePayload {
+  zoneId: string | null;
+}
+
+export interface ChannelJoinPayload {
+  slug: string;
+}
+
+export interface ChannelLeavePayload {
+  channelId: string;
+}
+
+/** A line said in the zone you follow. Same shape as spatial chat plus where. */
+export interface ZoneChatPayload extends ChatBroadcastPayload {
+  zoneId: string;
 }
 
 export interface DmOpenedPayload {

@@ -1,20 +1,17 @@
 'use client';
 
-import {
-  CHAT_LOG_LIMIT,
-  type ChannelRef,
-  type ChatBroadcastPayload,
-  type ConnectionStatus,
-  type MapZone,
-  type RosterEntry,
-} from '@quintal/shared';
+import { type ConnectionStatus, type MapZone, type RosterEntry } from '@quintal/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { getOverlayKey } from '@/lib/preferences';
 
 import { gameBridge } from './bridge';
 import type { OfficeSession } from './createGame';
 import { ChatPanel } from './ui/ChatPanel';
+import { CommsOverlay } from './ui/CommsOverlay';
 import { HelpPanel } from './ui/HelpPanel';
 import { RosterPanel } from './ui/RosterPanel';
+import { useConversations } from './useConversations';
 
 interface Hud {
   mapName: string;
@@ -31,21 +28,6 @@ const INITIAL_HUD: Hud = {
   debug: false,
   pathLength: 0,
 };
-
-/**
- * What was said before we were listening goes in front of what we have heard
- * since. A line can be in both — said after we joined, before the page came
- * back — and a message read from history carries a different `from` than the
- * same message heard live, so identity is the words.
- */
-function prependHistory(
-  heard: ChatBroadcastPayload[],
-  earlier: ChatBroadcastPayload[],
-): ChatBroadcastPayload[] {
-  const seen = new Set(heard.map((m) => `${m.sentAt} ${m.fromName} ${m.text}`));
-  const unseen = earlier.filter((m) => !seen.has(`${m.sentAt} ${m.fromName} ${m.text}`));
-  return [...unseen, ...heard].slice(-CHAT_LOG_LIMIT);
-}
 
 /**
  * Hosts the Phaser canvas and the overlays around it.
@@ -66,30 +48,32 @@ export default function OfficeGame() {
 
   const [hud, setHud] = useState<Hud>(INITIAL_HUD);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
-  const [messages, setMessages] = useState<ChatBroadcastPayload[]>([]);
-  /** The channels we are in, as the office last reported them. */
-  const [channels, setChannels] = useState<ChannelRef[]>([]);
-  /** Which tab the chat box shows: a channel id, or null for nearby. */
-  const [activeChannel, setActiveChannel] = useState<string | null>(null);
-  /** Per-channel transcript, as much as we have seen or loaded. */
-  const [channelLog, setChannelLog] = useState<Record<string, ChatBroadcastPayload[]>>({});
-  /** Channels whose history we have asked for — asked once, not per tab switch. */
-  const loadedChannels = useRef(new Set<string>());
   const [connection, setConnection] = useState<ConnectionStatus>('connecting');
   const [connectionDetail, setConnectionDetail] = useState<string>('');
-  const [notice, setNotice] = useState<string>('');
   const [chatFocused, setChatFocused] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayKey, setOverlayKey] = useState('`');
 
-  // `?` opens help. The chat input stops keydown propagation, so typing a
-  // question mark in a sentence never reaches this.
+  const conversations = useConversations(sessionRef);
+
+  // The key is a device preference; read it once the page has a window.
+  useEffect(() => setOverlayKey(getOverlayKey()), []);
+
+  // `?` opens help; the overlay key opens the conversations panel. The chat
+  // input stops keydown propagation, so typing either in a sentence never
+  // reaches this.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === '?') setHelpOpen((open) => !open);
+      else if (event.key === overlayKey && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        setOverlayOpen((open) => !open);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [overlayKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -156,75 +140,28 @@ export default function OfficeGame() {
       gameBridge.on('debug', ({ enabled }) => setHud((prev) => ({ ...prev, debug: enabled }))),
       gameBridge.on('path', ({ length }) => setHud((prev) => ({ ...prev, pathLength: length }))),
       gameBridge.on('roster', ({ players }) => setRoster(players)),
-      gameBridge.on('chat', (message) =>
-        setMessages((prev) => [...prev, message].slice(-CHAT_LOG_LIMIT)),
-      ),
-      // What was said before we were listening goes in front of what we have
-      // heard since. A line can be in both — said after we joined, before the
-      // page came back — and a message read from history carries a different
-      // `from` than the same message heard live, so identity is the words.
-      gameBridge.on('history', ({ channelId, messages: earlier }) => {
-        if (channelId !== null) {
-          setChannelLog((prev) => ({
-            ...prev,
-            [channelId]: prependHistory(prev[channelId] ?? [], earlier),
-          }));
-          return;
-        }
-        setMessages((prev) => prependHistory(prev, earlier));
-      }),
-      gameBridge.on('channelChat', (message) =>
-        setChannelLog((prev) => ({
-          ...prev,
-          [message.channel.id]: [...(prev[message.channel.id] ?? []), message].slice(
-            -CHAT_LOG_LIMIT,
-          ),
-        })),
-      ),
-      gameBridge.on('channels', ({ channels: mine }) => {
-        setChannels(mine);
-        // A tab for a channel we were taken out of is a tab that can never
-        // send again; fall back to nearby rather than leave it selected.
-        setActiveChannel((current) =>
-          current !== null && !mine.some((channel) => channel.id === current) ? null : current,
-        );
-      }),
-      // The DM we asked for. The channel list follows on its own; this arrives
-      // first so the tab can be there and selected the moment you clicked.
-      gameBridge.on('dmOpened', ({ channel }) => {
-        setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]));
-        setActiveChannel(channel.id);
-        if (!loadedChannels.current.has(channel.id)) {
-          loadedChannels.current.add(channel.id);
-          sessionRef.current?.loadChannelHistory(channel.id);
-        }
-        setChatFocused(true);
-      }),
+      // A DM you opened from a card is a conversation you meant to type in.
+      gameBridge.on('dmOpened', () => setChatFocused(true)),
       gameBridge.on('connection', ({ status, detail }) => {
         setConnection(status);
         setConnectionDetail(detail ?? '');
       }),
-      gameBridge.on('notice', ({ message }) => setNotice(message)),
     ];
     return () => {
       for (const off of unsubscribe) off();
     };
   }, []);
 
-  // Notices (rate limits, rejected moves) clear themselves.
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(''), 4000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
   /**
    * Enter opens the chat box from anywhere on the page; Escape hands the
    * keyboard back. Bound on the window so it works whether the last click
    * landed on the canvas or on a panel — the canvas is not a focusable element,
    * so relying on focus alone would break the moment you clicked a roster row.
+   * The overlay has its own input and its own Escape; while it is open this
+   * stays out of the way.
    */
   useEffect(() => {
+    if (overlayOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' && !chatFocused) {
         event.preventDefault();
@@ -236,32 +173,19 @@ export default function OfficeGame() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [chatFocused]);
+  }, [chatFocused, overlayOpen]);
 
-  // One place decides whether the office or the chat box owns the keyboard.
+  // One place decides whether the office or a text box owns the keyboard.
   useEffect(() => {
-    sessionRef.current?.setInputCaptured(chatFocused);
-  }, [chatFocused]);
+    sessionRef.current?.setInputCaptured(chatFocused || overlayOpen);
+  }, [chatFocused, overlayOpen]);
 
-  const send = useCallback(
-    (text: string) => {
-      if (activeChannel !== null) sessionRef.current?.sayInChannel(activeChannel, text);
-      else sessionRef.current?.say(text);
-    },
-    [activeChannel],
+  const openDm = useCallback(
+    (entry: RosterEntry) => conversations.openDm({ memberId: entry.identityId }),
+    [conversations],
   );
 
-  const openDm = useCallback((entry: RosterEntry) => {
-    sessionRef.current?.openDm(entry.identityId);
-  }, []);
-
-  const selectChannel = useCallback((channelId: string | null) => {
-    setActiveChannel(channelId);
-    if (channelId !== null && !loadedChannels.current.has(channelId)) {
-      loadedChannels.current.add(channelId);
-      sessionRef.current?.loadChannelHistory(channelId);
-    }
-  }, []);
+  const closeOverlay = useCallback(() => setOverlayOpen(false), []);
 
   const reconnecting = connection === 'reconnecting' || connection === 'connecting';
 
@@ -275,14 +199,12 @@ export default function OfficeGame() {
 
       <div className="pointer-events-none absolute bottom-10 left-3">
         <ChatPanel
-          messages={activeChannel !== null ? (channelLog[activeChannel] ?? []) : messages}
-          channels={channels}
-          activeChannel={activeChannel}
-          onSelectChannel={selectChannel}
+          conversations={conversations}
           focused={chatFocused}
           roster={roster}
-          onSend={send}
           onFocusChange={setChatFocused}
+          overlayKey={overlayKey}
+          onOpenOverlay={() => setOverlayOpen(true)}
         />
       </div>
 
@@ -299,12 +221,12 @@ export default function OfficeGame() {
         </div>
       ) : null}
 
-      {notice ? (
+      {conversations.notice && !overlayOpen ? (
         <div
           role="status"
           className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
         >
-          {notice}
+          {conversations.notice}
         </div>
       ) : null}
 
@@ -320,7 +242,7 @@ export default function OfficeGame() {
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · @name to address · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
         <button
           type="button"
@@ -332,7 +254,22 @@ export default function OfficeGame() {
         </button>
       </div>
 
-      {helpOpen ? <HelpPanel onClose={() => setHelpOpen(false)} /> : null}
+      {overlayOpen ? (
+        <CommsOverlay
+          conversations={conversations}
+          roster={roster}
+          toggleKey={overlayKey}
+          onClose={closeOverlay}
+          onLeaveChannel={(channelId) => {
+            sessionRef.current?.leaveChannel(channelId);
+            conversations.select('nearby');
+          }}
+        />
+      ) : null}
+
+      {helpOpen ? (
+        <HelpPanel onClose={() => setHelpOpen(false)} overlayKey={overlayKey} />
+      ) : null}
     </div>
   );
 }

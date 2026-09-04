@@ -50,16 +50,21 @@ import {
   type AgentRosterEvent,
   type AgentSayPayload,
   type AgentSetStatusPayload,
+  mayAddToChannel,
   mayOpenDm,
   type ChannelActor,
   type ChannelChatPayload,
   type ChannelChatSendPayload,
+  type ChannelJoinPayload,
+  type ChannelLeavePayload,
   type ChannelRef,
   type ChannelSubject,
   type ChannelsPayload,
   type DmOpenPayload,
   type DmOpenedPayload,
+  type FollowZonePayload,
   type MembershipRole,
+  type ZoneChatPayload,
   type ChatBroadcastPayload,
   type ChatSendPayload,
   type Direction,
@@ -82,11 +87,15 @@ import {
 import {
   MemoryLimitError,
   MemorySlugError,
+  addChannelMember,
   channelMembershipForWorkspace,
   ensureZoneConversations,
   findAgentById,
   findMembership,
   getAgentMemory,
+  listAgentsForWorkspace,
+  listPeopleForWorkspace,
+  removeChannelMember,
   getDb,
   getOfficeSettings,
   mentionsOf,
@@ -199,6 +208,11 @@ export class OfficeRoom extends Room<OfficeState> {
     new Map();
   /** sessionId -> the channel list last sent to it, so a change is sent once. */
   readonly #channelsSent = new Map<string, string>();
+  /**
+   * sessionId -> the zone they are reading live from elsewhere. One per
+   * person: a transcript you have open, not a wiretap on the office.
+   */
+  readonly #followed = new Map<string, string>();
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
@@ -259,6 +273,15 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.ChannelsGet, (client) => this.#sendChannels(client.sessionId));
     this.onMessage(ClientMessage.DmOpen, (client, payload: DmOpenPayload) =>
       void this.#onDmOpen(client, payload),
+    );
+    this.onMessage(ClientMessage.FollowZone, (client, payload: FollowZonePayload) =>
+      this.#onFollowZone(client, payload),
+    );
+    this.onMessage(ClientMessage.ChannelJoin, (client, payload: ChannelJoinPayload) =>
+      void this.#onChannelJoin(client, payload),
+    );
+    this.onMessage(ClientMessage.ChannelLeave, (client, payload: ChannelLeavePayload) =>
+      void this.#onChannelLeave(client, payload),
     );
 
     // --- agent protocol (docs/GATEWAY.md) ---
@@ -727,18 +750,39 @@ export class OfficeRoom extends Room<OfficeState> {
   async #onDmOpen(client: Client, payload: DmOpenPayload): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player || this.#agents.has(client.sessionId)) return;
-    const memberId = String(payload?.memberId ?? '');
-    if (memberId.length === 0) return;
 
     const db = getDb();
     try {
-      const membership = player.isGuest
-        ? null
-        : await findMembership(db, player.userId, this.#workspaceId);
-      const actor: ChannelActor = {
-        userId: player.userId,
-        role: (membership?.role as MembershipRole | undefined) ?? null,
-      };
+      let memberId = String(payload?.memberId ?? '');
+      // `/msg Marvin`: a name, resolved against everyone in the office —
+      // present or not — and refused if it fits more than one of them, since
+      // a display name is not an identity and a DM is not the place to guess.
+      if (memberId.length === 0 && typeof payload?.name === 'string') {
+        const wanted = payload.name.replace(/^@/, '').trim().toLowerCase();
+        if (wanted.length === 0) return;
+        const [people, agentsHere] = await Promise.all([
+          listPeopleForWorkspace(db, this.#workspaceId),
+          listAgentsForWorkspace(db, this.#workspaceId),
+        ]);
+        const matches = [
+          ...people.filter((person) => person.name.toLowerCase() === wanted).map((p) => p.id),
+          ...agentsHere
+            .filter((agent) => agent.revokedAt === null && agent.name.toLowerCase() === wanted)
+            .map((a) => a.id),
+        ];
+        if (matches.length !== 1) {
+          this.#sendError(
+            client,
+            'invalid_message',
+            matches.length === 0 ? `Nobody here called ${payload.name}.` : `More than one ${payload.name}.`,
+          );
+          return;
+        }
+        memberId = matches[0] ?? '';
+      }
+      if (memberId.length === 0) return;
+
+      const actor = await this.#actorFor(player);
 
       let subject: ChannelSubject | null = null;
       const agent = await findAgentById(db, memberId);
@@ -870,6 +914,17 @@ export class OfficeRoom extends Room<OfficeState> {
       if (byName && listenerId !== sessionId) mentioned.push(listener.userId);
     }
 
+    // Anyone reading this zone from elsewhere. Sent even to somebody who also
+    // heard it in earshot: the two arrive on different messages and land in
+    // different transcripts, and the client is the one that knows which it
+    // has open. Deduplicating here would mean guessing that.
+    for (const [followerId, followedZone] of this.#followed) {
+      if (followedZone !== zoneId) continue;
+      const follower = this.clients.getById(followerId);
+      if (!follower) continue;
+      follower.send(ServerMessage.ZoneChat, { zoneId, ...humanPayload } satisfies ZoneChatPayload);
+    }
+
     // After delivery, not before: the people in the room should never wait on
     // a disk. A write that fails is logged and the words were still heard.
     void this.#keep(zoneId, {
@@ -945,7 +1000,17 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!client || !player) return;
 
     const channels = this.#channelsFor(player.userId);
-    const signature = channels
+    // What a person could join: every channel they are not in. Never a DM —
+    // there is no such thing as a DM you could join.
+    const available: ChannelRef[] = [];
+    if (!this.#agents.has(sessionId)) {
+      for (const channel of this.#channels.values()) {
+        if (channel.kind === 'channel' && !channel.members.has(player.userId)) {
+          available.push(this.#refFor(channel, player.userId));
+        }
+      }
+    }
+    const signature = [...channels, ...available]
       .map((channel) => `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}`)
       .join(',');
     if (this.#channelsSent.get(sessionId) === signature) return;
@@ -954,7 +1019,80 @@ export class OfficeRoom extends Room<OfficeState> {
     if (this.#agents.has(sessionId)) {
       client.send(AgentServerMessage.Channels, { channels } satisfies AgentChannelsEvent);
     } else {
-      client.send(ServerMessage.Channels, { channels } satisfies ChannelsPayload);
+      client.send(ServerMessage.Channels, { channels, available } satisfies ChannelsPayload);
+    }
+  }
+
+  #onFollowZone(client: Client, payload: FollowZonePayload): void {
+    if (this.#agents.has(client.sessionId)) return; // agents read zones with messages_get
+    const zoneId = payload?.zoneId;
+    if (typeof zoneId !== 'string' || zoneId.length === 0) {
+      this.#followed.delete(client.sessionId);
+      return;
+    }
+    const known = zoneId === FLOOR_ZONE_ID || this.#map.zones.some((zone) => zone.id === zoneId);
+    if (!known) {
+      this.#sendError(client, 'invalid_message', 'No such zone.');
+      return;
+    }
+    this.#followed.set(client.sessionId, zoneId);
+  }
+
+  /** A person's standing in the office, for the channel rules. Null for a guest. */
+  async #actorFor(player: OfficePlayer): Promise<ChannelActor> {
+    const membership = player.isGuest
+      ? null
+      : await findMembership(getDb(), player.userId, this.#workspaceId);
+    return {
+      userId: player.userId,
+      role: (membership?.role as MembershipRole | undefined) ?? null,
+    };
+  }
+
+  /** `/join engineering`. Same rule as being added by somebody else: members only. */
+  async #onChannelJoin(client: Client, payload: ChannelJoinPayload): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.#agents.has(client.sessionId)) return;
+    const slug = String(payload?.slug ?? '')
+      .replace(/^#/, '')
+      .trim()
+      .toLowerCase();
+    const channel = [...this.#channels.values()].find(
+      (candidate) => candidate.kind === 'channel' && candidate.slug === slug,
+    );
+    if (!channel) {
+      this.#sendError(client, 'invalid_message', `No #${slug} here.`);
+      return;
+    }
+    try {
+      const actor = await this.#actorFor(player);
+      if (!mayAddToChannel(actor, { id: player.userId, kind: 'human' })) {
+        this.#sendError(client, 'unauthorised', 'Guests cannot join channels.');
+        return;
+      }
+      await addChannelMember(getDb(), {
+        channelId: channel.id,
+        memberId: player.userId,
+        memberKind: 'human',
+        addedBy: player.userId,
+      });
+      await this.#refreshChannels();
+    } catch (error: unknown) {
+      logger.error('[office] could not join a channel', error);
+    }
+  }
+
+  /** `/leave`. Anyone may leave a channel; a DM is not left, only ignored. */
+  async #onChannelLeave(client: Client, payload: ChannelLeavePayload): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.#agents.has(client.sessionId)) return;
+    const channel = this.#channelFor(player.userId, payload?.channelId);
+    if (!channel || channel.kind !== 'channel') return;
+    try {
+      await removeChannelMember(getDb(), channel.id, player.userId);
+      await this.#refreshChannels();
+    } catch (error: unknown) {
+      logger.error('[office] could not leave a channel', error);
     }
   }
 
@@ -1705,6 +1843,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#agents.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
+    this.#followed.delete(sessionId);
     // Nothing about what they said is forgotten. It used to be: leaving the
     // room erased your lines from everybody else's history.
   }

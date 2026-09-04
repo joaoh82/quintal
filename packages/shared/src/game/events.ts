@@ -6,6 +6,7 @@ import type {
   ChatBroadcastPayload,
   DmOpenedPayload,
   HistoryPayload,
+  ZoneChatPayload,
 } from './protocol.js';
 
 /** One line in the roster panel. */
@@ -28,6 +29,8 @@ export interface RosterEntry {
   identityId: string;
   /** ms since epoch when this occupant last visibly did something. */
   lastActionAt: number;
+  /** The zone they stand in — `FLOOR_ZONE_ID` outside every zone. */
+  zoneId: string;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;
   /** Humans: the profile line they wrote. Empty when unset. */
@@ -64,7 +67,7 @@ export type ConnectionStatus =
 // signature, so they don't satisfy the emitter's `Record<string, unknown>`.
 export type GameEvents = {
   /** The scene has finished loading the map and is rendering. */
-  ready: { mapName: string; width: number; height: number };
+  ready: { mapName: string; width: number; height: number; zones: MapZone[] };
   /** The local player entered or left a zone. Fires only on change. */
   zone: { zone: MapZone | null; previous: MapZone | null };
   /** Local player position, in tiles. Fires only when the tile changes. */
@@ -85,6 +88,8 @@ export type GameEvents = {
   channels: ChannelsPayload;
   /** A DM we asked to open is open. */
   dmOpened: DmOpenedPayload;
+  /** Somebody spoke in the zone we are following. */
+  zoneChat: ZoneChatPayload;
   /** Socket state changed. `detail` is safe to show a human. */
   connection: { status: ConnectionStatus; detail?: string };
   /** The server rejected something — rate limit, bad move. */
