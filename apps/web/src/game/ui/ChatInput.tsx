@@ -170,9 +170,12 @@ export function ChatInput({
   };
 
   const choose = (item: PickerItem): void => {
+    // A completed slash line gets a trailing space: it closes the picker, so
+    // the next Enter sends rather than re-choosing what is already there.
+    const completed = item.kind === 'slash' ? `${item.text.trimEnd()} ` : '';
     const next =
       item.kind === 'slash'
-        ? { text: item.text, caret: item.text.length }
+        ? { text: completed, caret: completed.length }
         : item.kind === 'command'
           ? applyCommand(draft, caret, item.name)
           : mention
@@ -302,6 +305,17 @@ export function ChatInput({
             if (event.key === 'Enter' || event.key === 'Tab') {
               event.preventDefault();
               const picked = candidates[highlighted];
+              // Typing the whole thing yourself and pressing Enter must send,
+              // not "complete" to the line you already have. That was the
+              // bug: `/msg Marvin` + Enter chose `/msg Marvin`, forever.
+              if (
+                event.key === 'Enter' &&
+                picked?.kind === 'slash' &&
+                picked.text.trim() === draft.trim()
+              ) {
+                submit();
+                return;
+              }
               if (picked) choose(picked);
               return;
             }
