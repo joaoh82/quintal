@@ -1,6 +1,6 @@
 import type { MapZone } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
-import type { ChatBroadcastPayload } from './protocol.js';
+import type { ChatBroadcastPayload, HistoryPayload } from './protocol.js';
 
 /** One line in the roster panel. */
 export interface RosterEntry {
@@ -69,6 +69,8 @@ export type GameEvents = {
   roster: { players: RosterEntry[]; selfSessionId: string | null };
   /** Someone within earshot spoke. */
   chat: ChatBroadcastPayload;
+  /** What was said in a zone before we were listening. */
+  history: HistoryPayload;
   /** Socket state changed. `detail` is safe to show a human. */
   connection: { status: ConnectionStatus; detail?: string };
   /** The server rejected something — rate limit, bad move. */

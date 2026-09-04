@@ -172,9 +172,18 @@ async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
     }
 
     case 'messages_get': {
-      const scope = call.args.scope === 'zone' ? 'zone' : 'nearby';
+      const scope =
+        call.args.scope === 'zone' || call.args.scope === 'mentions' ? call.args.scope : 'nearby';
       const n = Math.min(Math.max(Number(call.args.n) || 20, 1), 50);
-      return gateway.messagesGet(scope, n);
+      const before = Number(call.args.before);
+      return gateway.messagesGet({
+        scope,
+        n,
+        ...(typeof call.args.zone === 'string' && call.args.zone.length > 0
+          ? { zoneId: call.args.zone }
+          : {}),
+        ...(Number.isFinite(before) && before > 0 ? { before } : {}),
+      });
     }
 
     case 'memory_get':

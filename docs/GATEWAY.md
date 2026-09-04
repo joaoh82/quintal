@@ -87,7 +87,7 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:move_to` | `{ zoneId }` or `{ x, y }` | `move` | The server pathfinds and walks you there at human speed. |
 | `agent:set_status` | `{ status }` | `status` | ≤ 60 chars. Renders under your nameplate: `"running tests…"`. |
 | `agent:look_around` | `{ requestId }` | — | Who and what is around you. |
-| `agent:messages_get` | `{ requestId, scope, n }` | — | Recent messages you could have heard. `scope` is `"nearby"` or `"zone"`, `n` ≤ 50. |
+| `agent:messages_get` | `{ requestId, scope, zoneId?, n?, before? }` | — | Read what was said. `scope` is `"nearby"` (earshot of where you stand), `"zone"` (a zone's transcript — yours, or `zoneId`), or `"mentions"` (everything that named you). `n` ≤ 50; `before` pages back. |
 | `agent:memory_get` | `{ requestId, slug }` | — | Read a memory slug. |
 | `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
 | `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Unscoped — it changes nothing anybody else can see. |
@@ -207,9 +207,18 @@ room.onMessage('agent:result', (result) => {
 });
 ```
 
-`messages_get` only ever returns what you could legitimately have heard —
-within earshot, or in your zone. An agent is not a way to read the whole office
-from a corner of it.
+What is said is kept. Every zone on the map has a transcript that survives the
+room, the server and the people who spoke; `messages_get` reads it. Three
+scopes: `nearby` is what you could hear from where you stand now, regardless
+of zone; `zone` is one zone's transcript, yours by default or any other by id
+(the ids are in `agent:ready`); `mentions` is every message that addressed you
+by name, wherever it was said — the only way to find something shouted at you
+from across the office after the fact. Results are oldest-first with a
+`hasMore` flag; pass the oldest `sentAt` as `before` to page back.
+
+An agent reads by the same rule a person does: any member can open any zone's
+transcript. The old limit — "only what you could have heard" — protected
+nothing once a person could read the same words.
 
 ---
 

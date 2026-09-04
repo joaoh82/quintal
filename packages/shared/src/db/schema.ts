@@ -9,6 +9,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 import { AGENT_SCOPES } from '../agent.js';
+import { CONVERSATION_KINDS } from '../conversation.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
 /*
@@ -533,6 +534,107 @@ export const agentMemory = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Conversations
+// ---------------------------------------------------------------------------
+
+/**
+ * A place things are said — see `CONVERSATION_KINDS`.
+ *
+ * A `zone` row is the transcript of a room on the map, one per zone per
+ * office, and has no members: whoever stands there is in it. Channels and DMs
+ * will be rows of the other kinds with a members table beside them. One table
+ * for all three so a message points at a conversation and at nothing else,
+ * whichever shape it was said in.
+ */
+export const conversations = sqliteTable(
+  'conversations',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: CONVERSATION_KINDS }).notNull(),
+    /** For `zone`: which map, and which zone on it. Null for the other kinds. */
+    mapId: text('map_id'),
+    zoneId: text('zone_id'),
+    /** The zone's label, or a channel's name. Display only. */
+    name: text('name').notNull().default(''),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    // One transcript per zone per office. Rows of the other kinds have null
+    // map and zone, and SQLite treats nulls as distinct in a unique index, so
+    // any number of channels fit under it without colliding.
+    uniqueIndex('conversations_zone_idx').on(table.workspaceId, table.mapId, table.zoneId),
+  ],
+);
+
+/**
+ * One thing somebody said.
+ *
+ * Kept, which the room's chat buffer never was: an office that forgets every
+ * conversation on restart has no past, and an agent told to "look up what was
+ * said" had nothing to look in.
+ */
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: text('id').primaryKey(),
+    /**
+     * The office this was said in — redundant with the conversation and
+     * deliberately so, for the reason given on `agentEvents.workspaceId`.
+     * Written from the conversation in the same statement as the row.
+     */
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    /** `users.id` for a human, `agents.id` for an agent. */
+    fromId: text('from_id').notNull(),
+    fromKind: text('from_kind', { enum: ['human', 'agent'] }).notNull(),
+    /** As it read when spoken. Names change; a transcript should not. */
+    fromName: text('from_name').notNull(),
+    text: text('text').notNull(),
+    sentAt: integer('sent_at', { mode: 'timestamp_ms' }).notNull(),
+    /**
+     * Where the speaker stood, in map pixels, so "what could I have heard
+     * from here" can be answered after the fact. Null outside zones.
+     */
+    x: integer('x'),
+    y: integer('y'),
+  },
+  (table) => [
+    // A transcript is read newest-first for one conversation, and paged by time.
+    index('messages_conversation_sent_idx').on(table.conversationId, table.sentAt),
+  ],
+);
+
+/**
+ * Who a message addressed by name.
+ *
+ * An index rather than a column so "what was I tagged in" is a lookup and not
+ * a scan of every message ever said. A mention reaches across the whole map,
+ * so this is also the only way a message said out of earshot can be read
+ * back by the one person it was for.
+ */
+export const messageMentions = sqliteTable(
+  'message_mentions',
+  {
+    messageId: text('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    /** `users.id` or `agents.id` of who was addressed. */
+    memberId: text('member_id').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.messageId, table.memberId] }),
+    index('message_mentions_member_idx').on(table.memberId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -547,5 +649,7 @@ export type NewAgent = typeof agents.$inferInsert;
 export type AgentEvent = typeof agentEvents.$inferSelect;
 export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type AgentMemory = typeof agentMemory.$inferSelect;
+export type Conversation = typeof conversations.$inferSelect;
+export type Message = typeof messages.$inferSelect;
 export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
 export type InstanceSettingsRow = typeof instanceSettings.$inferSelect;

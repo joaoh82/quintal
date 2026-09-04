@@ -98,10 +98,18 @@ export interface AgentRequest {
 export type AgentLookAroundPayload = AgentRequest;
 
 export interface AgentMessagesGetPayload extends AgentRequest {
-  /** `nearby` = within earshot; `zone` = everyone in the same zone. */
-  scope: 'nearby' | 'zone';
+  /**
+   * `nearby` = within earshot of where you stand now; `zone` = a zone's
+   * transcript — yours unless `zoneId` names another; `mentions` = messages
+   * that addressed you by name, wherever in the office they were said.
+   */
+  scope: 'nearby' | 'zone' | 'mentions';
+  /** With `zone`: which one. Defaults to the zone you are standing in. */
+  zoneId?: string;
   /** How many, newest last. Clamped to MESSAGES_GET_MAX. */
   n?: number;
+  /** Only messages sent before this time (ms since epoch) — to page back. */
+  before?: number;
 }
 
 export interface AgentMemoryGetPayload extends AgentRequest {
@@ -191,6 +199,11 @@ export interface AgentReadyPayload {
 }
 
 export interface AgentChatEvent {
+  /**
+   * The speaker's session id while they are in the room. A message read back
+   * from history carries their stable id here instead — sessions do not
+   * outlive the room, and a transcript does.
+   */
   from: string;
   /**
    * Stable identity of the speaker: `users.id` for a human, `agents.id` for an
@@ -255,7 +268,9 @@ export interface AgentErrorPayload {
     | 'invalid_payload'
     | 'not_found'
     | 'too_large'
-    | 'unroutable';
+    | 'unroutable'
+    /** The office could not answer right now — a database it could not reach. */
+    | 'unavailable';
   message: string;
   /** Present on rate_limited: wait this long before retrying. */
   retryAfterMs?: number;
@@ -270,8 +285,13 @@ export interface LookAroundResult {
 }
 
 export interface MessagesGetResult {
-  scope: 'nearby' | 'zone';
+  scope: 'nearby' | 'zone' | 'mentions';
+  /** Which zone was read, for `zone`. Null for the other scopes. */
+  zoneId: string | null;
+  /** Oldest first. */
   messages: AgentChatEvent[];
+  /** There is more before the first message here; pass its `sentAt` as `before`. */
+  hasMore: boolean;
 }
 
 export interface MemoryGetResult {
@@ -306,6 +326,3 @@ export const AGENT_HEARTBEAT_MS = 15_000;
  * of its key being revoked, not instantly.
  */
 export const AGENT_REVOCATION_POLL_MS = 5_000;
-
-/** How many recent messages the room keeps for `messages_get`. Chat is not persisted. */
-export const AGENT_MESSAGE_BUFFER = 200;
