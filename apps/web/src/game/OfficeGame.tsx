@@ -189,6 +189,17 @@ export default function OfficeGame() {
           current !== null && !mine.some((channel) => channel.id === current) ? null : current,
         );
       }),
+      // The DM we asked for. The channel list follows on its own; this arrives
+      // first so the tab can be there and selected the moment you clicked.
+      gameBridge.on('dmOpened', ({ channel }) => {
+        setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]));
+        setActiveChannel(channel.id);
+        if (!loadedChannels.current.has(channel.id)) {
+          loadedChannels.current.add(channel.id);
+          sessionRef.current?.loadChannelHistory(channel.id);
+        }
+        setChatFocused(true);
+      }),
       gameBridge.on('connection', ({ status, detail }) => {
         setConnection(status);
         setConnectionDetail(detail ?? '');
@@ -240,6 +251,10 @@ export default function OfficeGame() {
     [activeChannel],
   );
 
+  const openDm = useCallback((entry: RosterEntry) => {
+    sessionRef.current?.openDm(entry.identityId);
+  }, []);
+
   const selectChannel = useCallback((channelId: string | null) => {
     setActiveChannel(channelId);
     if (channelId !== null && !loadedChannels.current.has(channelId)) {
@@ -255,7 +270,7 @@ export default function OfficeGame() {
       <div ref={containerRef} className="h-full w-full" data-testid="phaser-container" />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end gap-3 p-3">
-        <RosterPanel players={roster} connection={connection} />
+        <RosterPanel players={roster} connection={connection} onMessage={openDm} />
       </div>
 
       <div className="pointer-events-none absolute bottom-10 left-3">

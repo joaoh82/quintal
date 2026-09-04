@@ -4,6 +4,7 @@ import type {
   ChannelChatPayload,
   ChannelsPayload,
   ChatBroadcastPayload,
+  DmOpenedPayload,
   HistoryPayload,
 } from './protocol.js';
 
@@ -16,6 +17,8 @@ export interface RosterEntry {
   isSelf: boolean;
   /** Agents: the human accountable for this one. Empty for humans. */
   ownerName: string;
+  /** Agents: that human's `users.id`, so "is this one mine" is not a name match. */
+  ownerUserId: string;
   /** Agents: what it is allowed to do. */
   scopes: string[];
   /**
@@ -80,6 +83,8 @@ export type GameEvents = {
   channelChat: ChannelChatPayload;
   /** The channels we are in changed, or were first reported. */
   channels: ChannelsPayload;
+  /** A DM we asked to open is open. */
+  dmOpened: DmOpenedPayload;
   /** Socket state changed. `detail` is safe to show a human. */
   connection: { status: ConnectionStatus; detail?: string };
   /** The server rejected something — rate limit, bad move. */

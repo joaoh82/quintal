@@ -43,6 +43,13 @@ export class OfficePlayer extends Schema {
    * accountable for it is the thing this field exists to prevent.
    */
   ownerName = '';
+  /**
+   * For agents: `users.id` of the owner. Synced alongside the name because a
+   * name is not an identity — the roster has to answer "is this one *mine*"
+   * (may I message it directly, may I put it in a channel) and a self-chosen
+   * display name cannot answer that.
+   */
+  ownerUserId = '';
   /** For agents: comma-joined scopes, so the profile card can show them. */
   scopes = '';
   /**
@@ -77,6 +84,7 @@ defineTypes(OfficePlayer, {
   kind: 'string',
   status: 'string',
   ownerName: 'string',
+  ownerUserId: 'string',
   scopes: 'string',
   isGuest: 'boolean',
   description: 'string',
@@ -103,6 +111,7 @@ export interface PlayerInit {
   kind?: PlayerKind;
   status?: string;
   ownerName?: string;
+  ownerUserId?: string;
   scopes?: readonly string[];
   isGuest?: boolean;
   description?: string;
@@ -122,6 +131,7 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.kind = init.kind ?? 'human';
   player.status = init.status ?? '';
   player.ownerName = init.ownerName ?? '';
+  player.ownerUserId = init.ownerUserId ?? '';
   player.scopes = (init.scopes ?? []).join(',');
   player.isGuest = init.isGuest ?? false;
   player.description = init.description ?? '';

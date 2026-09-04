@@ -22,6 +22,8 @@ export const ClientMessage = {
   ChannelChat: 'channel_chat',
   /** Which channels am I in. Answered with `channels`, and again whenever that changes. */
   ChannelsGet: 'channels_get',
+  /** Open a direct message with somebody. Answered with `dm_opened`, then `channels`. */
+  DmOpen: 'dm_open',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -47,6 +49,8 @@ export const ServerMessage = {
   ChannelChat: 'channel_chat',
   /** The channels you are in. In reply to `channels_get`, and whenever it changes. */
   Channels: 'channels',
+  /** The DM you asked for is open; here it is, so you can switch to it. */
+  DmOpened: 'dm_opened',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
 } as const;
@@ -122,8 +126,17 @@ export interface ChannelChatPayload extends ChatBroadcastPayload {
 }
 
 export interface ChannelsPayload {
-  /** The channels this client is a member of. */
+  /** The channels and DMs this client is a member of. */
   channels: ChannelRef[];
+}
+
+export interface DmOpenPayload {
+  /** `users.id` or `agents.id` of who you want to talk to. */
+  memberId: string;
+}
+
+export interface DmOpenedPayload {
+  channel: ChannelRef;
 }
 
 export interface ErrorPayload {
