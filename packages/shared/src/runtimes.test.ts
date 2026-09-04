@@ -5,6 +5,7 @@ import {
   RUNTIMES,
   acpCommandFor,
   isUsable,
+  modelChoice,
   normaliseHostReport,
   runtimeById,
 } from './runtimes.js';
@@ -100,5 +101,63 @@ describe('a host report off the wire', () => {
 
   it('keeps an explicitly empty list, which means "I looked and found nothing"', () => {
     assert.deepEqual(normaliseHostReport({ label: 'box', reposDir: '', runtimes: [] })?.runtimes, []);
+  });
+});
+
+describe('the models a machine reports', () => {
+  const claude = { id: 'claude-code', installed: true, path: '/usr/bin/claude' };
+
+  it('keeps a well-formed list and tells "not asked" from "offers nothing"', () => {
+    const out = normaliseHostReport({
+      label: 'box',
+      reposDir: '',
+      runtimes: [
+        {
+          ...claude,
+          models: {
+            configId: 'model',
+            current: 'sonnet',
+            choices: [
+              { id: 'sonnet', label: 'Sonnet' },
+              { id: 'opus', label: 'Opus' },
+            ],
+          },
+        },
+        { id: 'goose', installed: true, path: '/usr/bin/goose', models: null },
+        { id: 'codex', installed: false, path: null },
+      ],
+    });
+    assert.deepEqual(out?.runtimes?.[0]?.models?.choices.map((c) => c.id), ['sonnet', 'opus']);
+    assert.equal(out?.runtimes?.[0]?.models?.current, 'sonnet');
+    assert.equal(out?.runtimes?.[1]?.models, null, 'asked, offers no choice');
+    assert.equal('models' in (out?.runtimes?.[2] ?? {}), false, 'never asked');
+  });
+
+  it('bounds what it keeps, and never trusts a default the list lacks', () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({ id: `m${i}`, label: `M${i}` }));
+    const out = normaliseHostReport({
+      label: 'box',
+      reposDir: '',
+      runtimes: [
+        {
+          ...claude,
+          models: { configId: 'model', current: 'not-in-list', choices: [...many, { id: 'm1' }] },
+        },
+      ],
+    });
+    const models = out?.runtimes?.[0]?.models;
+    assert.equal(models?.choices.length, 64, 'capped');
+    assert.equal(models?.current, null, 'a default that is not a choice is not a default');
+    assert.equal(new Set(models?.choices.map((c) => c.id)).size, 64, 'no duplicates');
+  });
+
+  it('treats a malformed model list as no choice rather than a crash', () => {
+    const out = normaliseHostReport({
+      label: 'box',
+      reposDir: '',
+      runtimes: [{ ...claude, models: { configId: '', choices: 'nope' } }],
+    });
+    assert.equal(out?.runtimes?.[0]?.models, null);
+    assert.equal(modelChoice(out?.runtimes?.[0], 'sonnet'), null);
   });
 });

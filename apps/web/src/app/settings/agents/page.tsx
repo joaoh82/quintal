@@ -69,6 +69,7 @@ export default async function AgentsSettingsPage() {
         currentUserId={session.user.id}
         canAdministerAll={canAdministerAll}
         machines={machines.filter((row) => row.revokedAt === null).map((row) => row.label)}
+        hosts={hosts.map((host) => ({ label: host.label, runtimes: host.runtimes }))}
       />
 
       <p className="text-muted-foreground pt-2 text-xs">

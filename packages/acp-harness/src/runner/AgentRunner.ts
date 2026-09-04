@@ -16,6 +16,7 @@ import { AgentProcess } from '../acp/agent-process.js';
 import type { AgentConfig } from '../config.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
+import { pickModel } from '../models.js';
 import { basePrompt } from './base-prompt.js';
 import { LOBBY_SCOPE, SessionStore } from './sessions.js';
 
@@ -704,12 +705,48 @@ export class AgentRunner {
       ],
     } as schema.NewSessionRequest);
 
+    await this.#applyModel(proc, created);
+
     this.#sessions.put(scope, created.sessionId);
     // A fresh session has been told nothing yet.
     this.#unprimed.add(scope);
     this.#log('info', `new session for "${scope}" (${this.#sessions.size} live)`);
 
     return created.sessionId;
+  }
+
+  /**
+   * Run on the model the owner chose, or do not run.
+   *
+   * The model is picked from what the agent advertised at `session/new`, and
+   * set with `session/set_config_option` — never a command-line flag, so a
+   * value from the office can never become argv on this machine. An agent
+   * that was not offered the model its card names refuses the session rather
+   * than answering on whatever the default is: an agent quietly running on a
+   * different model than it claims is the worse failure, because nobody can
+   * see it.
+   */
+  async #applyModel(proc: AgentProcess, created: schema.NewSessionResponse): Promise<void> {
+    const wanted = this.config.modelId;
+    if (!wanted) return;
+
+    const choice = pickModel((created as { configOptions?: unknown }).configOptions, wanted);
+    if (!choice) {
+      this.#setStatus(`no model "${wanted}" here`);
+      this.#log(
+        'error',
+        `the office asked for model "${wanted}", which ${this.config.harness} did not offer — refusing to run on a different one`,
+      );
+      throw new Error(`model "${wanted}" is not offered by ${this.config.harness}`);
+    }
+
+    await proc.setSessionConfigOption({
+      sessionId: created.sessionId,
+      configId: choice.configId,
+      type: 'id',
+      value: choice.value,
+    } as schema.SetSessionConfigOptionRequest);
+    this.#log('info', `model set to ${wanted}`);
   }
 
   /**

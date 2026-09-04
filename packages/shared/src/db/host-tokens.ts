@@ -255,6 +255,12 @@ export interface FleetMember {
   /** As written: a repo name, `*`, or an absolute path. Resolved on the host. */
   repoSpec: string;
   /**
+   * The model to ask the runtime for, by the id it advertised. Null for the
+   * runtime's default. Never a command-line flag: the harness sets it over
+   * ACP from the list the agent offered, or refuses to run.
+   */
+  modelId: string | null;
+  /**
    * A fingerprint of what its owner says this agent is.
    *
    * Here so a running harness can notice that it changed. The instructions the
@@ -288,6 +294,7 @@ export async function fleetForHost(
       description: agents.description,
       instructions: agents.instructions,
       hostLabel: agents.hostLabel,
+      modelId: agents.modelId,
       enabled: agents.enabled,
       revokedAt: agents.revokedAt,
       ownerUserId: agents.ownerUserId,
@@ -328,5 +335,6 @@ export async function fleetForHost(
       profile: profileFingerprint(row.description, row.instructions),
       runtimeId: row.runtimeId,
       repoSpec: row.repoSpec,
+      modelId: row.modelId,
     }));
 }

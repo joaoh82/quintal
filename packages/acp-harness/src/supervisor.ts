@@ -1,4 +1,7 @@
+import { acpCommandFor, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
+
 import type { AgentConfig } from './config.js';
+import { probeModels } from './models.js';
 import { AgentRunner, type RunnerState } from './runner/AgentRunner.js';
 import { detectRuntimes, hostLabel } from './runtimes.js';
 
@@ -69,7 +72,8 @@ export function sameAgent(a: AgentConfig, b: AgentConfig): boolean {
     a.url === b.url &&
     a.mapId === b.mapId &&
     a.command.join(' ') === b.command.join(' ') &&
-    a.profile === b.profile
+    a.profile === b.profile &&
+    (a.modelId ?? '') === (b.modelId ?? '')
   );
 }
 
@@ -151,8 +155,26 @@ export class Supervisor {
         reposDir: this.options.reposDir ?? '',
       };
       const runtimes = await detectRuntimes();
+      // Say what the machine has now; what each runtime offers takes longer.
       live[0]?.reportHost({ ...host, runtimes });
       for (const runner of live.slice(1)) runner.reportHost(host);
+
+      // Then ask each usable runtime which models it offers, and report again.
+      // A separate, later report rather than one slow one: the settings page
+      // shows "ready" within a second and gains the model list when it
+      // arrives, which beats showing nothing until every runtime has been
+      // spawned and closed.
+      const withModels = await Promise.all(
+        runtimes.map(async (status): Promise<RuntimeStatus> => {
+          if (!isUsable(status)) return status;
+          const spec = runtimeById(status.id);
+          const command = spec ? acpCommandFor(spec) : null;
+          if (!command) return status;
+          return { ...status, models: await probeModels(command) };
+        }),
+      );
+      const stillLive = runners.find((runner) => runner.connected);
+      stillLive?.reportHost({ ...host, runtimes: withModels });
     } catch {
       // Reporting is bookkeeping. Never let it take a working fleet down.
     }

@@ -86,6 +86,7 @@ interface FleetResponse {
     runtimeId: string;
     repoSpec: string;
     profile: string;
+    modelId?: string | null;
   }[];
 }
 
@@ -219,6 +220,12 @@ export function toAgentConfigs(
       mapId,
       workspaceId: fleet.host.workspaceId,
       profile: member.profile ?? '',
+      // Carried as data. It is applied over ACP after the session opens —
+      // it is deliberately not on `command`, which is built from the
+      // catalogue alone.
+      ...(typeof member.modelId === 'string' && member.modelId.length > 0
+        ? { modelId: member.modelId }
+        : {}),
     });
   }
 

@@ -7,7 +7,9 @@ import {
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
+  runtimeById,
   type AgentScope,
+  type RuntimeStatus,
 } from '@quintal/shared';
 import type { AgentListEntry } from '@quintal/shared/db';
 import Link from 'next/link';
@@ -31,12 +33,87 @@ import {
 
 const INITIAL: CreateAgentState = { ok: false };
 
+/** What a machine reported it can run, keyed by the label a form picks. */
+export interface ReportedHost {
+  label: string;
+  runtimes: RuntimeStatus[];
+}
+
 interface AgentsManagerProps {
   agents: AgentListEntry[];
   currentUserId: string;
   canAdministerAll: boolean;
   /** Registered machines, for assigning an agent somewhere it can boot. */
   machines: string[];
+  /** What each machine said it has — the model picker draws from this. */
+  hosts: ReportedHost[];
+}
+
+/**
+ * The model picker, for one machine and one runtime.
+ *
+ * Offers only what that machine reported the runtime offering, because that
+ * is the only list the harness will honour: an agent asked for a model its
+ * runtime never advertised refuses to run rather than running on another.
+ * The default is a real option, not an empty string that means "whatever".
+ */
+function ModelSelect({
+  hosts,
+  hostLabel,
+  runtimeId,
+  value,
+  onChange,
+  compact,
+}: {
+  hosts: ReportedHost[];
+  hostLabel: string;
+  runtimeId: string;
+  value: string;
+  onChange: (modelId: string) => void;
+  compact?: boolean;
+}) {
+  const status = hosts
+    .find((host) => host.label === hostLabel)
+    ?.runtimes.find((entry) => entry.id === runtimeId);
+  const models = status?.models ?? null;
+  const known = models !== null && models.choices.some((choice) => choice.id === value);
+  const runtime = runtimeById(runtimeId);
+
+  return (
+    <select
+      name="modelId"
+      value={known ? value : ''}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={hostLabel.length === 0 || models === null}
+      title={
+        hostLabel.length === 0
+          ? 'Pick a machine first'
+          : models === null
+            ? status?.models === undefined
+              ? `${hostLabel} has not reported which models ${runtime?.label ?? runtimeId} offers yet — it does so a few seconds after its fleet boots`
+              : `${runtime?.label ?? runtimeId} offers no model choice on ${hostLabel}`
+            : undefined
+      }
+      className={
+        compact
+          ? 'border-input bg-background h-7 rounded border px-2 text-xs disabled:opacity-50'
+          : 'border-input bg-background h-9 rounded-md border px-3 text-sm disabled:opacity-50'
+      }
+    >
+      <option value="">
+        {models === null
+          ? status?.models === undefined && hostLabel.length > 0
+            ? 'default — models not reported yet'
+            : `default`
+          : `default${models.current ? ` (${models.choices.find((c) => c.id === models.current)?.label ?? models.current})` : ''}`}
+      </option>
+      {models?.choices.map((choice) => (
+        <option key={choice.id} value={choice.id}>
+          {choice.label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 export function AgentsManager({
@@ -44,9 +121,15 @@ export function AgentsManager({
   currentUserId,
   canAdministerAll,
   machines,
+  hosts,
 }: AgentsManagerProps) {
   const [state, formAction, pending] = useActionState(createAgentAction, INITIAL);
   const [copied, setCopied] = useState(false);
+  // The create form's launch trio is controlled so the model picker can follow
+  // the machine and runtime it depends on.
+  const [newHost, setNewHost] = useState('');
+  const [newRuntime, setNewRuntime] = useState('claude-code');
+  const [newModel, setNewModel] = useState('');
 
   const live = agents.filter((agent) => agent.revokedAt === null);
   const revoked = agents.filter((agent) => agent.revokedAt !== null);
@@ -178,7 +261,8 @@ export function AgentsManager({
                 <select
                   name="hostLabel"
                   className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-                  defaultValue=""
+                  value={newHost}
+                  onChange={(event) => setNewHost(event.target.value)}
                 >
                   <option value="">nowhere — I&rsquo;ll start it myself</option>
                   {machines.map((machine) => (
@@ -194,7 +278,8 @@ export function AgentsManager({
                 <select
                   name="runtimeId"
                   className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-                  defaultValue="claude-code"
+                  value={newRuntime}
+                  onChange={(event) => setNewRuntime(event.target.value)}
                 >
                   {RUNTIMES.filter((runtime) => runtime.acp.kind !== 'none').map((runtime) => (
                     <option key={runtime.id} value={runtime.id}>
@@ -202,6 +287,17 @@ export function AgentsManager({
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium">Model</span>
+                <ModelSelect
+                  hosts={hosts}
+                  hostLabel={newHost}
+                  runtimeId={newRuntime}
+                  value={newModel}
+                  onChange={setNewModel}
+                />
               </label>
 
               <label className="flex flex-col gap-1">
@@ -241,6 +337,7 @@ export function AgentsManager({
                 agent={agent}
                 canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
                 machines={machines}
+                hosts={hosts}
               />
             ))}
           </ul>
@@ -258,7 +355,7 @@ export function AgentsManager({
           </p>
           <ul className="mt-3 divide-y rounded-lg border opacity-60">
             {revoked.map((agent) => (
-              <AgentRow key={agent.id} agent={agent} canRevoke={false} machines={[]} />
+              <AgentRow key={agent.id} agent={agent} canRevoke={false} machines={[]} hosts={[]} />
             ))}
           </ul>
         </section>
@@ -271,11 +368,17 @@ function AgentRow({
   agent,
   canRevoke,
   machines,
+  hosts,
 }: {
   agent: AgentListEntry;
   canRevoke: boolean;
   machines: string[];
+  hosts: ReportedHost[];
 }) {
+  const [host, setHost] = useState(agent.hostLabel ?? '');
+  const [runtime, setRuntime] = useState(agent.runtimeId ?? 'claude-code');
+  const [model, setModel] = useState(agent.modelId ?? '');
+
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
       <span className="flex items-center gap-1.5 font-medium">
@@ -296,6 +399,15 @@ function AgentRow({
       {agent.status ? (
         <span className="text-muted-foreground truncate font-mono text-xs">
           {agent.status}
+        </span>
+      ) : null}
+
+      {/* Which model, next to which runtime: the card should say what the
+          agent is running on without opening the form under it. */}
+      {agent.runtimeId !== null && agent.hostLabel !== null ? (
+        <span className="text-muted-foreground font-mono text-[11px]">
+          {runtimeById(agent.runtimeId)?.label ?? agent.runtimeId}
+          {agent.modelId ? ` · ${agent.modelId}` : ''}
         </span>
       ) : null}
 
@@ -333,7 +445,8 @@ function AgentRow({
           <span className="text-muted-foreground text-[11px]">Runs on</span>
           <select
             name="hostLabel"
-            defaultValue={agent.hostLabel ?? ''}
+            value={host}
+            onChange={(event) => setHost(event.target.value)}
             className="border-input bg-background h-7 rounded border px-2 text-xs"
           >
             <option value="">nowhere</option>
@@ -345,15 +458,24 @@ function AgentRow({
           </select>
           <select
             name="runtimeId"
-            defaultValue={agent.runtimeId ?? 'claude-code'}
+            value={runtime}
+            onChange={(event) => setRuntime(event.target.value)}
             className="border-input bg-background h-7 rounded border px-2 text-xs"
           >
-            {RUNTIMES.filter((runtime) => runtime.acp.kind !== 'none').map((runtime) => (
-              <option key={runtime.id} value={runtime.id}>
-                {runtime.label}
+            {RUNTIMES.filter((entry) => entry.acp.kind !== 'none').map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.label}
               </option>
             ))}
           </select>
+          <ModelSelect
+            hosts={hosts}
+            hostLabel={host}
+            runtimeId={runtime}
+            value={model}
+            onChange={setModel}
+            compact
+          />
           {/* `required` so the browser blocks an empty submit before it can
               become a thrown server error — this form has no inline error
               slot, and a full-page overlay is not how you say "fill this in". */}
