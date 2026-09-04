@@ -171,31 +171,11 @@ export async function redeemInviteLink(
   return { ok: true, link: row };
 }
 
-/** Put a redeemed guest into the workspace, if they are not already in it. */
-export async function ensureMembership(
-  db: Database,
-  input: { workspaceId: string; userId: string; role: MembershipRole },
-): Promise<void> {
-  const existing = await db
-    .select({ id: memberships.id })
-    .from(memberships)
-    .where(
-      and(
-        eq(memberships.workspaceId, input.workspaceId),
-        eq(memberships.userId, input.userId),
-      ),
-    )
-    .limit(1);
-
-  if (existing.length > 0) return;
-
-  await db.insert(memberships).values({
-    id: randomUUID(),
-    workspaceId: input.workspaceId,
-    userId: input.userId,
-    role: input.role,
-  });
-}
+// There is deliberately no `ensureMembership` here any more. A guest link
+// admits somebody for a visit, and the visit is carried by their session —
+// see `guestWorkspaceId` — not by a membership row, which would outlive the
+// link's expiry and use count. When "invite a real member" exists it will
+// write its own row, on purpose, from its own flow.
 
 /** Revoke a link without deleting it — a spent link stays explainable. */
 export async function revokeInviteLink(

@@ -1,15 +1,10 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import {
-  ensurePersonalWorkspace,
-  getDb,
-  getInstanceSettings,
-  getOfficeSettings,
-  isInstanceAdmin,
-} from '@quintal/shared/db';
+import { getDb, getInstanceSettings, getOfficeSettings, isInstanceAdmin } from '@quintal/shared/db';
 
 import { auth } from '@/lib/auth';
+import { currentOffice } from '@/lib/workspace';
 
 import { Offices } from './Offices';
 import { OfficeSettingsForm } from './OfficeSettingsForm';
@@ -29,11 +24,11 @@ export default async function OfficeSettingsPage() {
   const host = requestHeaders.get('host') ?? '';
 
   const db = getDb();
-  const workspace = await ensurePersonalWorkspace(db, {
-    userId: session.user.id,
-    name: session.user.name,
-    pubkey: session.user.pubkey,
-  });
+  // The office this session is in — for a guest, the one they are visiting,
+  // whose radii are the ones in force around them.
+  const here = await currentOffice(db, session);
+  if (!here) redirect('/login');
+  const { workspace } = here;
 
   // Two different things, from two different places: how *this office* works,
   // and what the *deployment* calls itself.

@@ -5,7 +5,6 @@ import {
   INVITE_MAX_USES_LIMIT,
   checkInviteLink,
   createInviteLink,
-  ensureMembership,
   listInviteLinks,
   parseInviteToken,
   redeemInviteLink,
@@ -192,24 +191,3 @@ describe('redeemInviteLink', () => {
   });
 });
 
-describe('ensureMembership', () => {
-  it('adds the guest once, however many times it is called', async () => {
-    const { db, host } = await setup();
-    const guest = await createTestUser(db, 'Guest');
-
-    for (let i = 0; i < 3; i += 1) {
-      await ensureMembership(db, {
-        workspaceId: host.workspaceId,
-        userId: guest.id,
-        role: 'member',
-      });
-    }
-
-    const joined = await listWorkspacesForUser(db, guest.id);
-    const inHosts = joined.filter(
-      (row) => row.workspace.id === host.workspaceId,
-    );
-    assert.equal(inHosts.length, 1);
-    assert.equal(inHosts[0]?.role, 'member');
-  });
-});

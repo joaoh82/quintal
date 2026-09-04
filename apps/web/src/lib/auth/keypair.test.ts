@@ -11,6 +11,7 @@ import {
 } from '@quintal/shared';
 import {
   createInviteLink,
+  findMembership,
   listWorkspacesForUser,
   schema,
   sessions,
@@ -504,6 +505,76 @@ describe('guest links', () => {
     assert.ok(
       joined.every((row) => row.role === 'owner'),
       'the only workspace a guest belongs to is the one they own',
+    );
+  });
+
+  it('carries the grant on the session, and lets it die within a day', async () => {
+    const { db, auth, host } = await withHost();
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+    });
+
+    const { result } = await joinAsGuest(auth, token);
+    const session = (
+      await db.select().from(sessions).where(eq(sessions.token, result.token))
+    )[0];
+    assert.ok(session);
+    assert.equal(session.guestWorkspaceId, host.workspaceId, 'the room gate reads this');
+
+    // A member's session lasts thirty days. A visit that could be resumed for
+    // a month is not a visit: the badge and the access should die together.
+    const hours = (session.expiresAt.getTime() - Date.now()) / 3_600_000;
+    assert.ok(hours <= 25, `a guest session ends on its own, in about a day — got ${hours}h`);
+    assert.ok(hours > 1, 'but not before the visit starts');
+  });
+
+  it('does not let a key that once visited walk back in without an invite', async () => {
+    // The leak case, and the reason a visit is a session rather than a row.
+    // Somebody who gets hold of a guest's in-tab key can sign in as them —
+    // and must find nothing but that person's own empty office.
+    const { db, auth, host } = await withHost();
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+    });
+    const { secretKey, pubkey } = keypair();
+
+    // The visit, through the link.
+    const first = buildAuthPayload({
+      origin: ORIGIN,
+      nonce: await challenge(auth, pubkey),
+      timestamp: nowSeconds(),
+    });
+    await verify(auth, {
+      pubkey,
+      sig: signAuthPayload(secretKey, first),
+      payload: first,
+      inviteToken: token,
+    });
+
+    // Later: the same key, no link.
+    const again = buildAuthPayload({
+      origin: ORIGIN,
+      nonce: await challenge(auth, pubkey),
+      timestamp: nowSeconds(),
+    });
+    const plain = (await verify(auth, {
+      pubkey,
+      sig: signAuthPayload(secretKey, again),
+      payload: again,
+    })) as { token: string; isGuest: boolean };
+
+    assert.equal(plain.isGuest, false);
+    const session = (await db.select().from(sessions).where(eq(sessions.token, plain.token)))[0];
+    assert.equal(session?.guestWorkspaceId ?? null, null, 'no grant without an invite');
+
+    const person = (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0];
+    assert.ok(person);
+    assert.equal(
+      await findMembership(db, person.id, host.workspaceId),
+      null,
+      'and no membership to fall back on — the office they visited is closed to them',
     );
   });
 

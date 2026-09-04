@@ -1,5 +1,4 @@
 import {
-  ensurePersonalWorkspace,
   findMembership,
   getDb,
   listAgentsForWorkspace,
@@ -10,8 +9,10 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
+import { currentOffice } from '@/lib/workspace';
 
 import { AgentsManager } from './AgentsManager';
+import { Visiting } from '../Visiting';
 import { Machines } from './Machines';
 import { FleetControl } from './FleetControl';
 import { RuntimePanels } from './RuntimePanels';
@@ -25,11 +26,12 @@ export default async function AgentsSettingsPage() {
   if (!session) redirect('/login');
 
   const db = getDb();
-  const workspace = await ensurePersonalWorkspace(db, {
-    userId: session.user.id,
-    name: session.user.name,
-    pubkey: session.user.pubkey,
-  });
+  const here = await currentOffice(db, session);
+  if (!here) redirect('/login');
+  if (here.role === 'guest') {
+    return <Visiting office={here.workspace.name} what="agents and machines" />;
+  }
+  const { workspace } = here;
 
   const [agents, membership, hosts, machines] = await Promise.all([
     listAgentsForWorkspace(db, workspace.id),
