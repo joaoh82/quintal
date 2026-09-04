@@ -11,9 +11,14 @@ import {
   tileCentre,
   toTile,
   zoneAt,
+  FLOOR_ZONE_ID,
   type ChannelChatPayload,
   type ChannelChatSendPayload,
+  type ChannelJoinPayload,
+  type ChannelLeavePayload,
   type ChannelsPayload,
+  type FollowZonePayload,
+  type ZoneChatPayload,
   type ChatBroadcastPayload,
   type Direction,
   type DmOpenPayload,
@@ -150,6 +155,7 @@ export class OfficeScene extends Phaser.Scene {
       mapName: this.#map.name,
       width: this.#map.width,
       height: this.#map.height,
+      zones: this.#map.zones,
     });
   }
 
@@ -195,6 +201,9 @@ export class OfficeScene extends Phaser.Scene {
     });
     room.onMessage(ServerMessage.DmOpened, (opened: DmOpenedPayload) => {
       this.#bridge.emit('dmOpened', opened);
+    });
+    room.onMessage(ServerMessage.ZoneChat, (message: ZoneChatPayload) => {
+      this.#bridge.emit('zoneChat', message);
     });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
@@ -427,14 +436,30 @@ export class OfficeScene extends Phaser.Scene {
     } satisfies ChannelChatSendPayload);
   }
 
-  /** Ask for a channel's recent transcript; it arrives as a `history` event. */
-  loadChannelHistory(channelId: string): void {
-    this.#room.send(ClientMessage.HistoryGet, { channelId } satisfies HistoryGetPayload);
+  /** Ask for a page of a transcript; it arrives as a `history` event. */
+  loadHistory(target: { channelId?: string; zoneId?: string; before?: number }): void {
+    const payload: HistoryGetPayload = {};
+    if (target.channelId) payload.channelId = target.channelId;
+    if (target.zoneId) payload.zoneId = target.zoneId;
+    if (target.before) payload.before = target.before;
+    this.#room.send(ClientMessage.HistoryGet, payload);
   }
 
   /** Open a direct message with somebody. The office answers with `dm_opened`. */
-  openDm(memberId: string): void {
-    this.#room.send(ClientMessage.DmOpen, { memberId } satisfies DmOpenPayload);
+  openDm(target: { memberId?: string; name?: string }): void {
+    this.#room.send(ClientMessage.DmOpen, target satisfies DmOpenPayload);
+  }
+
+  followZone(zoneId: string | null): void {
+    this.#room.send(ClientMessage.FollowZone, { zoneId } satisfies FollowZonePayload);
+  }
+
+  joinChannel(slug: string): void {
+    this.#room.send(ClientMessage.ChannelJoin, { slug } satisfies ChannelJoinPayload);
+  }
+
+  leaveChannel(channelId: string): void {
+    this.#room.send(ClientMessage.ChannelLeave, { channelId } satisfies ChannelLeavePayload);
   }
 
   // --- presentation --------------------------------------------------------
@@ -488,6 +513,9 @@ export class OfficeScene extends Phaser.Scene {
         scopes: player.scopes ? player.scopes.split(',') : [],
         identityId: player.userId,
         lastActionAt: this.#lastAction.get(sessionId) ?? 0,
+        zoneId:
+          zoneAt(this.#map, toTile(player.x, this.#map.tileSize), toTile(player.y, this.#map.tileSize))
+            ?.id ?? FLOOR_ZONE_ID,
         isGuest: player.isGuest,
         description: player.description,
         pubkey: player.pubkey,
@@ -500,7 +528,7 @@ export class OfficeScene extends Phaser.Scene {
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;

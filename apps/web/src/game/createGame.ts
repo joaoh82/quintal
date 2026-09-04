@@ -28,10 +28,18 @@ export interface OfficeSession {
   say(text: string): void;
   /** Post in a channel you are in. Nobody nearby hears it; every member reads it. */
   sayInChannel(channelId: string, text: string): void;
-  /** Ask for a channel's recent transcript. Arrives as a `history` bridge event. */
-  loadChannelHistory(channelId: string): void;
+  /**
+   * Ask for a page of a transcript: a channel's, a zone's, or earshot's.
+   * Arrives as a `history` bridge event. `before` pages further back.
+   */
+  loadHistory(target: { channelId?: string; zoneId?: string; before?: number }): void;
   /** Open a direct message with a person or agent. Arrives as a `dmOpened` bridge event. */
-  openDm(memberId: string): void;
+  openDm(target: { memberId?: string; name?: string }): void;
+  /** Read a zone live wherever you stand, or stop. Lines arrive as `zoneChat`. */
+  followZone(zoneId: string | null): void;
+  /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
+  joinChannel(slug: string): void;
+  leaveChannel(channelId: string): void;
   destroy(): void;
 }
 
@@ -135,11 +143,20 @@ export async function createGame(
     sayInChannel(channelId, text) {
       scene()?.sayInChannel(channelId, text);
     },
-    loadChannelHistory(channelId) {
-      scene()?.loadChannelHistory(channelId);
+    loadHistory(target) {
+      scene()?.loadHistory(target);
     },
-    openDm(memberId) {
-      scene()?.openDm(memberId);
+    openDm(target) {
+      scene()?.openDm(target);
+    },
+    followZone(zoneId) {
+      scene()?.followZone(zoneId);
+    },
+    joinChannel(slug) {
+      scene()?.joinChannel(slug);
+    },
+    leaveChannel(channelId) {
+      scene()?.leaveChannel(channelId);
     },
     destroy() {
       closedByUs = true;

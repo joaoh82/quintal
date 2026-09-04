@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 
 interface HelpPanelProps {
   onClose: () => void;
+  /** The conversations-panel key as configured on this device. */
+  overlayKey: string;
 }
 
 const KEYS: { keys: string; what: string }[] = [
@@ -16,6 +18,12 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: '?', what: 'This panel' },
 ];
 
+const SLASH: { keys: string; what: string }[] = [
+  { keys: '/msg name', what: 'Open a direct message — your own agents, or anybody' },
+  { keys: '/join channel', what: 'Join a channel' },
+  { keys: '/leave', what: 'Leave the channel you are reading' },
+];
+
 /**
  * What you can type, in one place.
  *
@@ -23,7 +31,7 @@ const KEYS: { keys: string; what: string }[] = [
  * about it suggests that `!cancel` exists. Discoverability for a typed
  * convention has to be built; it is never inferred.
  */
-export function HelpPanel({ onClose }: HelpPanelProps) {
+export function HelpPanel({ onClose, overlayKey }: HelpPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -56,7 +64,27 @@ export function HelpPanel({ onClose }: HelpPanelProps) {
         </div>
 
         <dl className="mb-5 grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-1.5 text-xs">
-          {KEYS.map((row) => (
+          {[
+            ...KEYS,
+            {
+              keys: overlayKey,
+              what: 'Every zone, channel and direct message in one panel — change the key in Settings → Profile',
+            },
+          ].map((row) => (
+            <div key={row.keys} className="contents">
+              <dt className="font-mono text-white/70">{row.keys}</dt>
+              <dd className="text-white/55">{row.what}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3 className="mb-1.5 text-xs font-semibold text-white/85">Places</h3>
+        <p className="mb-2 text-xs leading-relaxed text-white/55">
+          A zone is where you stand. A channel is somewhere you were put — everybody in it reads
+          what is said, wherever they are. A direct message is a channel nobody else can find.
+        </p>
+        <dl className="mb-5 grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-1.5 text-xs">
+          {SLASH.map((row) => (
             <div key={row.keys} className="contents">
               <dt className="font-mono text-white/70">{row.keys}</dt>
               <dd className="text-white/55">{row.what}</dd>
