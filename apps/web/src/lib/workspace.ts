@@ -50,5 +50,9 @@ export async function currentOffice(
     pubkey: session.user.pubkey,
   });
   const membership = await findMembership(db, session.user.id, workspace.id);
+  // `ensurePersonalWorkspace` returns the office this person *owns* and
+  // writes the owner membership when it creates one, so a missing row here
+  // is the safety net for an account whose sign-up was cut short — not a
+  // demotion. Owner is what the row would say.
   return { workspace, role: (membership?.role as MembershipRole | undefined) ?? 'owner' };
 }

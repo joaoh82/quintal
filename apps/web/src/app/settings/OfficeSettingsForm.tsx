@@ -109,14 +109,24 @@ export function OfficeSettingsForm({
               what this server is called.
             </p>
           </div>
-          <Input
-            id="workspaceName"
-            name="workspaceName"
-            defaultValue={workspaceName}
-            maxLength={WORKSPACE_NAME_MAX_LENGTH}
-            required
-            className="sm:max-w-sm"
-          />
+          {canChangeOffice ? (
+            <Input
+              id="workspaceName"
+              name="workspaceName"
+              defaultValue={workspaceName}
+              maxLength={WORKSPACE_NAME_MAX_LENGTH}
+              required
+              className="sm:max-w-sm"
+            />
+          ) : (
+            // A visitor reads the name; only a member changes it. Not a
+            // disabled input: a disabled field is not submitted, which would
+            // be fine, but it still looks like a thing you are meant to edit.
+            <p id="workspaceName" className="text-sm">
+              {workspaceName}{' '}
+              <span className="text-muted-foreground text-xs">— you are visiting</span>
+            </p>
+          )}
         </div>
 
         {/*
@@ -198,17 +208,21 @@ export function OfficeSettingsForm({
       </section>
       ) : null}
 
-      <div className="flex items-center gap-3 border-t pt-4">
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Saving…' : 'Save'}
-        </Button>
-        {state.ok ? (
-          <span className="text-xs text-emerald-600">
-            {canChangeOffice ? 'Saved — live within 10s.' : 'Saved.'}
-          </span>
-        ) : null}
-        {state.error ? <span className="text-xs text-rose-600">{state.error}</span> : null}
-      </div>
+      {/* Nothing on this page is a visitor's to save, so there is no Save
+          for them — a button that can only produce a refusal is a trap. */}
+      {canChangeOffice || canChangeInstance ? (
+        <div className="flex items-center gap-3 border-t pt-4">
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Saving…' : 'Save'}
+          </Button>
+          {state.ok ? (
+            <span className="text-xs text-emerald-600">
+              {canChangeOffice ? 'Saved — live within 10s.' : 'Saved.'}
+            </span>
+          ) : null}
+          {state.error ? <span className="text-xs text-rose-600">{state.error}</span> : null}
+        </div>
+      ) : null}
     </form>
   );
 }

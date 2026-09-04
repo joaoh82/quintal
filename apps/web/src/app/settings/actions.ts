@@ -2,7 +2,6 @@
 
 import { normaliseSettings, type OfficeSettings } from '@quintal/shared';
 import {
-  ensurePersonalWorkspace,
   getDb,
   getOfficeSettings,
   isInstanceAdmin,
@@ -14,6 +13,7 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
 import { auth } from '@/lib/auth';
+import { currentOffice } from '@/lib/workspace';
 
 export interface SettingsState {
   ok: boolean;
@@ -42,12 +42,15 @@ export async function saveSettingsAction(
     // behind the instance-admin gate with the deployment name, because every
     // office shared one row and one radius; now that a room belongs to one
     // office, how close you stand to be heard is the owner's call.
-    const workspace = await ensurePersonalWorkspace(db, {
-      userId: session.user.id,
-      name: session.user.name,
-      pubkey: session.user.pubkey,
-    });
-    const mayChangeOffice = !session.session.isGuest;
+    //
+    // *This* office — the one the page showed — and not the caller's own.
+    // The page and the action used to disagree for a guest: the page showed
+    // the host's office, the action wrote to the guest's, so a guest pressing
+    // Save renamed their own office to the host's name. One resolver for both.
+    const here = await currentOffice(db, session);
+    if (!here) return { ok: false, error: 'Not in an office.' };
+    const workspace = here.workspace;
+    const mayChangeOffice = here.role !== 'guest';
 
     // The form hides what somebody cannot change, so a submission carrying it
     // anyway is a crafted one. Refused rather than quietly dropped: silently
@@ -61,8 +64,12 @@ export async function saveSettingsAction(
     }
 
     const officeFields = ['chatRadiusTiles', 'walkUpRadiusTiles', 'replyWindowSeconds'];
-    if (officeFields.some((field) => formData.get(field) !== null) && !mayChangeOffice) {
-      return { ok: false, error: 'Guests cannot change how this office works.' };
+    if (
+      (officeFields.some((field) => formData.get(field) !== null) ||
+        formData.get('workspaceName') !== null) &&
+      !mayChangeOffice
+    ) {
+      return { ok: false, error: 'You are visiting this office; its members change how it works.' };
     }
 
     // An absent field means "leave this alone", and saying so takes real care.
