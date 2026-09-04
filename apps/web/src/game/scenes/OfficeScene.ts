@@ -11,10 +11,14 @@ import {
   tileCentre,
   toTile,
   zoneAt,
+  type ChannelChatPayload,
+  type ChannelChatSendPayload,
+  type ChannelsPayload,
   type ChatBroadcastPayload,
   type Direction,
   type ErrorPayload,
   type GameBridge,
+  type HistoryGetPayload,
   type HistoryPayload,
   type MapZone,
   type MoveIntent,
@@ -180,9 +184,17 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage(ServerMessage.History, (history: HistoryPayload) => {
       this.#bridge.emit('history', history);
     });
-    // Asked for here, after the handler exists, and not pushed by the server on
+    room.onMessage(ServerMessage.ChannelChat, (message: ChannelChatPayload) => {
+      // No bubble: a channel is not a place on the map.
+      this.#bridge.emit('channelChat', message);
+    });
+    room.onMessage(ServerMessage.Channels, (channels: ChannelsPayload) => {
+      this.#bridge.emit('channels', channels);
+    });
+    // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
     room.send(ClientMessage.HistoryGet, {});
+    room.send(ClientMessage.ChannelsGet, {});
 
     // Schema callbacks go through a proxy in 0.16 rather than living on the
     // schema instances themselves.
@@ -399,6 +411,20 @@ export class OfficeScene extends Phaser.Scene {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
     this.#room.send(ClientMessage.Chat, { text: trimmed });
+  }
+
+  sayInChannel(channelId: string, text: string): void {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    this.#room.send(ClientMessage.ChannelChat, {
+      channelId,
+      text: trimmed,
+    } satisfies ChannelChatSendPayload);
+  }
+
+  /** Ask for a channel's recent transcript; it arrives as a `history` event. */
+  loadChannelHistory(channelId: string): void {
+    this.#room.send(ClientMessage.HistoryGet, { channelId } satisfies HistoryGetPayload);
   }
 
   // --- presentation --------------------------------------------------------

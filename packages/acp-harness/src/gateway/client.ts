@@ -1,6 +1,8 @@
 import {
   AgentMessage,
   AgentServerMessage,
+  type AgentChannelChatEvent,
+  type AgentChannelsEvent,
   type AgentChatEvent,
   type AgentErrorPayload,
   type AgentMentionEvent,
@@ -10,6 +12,8 @@ import {
   type AgentReadyPayload,
   type AgentResultPayload,
   type AgentRosterEvent,
+  type AgentSayPayload,
+  type ChannelRef,
   type LookAroundResult,
   type MemoryGetResult,
   type MemorySetResult,
@@ -29,6 +33,10 @@ export interface GatewayEvents {
   ready: (ready: AgentReadyPayload) => void;
   chat: (message: AgentChatEvent) => void;
   mention: (message: AgentMentionEvent) => void;
+  /** A line in a channel this agent is in. `mentioned` says whether it named us. */
+  channelChat: (message: AgentChannelChatEvent) => void;
+  /** The office's current word on which channels this agent is in. */
+  channels: (event: AgentChannelsEvent) => void;
   roster: (roster: AgentRosterEvent) => void;
   error: (error: AgentErrorPayload) => void;
   /** The socket dropped. `code` 4000 means we or the server closed on purpose. */
@@ -48,6 +56,7 @@ export class GatewayClient {
 
   #ready: AgentReadyPayload | null = null;
   #roster: AgentRosterEvent | null = null;
+  #channels: ChannelRef[] | null = null;
 
   constructor(
     private readonly url: string,
@@ -141,6 +150,13 @@ export class GatewayClient {
     room.onMessage(AgentServerMessage.Mention, (message: AgentMentionEvent) =>
       this.#handlers.mention?.(message),
     );
+    room.onMessage(AgentServerMessage.ChannelChat, (message: AgentChannelChatEvent) =>
+      this.#handlers.channelChat?.(message),
+    );
+    room.onMessage(AgentServerMessage.Channels, (event: AgentChannelsEvent) => {
+      this.#channels = event.channels;
+      this.#handlers.channels?.(event);
+    });
     room.onMessage(AgentServerMessage.Roster, (roster: AgentRosterEvent) => {
       this.#roster = roster;
       this.#handlers.roster?.(roster);
@@ -178,8 +194,17 @@ export class GatewayClient {
 
   // --- commands ------------------------------------------------------------
 
-  say(text: string): void {
-    this.#room?.send(AgentMessage.Say, { text });
+  /** Speak aloud, or — with a channel — post there instead. */
+  say(text: string, channelId?: string): void {
+    this.#room?.send(AgentMessage.Say, {
+      text,
+      ...(channelId !== undefined ? { channelId } : {}),
+    } satisfies AgentSayPayload);
+  }
+
+  /** The channels this agent is in, as of the office's last word on it. */
+  channels(): ChannelRef[] {
+    return this.#channels ?? this.#ready?.channels ?? [];
   }
 
   moveToZone(zoneId: string): void {
@@ -286,5 +311,6 @@ export type Gateway = Pick<
   | 'memoryGet'
   | 'memorySet'
   | 'occupants'
+  | 'channels'
   | 'on'
 >;

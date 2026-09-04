@@ -120,6 +120,13 @@
       "when": 1788471016924,
       "tag": "0016_office_chat_is_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788512488050,
+      "tag": "0017_channels_name_their_members",
+      "breakpoints": true
     }
   ]
 }

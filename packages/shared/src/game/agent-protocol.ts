@@ -1,4 +1,5 @@
 import type { AgentScope } from '../agent.js';
+import type { ChannelRef } from '../conversation.js';
 import type { PlayerKind } from '../player.js';
 
 /**
@@ -52,6 +53,12 @@ export type AgentMessage = (typeof AgentMessage)[keyof typeof AgentMessage];
 
 export interface AgentSayPayload {
   text: string;
+  /**
+   * Post in a channel instead of speaking aloud. You have to be a member.
+   * Not spatial: no bubble, no earshot — every member is told, wherever
+   * they stand.
+   */
+  channelId?: string;
 }
 
 export interface AgentHostReportPayload {
@@ -100,12 +107,15 @@ export type AgentLookAroundPayload = AgentRequest;
 export interface AgentMessagesGetPayload extends AgentRequest {
   /**
    * `nearby` = within earshot of where you stand now; `zone` = a zone's
-   * transcript — yours unless `zoneId` names another; `mentions` = messages
-   * that addressed you by name, wherever in the office they were said.
+   * transcript — yours unless `zoneId` names another; `channel` = a channel
+   * you are in; `mentions` = messages that addressed you by name, wherever
+   * in the office they were said.
    */
-  scope: 'nearby' | 'zone' | 'mentions';
+  scope: 'nearby' | 'zone' | 'channel' | 'mentions';
   /** With `zone`: which one. Defaults to the zone you are standing in. */
   zoneId?: string;
+  /** With `channel`: which one. Required. */
+  channelId?: string;
   /** How many, newest last. Clamped to MESSAGES_GET_MAX. */
   n?: number;
   /** Only messages sent before this time (ms since epoch) — to page back. */
@@ -130,6 +140,10 @@ export const AgentServerMessage = {
   NearbyChat: 'agent:nearby_chat',
   /** Somebody said this agent's name, from anywhere on the map. */
   Mention: 'agent:mention',
+  /** Somebody posted in a channel this agent is a member of. */
+  ChannelChat: 'agent:channel_chat',
+  /** The channels this agent is in. On join, and whenever that changes. */
+  Channels: 'agent:channels',
   /** Who is in the room, and where this agent is standing. On join and change. */
   Roster: 'agent:roster',
   /** Proof of life, so a connected agent can tell "quiet" from "dead". */
@@ -179,6 +193,11 @@ export interface AgentReadyPayload {
    * coordinates — which is exactly the thing the zone form exists to avoid.
    */
   zones: AgentZone[];
+  /**
+   * The channels this agent is a member of. Kept current by `agent:channels`
+   * — membership is changed from the settings page, not by the agent.
+   */
+  channels: ChannelRef[];
   serverTime: number;
   limits: {
     chatIntervalMs: number;
@@ -218,6 +237,30 @@ export interface AgentChatEvent {
   /** Straight-line distance in tiles, at the moment it was said. */
   distance: number;
   sentAt: number;
+}
+
+/**
+ * A line in a channel this agent is in.
+ *
+ * `mentioned` is the office's word on whether the line named this agent. An
+ * agent in a channel wakes for mentions and for nothing else — a channel
+ * where every agent answered every line is the failure mode that ate Buzz's
+ * rooms — but every line is delivered, so the pushed window has the
+ * conversation the mention was part of.
+ */
+export interface AgentChannelChatEvent {
+  channel: ChannelRef;
+  from: string;
+  fromUserId: string;
+  fromName: string;
+  fromKind: PlayerKind;
+  text: string;
+  sentAt: number;
+  mentioned: boolean;
+}
+
+export interface AgentChannelsEvent {
+  channels: ChannelRef[];
 }
 
 /** A mention carries no distance: it reaches the agent from anywhere. */
@@ -285,9 +328,11 @@ export interface LookAroundResult {
 }
 
 export interface MessagesGetResult {
-  scope: 'nearby' | 'zone' | 'mentions';
+  scope: 'nearby' | 'zone' | 'channel' | 'mentions';
   /** Which zone was read, for `zone`. Null for the other scopes. */
   zoneId: string | null;
+  /** Which channel was read, for `channel`. Null for the other scopes. */
+  channelId: string | null;
   /** Oldest first. */
   messages: AgentChatEvent[];
   /** There is more before the first message here; pass its `sentAt` as `before`. */
