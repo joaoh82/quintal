@@ -118,6 +118,20 @@ export class AgentProcess {
     return this.#requireConnection().prompt(params);
   }
 
+  /** Choose one of the options the agent advertised at `session/new`. */
+  async setSessionConfigOption(
+    params: schema.SetSessionConfigOptionRequest,
+  ): Promise<schema.SetSessionConfigOptionResponse> {
+    const connection = this.#requireConnection();
+    // Optional in the SDK's eyes; an agent that advertised options and then
+    // cannot be asked to pick one is a protocol bug worth naming, not a
+    // silent fallback to the default.
+    if (typeof connection.setSessionConfigOption !== 'function') {
+      throw new Error('this ACP connection does not support session/set_config_option');
+    }
+    return connection.setSessionConfigOption(params);
+  }
+
   /** Fire-and-forget: ACP cancellation is a notification, not a request. */
   cancel(sessionId: string): void {
     void this.#connection?.cancel({ sessionId }).catch(() => {

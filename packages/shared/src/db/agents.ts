@@ -68,7 +68,7 @@ export interface CreateAgentInput {
    * All three together or none: an agent with a runtime but no host has nowhere
    * to run, and one with a host but no runtime has nothing to run.
    */
-  launch?: { runtimeId: string; repoSpec: string; hostLabel: string };
+  launch?: { runtimeId: string; repoSpec: string; hostLabel: string; modelId?: string | null };
 }
 
 export interface CreatedAgent {
@@ -100,6 +100,7 @@ export async function createAgent(
           runtimeId: input.launch.runtimeId,
           repoSpec: input.launch.repoSpec,
           hostLabel: input.launch.hostLabel,
+          modelId: input.launch.modelId ?? null,
         }
       : {}),
   });
@@ -330,6 +331,8 @@ export interface AgentListEntry {
   runtimeId: string | null;
   repoSpec: string | null;
   hostLabel: string | null;
+  /** The model its owner chose, by the runtime's own id. Null for the runtime's default. */
+  modelId: string | null;
   /** Whether a host pulling its fleet should be running this. */
   enabled: boolean;
   /** Where its harness said it is rooted. Empty until one connects. */
@@ -362,6 +365,7 @@ export async function listAgentsForWorkspace(
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
+      modelId: agents.modelId,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
@@ -406,6 +410,7 @@ export async function findAgentById(
       runtimeId: agents.runtimeId,
       repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
+      modelId: agents.modelId,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
@@ -510,7 +515,13 @@ export async function setAgentWorkspace(
 export async function setAgentLaunch(
   db: Database,
   agentId: string,
-  launch: { runtimeId: string; repoSpec: string; hostLabel: string } | null,
+  launch: {
+    runtimeId: string;
+    repoSpec: string;
+    hostLabel: string;
+    /** Null, or absent, for the runtime's default. */
+    modelId?: string | null;
+  } | null,
 ): Promise<void> {
   await db
     .update(agents)
@@ -520,8 +531,12 @@ export async function setAgentLaunch(
             runtimeId: launch.runtimeId,
             repoSpec: launch.repoSpec.slice(0, 512),
             hostLabel: launch.hostLabel,
+            modelId: launch.modelId ? launch.modelId.slice(0, 128) : null,
           }
-        : { hostLabel: null },
+        : // Unassigning keeps runtime and repo so re-enabling is one field, but
+          // not the model: it was chosen for a machine, and the next machine
+          // may not offer it.
+          { hostLabel: null, modelId: null },
     )
     .where(eq(agents.id, agentId));
 }

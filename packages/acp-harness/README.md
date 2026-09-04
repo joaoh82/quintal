@@ -96,6 +96,16 @@ which is why it must be asked for by name — an agent that gets it by *forgetti
 `cwd` is exactly the accident the rail exists to prevent. Either way the office
 shows what each agent can reach, next to its name.
 
+**Which model.** `model: "opus"` asks the runtime for a specific model, by the
+id the runtime itself advertises over ACP; leave it out for the runtime's
+default. It is applied with `session/set_config_option` after every session
+opens — never as a `--model` flag, so nothing an office says can become an
+argument on your command line. An agent asked for a model its runtime did not
+offer refuses to run and says so in its status, rather than quietly running on
+another. `quintal-acp` reports what each installed runtime offers to the
+office a few seconds after the fleet boots, and the settings page's picker
+draws from that list and nothing else.
+
 On the CLI it is `--all-repos` rather than `--repo '*'`: an unquoted `*` is
 expanded by your shell before the CLI ever sees it, and a flag whose meaning
 depends on quoting surviving a task runner will one day silently root an agent

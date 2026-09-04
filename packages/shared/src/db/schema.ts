@@ -385,6 +385,17 @@ export const agents = sqliteTable(
     repoSpec: text('repo_spec'),
     /** Which machine should run it, matching `agent_hosts.label`. */
     hostLabel: text('host_label'),
+    /**
+     * Which model the runtime should use, by the id the runtime itself
+     * advertised over ACP. Null means the runtime's own default — a real
+     * state, not a magic string, because "whatever Claude Code picks" has to
+     * stay sayable after a model is chosen and then unchosen.
+     *
+     * Never a command-line flag. The harness applies it with
+     * `session/set_config_option`, from the list the agent offered, so a
+     * value written here can never become argv on somebody's laptop.
+     */
+    modelId: text('model_id'),
     /** Whether a host that pulls its fleet should be running this. */
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     /** Last time this agent did anything at all. Drives "last seen" in the UI. */

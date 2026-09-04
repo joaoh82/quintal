@@ -5,6 +5,7 @@ import {
   runtimeById,
   isAgentScope,
   isAgentSpriteKey,
+  modelChoice,
   normaliseAgentName,
   type AgentScope,
 } from '@quintal/shared';
@@ -16,6 +17,7 @@ import {
   findAgentById,
   getDb,
   listHostTokens,
+  listHostsForWorkspace,
   revokeAgent,
   revokeHostToken,
   forgetHostReport,
@@ -58,6 +60,45 @@ async function requireSession() {
     throw new Error('Guests cannot manage agents or machines.');
   }
   return session;
+}
+
+/**
+ * The model an owner asked for, checked against what that machine's runtime
+ * actually offered.
+ *
+ * Empty means the runtime's default and is always fine. Anything else has to
+ * be a choice the machine reported for that runtime — the picker only offers
+ * those, and this is the same rule applied where the picker cannot be
+ * trusted. A model id that never came from the runtime would either be
+ * refused by the harness at every session (it will not run on a model it was
+ * not offered) or, worse, silently meaningless; better to say so here.
+ */
+async function modelFor(
+  db: ReturnType<typeof getDb>,
+  workspaceId: string,
+  hostLabel: string,
+  runtimeId: string,
+  raw: FormDataEntryValue | null,
+  /** What the agent already had. Keeping it needs no report; only a change does. */
+  current: string | null = null,
+): Promise<{ modelId: string | null } | { error: string }> {
+  const modelId = String(raw ?? '').trim();
+  if (modelId.length === 0) return { modelId: null };
+  // Saving the row for another reason — a repo, a machine — must not cost the
+  // owner a choice they already made, even while the machine has not reported
+  // its list yet. Re-choosing the same model is not a new claim about it.
+  if (modelId === current) return { modelId };
+
+  const host = (await listHostsForWorkspace(db, workspaceId)).find(
+    (row) => row.label === hostLabel,
+  );
+  const status = host?.runtimes.find((entry) => entry.id === runtimeId);
+  if (!modelChoice(status, modelId)) {
+    return {
+      error: `${hostLabel} did not report a model "${modelId}" for ${runtimeById(runtimeId)?.label ?? runtimeId}. Pick one it offers, or leave it on the default.`,
+    };
+  }
+  return { modelId };
 }
 
 export interface CreateAgentState {
@@ -115,6 +156,13 @@ export async function createAgentAction(
       }
     }
 
+    let modelId: string | null = null;
+    if (wantsLaunch) {
+      const model = await modelFor(db, workspace.id, hostLabel, runtimeId, formData.get('modelId'));
+      if ('error' in model) return { ok: false, error: model.error };
+      modelId = model.modelId;
+    }
+
     const created = await createAgent(db, {
       workspaceId: workspace.id,
       ownerUserId: session.user.id,
@@ -125,7 +173,7 @@ export async function createAgentAction(
       description: String(formData.get('description') ?? ''),
       instructions: String(formData.get('instructions') ?? ''),
       scopes: scopes.length > 0 ? scopes : DEFAULT_AGENT_SCOPES,
-      ...(wantsLaunch ? { launch: { runtimeId, repoSpec, hostLabel } } : {}),
+      ...(wantsLaunch ? { launch: { runtimeId, repoSpec, hostLabel, modelId } } : {}),
     });
 
     revalidatePath('/settings/agents');
@@ -324,7 +372,19 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
     throw new Error('Say which repo it works in, or * for all of them.');
   }
 
-  await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel });
+  const model = await modelFor(
+    db,
+    agent.workspaceId,
+    hostLabel,
+    runtimeId,
+    formData.get('modelId'),
+    // Only a choice made for the same machine and runtime carries over: a
+    // model id is meaningful to one runtime on one machine.
+    agent.hostLabel === hostLabel && agent.runtimeId === runtimeId ? agent.modelId : null,
+  );
+  if ('error' in model) throw new Error(model.error);
+
+  await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel, modelId: model.modelId });
   revalidatePath('/settings/agents');
 }
 

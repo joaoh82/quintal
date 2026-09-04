@@ -14,6 +14,8 @@
  *   FAKE_CHUNKS         split the reply into N chunks (default 1)
  *   FAKE_RECORD         append every received request to this file as JSONL
  *   FAKE_DELAY_MS       pause this long mid-turn, so a status line is observable
+ *   FAKE_MODELS         "a,b,c": advertise a model config option; first is current
+ *   FAKE_MODELS_GROUPED advertise the options grouped, as some adapters do
  */
 import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -27,6 +29,10 @@ const crashAfter = process.env.FAKE_CRASH_AFTER
   : Number.POSITIVE_INFINITY;
 const chunks = Number(process.env.FAKE_CHUNKS ?? 1);
 const delayMs = Number(process.env.FAKE_DELAY_MS ?? 0);
+const models = (process.env.FAKE_MODELS ?? '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter((entry) => entry.length > 0);
 
 let nextId = 1000;
 let prompts = 0;
@@ -101,8 +107,32 @@ async function handle(message) {
       });
       return;
 
-    case 'session/new':
-      respond(id, { sessionId: `fake-session-${nextId++}` });
+    case 'session/new': {
+      const session = { sessionId: `fake-session-${nextId++}` };
+      // FAKE_MODELS="fast,smart" advertises a model option the way an ACP
+      // agent does, first entry current. Grouped when FAKE_MODELS_GROUPED is
+      // set, because adapters ship both shapes.
+      if (models.length > 0) {
+        const options = models.map((value) => ({ value, name: value.toUpperCase() }));
+        session.configOptions = [
+          {
+            configId: 'model',
+            name: 'Model',
+            category: 'model',
+            type: 'select',
+            currentValue: models[0],
+            options: process.env.FAKE_MODELS_GROUPED
+              ? [{ name: 'All', options }]
+              : options,
+          },
+        ];
+      }
+      respond(id, session);
+      return;
+    }
+
+    case 'session/set_config_option':
+      respond(id, { configOptions: [] });
       return;
 
     case 'session/prompt': {

@@ -90,7 +90,7 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:messages_get` | `{ requestId, scope, zoneId?, channelId?, n?, before? }` | — | Read what was said. `scope` is `"nearby"` (earshot of where you stand), `"zone"` (a zone's transcript — yours, or `zoneId`), `"channel"` (a channel you are in, by `channelId`), or `"mentions"` (everything that named you). `n` ≤ 50; `before` pages back. |
 | `agent:memory_get` | `{ requestId, slug }` | — | Read a memory slug. |
 | `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
-| `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Unscoped — it changes nothing anybody else can see. |
+| `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. Unscoped — it changes nothing anybody else can see. |
 
 ### Two ways to authenticate
 

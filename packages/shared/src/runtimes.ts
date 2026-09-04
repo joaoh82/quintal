@@ -141,6 +141,29 @@ export function acpCommandFor(spec: RuntimeSpec): string[] | null {
 
 // --- what a machine reports back ---------------------------------------------
 
+/** One model a runtime offered, as it named it. */
+export interface RuntimeModelChoice {
+  id: string;
+  label: string;
+}
+
+/**
+ * What a runtime said about models when asked, over ACP.
+ *
+ * Probed by the harness — spawn the runtime, open a session, read the
+ * `configOptions` it advertises with `category: "model"`, close it — because
+ * the office cannot see the runtime and a hosted Quintal never will. The
+ * choices are the runtime's own words; the picker offers those and nothing
+ * else.
+ */
+export interface RuntimeModels {
+  /** The config option's id, needed to set it later. */
+  configId: string;
+  /** The runtime's default, when it said. */
+  current: string | null;
+  choices: RuntimeModelChoice[];
+}
+
 /** One runtime as found on somebody's machine. */
 export interface RuntimeStatus {
   id: string;
@@ -148,6 +171,11 @@ export interface RuntimeStatus {
   installed: boolean;
   /** Where it was found. Null when it wasn't. */
   path: string | null;
+  /**
+   * The models it offers. Absent: never asked (an older harness, or a runtime
+   * that is not installed). Null: asked, and it offers no choice.
+   */
+  models?: RuntimeModels | null;
 }
 
 /**
@@ -185,7 +213,47 @@ export const HOST_REPORT_LIMITS = {
   reposDirMaxLength: 512,
   maxRuntimes: 32,
   pathMaxLength: 512,
+  maxModels: 64,
+  modelIdMaxLength: 128,
+  modelLabelMaxLength: 128,
 } as const;
+
+/** Bring a reported model list into bounds, or say there is none. */
+function normaliseModels(raw: unknown): RuntimeModels | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object') return null;
+  const input = raw as Partial<RuntimeModels>;
+  const configId = String(input.configId ?? '').slice(0, HOST_REPORT_LIMITS.modelIdMaxLength);
+  if (configId.length === 0 || !Array.isArray(input.choices)) return null;
+
+  const seen = new Set<string>();
+  const choices: RuntimeModelChoice[] = [];
+  for (const entry of input.choices) {
+    if (choices.length >= HOST_REPORT_LIMITS.maxModels) break;
+    const id = String((entry as RuntimeModelChoice)?.id ?? '')
+      .trim()
+      .slice(0, HOST_REPORT_LIMITS.modelIdMaxLength);
+    if (id.length === 0 || seen.has(id)) continue;
+    seen.add(id);
+    const label = String((entry as RuntimeModelChoice)?.label ?? '')
+      .trim()
+      .slice(0, HOST_REPORT_LIMITS.modelLabelMaxLength);
+    choices.push({ id, label: label.length > 0 ? label : id });
+  }
+  if (choices.length === 0) return null;
+
+  const current =
+    typeof input.current === 'string' && seen.has(input.current) ? input.current : null;
+  return { configId, current, choices };
+}
+
+/** The choice a runtime offers under this id, if it does. */
+export function modelChoice(
+  status: RuntimeStatus | undefined,
+  modelId: string,
+): RuntimeModelChoice | null {
+  return status?.models?.choices.find((choice) => choice.id === modelId) ?? null;
+}
 
 /**
  * Coerce a report from the wire into something safe to store and render.
@@ -219,10 +287,12 @@ export function normaliseHostReport(raw: unknown): HostReport | null {
     if (!runtimeById(id) || seen.has(id)) continue;
     seen.add(id);
     const path = (entry as RuntimeStatus)?.path;
+    const models = normaliseModels((entry as RuntimeStatus)?.models);
     runtimes.push({
       id,
       installed: Boolean((entry as RuntimeStatus)?.installed),
       path: typeof path === 'string' ? path.slice(0, HOST_REPORT_LIMITS.pathMaxLength) : null,
+      ...(models !== undefined ? { models } : {}),
     });
   }
 

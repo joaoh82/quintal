@@ -174,6 +174,14 @@ export function RuntimeRows({ runtimes }: { runtimes: RuntimeStatus[] }) {
                         {status.path ? (
                           <span className="opacity-60"> · {status.path}</span>
                         ) : null}
+                        {status.models ? (
+                          <span className="opacity-60">
+                            {' '}
+                            · models: {status.models.choices.map((c) => c.label).join(', ')}
+                          </span>
+                        ) : status.models === null ? (
+                          <span className="opacity-60"> · no model choice</span>
+                        ) : null}
                       </>
                     ) : noAcp ? (
                       spec.evidence

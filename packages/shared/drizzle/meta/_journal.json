@@ -134,6 +134,13 @@
       "when": 1788512489050,
       "tag": "0018_agents_may_be_messaged",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788543506756,
+      "tag": "0019_an_agent_may_name_its_model",
+      "breakpoints": true
     }
   ]
 }

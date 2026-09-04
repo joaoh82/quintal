@@ -99,6 +99,14 @@ export interface AgentConfig {
    * learns is by being restarted, and this is what tells the supervisor to.
    */
   profile: string;
+  /**
+   * The model to ask the runtime for, by the id it advertises over ACP.
+   * Undefined for the runtime's default. Applied with
+   * `session/set_config_option` after every `session/new`, never as a flag —
+   * and an agent not offered it refuses to run rather than running on
+   * another.
+   */
+  modelId?: string;
 }
 
 export interface FleetConfig {
@@ -117,6 +125,7 @@ interface RawAgent {
   cmd?: unknown;
   cwd?: unknown;
   repo?: unknown;
+  model?: unknown;
 }
 
 interface RawFleet {
@@ -283,6 +292,8 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     // wrong directory looks identical to a typo.
     assertDirectory(cwd, name, cwdRaw);
 
+    const model = typeof rawAgent.model === 'string' ? rawAgent.model.trim() : '';
+
     return {
       name,
       key: resolveKey(rawAgent, name),
@@ -294,6 +305,7 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
       mapId,
       workspaceId: '',
       profile: '',
+      ...(model.length > 0 ? { modelId: model } : {}),
     } satisfies AgentConfig;
   });
 
