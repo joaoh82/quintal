@@ -14,6 +14,7 @@
  *   FAKE_CHUNKS         split the reply into N chunks (default 1)
  *   FAKE_RECORD         append every received request to this file as JSONL
  *   FAKE_DELAY_MS       pause this long mid-turn, so a status line is observable
+ *   FAKE_WARNING        emit "Warning: <text>\n\n" as one message chunk before the reply
  *   FAKE_MODELS         "a,b,c": advertise a model config option; first is current
  *   FAKE_MODELS_GROUPED advertise the options grouped, as some adapters do
  */
@@ -23,6 +24,8 @@ import { createInterface } from 'node:readline';
 const reply = process.env.FAKE_REPLY ?? 'ok';
 const stopReason = process.env.FAKE_STOP_REASON ?? 'end_turn';
 const tool = process.env.FAKE_TOOL;
+/** A runtime notice, sent as its own message chunk ahead of the reply — codex-acp's shape. */
+const warning = process.env.FAKE_WARNING;
 const permission = process.env.FAKE_PERMISSION;
 const crashAfter = process.env.FAKE_CRASH_AFTER
   ? Number(process.env.FAKE_CRASH_AFTER)
@@ -140,6 +143,16 @@ async function handle(message) {
       if (prompts > crashAfter) process.exit(1);
 
       const sessionId = params?.sessionId;
+
+      if (warning) {
+        notify('session/update', {
+          sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: `Warning: ${warning}\n\n` },
+          },
+        });
+      }
 
       if (tool) {
         notify('session/update', {
