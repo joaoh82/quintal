@@ -14,6 +14,7 @@ import {
   type AgentResultPayload,
   type AgentRosterEvent,
   type AgentSayPayload,
+  type AgentSetStatusPayload,
   type ChannelRef,
   type LookAroundResult,
   type MemoryGetResult,
@@ -221,8 +222,12 @@ export class GatewayClient {
     this.#room?.send(AgentMessage.HostReport, payload);
   }
 
-  setStatus(status: string): void {
-    this.#room?.send(AgentMessage.SetStatus, { status });
+  /** The status line, and — for a channel or DM turn — where the work is. */
+  setStatus(status: string, channelId?: string): void {
+    this.#room?.send(AgentMessage.SetStatus, {
+      status,
+      ...(channelId ? { channelId } : {}),
+    } satisfies AgentSetStatusPayload);
   }
 
   /**

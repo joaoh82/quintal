@@ -988,7 +988,11 @@ export class AgentRunner {
     const effective = status === 'idle' && this.#modelRefusal !== null ? this.#modelRefusal : status;
     if (this.#statusLine === effective) return;
     this.#statusLine = effective;
-    this.#gateway.setStatus(effective === 'idle' ? '' : effective);
+    // Where the work is, so the conversation being answered can show it: the
+    // channel or DM of the turn in flight, or nothing for a zone turn.
+    const workingIn =
+      effective === 'idle' ? undefined : this.#channelOf(this.#currentScope ?? '')?.id;
+    this.#gateway.setStatus(effective === 'idle' ? '' : effective, workingIn);
     // The same state, as a balloon. Derived here so every status the runner
     // narrates gets its glyph without anybody remembering to ask for one.
     this.#setEmote(emoteForStatus(effective));

@@ -60,6 +60,13 @@ export class OfficePlayer extends Schema {
   /** When the balloon comes down, ms since epoch. 0 means "when cleared". */
   emoteUntil = 0;
   /**
+   * For agents: the channel or DM the current turn is for, or empty when the
+   * work is spatial (a zone) or there is none. A status line says *what* an
+   * agent is doing; this says *where*, so the conversation it is answering
+   * can show it working there rather than only the map.
+   */
+  workingIn = '';
+  /**
    * For humans: arrived through a guest link rather than with their own
    * identity. Shown as a badge, because "who is this person and should they be
    * hearing this" is a question the room has to answer visually — the same
@@ -95,6 +102,7 @@ defineTypes(OfficePlayer, {
   scopes: 'string',
   emote: 'string',
   emoteUntil: 'number',
+  workingIn: 'string',
   isGuest: 'boolean',
   description: 'string',
   pubkey: 'string',

@@ -5,6 +5,7 @@ import { channelLabel, type RosterEntry } from '@quintal/shared';
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
 import { Transcript } from './Transcript';
+import { WorkingLine } from './WorkingLine';
 
 interface ChatPanelProps {
   conversations: Conversations;
@@ -98,6 +99,8 @@ export function ChatPanel({
               : 'Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.'
         }
       />
+
+      <WorkingLine roster={roster} active={shown} myZone={conversations.myZone} size="compact" />
 
       <ChatInput
         roster={roster}

@@ -108,6 +108,12 @@ export type AgentMoveToPayload =
 
 export interface AgentSetStatusPayload {
   status: string;
+  /**
+   * The channel or DM this status is about — the conversation the current
+   * turn is answering — so that conversation can show you working in it.
+   * Omit for spatial work or when going idle. You have to be a member.
+   */
+  channelId?: string;
 }
 
 /** Query messages carry a requestId; the reply comes back on `agent:result`. */

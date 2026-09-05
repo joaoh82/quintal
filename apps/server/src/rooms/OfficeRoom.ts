@@ -1470,6 +1470,13 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
+    // Where the work is. Only a conversation this agent is in — anything
+    // else is an empty "spatial", never an error: a stale channel id must
+    // not stop a status line from landing.
+    const workingIn =
+      status.length > 0 ? (this.#channelFor(player.userId, payload?.channelId)?.id ?? '') : '';
+    if (player.workingIn !== workingIn) player.workingIn = workingIn;
+
     if (player.status !== status) {
       player.status = status;
       session.identity.status = status;

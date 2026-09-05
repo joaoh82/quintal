@@ -31,6 +31,10 @@ export interface RosterEntry {
   lastActionAt: number;
   /** The zone they stand in — `FLOOR_ZONE_ID` outside every zone. */
   zoneId: string;
+  /** Agents: the balloon over their head, or empty. */
+  emote: string;
+  /** Agents: the channel or DM the current turn is for, or empty. */
+  workingIn: string;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;
   /** Humans: the profile line they wrote. Empty when unset. */

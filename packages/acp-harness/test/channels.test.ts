@@ -31,6 +31,9 @@ const ENGINEERING = { id: 'ch-1', kind: 'channel', name: 'Engineering', slug: 'e
 /** As the agent sees it: named after the other party. */
 const DM_WITH_JOSH = { id: 'dm-1', kind: 'dm', name: 'Josh', slug: '' };
 
+/** Every status the runner set, with where it said the work was. */
+const statuses: Array<[string, string | undefined]> = [];
+
 function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined]>): Gateway {
   const ready = {
     agentId: 'agent-1',
@@ -51,7 +54,9 @@ function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined
     say: (text: string, channelId?: string) => {
       said.push([text, channelId]);
     },
-    setStatus: () => {},
+    setStatus: (status: string, channelId?: string) => {
+      statuses.push([status, channelId]);
+    },
     emote: () => {},
     hostReport: () => {},
     moveToZone: () => {},
@@ -180,6 +185,16 @@ describe('an agent in a channel', () => {
 
     await until(() => said.length > 0, 'a reply');
     assert.equal(said[0]?.[1], ENGINEERING.id, 'the reply is posted to the channel, not spoken');
+
+    // While it worked, it said *where*: the channel shows it thinking there.
+    assert.ok(
+      statuses.some(([status, where]) => status === 'thinking' && where === ENGINEERING.id),
+      `thinking was attributed to the channel: ${JSON.stringify(statuses)}`,
+    );
+    assert.ok(
+      statuses.some(([status, where]) => status === '' && where === undefined),
+      'and going idle carries no place',
+    );
   });
 
   it('treats a direct message as addressed, and answers only the sender', async () => {
