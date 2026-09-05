@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn the_generated_catalogue_parses_and_is_not_empty() {
         let all = catalogue();
-        assert!(!all.is_empty(), "the office would have nothing to offer");
+        assert!(!all.is_empty(), "the server would have nothing to offer");
         assert!(all
             .iter()
             .all(|spec| !spec.id.is_empty() && !spec.bin.is_empty()));

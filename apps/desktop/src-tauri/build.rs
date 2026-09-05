@@ -4,7 +4,7 @@
 //! application commands are allowed" branch. That does *not* open them to the
 //! office: for a remote origin the runtime still requires a resolved ACL entry,
 //! so the commands are simply rejected and nothing works. Declaring them here
-//! generates `allow-<command>` permissions, which `office::capability_for`
+//! generates `allow-<command>` permissions, which `server::capability_for`
 //! grants to exactly one origin.
 fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
@@ -30,11 +30,11 @@ fn main() {
             "pick_repos_dir",
             "opens_at_login",
             "set_opens_at_login",
-            "list_offices",
-            "add_office",
-            "switch_office",
-            "remove_office",
-            "open_office_picker",
+            "list_servers",
+            "add_server",
+            "switch_server",
+            "remove_server",
+            "open_server_picker",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");

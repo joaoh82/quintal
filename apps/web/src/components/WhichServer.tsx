@@ -5,22 +5,23 @@ import { useEffect, useState } from 'react';
 import { useHost } from '@/lib/use-host';
 
 /**
- * Which office this is.
+ * Which server this is.
  *
  * Obvious in a browser — the address bar says so. The app has no address bar,
- * so once you have more than one office there is nothing on the sign-in screen
- * telling you which of them you are signing into, and every office looks
- * identical until you are inside it. Switching to the wrong one and only
- * finding out after you have signed in is a bad way to learn.
+ * so once you have more than one server there is nothing on the sign-in screen
+ * telling you which of them you are signing into, and every server looks
+ * identical until you are inside its office. Switching to the wrong one and
+ * only finding out after you have signed in is a bad way to learn.
  *
- * Prefers the name you gave the office in the picker, because "work" means more
- * than `localhost:3100`. Falls back to the host, which is what the picker
- * defaults its labels to anyway.
+ * Prefers the name the server gave itself (Settings → Office → "This server"),
+ * then the name you gave it in the picker, because "work" means more than
+ * `localhost:3100`. Falls back to the host, which is what the picker defaults
+ * its labels to anyway.
  *
- * Renders nothing until it knows: an office is not something to guess at, and a
+ * Renders nothing until it knows: a server is not something to guess at, and a
  * flash of the wrong name would be worse than a moment of none.
  */
-export function WhichOffice({ className }: { className?: string }) {
+export function WhichServer({ className }: { className?: string }) {
   const { host, ready } = useHost();
   const [shown, setShown] = useState<{ name: string | null; where: string } | null>(null);
 
@@ -29,7 +30,7 @@ export function WhichOffice({ className }: { className?: string }) {
     let cancelled = false;
 
     void (async () => {
-      // What the office calls itself wins. It is the one answer everybody
+      // What the server calls itself wins. It is the one answer everybody
       // arriving here sees the same, which is the point of having it.
       const named = await fetch('/api/office', { credentials: 'same-origin' })
         .then((response) => (response.ok ? (response.json() as Promise<{ name?: string }>) : null))
@@ -41,9 +42,9 @@ export function WhichOffice({ className }: { className?: string }) {
       const labelled = named
         ? null
         : await host
-            ?.listOffices()
+            ?.listServers()
             .then((listed) => {
-              const active = listed.offices.find((office) => office.url === listed.active);
+              const active = listed.servers.find((server) => server.url === listed.active);
               return active?.label ?? null;
             })
             .catch(() => null);
@@ -63,7 +64,7 @@ export function WhichOffice({ className }: { className?: string }) {
     <p className={className ?? 'text-muted-foreground text-center text-xs'}>
       {shown.name ? <span className="mr-1.5 font-medium">{shown.name}</span> : null}
       {/*
-        The address is shown even when the office has a name. Two deployments
+        The address is shown even when the server has a name. Two deployments
         can be called the same thing, and "am I on staging or production" is
         exactly the question this is here to answer.
       */}

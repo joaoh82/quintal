@@ -50,12 +50,13 @@ whoever made them.
 
 You always have an office of your own. Visiting somebody else's shows their
 office in the header with a note that you are visiting, and a way back to
-yours. In the desktop app, offices are places you can switch between — see
-[The desktop app](../DESKTOP.md#offices).
+yours. The desktop app can also hold several **servers** — deployments, each
+with an office on it — and switch between them; see
+[The desktop app](../DESKTOP.md#servers).
 
 ## If you cannot get in
 
-The sign-in page has a way out of an office you cannot get into: **Open a
-different office** lets you point at another instance, because sign-in can
+The sign-in page has a way out of a server you cannot get into: **Open a
+different server** lets you point at another deployment, because sign-in can
 fail for reasons that have nothing to do with your key — a server that is
 down, or an address that changed.

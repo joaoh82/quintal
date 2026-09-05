@@ -22,7 +22,7 @@ pnpm desktop             # the app, in another terminal
 
 | Variable | What it does |
 | --- | --- |
-| `QUINTAL_OFFICE_URL` | Which office to open. Default `http://localhost:3000`. |
+| `QUINTAL_SERVER_URL` | Which server to open — a Quintal deployment, with an office on it. Default `http://localhost:3000`. `QUINTAL_OFFICE_URL` still works. |
 | `QUINTAL_SECRETS_BACKEND` | `file` to skip the OS keychain — for CI and for a dev box you would rather not prompt. Detected automatically otherwise. |
 | `QUINTAL_PRIVATE_KEY` | Sign with this key (hex or `nsec`) instead of the stored one. Used in memory, never written down. |
 
@@ -47,16 +47,16 @@ whether a read succeeds: a failed read means the keychain is **locked**, and
 falling back there would look like a first run and mint a new identity over a
 perfectly good one.
 
-## Only your office may call the bridge
+## Only your server may call the bridge
 
 Each command is declared in `build.rs` and granted, by name, to exactly one
-origin built at startup from the configured office URL. Both halves matter:
+origin built at startup from the configured server URL. Both halves matter:
 without the app manifest, Tauri takes its "all application commands are
 allowed" branch, and since the office is a *remote* origin the runtime then
 refuses every call — the app looks alive and nothing works. With it, the grant
 is explicit and narrow.
 
-The office URL is validated before it is interpolated into that grant. A value
+The server URL is validated before it is interpolated into that grant. A value
 like `https://*` would become the pattern `https://*/*`, which is every site on
 the internet, so globs, `file:` and hostless URLs all fall back to localhost.
 
@@ -65,7 +65,7 @@ the encrypted blob *and* its passphrase, which together are the key — so an
 office reached over plain http is one anybody on the path can lift an identity
 from. Loopback has no path to sit on; everywhere else needs `https`.
 
-Changing offices means restarting, which is the right price.
+Changing servers means restarting, which is the right price.
 
 ## Verifying the bridge
 

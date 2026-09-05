@@ -22,7 +22,7 @@ use crate::spawn::FleetState;
 /// Menu item ids. Matched on the way back in, so they live in one place.
 const OPEN: &str = "open";
 const TOGGLE: &str = "toggle-fleet";
-const OFFICES: &str = "offices";
+const SERVERS: &str = "servers";
 const QUIT: &str = "quit";
 
 pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
@@ -38,7 +38,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => show_window(app),
             TOGGLE => toggle_fleet(app),
-            OFFICES => switch_office(app),
+            SERVERS => switch_server(app),
             QUIT => {
                 // Through `exit`, so the fleet is stopped by the same teardown
                 // that closing the window uses. Killing the process here would
@@ -80,7 +80,7 @@ fn menu_for(app: &AppHandle, state: &FleetState) -> tauri::Result<Menu<Wry>> {
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, OFFICES, "Switch office…", true, None::<&str>)?,
+            &MenuItem::with_id(app, SERVERS, "Switch server…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, QUIT, "Quit Quintal", true, None::<&str>)?,
         ],
@@ -91,7 +91,7 @@ fn tooltip(state: &FleetState) -> String {
     match state {
         FleetState::Running { .. } => "Quintal — agents running".into(),
         FleetState::Stopped => "Quintal — agents not running".into(),
-        // Worth saying in the one place somebody looks when the office has gone
+        // Worth saying in the one place somebody looks when the server has gone
         // quiet, rather than showing the same word as a deliberate stop.
         FleetState::Crashed { .. } => "Quintal — agents stopped on their own".into(),
     }
@@ -124,12 +124,12 @@ pub fn watch(app: &AppHandle) {
     });
 }
 
-/// Back to the picker. Restarts, like every office change does.
-fn switch_office(app: &AppHandle) {
+/// Back to the picker. Restarts, like every server change does.
+fn switch_server(app: &AppHandle) {
     let Some(state) = app.try_state::<HostState>() else {
         return;
     };
-    if let Err(error) = crate::office::clear_active(&state.dir) {
+    if let Err(error) = crate::server::clear_active(&state.dir) {
         eprintln!("[quintal] tray: {error}");
         return;
     }
@@ -153,23 +153,23 @@ fn toggle_fleet(app: &AppHandle) {
     let next = if matches!(state.fleet.status(), FleetState::Running { .. }) {
         state.fleet.stop().err().map(|error| error.to_string())
     } else {
-        match state.office.as_deref().map_or(Ok(None), |office| {
-            crate::machine::token(&state.store, office)
+        match state.server.as_deref().map_or(Ok(None), |server| {
+            crate::machine::token(&state.store, server)
         }) {
-            Ok(Some(token)) => match state.office.as_deref() {
-                Some(office) => {
+            Ok(Some(token)) => match state.server.as_deref() {
+                Some(server) => {
                     let dir = crate::spawn::repos_dir(&state.dir);
                     state
                         .fleet
-                        .start(&dir, office, &token)
+                        .start(&dir, server, &token)
                         .err()
                         .map(|error| error.to_string())
                 }
-                None => Some("no office is selected".into()),
+                None => Some("no server is selected".into()),
             },
             // Nothing useful the tray can do about either: an unregistered
             // machine needs the office, and a locked keychain needs the OS.
-            Ok(None) => Some("this machine has not registered with an office yet".into()),
+            Ok(None) => Some("this machine has not registered with an server yet".into()),
             Err(error) => Some(error.to_string()),
         }
     };
