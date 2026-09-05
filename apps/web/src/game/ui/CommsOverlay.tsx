@@ -6,6 +6,7 @@ import { useEffect, useMemo } from 'react';
 import { NEARBY, channelKey, parseKey, zoneKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
 import { Transcript } from './Transcript';
+import { WorkingLine } from './WorkingLine';
 
 interface CommsOverlayProps {
   conversations: Conversations;
@@ -239,6 +240,8 @@ export function CommsOverlay({
                     : 'Nothing said nearby.'
             }
           />
+
+          <WorkingLine roster={roster} active={active} myZone={myZone} size="full" />
 
           {conversations.notice ? (
             <p className="px-4 py-1 text-[11px] text-amber-200/90" role="status">

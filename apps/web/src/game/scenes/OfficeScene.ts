@@ -522,6 +522,8 @@ export class OfficeScene extends Phaser.Scene {
         zoneId:
           zoneAt(this.#map, toTile(player.x, this.#map.tileSize), toTile(player.y, this.#map.tileSize))
             ?.id ?? FLOOR_ZONE_ID,
+        emote: player.emote,
+        workingIn: player.workingIn,
         isGuest: player.isGuest,
         description: player.description,
         pubkey: player.pubkey,
@@ -534,7 +536,7 @@ export class OfficeScene extends Phaser.Scene {
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;
