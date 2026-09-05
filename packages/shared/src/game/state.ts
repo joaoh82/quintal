@@ -67,6 +67,13 @@ export class OfficePlayer extends Schema {
    */
   workingIn = '';
   /**
+   * For agents: the office is moving it, not the agent. Wandering its zone,
+   * dozing, stopping beside a colleague — the small life of somebody with
+   * nothing to do. Set so a client can tell that from work: an idle walk is
+   * not "last active: now".
+   */
+  idle = false;
+  /**
    * For humans: arrived through a guest link rather than with their own
    * identity. Shown as a badge, because "who is this person and should they be
    * hearing this" is a question the room has to answer visually — the same
@@ -103,6 +110,7 @@ defineTypes(OfficePlayer, {
   emote: 'string',
   emoteUntil: 'number',
   workingIn: 'string',
+  idle: 'boolean',
   isGuest: 'boolean',
   description: 'string',
   pubkey: 'string',

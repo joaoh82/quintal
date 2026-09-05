@@ -63,7 +63,7 @@ export async function saveSettingsAction(
       };
     }
 
-    const officeFields = ['chatRadiusTiles', 'walkUpRadiusTiles', 'replyWindowSeconds'];
+    const officeFields = ['chatRadiusTiles', 'walkUpRadiusTiles', 'replyWindowSeconds', 'idleLife'];
     if (
       (officeFields.some((field) => formData.get(field) !== null) ||
         formData.get('workspaceName') !== null) &&
@@ -93,6 +93,12 @@ export async function saveSettingsAction(
       chatRadiusTiles: given('chatRadiusTiles', current.chatRadiusTiles),
       walkUpRadiusTiles: given('walkUpRadiusTiles', current.walkUpRadiusTiles),
       replyWindowSeconds: given('replyWindowSeconds', current.replyWindowSeconds),
+      // A checkbox: the hidden "0" beneath it is always sent, the "1" only
+      // when ticked, so the last value is the answer and none means untouched.
+      idleLife: (() => {
+        const values = formData.getAll('idleLife');
+        return values.length === 0 ? current.idleLife : values.at(-1) === '1';
+      })(),
     });
 
     // The office is a place, not a person: it starts out named after whoever

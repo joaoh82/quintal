@@ -136,6 +136,20 @@ import {
 } from '../agents/gateway.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
+import {
+  SMALL_TALK_MS,
+  SMALL_TALK_REPLY_MS,
+  between,
+  idleCapable,
+  newIdleRecord,
+  pickSmallTalk,
+  stepIdle,
+  touch,
+  wake,
+  wanderTarget,
+  zoneIdAt,
+  type IdleRecord,
+} from './idle-life.js';
 
 interface OfficeRoomOptions {
   mapId?: unknown;
@@ -171,6 +185,12 @@ interface PlayerSim {
   away: boolean;
   /** Set for agents; absent for humans. */
   agent?: AgentSession;
+  /**
+   * The walk in progress is the office's idea, not the agent's — a wander,
+   * or stepping over for a chat. Not audited, not reported back, and the
+   * first thing cancelled when anything real happens.
+   */
+  idleWalk?: boolean;
 }
 
 const STATUS_MAX_LENGTH = 60;
@@ -228,6 +248,10 @@ export class OfficeRoom extends Room<OfficeState> {
   >();
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
+  /** sessionId -> what an agent with nothing to do is up to. See `idle-life.ts`. */
+  readonly #idle = new Map<string, IdleRecord>();
+  /** zoneId -> when the next small talk may start there. */
+  readonly #nextTalkAt = new Map<string, number>();
   #heartbeatTimer?: NodeJS.Timeout;
   #revocationTimer?: NodeJS.Timeout;
   #settingsTimer?: NodeJS.Timeout;
@@ -488,6 +512,7 @@ export class OfficeRoom extends Room<OfficeState> {
       agent: session,
     });
     this.#agents.set(client.sessionId, identity);
+    this.#idle.set(client.sessionId, newIdleRecord(Date.now()));
 
     audit(identity.id, 'session.connected', {
       sessionId: client.sessionId,
@@ -593,6 +618,9 @@ export class OfficeRoom extends Room<OfficeState> {
 
     sim.intent = { x: 0, y: 0 };
     sim.path = path;
+    // Somebody meant this one. Idle life sets the flag back after the call
+    // when the walk was its own.
+    sim.idleWalk = false;
     return true;
   }
 
@@ -654,6 +682,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (now >= this.#nextEmoteSweep) {
       this.#nextEmoteSweep = now + 1_000;
       this.#sweepEmotes(now);
+      this.#stepIdleLife(now);
     }
 
     for (const [sessionId, sim] of this.#sims) {
@@ -680,12 +709,18 @@ export class OfficeRoom extends Room<OfficeState> {
           !arrived,
         );
         if (arrived && sim.agent) {
-          const tile = this.#tileOf(player);
-          audit(sim.agent.identity.id, 'effect.moved', {
-            tile,
-            zoneId: zoneAt(this.#map, tile.x, tile.y)?.id ?? null,
-          });
-          this.#sendRoster(sessionId);
+          if (sim.idleWalk) {
+            // A wander is not an action. An audit log full of "walked two
+            // tiles" is one nobody reads, and the agent did not ask to go.
+            sim.idleWalk = false;
+          } else {
+            const tile = this.#tileOf(player);
+            audit(sim.agent.identity.id, 'effect.moved', {
+              tile,
+              zoneId: zoneAt(this.#map, tile.x, tile.y)?.id ?? null,
+            });
+            this.#sendRoster(sessionId);
+          }
         }
       } else if (player.moving) {
         player.moving = false;
@@ -912,6 +947,8 @@ export class OfficeRoom extends Room<OfficeState> {
 
       const agent = this.#agents.get(listenerId);
       if (agent) {
+        // Something reached it: whatever it was doing with nothing to do ends.
+        this.#noteActivity(listenerId);
         if (withinEarshot) {
           target.send(AgentServerMessage.NearbyChat, {
             from: sessionId,
@@ -1176,6 +1213,10 @@ export class OfficeRoom extends Room<OfficeState> {
 
       const ref = this.#refFor(channel, listener.userId);
       if (this.#agents.has(listenerId)) {
+        // Only a line that names it is for it; the rest is the quiet an
+        // agent in a channel keeps, and a busy channel must not keep every
+        // member from ever being idle.
+        if (mentioned.has(listener.userId)) this.#noteActivity(listenerId);
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
           ...line,
@@ -1376,6 +1417,10 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #agentSession(client: Client): AgentSession | null {
     const sim = this.#sims.get(client.sessionId);
+    // Every command an agent sends is a sign of life, and this is the one
+    // place they all pass through. A status line, a look around, a move: the
+    // agent is doing something, so it is not idling.
+    if (sim?.agent) this.#noteActivity(client.sessionId);
     return sim?.agent ?? null;
   }
 
@@ -1914,6 +1959,221 @@ export class OfficeRoom extends Room<OfficeState> {
     } satisfies AgentResultPayload);
   }
 
+  // --- idle life -----------------------------------------------------------
+
+  /**
+   * Something happened to or by this agent.
+   *
+   * Restarts its idle clock and, if it was wandering, dozing or stopped for
+   * a chat, ends that at once: the walk is cancelled, the balloon comes
+   * down, a partner is released. Cheap enough to call from every message
+   * an agent sends or receives, which is exactly where it is called from.
+   */
+  #noteActivity(sessionId: string): void {
+    const record = this.#idle.get(sessionId);
+    if (!record) return;
+    touch(record, Date.now());
+    if (record.phase !== 'active') this.#endIdle(sessionId, record);
+  }
+
+  #endIdle(sessionId: string, record: IdleRecord): void {
+    const talk = record.talk;
+    wake(record);
+
+    const sim = this.#sims.get(sessionId);
+    if (sim?.idleWalk) {
+      sim.path = [];
+      sim.idleWalk = false;
+    }
+    const player = this.state.players.get(sessionId);
+    if (player) {
+      if (player.idle) player.idle = false;
+      if (player.moving && sim?.path.length === 0) player.moving = false;
+    }
+    this.#dropIdleBalloon(sessionId, record);
+
+    if (talk) this.#endTalkWith(talk.partner, sessionId);
+  }
+
+  /** Take down the balloon idle life put up — and only that one. */
+  #dropIdleBalloon(sessionId: string, record: IdleRecord): void {
+    const player = this.state.players.get(sessionId);
+    if (player && record.balloon.length > 0 && player.emote === record.balloon) {
+      player.emote = '';
+      player.emoteUntil = 0;
+    }
+    record.balloon = '';
+  }
+
+  #idleBalloon(sessionId: string, record: IdleRecord, emote: string, ttlMs: number): void {
+    const session = this.#sims.get(sessionId)?.agent;
+    if (!session) return;
+    // Not `chosen`: the agent did not ask, so there is nothing to log.
+    this.#applyEmote(sessionId, session, { emote, ttlMs, chosen: false });
+    record.balloon = emote;
+  }
+
+  /** `partner` was talking with `leaving`; let them go on with their idling. */
+  #endTalkWith(partner: string, leaving: string): void {
+    const record = this.#idle.get(partner);
+    if (!record?.talk || record.talk.partner !== leaving) return;
+    record.talk = null;
+    this.#dropIdleBalloon(partner, record);
+    // Soon, not now: they drift apart rather than turning on their heel.
+    record.nextDecisionAt = Date.now() + between(Math.random, 2_000, 6_000);
+  }
+
+  /**
+   * Once a second: every agent with nothing to do gets a look.
+   *
+   * The rules live in `idle-life.ts`; this applies what they decide to the
+   * room. Turned off in settings, it only ever ends idle lives, so a switch
+   * flipped mid-wander stops the wander.
+   */
+  #stepIdleLife(now: number): void {
+    if (!this.#settings.idleLife) {
+      for (const [sessionId, record] of this.#idle) {
+        if (record.phase !== 'active') this.#endIdle(sessionId, record);
+      }
+      return;
+    }
+
+    /** Idle, awake, unengaged and able to walk, by home zone — the chat pool. */
+    const free = new Map<string, string[]>();
+
+    for (const [sessionId, record] of this.#idle) {
+      const sim = this.#sims.get(sessionId);
+      const player = this.state.players.get(sessionId);
+      if (!sim?.agent || !player || sim.away) continue;
+
+      const tile = this.#tileOf(player);
+      const busy = !idleCapable(player.status);
+      const action = stepIdle(record, { now, busy, zoneId: zoneIdAt(this.#map, tile) }, Math.random);
+
+      switch (action.kind) {
+        case 'wake':
+          this.#endIdle(sessionId, record);
+          continue;
+        case 'sleep':
+          if (sim.idleWalk) {
+            sim.path = [];
+            sim.idleWalk = false;
+          }
+          if (!player.idle) player.idle = true;
+          this.#idleBalloon(sessionId, record, 'sleep', 0);
+          continue;
+        case 'wander': {
+          if (sim.path.length === 0 && hasScope(sim.agent.identity, 'move')) {
+            const target = wanderTarget(this.#map, tile, record.homeZone, Math.random);
+            if (target && this.walkTo(sessionId, target.x, target.y)) sim.idleWalk = true;
+          }
+          break;
+        }
+        case 'none':
+          break;
+      }
+
+      if (record.phase !== 'wandering') continue;
+      if (!player.idle) player.idle = true;
+
+      if (record.talk) {
+        this.#stepTalk(sessionId, record, now);
+      } else if (sim.path.length === 0 && hasScope(sim.agent.identity, 'move')) {
+        const pool = free.get(record.homeZone) ?? [];
+        pool.push(sessionId);
+        free.set(record.homeZone, pool);
+      }
+    }
+
+    for (const [a, b] of pickSmallTalk(free, this.#nextTalkAt, now, Math.random)) {
+      this.#startTalk(a, b);
+    }
+  }
+
+  /** `a` walks over to stand beside `b`. */
+  #startTalk(a: string, b: string): void {
+    const recordA = this.#idle.get(a);
+    const recordB = this.#idle.get(b);
+    const playerB = this.state.players.get(b);
+    const simA = this.#sims.get(a);
+    if (!recordA || !recordB || !playerB || !simA) return;
+
+    const taken = new Set<string>();
+    for (const [, player] of this.state.players) {
+      const tile = this.#tileOf(player);
+      taken.add(`${tile.x},${tile.y}`);
+    }
+    const target = this.#tileOf(playerB);
+    const beside = tileBeside(this.#map, target.x, target.y, taken, 2);
+    if (!beside) return;
+    // Beside them, but still at home: a chat is not a reason to leave the zone.
+    if (zoneIdAt(this.#map, beside) !== recordA.homeZone) return;
+    if (!this.walkTo(a, beside.x, beside.y)) return;
+    simA.idleWalk = true;
+
+    recordA.talk = { partner: b, initiator: true, startedAt: 0, answered: false };
+    recordB.talk = { partner: a, initiator: false, startedAt: 0, answered: false };
+  }
+
+  /**
+   * A small talk, second by second, driven by the one who walked over: face
+   * each other once there, a balloon, an answering balloon, and after a
+   * moment both go back to their own idling.
+   */
+  #stepTalk(sessionId: string, record: IdleRecord, now: number): void {
+    const talk = record.talk;
+    if (!talk) return;
+    const partner = this.#idle.get(talk.partner);
+    const player = this.state.players.get(sessionId);
+    const other = this.state.players.get(talk.partner);
+    if (!partner?.talk || partner.talk.partner !== sessionId || !player || !other) {
+      record.talk = null;
+      this.#dropIdleBalloon(sessionId, record);
+      return;
+    }
+    if (!talk.initiator) return;
+
+    const sim = this.#sims.get(sessionId);
+    if (talk.startedAt === 0) {
+      if (sim && sim.path.length > 0) return; // still walking over
+      // Arrived — or the walk was lost. Only a real arrival starts a chat.
+      if (this.#tileDistance(player, other) > 2) {
+        this.#endTalkWith(talk.partner, sessionId);
+        this.#endTalkWith(sessionId, talk.partner);
+        return;
+      }
+      this.#faceEachOther(player, other);
+      talk.startedAt = now;
+      partner.talk.startedAt = now;
+      this.#idleBalloon(sessionId, record, 'dots', SMALL_TALK_MS);
+      return;
+    }
+
+    if (!partner.talk.answered && now >= talk.startedAt + SMALL_TALK_REPLY_MS) {
+      partner.talk.answered = true;
+      const answer = Math.random() < 0.5 ? 'dots' : 'laugh';
+      this.#idleBalloon(talk.partner, partner, answer, SMALL_TALK_MS - SMALL_TALK_REPLY_MS);
+    }
+
+    if (now >= talk.startedAt + SMALL_TALK_MS) {
+      this.#endTalkWith(talk.partner, sessionId);
+      this.#endTalkWith(sessionId, talk.partner);
+    }
+  }
+
+  #faceEachOther(a: OfficePlayer, b: OfficePlayer): void {
+    const from = this.#tileOf(a);
+    const to = this.#tileOf(b);
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const towards: Direction =
+      Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+    const back: Direction =
+      towards === 'right' ? 'left' : towards === 'left' ? 'right' : towards === 'down' ? 'up' : 'down';
+    if (a.dir !== towards) a.dir = towards;
+    if (b.dir !== back) b.dir = back;
+  }
+
   // --- helpers -------------------------------------------------------------
 
   /**
@@ -1962,6 +2222,10 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   #removePlayer(sessionId: string): void {
+    // Whoever it was chatting with is released before the record goes.
+    const record = this.#idle.get(sessionId);
+    if (record?.talk) this.#endTalkWith(record.talk.partner, sessionId);
+    this.#idle.delete(sessionId);
     this.state.players.delete(sessionId);
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
