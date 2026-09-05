@@ -33,7 +33,7 @@ import {
   selectWindow,
   type Trigger,
 } from './context.js';
-import { statusForTool, toBubbles } from './outbound.js';
+import { isHarnessNotice, statusForTool, toBubbles } from './outbound.js';
 
 /**
  * One agent, alive in one office.
@@ -873,7 +873,15 @@ export class AgentRunner {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk': {
         const text = textOf(update.content);
-        if (text) this.#responseBuffer += text;
+        if (!text) break;
+        // The adapter's housekeeping, not the model's words. Codex's "Skill
+        // descriptions were shortened…" arrived this way and was said aloud
+        // — and posted, and DM'd — as if the agent had chosen to.
+        if (isHarnessNotice(text)) {
+          this.#log('warn', `runtime notice (not spoken): ${text.trim()}`);
+          break;
+        }
+        this.#responseBuffer += text;
         break;
       }
       case 'agent_thought_chunk':

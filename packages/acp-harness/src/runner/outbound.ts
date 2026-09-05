@@ -126,3 +126,18 @@ function basename(path: string): string {
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] ?? path;
 }
+
+/**
+ * A line the agent adapter wrote, not the model.
+ *
+ * `codex-acp` renders Codex's own notices — "Warning: Skill descriptions
+ * were shortened…", "Config warning: …" — as an `agent_message_chunk`, one
+ * whole paragraph in one chunk, ahead of the model's reply (see
+ * `createWarningEvent` in its bundle). Spoken aloud, that is an agent
+ * announcing its runtime's housekeeping to the room. A model's own text
+ * arrives as token deltas, never as a complete "Warning: …" paragraph in a
+ * single chunk, so the shape is safe to recognise.
+ */
+export function isHarnessNotice(chunk: string): boolean {
+  return /^(?:Config warning|Warning): [\s\S]*\n\n$/.test(chunk);
+}

@@ -219,6 +219,11 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   readonly #followed = new Map<string, string>();
   #nextEmoteSweep = 0;
+  /** sessionId -> a balloon asked for inside the flicker interval, applied when it is up. */
+  readonly #emoteLater = new Map<
+    string,
+    { timer: NodeJS.Timeout; wanted: { emote: string; ttlMs: number; chosen: boolean } }
+  >();
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
   #heartbeatTimer?: NodeJS.Timeout;
@@ -1509,25 +1514,55 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#denyAgent(client, session, 'missing_scope', 'This agent has no "status" scope.');
       return;
     }
-    const waitMs = allowEmote(session, Date.now());
-    if (waitMs > 0) {
-      this.#denyAgent(client, session, 'rate_limited', 'Too many balloons.', waitMs);
-      return;
-    }
 
     const ttlRaw = payload?.ttlMs;
     const ttlMs =
       ttlRaw === undefined
         ? EMOTE_TTL_DEFAULT_MS
         : Math.min(Math.max(Number(ttlRaw) || 0, 0), EMOTE_TTL_MAX_MS);
-    const until = emote.length === 0 || ttlMs === 0 ? 0 : Date.now() + ttlMs;
+    const wanted = { emote, ttlMs, chosen: ttlRaw === undefined };
 
-    if (player.emote !== emote) player.emote = emote;
+    // A flicker guard, not a refusal. Balloons follow status lines, and a
+    // tool-heavy turn flips those several times a second; refusing the extra
+    // ones left the *last* balloon unset — the map showing a lightbulb on an
+    // agent that had gone idle, with six "rate_limited" rows in its log. Now
+    // the newest wanted balloon is kept and applied when the interval is up,
+    // so the office always ends on the balloon the harness meant.
+    const waitMs = allowEmote(session, Date.now());
+    if (waitMs > 0) {
+      const pending = this.#emoteLater.get(client.sessionId);
+      if (pending) {
+        pending.wanted = wanted;
+        return;
+      }
+      const timer = setTimeout(() => {
+        const later = this.#emoteLater.get(client.sessionId);
+        this.#emoteLater.delete(client.sessionId);
+        if (!later || !this.state.players.has(client.sessionId)) return;
+        session.lastEmoteAt = Date.now();
+        this.#applyEmote(client.sessionId, session, later.wanted);
+      }, waitMs);
+      this.#emoteLater.set(client.sessionId, { timer, wanted });
+      return;
+    }
+
+    this.#applyEmote(client.sessionId, session, wanted);
+  }
+
+  #applyEmote(
+    sessionId: string,
+    session: AgentSession,
+    wanted: { emote: string; ttlMs: number; chosen: boolean },
+  ): void {
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+    const until = wanted.emote.length === 0 || wanted.ttlMs === 0 ? 0 : Date.now() + wanted.ttlMs;
+    if (player.emote !== wanted.emote) player.emote = wanted.emote;
     if (player.emoteUntil !== until) player.emoteUntil = until;
     // Only the chosen ones are worth a log line; the derived ones follow the
     // status changes that are already logged.
-    if (ttlRaw === undefined && emote.length > 0) {
-      audit(session.identity.id, 'command.emote', { emote });
+    if (wanted.chosen && wanted.emote.length > 0) {
+      audit(session.identity.id, 'command.emote', { emote: wanted.emote });
     }
   }
 
@@ -1922,6 +1957,11 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#chatLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
     this.#followed.delete(sessionId);
+    const later = this.#emoteLater.get(sessionId);
+    if (later) {
+      clearTimeout(later.timer);
+      this.#emoteLater.delete(sessionId);
+    }
     // Nothing about what they said is forgotten. It used to be: leaving the
     // room erased your lines from everybody else's history.
   }
