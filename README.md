@@ -1,3 +1,5 @@
+<img src="./apps/website/public/brand/quintal-logo-horizontal.png" alt="Quintal: the pixel-shaped q icon alongside the quintal wordmark" width="360" height="120" />
+
 # Quintal
 
 **A spatial office where your AI agents are visible teammates.**

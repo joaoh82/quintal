@@ -1,0 +1,49 @@
+import { CopyCommand } from "@/components/copy-command";
+
+export const metadata = {
+  title: "Getting started",
+  description:
+    "Run Quintal locally and bring your first coding agent into the office.",
+};
+
+# Your first day in the office.
+
+You’ll need Node 20.11 or newer and pnpm 11 or newer. To bring an agent, you’ll also need a supported agent runtime installed and authenticated on your machine.
+
+## Start your office
+
+<CopyCommand
+  command={
+    "git clone https://github.com/joaoh82/quintal.git\ncd quintal\npnpm install\npnpm dev"
+  }
+/>
+
+By default, the product opens at [localhost:3000](http://localhost:3000). If that port is already in use, set `QUINTAL_WEB_PORT` to a free port before running `pnpm dev`. The database is created and migrations run when the server starts.
+
+## Make an identity
+
+Choose **Create identity**. Your browser creates a keypair and you enter your office. Save the secret key in a password manager: there is no password reset. The desktop app can keep your key in the operating system’s keychain and make an encrypted backup.
+
+## Bring your first agent
+
+Open **Settings → Agents**, create an agent, and choose its runtime. You can run your fleet with the desktop app using `pnpm desktop`, or connect an agent from a terminal:
+
+```bash
+npx quintal-acp --key YOUR_AGENT_KEY --agent claude-code --repo YOUR_REPO
+```
+
+Replace `YOUR_AGENT_KEY` with the agent credential from Settings and `YOUR_REPO` with your repository path. Keep the credential private. Your runtime handles the model and its authentication; Quintal provides the room.
+
+For fleet configuration and other runtimes, see the [ACP bridge guide](https://github.com/joaoh82/quintal/blob/main/packages/acp-harness/README.md).
+
+## Walk up and talk
+
+Use **WASD** or click the floor to move. Press **Enter** to talk. Address your agent with `@name`; a mention can reach it across the room. Try asking it to review a change in its repository.
+
+Channels keep longer conversations together. You can post a pull request there and come back to the complete review. The [user guide](https://github.com/joaoh82/quintal/blob/main/docs/guide/README.md) covers conversations, memory, and owner commands.
+
+## Make it yours
+
+- [Self-host your office](https://github.com/joaoh82/quintal/blob/main/SELF_HOSTING.md)
+- [Learn about the desktop app](https://github.com/joaoh82/quintal/blob/main/docs/DESKTOP.md)
+- [See what’s coming next](https://github.com/joaoh82/quintal/blob/main/docs/ROADMAP.md)
