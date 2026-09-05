@@ -10,6 +10,7 @@ import {
   AgentMessage,
   AgentServerMessage,
   CHAT_LOG_LIMIT,
+  CHANNEL_POST_MAX_LENGTH,
   CHAT_MAX_LENGTH,
   ClientMessage,
   DEFAULT_OFFICE_SETTINGS,
@@ -36,6 +37,7 @@ import {
   toTile,
   isAddressed,
   mentionedNames,
+  messageMaxLength,
   zoneAt,
   type AgentChannelChatEvent,
   type AgentChannelsEvent,
@@ -753,7 +755,7 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
-    const text = this.#acceptHumanText(client, payload?.text);
+    const text = this.#acceptHumanText(client, payload?.text, CHANNEL_POST_MAX_LENGTH);
     if (text === null) return;
 
     this.#deliverChannelChat(client.sessionId, speaker, channel, text);
@@ -841,16 +843,23 @@ export class OfficeRoom extends Room<OfficeState> {
     }
   }
 
-  /** Length and rate checks shared by everything a person can type. Null = refused. */
-  #acceptHumanText(client: Client, rawText: unknown): string | null {
+  /**
+   * Length and rate checks shared by everything a person can type. Null =
+   * refused. Speech has the short cap; a channel post may run to a review.
+   */
+  #acceptHumanText(
+    client: Client,
+    rawText: unknown,
+    maxLength: number = CHAT_MAX_LENGTH,
+  ): string | null {
     const text = String(rawText ?? '').trim();
     if (text.length === 0) return null;
 
-    if (text.length > CHAT_MAX_LENGTH) {
+    if (text.length > maxLength) {
       this.#sendError(
         client,
         'invalid_message',
-        `Messages are limited to ${CHAT_MAX_LENGTH} characters.`,
+        `Messages are limited to ${maxLength} characters.`,
       );
       return null;
     }
@@ -1383,12 +1392,14 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#denyAgent(client, session, 'missing_scope', 'This agent has no "chat" scope.');
       return;
     }
-    if (text.length === 0 || text.length > CHAT_MAX_LENGTH) {
+    // A post in a channel may be a whole review; speech stays a bubble.
+    const maxLength = messageMaxLength(payload?.channelId);
+    if (text.length === 0 || text.length > maxLength) {
       this.#denyAgent(
         client,
         session,
         'invalid_payload',
-        `text must be 1..${CHAT_MAX_LENGTH} characters.`,
+        `text must be 1..${maxLength} characters.`,
       );
       return;
     }

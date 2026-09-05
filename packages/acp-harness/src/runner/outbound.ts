@@ -1,3 +1,5 @@
+import { CHANNEL_POST_MAX_LENGTH } from '@quintal/shared';
+
 /**
  * Turning agent output into things an office can hold.
  *
@@ -6,6 +8,11 @@
  * fills the nearby-chat log drowns out the humans. So streamed text is chunked
  * at sentence boundaries into at most three bubbles, and the rest is left for
  * whoever wants it — they can ask.
+ *
+ * A channel is not a room. A review asked for in `#engineering` is read as a
+ * transcript, and cutting it into three bubbles is how one arrived as a
+ * 280-character fragment starting mid-word. So a post keeps its paragraphs
+ * and its length, and is only split when it will not fit the office's cap.
  */
 
 /** Most bubbles one response may produce. */
@@ -72,6 +79,57 @@ export function toBubbles(text: string): string[] {
     last.length > room
       ? `${last.slice(0, room)}${CONTINUED_SUFFIX}`
       : `${last} ${CONTINUED_SUFFIX}`;
+  return kept;
+}
+
+/** Most posts one response may make in a channel or DM. */
+export const MAX_POSTS = 5;
+
+/**
+ * Pack a full response into channel posts.
+ *
+ * One post whenever it fits, whitespace and all: a review keeps its list, a
+ * stack trace keeps its lines. Over the cap it is split at paragraph breaks,
+ * and a single paragraph longer than a post is cut rather than dropped. Past
+ * five posts the last one says there is more, as the bubbles do — an agent
+ * that stops mid-thought reads as broken, in a channel as much as aloud.
+ */
+export function toPosts(text: string, maxLength: number = CHANNEL_POST_MAX_LENGTH): string[] {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return [];
+  if (trimmed.length <= maxLength) return [trimmed];
+
+  const all: string[] = [];
+  let current = '';
+  const flush = (): void => {
+    if (current.trim().length > 0) all.push(current.trim());
+    current = '';
+  };
+
+  for (const paragraph of trimmed.split(/\n{2,}/)) {
+    const candidate = current.length === 0 ? paragraph : `${current}\n\n${paragraph}`;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+
+    flush();
+    let rest = paragraph;
+    while (rest.length > maxLength) {
+      all.push(rest.slice(0, maxLength));
+      rest = rest.slice(maxLength);
+    }
+    current = rest;
+  }
+  flush();
+
+  if (all.length <= MAX_POSTS) return all;
+
+  const kept = all.slice(0, MAX_POSTS);
+  const last = kept[MAX_POSTS - 1] ?? '';
+  const room = maxLength - CONTINUED_SUFFIX.length - 1;
+  kept[MAX_POSTS - 1] =
+    last.length > room ? `${last.slice(0, room)}${CONTINUED_SUFFIX}` : `${last} ${CONTINUED_SUFFIX}`;
   return kept;
 }
 

@@ -48,6 +48,25 @@ async function callBridge(tool: string, args: Record<string, unknown>): Promise<
 
 const TOOLS = [
   {
+    name: 'say',
+    description:
+      'Post a line right now, into the conversation this turn is in — the ' +
+      'channel or DM you were addressed in, or aloud to whoever is nearby. ' +
+      'Use it to say you have picked something up, to report when a step ' +
+      'lands or blocks, and to publish a result before you carry on. What you ' +
+      'write as your final answer is posted the same way when the turn ends, ' +
+      'so do not repeat there what you already said here. Aloud, a line is ' +
+      'cut into short speech bubbles; in a channel or DM it is posted whole, ' +
+      'up to about 4000 characters, so a review or a plan can go in as one ' +
+      'message. Never a bare acknowledgement.',
+    inputSchema: {
+      type: 'object',
+      properties: { text: { type: 'string' } },
+      required: ['text'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'look_around',
     description:
       'Look at the room you are standing in: which zone you are in, your tile, ' +

@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
 import {
+  AGENT_CHAT_INTERVAL_MS,
+  channelLabel,
   emoteForStatus,
   isAddressed,
   parseAgentCommand,
@@ -33,7 +35,7 @@ import {
   selectWindow,
   type Trigger,
 } from './context.js';
-import { isHarnessNotice, statusForTool, toBubbles } from './outbound.js';
+import { isHarnessNotice, statusForTool, toBubbles, toPosts } from './outbound.js';
 
 /**
  * One agent, alive in one office.
@@ -51,6 +53,13 @@ export interface RunnerEvents {
 }
 
 const PERMISSION_TIMEOUT_MS = 120_000;
+
+/**
+ * Gap between two lines we send. The office allows an agent one every
+ * `AGENT_CHAT_INTERVAL_MS`; a little over, so a burst is paced rather than
+ * refused and then lost.
+ */
+const SEND_INTERVAL_MS = AGENT_CHAT_INTERVAL_MS + 100;
 
 /**
  * How close someone must be for an unaddressed remark to count as talking to
@@ -115,6 +124,8 @@ export class AgentRunner {
   #modelRefusal: string | null = null;
   /** The balloon last asked for, so the same one is not sent twice. */
   #emoteLine = '';
+  /** When the next line may leave: everything we say is paced through here. */
+  #nextSendAt = 0;
 
   #busy = false;
   #currentScope: string | null = null;
@@ -274,9 +285,13 @@ export class AgentRunner {
   }
 
   async #startAgent(): Promise<void> {
-    this.#bridge = await startBridge(this.#gateway, (tool) => {
-      this.#log('info', `tool: ${tool}`);
-    });
+    this.#bridge = await startBridge(
+      this.#gateway,
+      (tool) => {
+        this.#log('info', `tool: ${tool}`);
+      },
+      { say: (text) => this.#sayNow(text) },
+    );
 
     const bridge = this.#bridge;
     const proc = new AgentProcess({
@@ -972,20 +987,61 @@ export class AgentRunner {
    * in the channel, which is the wrong audience twice.
    */
   #speak(text: string, scope: string = this.#scopeOf()): void {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    if (text.trim().length === 0) {
       // Silence is a valid answer, and often the right one.
       this.#log('info', 'turn produced no reply (silence)');
       return;
     }
+    this.#deliver(text, scope);
+  }
 
+  /**
+   * The `say` tool: a line now, mid-turn, into the conversation the turn is
+   * in. This is what lets an agent say "on it" and, minutes later, "review
+   * posted" — before this, everything it had to say waited for the turn to
+   * end and was cut to three bubbles.
+   */
+  #sayNow(text: string): { posted_to: string; parts: number } {
+    const scope = this.#currentScope ?? this.#scopeOf();
+    const parts = this.#deliver(text, scope);
+    this.#audit('say', { scope, text });
+    const channel = this.#channelOf(scope);
+    const where =
+      channel === null
+        ? 'aloud, to whoever is nearby'
+        : channel.kind === 'dm'
+          ? `your direct message with ${channel.name}`
+          : channelLabel(channel);
+    return { posted_to: where, parts };
+  }
+
+  /**
+   * Cut to fit where it is going, and send. Speech is bubbles; a channel or
+   * DM post keeps its shape and its length. Returns how many pieces went.
+   */
+  #deliver(text: string, scope: string): number {
     const channelId = this.#channelOf(scope)?.id;
-    const bubbles = toBubbles(trimmed);
-    for (const [index, bubble] of bubbles.entries()) {
-      // The office rate-limits agents to one message every 2s; pace ourselves
-      // rather than earning refusals we would then have to retry.
-      setTimeout(() => this.#gateway.say(bubble, channelId), index * 2100);
+    const pieces = channelId === undefined ? toBubbles(text) : toPosts(text);
+    for (const piece of pieces) this.#send(piece, channelId);
+    return pieces.length;
+  }
+
+  /**
+   * One line out, no sooner than the office allows.
+   *
+   * Every line — a turn's reply, a `say` mid-turn — goes through here, so a
+   * reply landing right behind a `say` waits its 2s instead of earning a
+   * refusal and vanishing.
+   */
+  #send(text: string, channelId: string | undefined): void {
+    const now = Date.now();
+    const at = Math.max(now, this.#nextSendAt);
+    this.#nextSendAt = at + SEND_INTERVAL_MS;
+    if (at === now) {
+      this.#gateway.say(text, channelId);
+      return;
     }
+    setTimeout(() => this.#gateway.say(text, channelId), at - now);
   }
 
   #setStatus(status: string): void {
@@ -1047,7 +1103,7 @@ export class AgentRunner {
   }
 
   /** Local audit of everything the agent was told and everything it said. */
-  #audit(kind: 'prompt' | 'response', payload: Record<string, unknown>): void {
+  #audit(kind: 'prompt' | 'response' | 'say', payload: Record<string, unknown>): void {
     if (!this.logDir) return;
     try {
       mkdirSync(this.logDir, { recursive: true });

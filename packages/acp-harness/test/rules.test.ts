@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { loadFleet, parseFleet, splitCommand, ConfigError } from '../src/config.js';
 import { resolveZone } from '../src/mcp/bridge.js';
 import { buildEnvelope, selectWindow, WINDOW_SIZE } from '../src/runner/context.js';
-import { MAX_BUBBLES, statusForTool, toBubbles } from '../src/runner/outbound.js';
+import { MAX_BUBBLES, MAX_POSTS, statusForTool, toBubbles, toPosts } from '../src/runner/outbound.js';
 import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
 
 /**
@@ -271,6 +271,55 @@ describe('speaking in an office', () => {
 
   it('says nothing when there is nothing to say', () => {
     assert.deepEqual(toBubbles('   '), []);
+  });
+});
+
+describe('posting in a channel', () => {
+  const review = [
+    'Two findings on #52.',
+    '',
+    '1. `avatar.ts:166` — the balloon offset is applied before the sprite is scaled, so it lands over the neighbour.',
+    '2. The emote sweep runs on every tick; a `Map` of expiries would do it once.',
+    '3. `tickEmote` advances the frame from wall-clock time, so a tab left in the background jumps frames when it wakes.',
+    '4. The CSS sprite and the Phaser sheet are the same PNG but sized separately; one constant would keep them aligned.',
+    '',
+    'Neither of the first two blocks the merge; the third is worth a follow-up.',
+  ].join('\n');
+
+  it('keeps a review whole — its lines, its list, its length', () => {
+    assert.deepEqual(toPosts(review), [review]);
+    assert.ok(review.length > 280, 'this would have been three bubbles');
+  });
+
+  it('splits at paragraphs only when the post will not fit', () => {
+    const paragraphs = Array.from({ length: 6 }, (_, i) => `Paragraph ${i}. ${'x'.repeat(90)}`);
+    const posts = toPosts(paragraphs.join('\n\n'), 250);
+
+    assert.ok(posts.length > 1);
+    for (const post of posts) {
+      assert.ok(post.length <= 250, `post too long: ${post.length}`);
+      assert.match(post, /^Paragraph \d\./, 'every post starts on a paragraph, not mid-word');
+    }
+    assert.equal(posts.join('\n\n'), paragraphs.join('\n\n'), 'nothing was lost');
+  });
+
+  it('cuts a paragraph longer than a post rather than dropping it', () => {
+    const wall = 'y'.repeat(600);
+    const posts = toPosts(wall, 250);
+    assert.equal(posts.join(''), wall);
+  });
+
+  it('stops at five posts and says there is more', () => {
+    const endless = Array.from({ length: 40 }, (_, i) => `Item ${i}. ${'z'.repeat(200)}`).join('\n\n');
+    const posts = toPosts(endless, 250);
+
+    assert.equal(posts.length, MAX_POSTS);
+    assert.match(posts[MAX_POSTS - 1] ?? '', /continued — ask me for more/);
+    for (const post of posts) assert.ok(post.length <= 250, `post too long: ${post.length}`);
+  });
+
+  it('posts nothing when there is nothing to post', () => {
+    assert.deepEqual(toPosts('  \n '), []);
   });
 
   it('turns tool calls into a glanceable status line', () => {
