@@ -1,207 +1,199 @@
 # Quintal
 
-**A spatial office where your AI agents are visible teammates.** Quintal gives
-your work a place: a 2D office you walk around as an avatar, built for one
-developer plus their fleet of AI agents. Agents aren't a sidebar or a log tail —
-they get avatars, desks, status and presence, so a glance at the room tells you
-what your fleet is doing and where. Other humans can be invited in, but nothing
-assumes a team.
+**A spatial office where your AI agents are visible teammates.**
 
-![Two people standing in the Quintal office: avatars on a tile map with name labels above them, one mid-sentence in a speech bubble, the online roster in the corner, and the Agent Bay carpeted across the lower half of the room](./screenshots/office.png)
+Quintal is a small 2D office you walk around in. Your coding agents — Claude
+Code, Codex, Goose, Gemini CLI, whatever speaks
+[ACP](https://agentclientprotocol.com) — get avatars, names, a status line and
+a place to stand. You walk up to one and ask it something. You `@mention` one
+from across the room. You post a pull request in a channel and watch it think,
+then read the review. A glance at the room tells you what your fleet is doing.
 
-An agent is a colleague you walk over to. Here a real Claude Code session,
-signed in as `claude` and attributed to its owner, answers a question about the
-repository it is working in — in a speech bubble, from the Agent Bay, like
-anyone else in the room:
+Other people can walk in too. Nothing assumes a team, and nothing needs one.
 
-![The same office with a human and an agent standing near each other in the Agent Bay. The agent's nameplate reads "claude · Josh's" and its speech bubble says "No — working tree is clean, nothing staged or untracked." The nearby-chat log in the corner shows the exchange: Josh asking what the current branch is, the agent naming it and reporting a clean tree](./screenshots/office_with_agent.png)
+![The office: a human and an agent in the Agent Bay. The agent's nameplate reads "claude · Josh's" and its speech bubble answers a question about the repository it is working in](./screenshots/office_with_agent.png)
 
-> **Under construction.** This is early, and honest about it.
->
-> **Works today:** sign in with a magic link, walk around a tile map with
-> collision and click-to-move pathfinding, and share the office with other
-> people in real time — server-authoritative movement, name labels, a roster,
-> and proximity chat that only carries as far as your voice would.
->
-> **Also works:** agents. They log into the same office with their own identity,
-> walk around it, answer when you walk up, and leave an audit trail. Your
-> existing Claude Code / Codex / Goose sessions can join through
-> [`quintal-acp`](./packages/acp-harness).
->
-> **Not yet:** voice, and a Docker image.
->
-> Building in public means you can watch that happen — every file here is
-> world-readable and written with that in mind.
+Quintal is open source (AGPL-3.0), self-hostable in one process with one
+SQLite file, and built in public — every commit is world-readable and written
+with that in mind. It is early, and honest about it.
 
-## Quickstart
+---
+
+## Why
+
+If you run agents all day, you run them in terminals: one tab each, each a
+scrolling log. You cannot see which one is stuck, which one is waiting on you,
+or what any of them did an hour ago without going tab by tab.
+
+Quintal gives the fleet a room. Presence does the work a dashboard would:
+an agent that is thinking has a balloon over its head, one that is waiting
+for you says so under its name, one that has nothing to do wanders its
+corner. Asking is walking over. Delegating is `@name`. And everything an
+agent does is attributed to its owner and written to a log you can read.
+
+Quintal never runs the agent's loop. Your harness does that already; this is
+the place where it happens.
+
+## What you can do today
+
+**Walk around an office.** A tile map with meeting rooms, an open floor and
+an Agent Bay. `WASD` to walk, click to pathfind, `Enter` to talk. Movement is
+server-authoritative, so nobody teleports and nobody outruns a person.
+
+**Talk the way a room works.** Speech carries about twelve tiles. `@name`
+reaches anyone anywhere, with autocomplete. Standing in a room puts you in its
+conversation, and what was said there is kept.
+
+**Channels and direct messages.** A channel is a conversation you are in by
+membership: nobody nearby hears it, every member reads it, it is kept. A DM is
+a channel nobody else can find. Everything lives in one panel, one keypress
+away.
+
+![The conversations panel open on #engineering, where an agent has posted a full pull-request review](./screenshots/conversations-panel-channel-review.png)
+
+**Agents as members.** Each agent has an identity, an owner, scopes and an
+audit log. It answers when addressed and stays quiet otherwise. It walks when
+asked ("come to the focus room"). It remembers what you tell it to. It can
+say "on it" and, minutes later, "review posted", in the channel where you
+asked.
+
+![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, and the chat box showing who is answering](./screenshots/agent-thinking.png)
+
+**See what they are doing.** A status line under every agent's name —
+`reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
+that says the same from across the room. Idle agents wander, doze, and stop
+beside each other for a wordless moment. None of that costs a token.
+
+**Your key, your identity.** No accounts, no email, no passwords. You hold a
+keypair; signing in is signing a challenge. The desktop app keeps the key in
+your operating system's keychain and makes encrypted backups.
+
+**Run your fleet from your laptop.** The desktop app finds every agent runtime
+you have installed, and starts the agents assigned to this machine. Or run
+[`quintal-acp`](./packages/acp-harness) from a terminal.
+
+![The desktop app's Agents tab: the fleet running, and each runtime on this machine listed as Ready, Not installed or Unsupported](./screenshots/desktop-runtimes.png)
+
+**Not yet:** voice between people, private rooms that actually isolate, a
+Docker image. See the [roadmap](./docs/ROADMAP.md).
+
+## Try it in five minutes
 
 Requires Node 20.11+ and [pnpm](https://pnpm.io) 11+.
 
 ```bash
+git clone https://github.com/joaoh82/quintal.git
+cd quintal
 pnpm install
-cp .env.example .env   # optional — the defaults work as-is
 pnpm dev
 ```
 
-Then open <http://localhost:3000> and pick **Create identity**. Your identity is
-a secp256k1 keypair the browser makes on the spot — there is no email field, no
-password, and nothing to configure to sign in. Already have a key? Paste an
-`nsec` or use a NIP-07 signing extension.
+Open <http://localhost:3000> and pick **Create identity**. The browser makes a
+key on the spot — put the secret half in a password manager, there is no
+reset — and you land in your own office. Open a second browser as somebody
+else and you will see each other.
 
-You land in the office at `/office`. **WASD or arrow keys** to walk, **click**
-to route there with pathfinding, **Enter** to chat with whoever is nearby, **Z**
-to show the zone and collision overlay. Open a second browser, sign in as
-someone else, and you'll see each other.
+The database is created for you and migrations run on boot. There is no
+setup command to forget.
 
-The database is created for you at `data/quintal.db` and migrations run on boot.
-There is no setup command to forget.
+To put an agent in the room, open **Settings → Agents**, create one, and run
+it with the desktop app (`pnpm desktop`) or from a terminal:
+
+```bash
+npx quintal-acp --key qa_… --agent claude-code --repo api
+```
+
+Then walk up to it and say hello. The
+[user guide](./docs/guide/README.md) takes it from there.
 
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` | Web on :3000 + game server on :2567, two processes, fast HMR |
-| `pnpm build` | Build shared → web → server |
-| `pnpm start` | **One** process serving web + game server on one port |
-| `pnpm typecheck` | Typecheck every package |
-| `pnpm test` | Run the test suite (movement, pathfinding, map, state sync) |
-| `pnpm db:generate` | Generate a migration after changing the schema |
-| `pnpm db:seed` | Create a local demo user + personal workspace (idempotent) |
-| `pnpm desktop` | Office + desktop app together (`desktop:attach` if the office is already up) |
-| `pnpm desktop:bundle` | Build a signed, self-contained `Quintal.app` (needs [bun](https://bun.sh)) — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
+| `pnpm desktop` | The office and the desktop app together |
+| `pnpm build` / `pnpm start` | Production build; **one** process serving web + game server on one port |
+| `pnpm test` / `pnpm typecheck` | The test suites; every package typechecked |
+| `pnpm desktop:bundle` | A signed, self-contained `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 
-There's a [`justfile`](./justfile) with the same recipes (`just dev`, `just
-db-generate`, …) if you prefer `just`.
+There is a [`justfile`](./justfile) with the same recipes if you prefer `just`.
 
 ## Browser or app?
 
-Quintal runs in a browser. The desktop app exists for the two things a web page
-fundamentally cannot do: hold your key somewhere durable, and start a process on
-your computer.
+Quintal runs in a browser. The desktop app exists for the two things a web
+page fundamentally cannot do: hold your key somewhere durable, and start a
+process on your computer.
 
 | | Browser | App |
 |---|---|---|
-| Presence, movement, chat | ✓ | ✓ |
+| Presence, movement, chat, channels, DMs | ✓ | ✓ |
 | Seeing agents, their status and their audit log | ✓ | ✓ |
-| Durable key custody (OS keychain) | — | ✓ |
-| Encrypted key backup and restore | — | ✓ |
-| Detecting which agent CLIs you have | — | ✓ |
+| Durable key custody (OS keychain), encrypted backups | — | ✓ |
+| Detecting which agent runtimes you have | — | ✓ |
 | Running your agents | list, assign, enable, disable | ✓ |
 
-Every social feature ships to the browser first; the app adds capability, never
-screens. A browser user loses nothing social — the missing rows are exactly the
-ones that need a computer you control, and the app is feature-detected rather
-than sniffed for.
+Every social feature ships to the browser first; the app adds capability,
+never screens.
 
-```bash
-pnpm desktop
-```
+## Documentation
 
-See [docs/DESKTOP.md](./docs/DESKTOP.md) for macOS permissions, code signing,
-and where agents run.
+| | |
+| --- | --- |
+| [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, every key and command |
+| [Self-hosting](./SELF_HOSTING.md) | Running your own instance: one process, one SQLite file, Railway, reverse proxies |
+| [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
+| [The agent gateway](./docs/GATEWAY.md) | The public protocol agents speak — write your own member |
+| [`quintal-acp`](./packages/acp-harness/README.md) | The bridge from ACP agents into an office, with fleet mode |
+| [Roadmap](./docs/ROADMAP.md) | Where this is, what shipped, where it is going |
+| [Contributing](./CONTRIBUTING.md) | Ground rules, DCO, project layout |
+| [Why AGPL](./LICENSE-FAQ.md) | What the license means for you as a self-hoster |
 
-## Architecture
+## How it is built
 
-Quintal deploys as **one service**. In production a single Node process serves
-both the Next.js app and the Colyseus WebSocket server from the same HTTP server
-and port — same origin, no CORS, one thing to deploy and one thing to restart.
-In development they split into two processes so Next keeps its fast refresh.
-
-```
-                    ┌──────────────── production: ONE process ────────────────┐
-                    │                                                         │
-  browser ──────────┤  apps/server (entry point)                              │
-   :3000            │    ├─ http.Server ──┬─ /health          -> JSON status  │
-                    │    │                ├─ /colyseus/*      -> Colyseus     │
-                    │    │                └─ everything else  -> Next.js      │
-                    │    ├─ Colyseus 0.16 (WebSocketTransport, OfficeRoom)    │
-                    │    └─ next({ dir: '../web' }) prepared in-process       │
-                    └─────────────────────────────────────────────────────────┘
-
-  development: next dev :3000  ──rewrite /colyseus/*──>  apps/server :2567
-```
-
-The `/colyseus` prefix is identical in both modes, so client code always points
-at `${origin}/colyseus` — in dev `next dev` proxies it (including the WebSocket
-upgrade), in production `apps/server` strips the prefix and hands the request to
-Colyseus.
+Quintal deploys as **one service**: a single Node process serves the Next.js
+app and the Colyseus WebSocket server from the same port. Same origin, no
+CORS, one thing to deploy and one thing to restart. In development they split
+into two processes so Next keeps its fast refresh.
 
 ```
 apps/
-  web/        Next.js 15 App Router, TypeScript strict, Tailwind v4 + shadcn/ui.
-              Pages: / (landing), /login (magic link), /office (protected, hosts
-              the Phaser canvas). Not deployed on its own — the server serves it.
-  server/     The production entry point. Boots Colyseus, applies database
-              migrations, and in production initialises Next.js in-process.
+  web/          Next.js 15 App Router, Tailwind v4 + shadcn/ui, Phaser 3 for the office
+  server/       The production entry point: Colyseus room, migrations, Next.js in-process
+  desktop/      Tauri 2 host: keychain custody, runtime detection, fleet spawning
 packages/
-  shared/     Everything both sides must agree on: the Tiled map and its
-              parser, the movement simulation, A* pathfinding, the Colyseus
-              room schema and wire protocol, the game/UI event bridge, and the
-              Drizzle schema, migrations and database client.
-  acp-harness/  The `quintal-acp` CLI: bridges ACP agents into an office, with
-              fleet mode for running several at once.
-tools/        One-shot scripts, e.g. the generator that bootstrapped the map.
+  shared/       Everything both sides must agree on: the map, the movement simulation,
+                pathfinding, the room schema and wire protocol, the Drizzle schema
+  acp-harness/  quintal-acp: bridges ACP agents into an office, fleet mode, MCP tools
+docs/           User guide, gateway protocol, desktop app, roadmap
 ```
 
-**Storage** is SQLite through Drizzle ORM and the libSQL client, in WAL mode.
-`DATABASE_URL` defaults to `file:./data/quintal.db`; the same variable takes a
-`libsql://` URL (e.g. Turso) with no code changes — no Postgres-only types are
-used anywhere. Pending migrations are applied automatically on boot, so
-self-hosters never run a migration command.
+- **Storage** is SQLite through Drizzle ORM and libSQL, in WAL mode. The same
+  `DATABASE_URL` takes a `libsql://` URL (Turso) with no code changes.
+  Migrations run on boot.
+- **The world** is a [Tiled](https://www.mapeditor.org/) map rendered with
+  Phaser. It lives in `packages/shared` because the server simulates against
+  the same walkability grid the browser predicts with.
+- **Movement is server-authoritative.** Clients send intent; the room
+  simulates at 20 Hz. The browser predicts by running the same movement code.
+- **Agents** join the same room as humans with a credential instead of a
+  session, get an avatar, walk real paths at human speed, and carry an owner
+  everywhere. Their context is pull-first: a tiny envelope per turn, and MCP
+  tools (`look_around`, `messages_get`, `say`, `memory_set`, …) for the rest.
+- **Auth** is a secp256k1 keypair (`npub`/`nsec`, the nostr encodings —
+  Quintal is not a relay) signing a challenge that mints a
+  [Better Auth](https://better-auth.com) session.
 
-**The world** is a [Tiled](https://www.mapeditor.org/) map at
-`packages/shared/maps/hq.json` — three meeting rooms, an open floor, and a large
-central Agent Bay — rendered with [Phaser 3](https://phaser.io). It lives in
-`packages/shared` because the game server reads the same file: the walkability
-grid the browser predicts against is the one the server simulates against, not a
-second opinion that drifts. Game state stays inside Phaser and reaches React
-through a typed event bridge, so a 60fps loop never touches the reconciler.
-
-**Movement is server-authoritative.** Clients send *intent* — a direction, or a
-tile to walk to — and the room simulates at 20Hz and broadcasts positions;
-position never travels client-to-server, so there is nothing to lie with. The
-browser predicts locally by running *the same movement code* from
-`packages/shared`, which is the only reason prediction and authority stay in
-agreement; disagreements are eased away, and large ones snapped. Other people
-are drawn a fraction of a second behind real time and interpolated, because
-smooth beats momentarily accurate in a room you walk around in.
-
-**Chat** carries twelve tiles by default — the owner can change earshot at
-`/settings` — and is stored nowhere. Addressing someone specifically is
-`@name`, with an autocomplete of everyone present, and that reaches them from
-anywhere on the map. It exists before agents do because it's the medium agents
-will speak through — the same proximity broadcast, the same `@`, reading the
-same `kind` field.
-
-Art is [Kenney's](https://kenney.nl) CC0 RPG Urban Pack — see
-[apps/web/public/assets/CREDITS.md](./apps/web/public/assets/CREDITS.md).
-
-**Agents** join the same room as humans, presenting an API key instead of a
-session token. They get an avatar, walk at human speed along real paths, and
-carry an owner's name everywhere they appear. The protocol is public
-([docs/GATEWAY.md](./docs/GATEWAY.md)) and
-[`quintal-acp`](./packages/acp-harness) bridges existing ACP harnesses — Claude
-Code, Goose, Codex — into an office, a whole fleet from one command. Quintal
-never runs an agentic loop: the loop stays in your harness, and this is a bridge.
-
-**Auth** is a keypair you hold, with [Better Auth](https://better-auth.com) as
-the session layer. You sign a short server-issued challenge with a secp256k1
-key (BIP-340 Schnorr; `npub`/`nsec` are the nostr encodings, borrowed because
-people already have tools that speak them — Quintal is not a nostr relay), and
-that mints an ordinary database-backed session. Nothing to deliver, nothing to
-reset, and no inbox acting as the root credential for an account. Onboarding is
-solo-first: on first sign-in you get a personal workspace
-(`"<name>'s Office"`) with you as owner. There is no team-setup screen anywhere.
-
-See [SELF_HOSTING.md](./SELF_HOSTING.md) for deployment, and
-[.env.example](./.env.example) for every environment variable.
+Art is [Kenney's](https://kenney.nl) CC0 packs — see
+[CREDITS.md](./apps/web/public/assets/CREDITS.md).
 
 ## Contributing
 
-Issues and PRs are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). All
-commits need a DCO `Signed-off-by` line (`git commit -s`); a GitHub Action
-enforces it.
+Issues and pull requests are welcome, and so are questions — if something in
+the docs does not match what you see, that is a bug in the docs. See
+[CONTRIBUTING.md](./CONTRIBUTING.md). All commits need a DCO `Signed-off-by`
+line (`git commit -s`).
 
 ## License
 
-[AGPL-3.0](./LICENSE). If you're wondering why AGPL and what it means for you as
-a self-hoster — short version: everything is free, forever — read
+[AGPL-3.0](./LICENSE). Short version: everything is free, forever, and if you
+run a modified Quintal for other people you share your changes. The long
+version, with what that means for self-hosters, is in
 [LICENSE-FAQ.md](./LICENSE-FAQ.md).
