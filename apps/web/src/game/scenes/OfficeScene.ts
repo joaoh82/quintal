@@ -260,7 +260,9 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     // "Last action" means something a person would notice, not every patch.
-    if (player.moving || player.status !== avatar.lastStatus) {
+    // An idle wander is the office moving the avatar, not the agent acting:
+    // the roster keeps saying "idle" rather than "now".
+    if ((player.moving && !player.idle) || player.status !== avatar.lastStatus) {
       this.#lastAction.set(sessionId, Date.now());
       avatar.lastStatus = player.status;
     }

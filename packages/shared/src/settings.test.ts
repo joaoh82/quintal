@@ -27,6 +27,14 @@ describe('normaliseSettings', () => {
   it('allows zero reply window, which turns the behaviour off', () => {
     assert.equal(normaliseSettings({ replyWindowSeconds: 0 }).replyWindowSeconds, 0);
   });
+
+  it('leaves idle life on unless an office turned it off', () => {
+    assert.equal(normaliseSettings(null).idleLife, true);
+    assert.equal(normaliseSettings({}).idleLife, true);
+    assert.equal(normaliseSettings({ idleLife: false }).idleLife, false);
+    // A row written as 0/1 by the database, not a boolean.
+    assert.equal(normaliseSettings({ idleLife: 0 as unknown as boolean }).idleLife, false);
+  });
 });
 
 describe('addressing', () => {

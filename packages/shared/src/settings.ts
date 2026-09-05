@@ -42,6 +42,12 @@ export interface OfficeSettings {
    * person who asked. Zero disables the behaviour entirely.
    */
   replyWindowSeconds: number;
+  /**
+   * Whether idle agents live a little — wander their zone, doze off, stop
+   * for a wordless chat — or stand perfectly still. Costs no tokens either
+   * way; this is about what the office looks like, not what it spends.
+   */
+  idleLife: boolean;
 }
 
 /** Long enough for "Rockflow Engineering", short enough to sit on a card. */
@@ -53,6 +59,7 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   chatRadiusTiles: 12,
   walkUpRadiusTiles: 3,
   replyWindowSeconds: 90,
+  idleLife: true,
 };
 
 /** Bounds the UI enforces and the server re-enforces. */
@@ -104,6 +111,9 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
       SETTING_LIMITS.replyWindowSeconds.min,
       SETTING_LIMITS.replyWindowSeconds.max,
     ),
+    // Absent means the default, not "off": a row written before the switch
+    // existed describes an office that never chose.
+    idleLife: raw?.idleLife === undefined ? DEFAULT_OFFICE_SETTINGS.idleLife : Boolean(raw.idleLife),
   };
 }
 

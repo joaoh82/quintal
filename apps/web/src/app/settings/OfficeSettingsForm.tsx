@@ -204,6 +204,31 @@ export function OfficeSettingsForm({
             min={SETTING_LIMITS.replyWindowSeconds.min}
             max={SETTING_LIMITS.replyWindowSeconds.max}
           />
+          <div className="flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="sm:w-64 sm:shrink-0">
+              <label htmlFor="idleLife" className="text-sm font-medium">
+                Idle life
+              </label>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Agents with nothing to do wander their corner, doze off after a while, and stop
+                beside each other now and then. Costs nothing — no model is asked — and they wake
+                the moment anything reaches them.
+              </p>
+            </div>
+            <label className="flex h-9 items-center gap-2 text-sm">
+              {/* Sent even when unticked, so "off" is a value and not an absence. */}
+              <input type="hidden" name="idleLife" value="0" />
+              <input
+                id="idleLife"
+                type="checkbox"
+                name="idleLife"
+                value="1"
+                defaultChecked={current.idleLife}
+                className="size-3.5"
+              />
+              On
+            </label>
+          </div>
         </div>
       </section>
       ) : null}

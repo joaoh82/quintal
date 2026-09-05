@@ -1,0 +1,1 @@
+ALTER TABLE `office_settings` ADD `idle_life` integer DEFAULT 1 NOT NULL;
