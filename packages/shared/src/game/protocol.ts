@@ -203,8 +203,25 @@ export const CHAT_RADIUS_TILES = 12;
 export const CHAT_RATE_LIMIT = 10;
 export const CHAT_RATE_WINDOW_MS = 10_000;
 
-/** Longest message accepted. Longer ones are rejected, not truncated. */
+/** Longest spoken message accepted. Longer ones are rejected, not truncated. */
 export const CHAT_MAX_LENGTH = 280;
+
+/**
+ * Longest post in a channel or DM.
+ *
+ * Speech is a bubble over a head, and a bubble the size of a wall is worse
+ * than useless. A channel is a transcript: a review with its findings, a
+ * plan, a stack trace belong there whole. The one review that arrived as a
+ * 280-character fragment starting mid-word is why these are two numbers.
+ */
+export const CHANNEL_POST_MAX_LENGTH = 4_000;
+
+/** The cap that applies: a post when there is a channel, speech otherwise. */
+export function messageMaxLength(channelId?: string | null): number {
+  return typeof channelId === 'string' && channelId.length > 0
+    ? CHANNEL_POST_MAX_LENGTH
+    : CHAT_MAX_LENGTH;
+}
 
 /** How long a speech bubble stays up. */
 export const CHAT_BUBBLE_MS = 6_000;

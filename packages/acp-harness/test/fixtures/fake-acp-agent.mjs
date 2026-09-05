@@ -15,6 +15,9 @@
  *   FAKE_RECORD         append every received request to this file as JSONL
  *   FAKE_DELAY_MS       pause this long mid-turn, so a status line is observable
  *   FAKE_WARNING        emit "Warning: <text>\n\n" as one message chunk before the reply
+ *   FAKE_TOOL_CALL      "say:{\"text\":\"on it\"}": call a quintal tool mid-turn, before
+ *                       the reply, the way the MCP server would — straight at the bridge
+ *                       whose address and token arrived with session/new
  *   FAKE_MODELS         "a,b,c": advertise a model config option; first is current
  *   FAKE_MODELS_GROUPED advertise the options grouped, as some adapters do
  */
@@ -27,6 +30,31 @@ const tool = process.env.FAKE_TOOL;
 /** A runtime notice, sent as its own message chunk ahead of the reply — codex-acp's shape. */
 const warning = process.env.FAKE_WARNING;
 const permission = process.env.FAKE_PERMISSION;
+/**
+ * A tool to call during the turn. The real MCP server is a thin forwarder to
+ * the harness's loopback bridge (see `mcp/server.ts`); standing in for it here
+ * exercises the same path without spawning a second process per test.
+ */
+const toolCall = parseToolCall(process.env.FAKE_TOOL_CALL);
+/** Where the bridge is, as the harness told us at session/new. */
+let bridge = null;
+
+function parseToolCall(spec) {
+  if (!spec) return null;
+  const colon = spec.indexOf(':');
+  if (colon < 0) return { name: spec, args: {} };
+  return { name: spec.slice(0, colon), args: JSON.parse(spec.slice(colon + 1)) };
+}
+
+async function callTool({ name, args }) {
+  if (!bridge) throw new Error('no bridge advertised at session/new');
+  const response = await fetch(bridge.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-quintal-token': bridge.token },
+    body: JSON.stringify({ tool: name, args }),
+  });
+  return response.json();
+}
 const crashAfter = process.env.FAKE_CRASH_AFTER
   ? Number(process.env.FAKE_CRASH_AFTER)
   : Number.POSITIVE_INFINITY;
@@ -112,6 +140,10 @@ async function handle(message) {
 
     case 'session/new': {
       const session = { sessionId: `fake-session-${nextId++}` };
+      const env = params?.mcpServers?.[0]?.env ?? [];
+      const url = env.find((entry) => entry.name === 'QUINTAL_BRIDGE_URL')?.value;
+      const token = env.find((entry) => entry.name === 'QUINTAL_BRIDGE_TOKEN')?.value;
+      if (url && token) bridge = { url, token };
       // FAKE_MODELS="fast,smart" advertises a model option the way an ACP
       // agent does, first entry current. Grouped when FAKE_MODELS_GROUPED is
       // set, because adapters ship both shapes.
@@ -168,6 +200,17 @@ async function handle(message) {
       }
 
       if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+
+      if (toolCall) {
+        const result = await callTool(toolCall);
+        // Recorded like a request, so a test can read what the tool answered.
+        if (process.env.FAKE_RECORD) {
+          appendFileSync(
+            process.env.FAKE_RECORD,
+            `${JSON.stringify({ method: '_test/tool_result', params: { ...toolCall, result } })}\n`,
+          );
+        }
+      }
 
       if (permission) {
         const outcome = await request('session/request_permission', {

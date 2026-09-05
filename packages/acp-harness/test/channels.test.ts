@@ -197,6 +197,32 @@ describe('an agent in a channel', () => {
     );
   });
 
+  it('posts a long reply to a channel whole, where aloud it would be bubbled', async () => {
+    const review = [
+      'Two findings on #52.',
+      '',
+      '1. The balloon offset is applied before the sprite is scaled, so it lands over the neighbour.',
+      '2. The emote sweep runs on every tick; a map of expiries would do it once per expiry.',
+      '3. The frame advances from wall-clock time, so a tab left in the background jumps frames when it wakes.',
+      '4. The CSS sprite and the Phaser sheet are sized separately; one constant would keep them aligned.',
+      '',
+      'Neither of the first two blocks the merge, but the first is visible to everyone in the room.',
+    ].join('\n');
+    assert.ok(review.length > 280, 'long enough that speech would cut it');
+    process.env.FAKE_REPLY = review;
+    try {
+      const { handlers, said } = await start();
+
+      handlers.channelChat?.(line('@Bob review #52 please', true));
+      await until(() => said.length > 0, 'a reply');
+      await settle();
+
+      assert.deepEqual(said, [[review, ENGINEERING.id]], 'one post, lines and all');
+    } finally {
+      delete process.env.FAKE_REPLY;
+    }
+  });
+
   it('treats a direct message as addressed, and answers only the sender', async () => {
     const { handlers, record, said } = await start();
 

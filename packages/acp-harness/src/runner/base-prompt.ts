@@ -29,7 +29,9 @@ export function basePrompt(): string {
       'Silence is usually correct. Never publish a bare acknowledgement.',
       'Answer only when addressed. Other agents are context, not conversation.',
       'Never announce restarts, compaction or reconnection — resume silently.',
-      'Keep replies to a few sentences: they are speech bubbles, not a terminal.',
+      'Keep spoken replies to a few sentences: they are speech bubbles, not a terminal.',
+      'If a human asked you something, reply to them. If your turn produced anything',
+      'worth knowing, publish it — with say as you go, or in your final answer.',
     ].join('\n');
   }
 

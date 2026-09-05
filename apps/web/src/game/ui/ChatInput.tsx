@@ -48,6 +48,8 @@ export interface ChatInputProps {
   hint?: string | undefined;
   /** Keep focus on mount and whenever `focused` becomes true. */
   autoFocus?: boolean;
+  /** Longest line accepted here: speech is short, a channel post may be a review. */
+  maxLength?: number;
 }
 
 /**
@@ -69,6 +71,7 @@ export function ChatInput({
   placeholder,
   hint,
   autoFocus,
+  maxLength,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState('');
@@ -276,7 +279,7 @@ export function ChatInput({
       <input
         ref={inputRef}
         value={draft}
-        maxLength={CHAT_MAX_LENGTH}
+        maxLength={maxLength ?? CHAT_MAX_LENGTH}
         placeholder={placeholder}
         onChange={(event) => {
           setDraft(event.target.value);

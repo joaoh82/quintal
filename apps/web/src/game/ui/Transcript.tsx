@@ -107,7 +107,7 @@ export function Transcript({
               {message.fromName}
             </span>
             <span className="text-white/45">: </span>
-            <span className="text-white/90">{message.text}</span>
+            <span className="whitespace-pre-wrap break-words text-white/90">{message.text}</span>
           </p>
         ))
       )}

@@ -1,6 +1,12 @@
 'use client';
 
-import { FLOOR_ZONE_ID, FLOOR_ZONE_LABEL, channelLabel, type RosterEntry } from '@quintal/shared';
+import {
+  FLOOR_ZONE_ID,
+  FLOOR_ZONE_LABEL,
+  channelLabel,
+  messageMaxLength,
+  type RosterEntry,
+} from '@quintal/shared';
 import { useEffect, useMemo } from 'react';
 
 import { NEARBY, channelKey, parseKey, zoneKey, type Conversations } from '../useConversations';
@@ -257,6 +263,7 @@ export function CommsOverlay({
             onSend={conversations.send}
             onFocusChange={() => {}}
             onEscape={onClose}
+            maxLength={messageMaxLength(activeChannel?.id)}
             placeholder={
               activeChannel?.kind === 'dm'
                 ? `Message ${activeChannel.name}`

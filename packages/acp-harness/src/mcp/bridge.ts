@@ -31,9 +31,22 @@ export interface BridgeHandle {
   close: () => Promise<void>;
 }
 
+/**
+ * What the runner knows and the gateway does not.
+ *
+ * `say` posts into the conversation the current turn is in, and only the
+ * runner knows which that is — the gateway sees a socket, not a turn. Without
+ * the hook a `say` is spoken aloud, which is right for a bridge started on
+ * its own and wrong for one inside a channel turn.
+ */
+export interface BridgeHooks {
+  say?: (text: string) => unknown;
+}
+
 export async function startBridge(
   gateway: Gateway,
   onCall?: (tool: string, args: Record<string, unknown>) => void,
+  hooks: BridgeHooks = {},
 ): Promise<BridgeHandle> {
   const token = randomBytes(24).toString('base64url');
 
@@ -60,7 +73,7 @@ export async function startBridge(
       onCall?.(call.tool, call.args ?? {});
 
       try {
-        const result = await dispatch(gateway, call);
+        const result = await dispatch(gateway, call, hooks);
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: true, result }));
       } catch (error: unknown) {
@@ -112,8 +125,24 @@ export function resolveZone(zones: readonly AgentZone[], wanted: string): string
   return match.id;
 }
 
-async function dispatch(gateway: Gateway, call: BridgeCall): Promise<unknown> {
+async function dispatch(
+  gateway: Gateway,
+  call: BridgeCall,
+  hooks: BridgeHooks,
+): Promise<unknown> {
   switch (call.tool) {
+    case 'say': {
+      const scopes = gateway.ready?.scopes ?? [];
+      if (!scopes.includes('chat')) {
+        throw new Error('you do not have the "chat" scope, so you cannot speak or post');
+      }
+      const text = String(call.args.text ?? '').trim();
+      if (text.length === 0) throw new Error('say needs some text');
+      if (hooks.say) return hooks.say(text);
+      gateway.say(text);
+      return { posted_to: 'aloud, to whoever is nearby', parts: 1 };
+    }
+
     case 'look_around': {
       // The zone list rides along: "look at the room" reasonably includes what
       // other rooms exist, and an agent that can walk needs somewhere to aim.

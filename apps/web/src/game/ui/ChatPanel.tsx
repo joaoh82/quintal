@@ -1,6 +1,6 @@
 'use client';
 
-import { channelLabel, type RosterEntry } from '@quintal/shared';
+import { channelLabel, messageMaxLength, type RosterEntry } from '@quintal/shared';
 
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
@@ -109,6 +109,7 @@ export function ChatPanel({
         onSend={send}
         onFocusChange={onFocusChange}
         onEscape={() => onFocusChange(false)}
+        maxLength={messageMaxLength(activeChannel?.id)}
         placeholder={
           focused
             ? activeChannel?.kind === 'dm'
