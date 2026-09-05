@@ -89,6 +89,9 @@ jobs:
 
       - run: pnpm build
 
+      - name: Build the marketing website
+        run: pnpm --filter @quintal/website build
+
       # The Rust host reads the runtime catalogue as generated data, so a
       # change to the TypeScript that is not regenerated means the office and
       # the host disagree about what a runtime id means — and the host is what
