@@ -44,6 +44,14 @@ const AGENT_LABEL_STYLE = {
   padding: { x: 4, y: 1 },
 } as const;
 
+/**
+ * Where the balloon sits relative to the feet: centred over the head, clear
+ * of the nameplate (which spans roughly y−36 to y−22). One constant for the
+ * two places that position it — the first version offset it to the right
+ * and it read as belonging to whoever stood there.
+ */
+const EMOTE_OFFSET = { x: 0, y: -40 } as const;
+
 /** Glyph on every agent nameplate. Non-human, and obviously so. */
 const AGENT_GLYPH = '◆';
 
@@ -151,10 +159,11 @@ export class Avatar {
         .setOrigin(0.5, 1)
         .setDepth(19)
         .setVisible(player.status.length > 0);
-      // The balloon: up and to the right of the nameplate, above a speech
-      // bubble, so a laugh and the line that caused it can both be read.
+      // The balloon: centred over the head, above the nameplate. A speech
+      // bubble sits a little higher still, so a laugh and the line that
+      // caused it can both be read.
       this.#emoteSprite = scene.add
-        .sprite(player.x + 16, player.y - 40, ASSETS.emotes, 0)
+        .sprite(player.x + EMOTE_OFFSET.x, player.y + EMOTE_OFFSET.y, ASSETS.emotes, 0)
         .setOrigin(0.5, 1)
         .setDepth(31)
         .setVisible(false);
@@ -272,7 +281,7 @@ export class Avatar {
     this.#ring?.setPosition(x, y + 6);
     this.#statusLine?.setPosition(x, y - 12);
     if (this.#bubble) this.#bubble.setPosition(x, y - 36);
-    this.#emoteSprite?.setPosition(x + 16, y - 40);
+    this.#emoteSprite?.setPosition(x + EMOTE_OFFSET.x, y + EMOTE_OFFSET.y);
   }
 
   setFacing(dir: Direction, moving: boolean): void {
