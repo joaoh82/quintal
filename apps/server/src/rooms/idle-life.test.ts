@@ -16,8 +16,11 @@ import {
   wake,
   wanderTarget,
   zoneIdAt,
+  BANTER_AFTERGLOW_MS,
   BANTER_DAILY_CAP,
   BANTER_PER_AGENT_MS,
+  BANTER_STAGE_MS,
+  banterOver,
   mayBanter,
   newBanterLedger,
   noteBanter,
@@ -254,5 +257,33 @@ describe('whether two idle agents may actually speak', () => {
 
   it('never pairs an agent with itself', () => {
     assert.equal(mayBanter({ ...allowed, b: 'agent-a' }, newBanterLedger()), false);
+  });
+});
+
+describe('the clock on an exchange', () => {
+  const t0 = 1_000_000;
+
+  it('gives each line its own full stage, however long the first took', () => {
+    // A is asked at t0 and takes 40s to answer.
+    const a = { stage: 'asked_a' as const, since: t0 };
+    assert.equal(banterOver(a, t0 + 40_000), false, 'still within the first stage');
+    assert.equal(banterOver(a, t0 + BANTER_STAGE_MS), true, 'and it would have expired at the limit');
+
+    // B is asked at t0 + 40s: a fresh stage, not the five seconds left of A's.
+    const b = { stage: 'asked_b' as const, since: t0 + 40_000 };
+    assert.equal(banterOver(b, t0 + BANTER_STAGE_MS), false, 'B is not cut off by A\'s clock');
+    assert.equal(banterOver(b, t0 + 40_000 + BANTER_STAGE_MS - 1), false);
+    assert.equal(banterOver(b, t0 + 40_000 + BANTER_STAGE_MS), true);
+  });
+
+  it('never ends from the listening side', () => {
+    const listening = { stage: 'listening' as const, since: t0 };
+    assert.equal(banterOver(listening, t0 + 10 * BANTER_STAGE_MS), false);
+  });
+
+  it('lingers a moment after the answer, then parts', () => {
+    const done = { stage: 'done' as const, since: t0 };
+    assert.equal(banterOver(done, t0 + BANTER_AFTERGLOW_MS - 1), false);
+    assert.equal(banterOver(done, t0 + BANTER_AFTERGLOW_MS), true);
   });
 });

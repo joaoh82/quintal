@@ -167,6 +167,18 @@ describe('a moment with a colleague', () => {
     assert.match(prompt, /\[Banter\]/, 'and it was the banter prompt, not a work turn');
     assert.match(prompt, /Marvin/, 'naming the colleague');
     assert.doesNotMatch(prompt, /\[Recent conversation/, 'with no window');
+    // The short preamble, not the priming a work session gets.
+    assert.match(prompt, /You are "Bob"/, 'it is told who it is');
+    assert.doesNotMatch(prompt, /You are working in an office/, 'but not the office manual');
+    assert.doesNotMatch(prompt, /Tools available now/, 'nor a tool list');
+    assert.doesNotMatch(prompt, /Core memory/, 'nor its memory');
+
+    // And no tools on the session: the warmed work session has the tool
+    // server, the banter session does not.
+    const sessions = requests(record)
+      .filter((entry) => entry.method === 'session/new')
+      .map((entry) => (entry.params as { mcpServers?: unknown[] }).mcpServers?.length ?? 0);
+    assert.deepEqual(sessions, [1, 0], 'tools for work, none for a joke');
 
     // The second invitation opens another session: the first was not kept.
     await settle();

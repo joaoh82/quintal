@@ -690,9 +690,16 @@ export class AgentRunner {
         });
 
     // A session nobody has spoken to yet gets the standing instructions on the
-    // front of this turn rather than in a turn of its own.
-    const priming = this.#unprimed.has(scope);
-    const text = priming ? `${await this.#systemPrompt()}\n\n${envelope}` : envelope;
+    // front of this turn rather than in a turn of its own. A banter session
+    // is always new and always thrown away, and gets the short version: who
+    // it is and how its owner wants it to behave — not the office manual,
+    // not its memory, not a tool list it has no tools for.
+    const priming = !banter && this.#unprimed.has(scope);
+    const text = banter
+      ? `${this.#banterPreamble()}\n\n${envelope}`
+      : priming
+        ? `${await this.#systemPrompt()}\n\n${envelope}`
+        : envelope;
 
     this.#responseBuffer = '';
     this.#audit('prompt', { scope, session, envelope, priming });
@@ -777,19 +784,26 @@ export class AgentRunner {
     const bridge = this.#bridge;
     if (!proc || !bridge) throw new Error('agent is not running');
 
+    // A banter session gets no tools: the one turn it lives for is a line
+    // to a colleague, and a model with `say` and `move_to` in reach while
+    // being asked for a joke is a model that can wander off or mention
+    // somebody mid-joke. Cheaper, too — no MCP subprocess, no handshake.
+    const tools = scope.startsWith(BANTER_SCOPE)
+      ? []
+      : [
+          {
+            name: 'quintal-tools',
+            command: process.execPath,
+            args: mcpServerArgs(),
+            env: [
+              { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
+              { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
+            ],
+          },
+        ];
     const created = await proc.newSession({
       cwd: this.config.cwd,
-      mcpServers: [
-        {
-          name: 'quintal-tools',
-          command: process.execPath,
-          args: mcpServerArgs(),
-          env: [
-            { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
-            { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
-          ],
-        },
-      ],
+      mcpServers: tools,
     } as schema.NewSessionRequest);
 
     await this.#applyModel(proc, created);
@@ -880,6 +894,23 @@ export class AgentRunner {
       core.trim().length > 0 ? `\n[Core memory — your own notes]\n${core.trim()}` : '',
       '',
       TOOL_HINT,
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
+  }
+
+  /**
+   * What a banter turn is told about itself: a name, an owner, and the
+   * owner's standing instructions, because a personality is what makes one
+   * agent's joke different from another's. Nothing that costs more.
+   */
+  #banterPreamble(): string {
+    const ready = this.#gateway.ready;
+    const instructions = (ready?.instructions ?? '').trim();
+    return [
+      '[You]',
+      `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
+      instructions.length > 0 ? `\n[Your owner's instructions]\n${instructions}` : '',
     ]
       .filter((line) => line !== '')
       .join('\n');

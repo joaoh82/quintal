@@ -1,4 +1,5 @@
 import {
+  BANTER_DAILY_CAP,
   FLOOR_ZONE_ID,
   emoteForStatus,
   findPath,
@@ -42,12 +43,7 @@ export const SMALL_TALK_MS = 6_000;
 export const SMALL_TALK_REPLY_MS = 2_500;
 /** Banter: at most one exchange per agent in this long. */
 export const BANTER_PER_AGENT_MS = 60 * 60_000;
-/**
- * Banter: at most this many exchanges per office per day, whatever the
- * setting says. A cap in code, because a setting is a thing somebody can
- * leave on, and an API bill is not.
- */
-export const BANTER_DAILY_CAP = 24;
+export { BANTER_DAILY_CAP };
 /** Banter: how long to wait for each line before the moment has passed. */
 export const BANTER_STAGE_MS = 45_000;
 /** Banter: how long both linger after the second line before drifting apart. */
@@ -317,6 +313,27 @@ export function mayBanter(
     if (last !== undefined && input.now - last < BANTER_PER_AGENT_MS) return false;
   }
   return true;
+}
+
+/**
+ * Has this exchange run out of time?
+ *
+ * Only the initiator's stage is on a clock, and each stage gets a fresh
+ * one: the first line has its own deadline, the answer has its own once
+ * the first line has been passed on, and "done" is the short afterglow.
+ * The partner's copy is `listening` and never expires from its own side —
+ * the initiator ends the exchange for both, so a partner that was asked
+ * late is not cut off by a clock that started before it was asked.
+ */
+export function banterOver(banter: Banter, now: number): boolean {
+  switch (banter.stage) {
+    case 'listening':
+      return false;
+    case 'done':
+      return now - banter.since >= BANTER_AFTERGLOW_MS;
+    default:
+      return now - banter.since >= BANTER_STAGE_MS;
+  }
 }
 
 /** Spend one exchange on these two. */

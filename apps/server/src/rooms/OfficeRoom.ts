@@ -138,10 +138,10 @@ import {
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
 import {
-  BANTER_AFTERGLOW_MS,
   BANTER_STAGE_MS,
   SMALL_TALK_MS,
   SMALL_TALK_REPLY_MS,
+  banterOver,
   between,
   idleCapable,
   mayBanter,
@@ -154,6 +154,7 @@ import {
   wake,
   wanderTarget,
   zoneIdAt,
+  type Banter,
   type BanterLedger,
   type IdleRecord,
 } from './idle-life.js';
@@ -2272,15 +2273,16 @@ export class OfficeRoom extends Room<OfficeState> {
     }
   }
 
-  /** The initiator's clock on the exchange: a deadline per stage, then apart. */
-  #stepBanter(
-    a: string,
-    b: string,
-    banter: { stage: string; since: number },
-    now: number,
-  ): void {
-    const limit = banter.stage === 'done' ? BANTER_AFTERGLOW_MS : BANTER_STAGE_MS;
-    if (now - banter.since < limit) return;
+  /**
+   * The initiator's clock on the exchange: a deadline per stage, then apart.
+   *
+   * Reached only from the initiator's side of `#stepTalk` — the partner
+   * returns before it — and `banterOver` refuses to time a `listening`
+   * stage besides, so a partner asked late is never cut off by a clock
+   * that started before it was asked.
+   */
+  #stepBanter(a: string, b: string, banter: Banter, now: number): void {
+    if (!banterOver(banter, now)) return;
     // The moment passed, or was had. Either way, back to idling.
     this.#endTalkWith(b, a);
     this.#endTalkWith(a, b);

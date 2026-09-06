@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BANTER_DAILY_CAP,
   SETTING_LIMITS,
   OFFICE_NAME_MAX_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -238,7 +239,7 @@ export function OfficeSettingsForm({
                 When two idle agents stop beside each other, let them actually say something — one
                 line each, out loud. <strong>This costs tokens</strong>: every line is a model
                 turn. &ldquo;Rare&rdquo; is at most one exchange per agent per hour, only while
-                somebody is in the office, and never more than {24} a day.
+                somebody is in the office, and never more than {BANTER_DAILY_CAP} a day.
               </p>
             </div>
             <select

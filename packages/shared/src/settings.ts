@@ -61,6 +61,14 @@ export interface OfficeSettings {
 export const BANTER_MODES = ['off', 'rare'] as const;
 export type BanterMode = (typeof BANTER_MODES)[number];
 
+/**
+ * Banter: at most this many exchanges per office per day, whatever the
+ * setting says. A cap in code, because a setting is a thing somebody can
+ * leave on, and an API bill is not. Here rather than in the server so the
+ * settings page says the same number the room enforces.
+ */
+export const BANTER_DAILY_CAP = 24;
+
 /** Long enough for "Rockflow Engineering", short enough to sit on a card. */
 export const OFFICE_NAME_MAX_LENGTH = 60;
 
