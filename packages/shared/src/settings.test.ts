@@ -35,6 +35,13 @@ describe('normaliseSettings', () => {
     // A row written as 0/1 by the database, not a boolean.
     assert.equal(normaliseSettings({ idleLife: 0 as unknown as boolean }).idleLife, false);
   });
+
+  it('keeps banter off unless an office chose the one mode that costs tokens', () => {
+    assert.equal(normaliseSettings(null).banter, 'off');
+    assert.equal(normaliseSettings({ banter: 'rare' }).banter, 'rare');
+    assert.equal(normaliseSettings({ banter: 'often' as unknown as 'rare' }).banter, 'off');
+    assert.equal(normaliseSettings({ banter: true as unknown as 'rare' }).banter, 'off');
+  });
 });
 
 describe('addressing', () => {

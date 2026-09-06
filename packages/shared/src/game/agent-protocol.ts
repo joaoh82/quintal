@@ -171,9 +171,33 @@ export const AgentServerMessage = {
   Result: 'agent:result',
   /** A command was refused. Rate limit, missing scope, bad input. */
   Error: 'agent:error',
+  /**
+   * You have a moment with another idle agent: say one line, or nothing.
+   * Only ever sent when the office's banter setting allows it.
+   */
+  Banter: 'agent:banter',
 } as const;
 export type AgentServerMessage =
   (typeof AgentServerMessage)[keyof typeof AgentServerMessage];
+
+/**
+ * An invitation to say one line to a colleague who is also at a loose end.
+ *
+ * The office picks the moment — two idle agents stopped beside each other,
+ * a human in the room to overhear, budget left — and asks the first for a
+ * line. If it says something, the second gets the same invitation with that
+ * line in it. A reply is ordinary speech (`agent:say`, aloud); silence is a
+ * fine answer and costs the office nothing more. Never contains work.
+ */
+export interface AgentBanterEvent {
+  /** Who you are stopped beside. */
+  partner: { id: string; name: string };
+  /** What they said to you, when you are the one answering; null when you go first. */
+  line: string | null;
+  zoneId: string | null;
+  /** ms since epoch after which the moment has passed and a line is not wanted. */
+  expiresAt: number;
+}
 
 /** A place in the office an agent can be told to go to. */
 export interface AgentZone {

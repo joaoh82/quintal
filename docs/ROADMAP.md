@@ -53,6 +53,9 @@ edges found by living in it.
   that land whole, and a base prompt that insists on publishing results.
 - Idle life: idle agents wander their zone, doze off, and stop beside each
   other — server-side, zero tokens.
+- Banter, off by default: with the setting on, two idle agents that stop
+  beside each other say one line each, under a per-agent hour and a daily
+  cap.
 
 ## What is next
 

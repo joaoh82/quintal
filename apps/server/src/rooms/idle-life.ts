@@ -40,11 +40,36 @@ export const SMALL_TALK_MAX_MS = 300_000;
 export const SMALL_TALK_MS = 6_000;
 /** How long the second party takes to answer with a balloon of their own. */
 export const SMALL_TALK_REPLY_MS = 2_500;
+/** Banter: at most one exchange per agent in this long. */
+export const BANTER_PER_AGENT_MS = 60 * 60_000;
+/**
+ * Banter: at most this many exchanges per office per day, whatever the
+ * setting says. A cap in code, because a setting is a thing somebody can
+ * leave on, and an API bill is not.
+ */
+export const BANTER_DAILY_CAP = 24;
+/** Banter: how long to wait for each line before the moment has passed. */
+export const BANTER_STAGE_MS = 45_000;
+/** Banter: how long both linger after the second line before drifting apart. */
+export const BANTER_AFTERGLOW_MS = 4_000;
 
 /** A number in [0, 1). Injected so tests can decide what "random" picks. */
 export type Rng = () => number;
 
 export type IdlePhase = 'active' | 'wandering' | 'asleep';
+
+/**
+ * Where a banter is, when a small talk is one that speaks.
+ *
+ * Held by the initiator; the partner's talk carries `listening`. The
+ * stages are the two lines the office waits for, then a moment to let the
+ * second one land. Every stage has a deadline: a model that says nothing is
+ * allowed to, and the pair should not stand there forever waiting for it.
+ */
+export interface Banter {
+  stage: 'asked_a' | 'asked_b' | 'done' | 'listening';
+  since: number;
+}
 
 /** A small talk in progress, from the point of view of one party. */
 export interface SmallTalk {
@@ -56,6 +81,8 @@ export interface SmallTalk {
   startedAt: number;
   /** The reply balloon has gone up (the answering party only). */
   answered: boolean;
+  /** Set when this small talk is one where the agents actually speak. */
+  banter: Banter | null;
 }
 
 /** Everything the office remembers about one agent's idle life. */
@@ -236,6 +263,67 @@ export function wanderTarget(
     if (path.every((step) => zoneIdAt(map, step) === homeZone)) return tile;
   }
   return null;
+}
+
+/**
+ * What the office remembers about banter, so the budget holds.
+ *
+ * Keyed by the agent's stable id rather than its session: reconnecting
+ * must not refill an hour, and a restart of the room is the one thing that
+ * does reset the day — accepted, because a room restarts rarely and the
+ * cap is a backstop, not an accountant.
+ */
+export interface BanterLedger {
+  /** The UTC day the count is for, `YYYY-MM-DD`. */
+  day: string;
+  count: number;
+  /** agent id -> when it last bantered. */
+  lastAt: Map<string, number>;
+}
+
+export function newBanterLedger(): BanterLedger {
+  return { day: '', count: 0, lastAt: new Map() };
+}
+
+function dayOf(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * May these two say something to each other right now?
+ *
+ * Every clause is a cost control. The setting is the owner's word; a human
+ * has to be there because nobody performs to an empty room; each agent gets
+ * one exchange an hour; and the office gets a fixed number a day whatever
+ * anybody set. Does not spend anything — `noteBanter` does, once the office
+ * has actually asked.
+ */
+export function mayBanter(
+  input: { setting: string; humansPresent: boolean; a: string; b: string; now: number },
+  ledger: BanterLedger,
+): boolean {
+  if (input.setting !== 'rare') return false;
+  if (!input.humansPresent) return false;
+  if (input.a === input.b) return false;
+
+  if (ledger.day !== dayOf(input.now)) {
+    ledger.day = dayOf(input.now);
+    ledger.count = 0;
+  }
+  if (ledger.count >= BANTER_DAILY_CAP) return false;
+
+  for (const id of [input.a, input.b]) {
+    const last = ledger.lastAt.get(id);
+    if (last !== undefined && input.now - last < BANTER_PER_AGENT_MS) return false;
+  }
+  return true;
+}
+
+/** Spend one exchange on these two. */
+export function noteBanter(ledger: BanterLedger, a: string, b: string, now: number): void {
+  ledger.count += 1;
+  ledger.lastAt.set(a, now);
+  ledger.lastAt.set(b, now);
 }
 
 /**

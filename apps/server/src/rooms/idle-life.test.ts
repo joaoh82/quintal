@@ -16,6 +16,11 @@ import {
   wake,
   wanderTarget,
   zoneIdAt,
+  BANTER_DAILY_CAP,
+  BANTER_PER_AGENT_MS,
+  mayBanter,
+  newBanterLedger,
+  noteBanter,
   type IdleRecord,
 } from './idle-life.js';
 
@@ -116,7 +121,7 @@ describe('the clock of an idle life', () => {
   it('does not wander while stopped for a chat', () => {
     const { record, now } = idleFor(IDLE_AFTER_MS + WANDER_MAX_MS);
     stepIdle(record, { now, busy: false, zoneId: 'bay' }, rngOf(0));
-    record.talk = { partner: 'other', initiator: true, startedAt: now, answered: false };
+    record.talk = { partner: 'other', initiator: true, startedAt: now, answered: false, banter: null };
     assert.deepEqual(stepIdle(record, { now: now + WANDER_MAX_MS, busy: false, zoneId: 'bay' }, rngOf(0)), {
       kind: 'none',
     });
@@ -201,5 +206,53 @@ describe('who stops for a chat', () => {
 
     const later = pickSmallTalk(free, nextTalkAt, 1_000 + 6 * 60_000, rngOf(0, 0, 0.5));
     assert.equal(later.length, 1, 'and off it again');
+  });
+});
+
+describe('whether two idle agents may actually speak', () => {
+  const now = Date.UTC(2026, 8, 6, 12, 0, 0);
+  const allowed = { setting: 'rare', humansPresent: true, a: 'agent-a', b: 'agent-b', now };
+
+  it('is off unless the office turned it on, and never to an empty room', () => {
+    assert.equal(mayBanter({ ...allowed, setting: 'off' }, newBanterLedger()), false);
+    assert.equal(mayBanter({ ...allowed, setting: 'often' }, newBanterLedger()), false, 'unknown is off');
+    assert.equal(mayBanter({ ...allowed, humansPresent: false }, newBanterLedger()), false);
+    assert.equal(mayBanter(allowed, newBanterLedger()), true);
+  });
+
+  it('gives each agent one exchange an hour', () => {
+    const ledger = newBanterLedger();
+    assert.equal(mayBanter(allowed, ledger), true);
+    noteBanter(ledger, 'agent-a', 'agent-b', now);
+
+    assert.equal(mayBanter({ ...allowed, now: now + 10 * 60_000 }, ledger), false, 'both are spent');
+    assert.equal(
+      mayBanter({ ...allowed, b: 'agent-c', now: now + 10 * 60_000 }, ledger),
+      false,
+      'a is spent even with a fresh partner',
+    );
+    assert.equal(
+      mayBanter({ ...allowed, a: 'agent-c', b: 'agent-d', now: now + 10 * 60_000 }, ledger),
+      true,
+      'two fresh agents may',
+    );
+    assert.equal(mayBanter({ ...allowed, now: now + BANTER_PER_AGENT_MS }, ledger), true, 'an hour later');
+  });
+
+  it('stops at the daily cap whatever the setting says, and starts over tomorrow', () => {
+    const ledger = newBanterLedger();
+    for (let i = 0; i < BANTER_DAILY_CAP; i += 1) {
+      const at = now + i * 1_000;
+      assert.equal(mayBanter({ ...allowed, a: `x${i}`, b: `y${i}`, now: at }, ledger), true, `exchange ${i}`);
+      noteBanter(ledger, `x${i}`, `y${i}`, at);
+    }
+    assert.equal(mayBanter({ ...allowed, a: 'fresh-1', b: 'fresh-2', now: now + 60_000 }, ledger), false);
+
+    const tomorrow = now + 24 * 60 * 60_000;
+    assert.equal(mayBanter({ ...allowed, a: 'fresh-1', b: 'fresh-2', now: tomorrow }, ledger), true);
+  });
+
+  it('never pairs an agent with itself', () => {
+    assert.equal(mayBanter({ ...allowed, b: 'agent-a' }, newBanterLedger()), false);
   });
 });

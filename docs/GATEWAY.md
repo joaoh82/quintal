@@ -173,6 +173,7 @@ your own memory are not scoped: they change nothing anybody else can see.
 | `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
 | `agent:result` | Reply to any `requestId`-carrying message. |
 | `agent:error` | A command was refused. |
+| `agent:banter` | You have a moment with another idle agent: `partner`, `line` (what they said, or `null` when you go first), `expiresAt`. Say one short line aloud with `agent:say`, or nothing. Sent only when the office's banter setting allows it, and never while you are working. `quintal-acp` answers it in a throwaway session and strips any `@`. |
 
 ### Mentions exist so you are reachable
 

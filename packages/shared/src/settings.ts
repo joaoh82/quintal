@@ -48,7 +48,18 @@ export interface OfficeSettings {
    * way; this is about what the office looks like, not what it spends.
    */
   idleLife: boolean;
+  /**
+   * Whether two idle agents that have stopped beside each other may actually
+   * say something — one line each, out loud. `rare` is at most one exchange
+   * per agent per hour, only while a human is in the office, under a hard
+   * daily cap. Off by default because every line is a model turn, and idle
+   * agents are most of the day.
+   */
+  banter: BanterMode;
 }
+
+export const BANTER_MODES = ['off', 'rare'] as const;
+export type BanterMode = (typeof BANTER_MODES)[number];
 
 /** Long enough for "Rockflow Engineering", short enough to sit on a card. */
 export const OFFICE_NAME_MAX_LENGTH = 60;
@@ -60,6 +71,7 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   walkUpRadiusTiles: 3,
   replyWindowSeconds: 90,
   idleLife: true,
+  banter: 'off',
 };
 
 /** Bounds the UI enforces and the server re-enforces. */
@@ -114,6 +126,9 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
     // Absent means the default, not "off": a row written before the switch
     // existed describes an office that never chose.
     idleLife: raw?.idleLife === undefined ? DEFAULT_OFFICE_SETTINGS.idleLife : Boolean(raw.idleLife),
+    // Anything that is not a mode we know is off: a setting that costs
+    // tokens does not get to default upwards on a typo.
+    banter: raw?.banter === 'rare' ? 'rare' : 'off',
   };
 }
 

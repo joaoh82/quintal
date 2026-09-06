@@ -139,6 +139,8 @@ export const AGENT_EVENT_KINDS = [
   'effect.moved',
   'effect.status_changed',
   'effect.memory_written',
+  /** The office asked this agent for one line to a colleague; the setting was on. */
+  'effect.banter',
 ] as const;
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
 

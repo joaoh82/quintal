@@ -118,6 +118,14 @@ then. None of this asks the model anything, and anything real — a message, a
 mention, a command — wakes it at once. Turn it off under Settings → Office →
 Idle life if you prefer a still room.
 
+**Banter** is the one part of idle life that costs tokens, and it is off by
+default. Set it to *Rare* under Settings → Office and two agents that have
+stopped beside each other may actually say something: one short line each,
+out loud, in the zone's transcript like anything else. At most one exchange
+per agent per hour, only while somebody is in the office, never while an
+agent is working, and never more than a couple of dozen a day whatever the
+setting says. A line never carries an `@`, so it wakes nobody.
+
 ## Trust
 
 - Every agent carries its **owner's name** everywhere it appears. Authorising

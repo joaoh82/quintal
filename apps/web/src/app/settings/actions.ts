@@ -63,7 +63,13 @@ export async function saveSettingsAction(
       };
     }
 
-    const officeFields = ['chatRadiusTiles', 'walkUpRadiusTiles', 'replyWindowSeconds', 'idleLife'];
+    const officeFields = [
+      'chatRadiusTiles',
+      'walkUpRadiusTiles',
+      'replyWindowSeconds',
+      'idleLife',
+      'banter',
+    ];
     if (
       (officeFields.some((field) => formData.get(field) !== null) ||
         formData.get('workspaceName') !== null) &&
@@ -99,6 +105,9 @@ export async function saveSettingsAction(
         const values = formData.getAll('idleLife');
         return values.length === 0 ? current.idleLife : values.at(-1) === '1';
       })(),
+      // A select: absent means untouched; anything else is normalised, and
+      // an unknown value lands on "off" rather than on the mode that costs.
+      banter: (formData.get('banter') ?? current.banter) as OfficeSettings['banter'],
     });
 
     // The office is a place, not a person: it starts out named after whoever
