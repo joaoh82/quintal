@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+import { AvatarPicker } from './AvatarPicker';
 import { KeyBackup } from './KeyBackup';
 import { resetDisplayNameAction, saveProfileAction } from './actions';
 
@@ -18,6 +19,8 @@ interface ProfileFormProps {
   description: string;
   npub: string;
   pubkey: string;
+  /** Object key of a chosen face, or empty. */
+  avatar: string;
   isGuest: boolean;
 }
 
@@ -26,6 +29,7 @@ export function ProfileForm({
   description,
   npub,
   pubkey,
+  avatar,
   isGuest,
 }: ProfileFormProps) {
   const [busy, setBusy] = useState(false);
@@ -128,6 +132,8 @@ export function ProfileForm({
           </p>
         ) : null}
       </form>
+
+      <AvatarPicker avatar={avatar} pubkey={pubkey} disabled={isGuest} />
 
       <div className="space-y-2 rounded-lg border p-4">
         <h2 className="text-sm font-medium">Identity</h2>

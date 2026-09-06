@@ -1,6 +1,8 @@
 'use client';
 
 import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
+
+import { Avatar } from '@/components/Avatar';
 import { useState } from 'react';
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -98,10 +100,11 @@ export function RosterPanel({ players, connection, onMessage }: RosterPanelProps
                   onClick={() =>
                     setOpenCard(openCard === player.sessionId ? null : player.sessionId)
                   }
-                  className={`flex w-full items-baseline gap-2 px-3 py-1 text-left text-xs transition-colors hover:bg-white/5 ${
+                  className={`flex w-full items-center gap-2 px-3 py-1 text-left text-xs transition-colors hover:bg-white/5 ${
                     openCard === player.sessionId ? 'bg-white/10' : ''
                   }`}
                 >
+                  <Avatar avatar={player.avatar} pubkey={player.pubkey} size={16} />
                   <span className={player.isSelf ? 'text-emerald-300' : 'text-white/85'}>
                     {player.name}
                   </span>
@@ -292,7 +295,8 @@ function PersonCard({
 }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-white/15 bg-black/80 p-3 text-white backdrop-blur-sm">
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-center gap-2">
+        <Avatar avatar={person.avatar} pubkey={person.pubkey} size={40} className="rounded-md" />
         <span className="text-sm text-white/90">{person.name}</span>
         {person.isGuest ? (
           <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">

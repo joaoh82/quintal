@@ -22,6 +22,8 @@ export interface AuthenticatedUser {
   isGuest: boolean;
   /** Profile line, shown on this person's card in the office. */
   description: string;
+  /** Object key of a chosen face, or empty. */
+  avatar: string;
   /**
    * The one office a guest was let into, or null for a full member.
    *
@@ -47,6 +49,7 @@ export async function verifySessionToken(
       name: users.name,
       pubkey: users.pubkey,
       description: users.description,
+      image: users.image,
       isGuest: sessions.isGuest,
       guestWorkspaceId: sessions.guestWorkspaceId,
     })
@@ -57,7 +60,10 @@ export async function verifySessionToken(
     .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
     .limit(1);
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  const { image, ...rest } = row;
+  return { ...rest, avatar: image ?? '' };
 }
 
 /**

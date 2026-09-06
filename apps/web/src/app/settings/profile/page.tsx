@@ -19,7 +19,12 @@ export default async function ProfilePage() {
   // cached in a cookie, so a name saved a moment ago would still look unsaved.
   const row = (
     await getDb()
-      .select({ name: users.name, description: users.description, pubkey: users.pubkey })
+      .select({
+        name: users.name,
+        description: users.description,
+        pubkey: users.pubkey,
+        image: users.image,
+      })
       .from(users)
       .where(eq(users.id, session.user.id))
       .limit(1)
@@ -33,6 +38,7 @@ export default async function ProfilePage() {
         description={row.description}
         npub={npubEncode(row.pubkey)}
         pubkey={row.pubkey}
+        avatar={row.image ?? ''}
         isGuest={session.session.isGuest}
       />
       <OverlayKeyField />

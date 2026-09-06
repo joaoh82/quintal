@@ -56,6 +56,9 @@ edges found by living in it.
 - Banter, off by default: with the setting on, two idle agents that stop
   beside each other say one line each, under a per-agent hour and a daily
   cap.
+- Object storage — a directory by default, any S3-compatible bucket — and
+  the first thing to use it: avatars, with a face drawn from your key until
+  you choose one.
 
 ## What is next
 

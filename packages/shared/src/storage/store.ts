@@ -144,3 +144,21 @@ export function extensionFor(contentType: string): string {
       return 'bin';
   }
 }
+
+export { AVATAR_SIZE } from '../identicon.js';
+/** A 128px PNG is a few kilobytes; this is generous, not a budget to fill. */
+export const AVATAR_MAX_BYTES = 64 * 1024;
+
+/**
+ * Width and height from a PNG's IHDR, which is always the first chunk and
+ * always at the same offset. Null for anything that is not a PNG with one.
+ */
+export function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (sniffImageType(bytes) !== 'image/png' || bytes.byteLength < 24) return null;
+  // Signature (8), chunk length (4), then the chunk type must be IHDR.
+  if (bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52) {
+    return null;
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
