@@ -17,6 +17,10 @@
       "types": "./dist/db/testing.d.ts",
       "default": "./dist/db/testing.js"
     },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "default": "./dist/storage/index.js"
+    },
     "./maps": {
       "types": "./dist/maps/index.d.ts",
       "default": "./dist/maps/index.js"
@@ -44,6 +48,7 @@
     "@noble/curves": "^2.3.0",
     "@noble/hashes": "^2.3.0",
     "@scure/base": "^2.3.0",
+    "aws4fetch": "^1.0.20",
     "dotenv": "^17.2.4",
     "drizzle-orm": "^0.45.2"
   },

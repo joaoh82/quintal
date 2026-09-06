@@ -244,6 +244,9 @@ importers:
       '@scure/base':
         specifier: ^2.3.0
         version: 2.3.0
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
       dotenv:
         specifier: ^17.2.4
         version: 17.4.2
@@ -1509,6 +1512,9 @@ packages:
 
   async@2.6.4:
     resolution: {integrity: sha512-mzo5dfJYwAn29PeiJ0zvwTo04zj8HDJj0Mn8TD7sno7q12prdbnasKJHhkm2c1LgrhlJ0teaea8860oxi51mGA==}
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
@@ -3639,6 +3645,8 @@ snapshots:
   async@2.6.4:
     dependencies:
       lodash: 4.18.1
+
+  aws4fetch@1.0.20: {}
 
   bail@2.0.2: {}
 

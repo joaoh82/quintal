@@ -14,6 +14,11 @@ import {
   resolveDatabaseUrl,
   runMigrations,
 } from '@quintal/shared/db';
+import {
+  assertStorageFitForProduction,
+  describeStorage,
+  resolveStorage,
+} from '@quintal/shared/storage';
 
 import { config } from './config.js';
 import { handleHealth } from './http/health.js';
@@ -28,6 +33,12 @@ loadRootEnv();
 // before anything can touch the database.
 logger.info(`[db] ${resolveDatabaseUrl().url}`);
 await runMigrations();
+
+// Where bytes go. Refused outright in production on a disk that will not be
+// there after the next deploy — see `assertStorageFitForProduction`.
+const storage = resolveStorage();
+assertStorageFitForProduction(storage);
+logger.info(`[storage] ${describeStorage(storage)}`);
 
 const nextHandler: NextRequestHandler | undefined = config.isProduction
   ? await createNextHandler(config.webDir)
