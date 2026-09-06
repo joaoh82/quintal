@@ -10,6 +10,7 @@ import {
   ObjectRejected,
   assertObjectAllowed,
   assertStorageFitForProduction,
+  getStorage,
   isObjectKey,
   putReplacing,
   resolveStorage,
@@ -251,5 +252,20 @@ describe('refusing a disk that will not be there tomorrow', () => {
       assertStorageFitForProduction(local, { NODE_ENV: 'production', NEXT_PHASE: 'phase-production-build' }),
     );
     assert.doesNotThrow(() => assertStorageFitForProduction(bucket, { NODE_ENV: 'production' }));
+  });
+});
+
+describe('opening the process store', () => {
+  it('runs the production guard on first use, not only at server boot', () => {
+    const before = { ...process.env };
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.STORAGE_URL;
+      delete process.env.STORAGE_ALLOW_LOCAL;
+      delete process.env.NEXT_PHASE;
+      assert.throws(() => getStorage(), /STORAGE_URL=s3:/);
+    } finally {
+      process.env = before;
+    }
   });
 });

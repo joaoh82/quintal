@@ -13,7 +13,7 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { objectUrl, uploadKeyFor } from '@/lib/objects';
+import { objectUrl, readBounded, uploadKeyFor } from '@/lib/objects';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +43,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: `at most ${OBJECT_MAX_BYTES} bytes` }, { status: 413 });
   }
 
-  const body = new Uint8Array(await request.arrayBuffer());
+  // Read no more than the limit, whatever the header said or did not say:
+  // a body that keeps coming is refused at the byte after the cap, not
+  // buffered in full and then weighed.
+  const body = await readBounded(request, OBJECT_MAX_BYTES);
+  if (body === null) {
+    return NextResponse.json({ error: `at most ${OBJECT_MAX_BYTES} bytes` }, { status: 413 });
+  }
   const actual = sniffImageType(body);
   if (actual === null || actual !== claimed) {
     return NextResponse.json(
@@ -72,3 +78,4 @@ export async function POST(request: Request): Promise<NextResponse> {
     { status: 201 },
   );
 }
+

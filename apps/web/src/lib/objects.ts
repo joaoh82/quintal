@@ -37,3 +37,34 @@ export function uploadKeyFor(userId: string, id: string, extension: string): str
 export function objectUrl(key: string): string {
   return `/api/objects/${key}`;
 }
+
+/**
+ * The body, or null once it has exceeded `max` — reading stops there.
+ *
+ * A `Content-Length` is a claim, and a missing one is normal. Reading the
+ * whole body and then weighing it would mean an upload door that buffers
+ * whatever it is sent; this refuses at the byte after the cap instead.
+ */
+export async function readBounded(request: Request, max: number): Promise<Uint8Array | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array(0);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}

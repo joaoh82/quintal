@@ -106,8 +106,18 @@ export function openStorage(storage: ResolvedStorage): ObjectStore {
 
 let shared: ObjectStore | null = null;
 
-/** The process's one store, opened from the environment on first use. */
+/**
+ * The process's one store, opened from the environment on first use.
+ *
+ * The production guard runs here as well as at server boot, so a Next
+ * process serving on its own — without the unified server in front of it —
+ * still cannot quietly write to a disk that will not be there tomorrow.
+ */
 export function getStorage(): ObjectStore {
-  if (shared === null) shared = openStorage(resolveStorage());
+  if (shared === null) {
+    const resolved = resolveStorage();
+    assertStorageFitForProduction(resolved);
+    shared = openStorage(resolved);
+  }
   return shared;
 }

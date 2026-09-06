@@ -122,7 +122,10 @@ jobs:
       - name: Smoke test the unified production server
         run: |
           set -euo pipefail
-          BETTER_AUTH_SECRET=ci-secret-not-used-anywhere pnpm start &
+          # A local object directory is refused in production on purpose —
+          # a container's disk does not survive a redeploy. CI is not a
+          # deploy, so say the disk is real rather than weaken the check.
+          BETTER_AUTH_SECRET=ci-secret-not-used-anywhere STORAGE_ALLOW_LOCAL=1 pnpm start &
           server=$!
           trap 'kill $server 2>/dev/null || true' EXIT
 
