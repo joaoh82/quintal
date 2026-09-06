@@ -142,8 +142,37 @@ DATABASE_AUTH_TOKEN=...
 ```
 
 **Backups:** stop the process (or use `sqlite3 … ".backup"`) and copy
-`data/quintal.db` along with any `-wal` / `-shm` files. That file is the whole
-of your instance's state.
+`data/quintal.db` along with any `-wal` / `-shm` files — and `data/objects/`,
+if you keep objects on disk (below). Together they are the whole of your
+instance's state.
+
+### Objects: avatars, and attachments later
+
+Bytes that are not rows — uploaded images — go through one small storage
+layer with two backends. `STORAGE_URL` picks one, the way `DATABASE_URL` does:
+
+```bash
+# default: a directory beside the database
+STORAGE_URL=file:./data/objects
+
+# an S3-compatible bucket — Railway Buckets, Cloudflare R2, Backblaze, S3,
+# MinIO, Garage: anything that speaks the S3 API
+STORAGE_URL=s3://quintal
+S3_ENDPOINT=https://s3.example.com
+S3_ACCESS_KEY_ID=…
+S3_SECRET_ACCESS_KEY=…
+S3_REGION=auto        # optional; the default suits R2 and Railway
+```
+
+Objects are served through the app, which checks who may see each one; the
+bucket is never public. No vendor is named in code — the seam is the S3 API.
+
+**A local directory is refused in production.** On a container platform the
+filesystem does not survive a redeploy, and every avatar would vanish with it,
+silently, later. So with `NODE_ENV=production` and no bucket configured the
+process stops at boot and says why. If you are genuinely on a machine with a
+disk — a VPS, a box under the desk — say so once with `STORAGE_ALLOW_LOCAL=1`
+and back up `data/objects/` with the database.
 
 ## Deploying on Railway
 
@@ -182,8 +211,11 @@ schema and the same migrations, and brings point-in-time recovery with it.
 > this mistake impossible by refusing to mount twice. Turso does not, so the
 > guardrail is now this paragraph.
 
-Avatars and file attachments will need object storage; that is not wired up
-yet — see [Still to come](#still-to-come).
+**Add a bucket.** Railway Buckets are S3-compatible, with free API calls and
+egress: create one in the project, and set `STORAGE_URL=s3://<bucket>` with the
+`S3_ENDPOINT`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` it shows you. Without
+one the process refuses to boot in production, on purpose — see
+[Objects](#objects-avatars-and-attachments-later).
 
 ## Behind a reverse proxy
 
@@ -227,8 +259,6 @@ Migrations apply themselves on the next boot.
 
 ## Still to come
 
-- Object storage for avatars and file attachments — a local directory by
-  default, any S3-compatible bucket (Railway, R2, MinIO) in the cloud
 - Docker image and compose file
-- LiveKit configuration for proximity voice
+- Proximity voice between people (the relay runs inside the one process)
 - Agent gateway setup (connecting your fleet)
