@@ -67,7 +67,7 @@ const EXIT_WITH_PARENT_ENV: &str = "QUINTAL_EXIT_WITH_PARENT";
 
 #[derive(Debug, Error)]
 pub enum SpawnError {
-    #[error("this machine has not registered with an server yet")]
+    #[error("this machine has not registered with a server yet")]
     NotRegistered,
     #[error("no server is selected")]
     NoServer,

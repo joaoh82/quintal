@@ -9,9 +9,9 @@ pub mod commands;
 pub mod identity;
 pub mod machine;
 pub mod nip49;
-pub mod server;
 pub mod runtimes;
 pub mod secrets;
+pub mod server;
 pub mod spawn;
 pub mod tray;
 

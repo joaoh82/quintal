@@ -266,7 +266,7 @@ mod servers_tests {
     /// navigated anywhere — and cancelling the restart left the app on a page
     /// that would never move.
     #[test]
-    fn adding_an_server_does_not_make_it_the_active_one() {
+    fn adding_a_server_does_not_make_it_the_active_one() {
         let dir = dir();
         add_server(dir.path(), A, None).expect("added");
         assert_eq!(active_server_url(dir.path()), None);
@@ -322,19 +322,19 @@ mod servers_tests {
     }
 
     #[test]
-    fn an_server_this_app_will_not_connect_to_is_refused() {
+    fn a_server_this_app_will_not_connect_to_is_refused() {
         let dir = dir();
         for bad in ["https://*", "http://example.com", "ftp://x", "not a url"] {
             assert!(
                 add_server(dir.path(), bad, None).is_err(),
-                "{bad} must not become an server"
+                "{bad} must not become a server"
             );
         }
         assert!(load_servers(dir.path()).servers.is_empty());
     }
 
     #[test]
-    fn switching_only_works_for_an_server_you_have() {
+    fn switching_only_works_for_a_server_you_have() {
         let dir = dir();
         add_server(dir.path(), A, None).expect("added");
         assert!(switch_server(dir.path(), B).is_err());
@@ -531,7 +531,7 @@ mod tests {
         for forbidden in ["allow-add-server", "allow-remove-server"] {
             assert!(
                 !capability.contains(forbidden),
-                "{forbidden} must not be granted while an server is loaded"
+                "{forbidden} must not be granted while a server is loaded"
             );
         }
         // It may still ask to be sent to the picker, where a human decides —
@@ -724,7 +724,9 @@ pub fn save_servers(dir: &Path, servers: &Servers) -> std::io::Result<()> {
 /// is the server they already have.
 pub fn add_server(dir: &Path, url: &str, label: Option<String>) -> Result<String, String> {
     let url = normalise(url).ok_or_else(|| {
-        format!("{url:?} is not an server this app will connect to. Use https, or http on this machine.")
+        format!(
+            "{url:?} is not a server this app will connect to. Use https, or http on this machine."
+        )
     })?;
 
     let mut servers = load_servers(dir);

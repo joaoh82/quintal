@@ -169,7 +169,7 @@ fn toggle_fleet(app: &AppHandle) {
             },
             // Nothing useful the tray can do about either: an unregistered
             // machine needs the office, and a locked keychain needs the OS.
-            Ok(None) => Some("this machine has not registered with an server yet".into()),
+            Ok(None) => Some("this machine has not registered with a server yet".into()),
             Err(error) => Some(error.to_string()),
         }
     };
