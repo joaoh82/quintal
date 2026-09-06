@@ -68,6 +68,7 @@ export async function getOfficeSettings(
     walkUpRadiusTiles: row.walkUpRadiusTiles,
     replyWindowSeconds: row.replyWindowSeconds,
     idleLife: row.idleLife,
+    banter: row.banter as OfficeSettings['banter'],
   });
 }
 

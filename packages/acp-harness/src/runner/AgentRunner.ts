@@ -9,6 +9,7 @@ import {
   isAddressed,
   parseAgentCommand,
   type RuntimeStatus,
+  type AgentBanterEvent,
   type AgentChannelChatEvent,
   type AgentChatEvent,
   type AgentMentionEvent,
@@ -28,9 +29,16 @@ import { LOBBY_SCOPE, SessionStore } from './sessions.js';
  * cannot collide with one because no zone id carries a colon.
  */
 const CHANNEL_SCOPE = 'channel:';
+/**
+ * Scope prefix for a banter. Its session is thrown away after the one turn:
+ * a joke told to a colleague must not sit in the zone's context when the
+ * next real question arrives, and must not cost the zone its window.
+ */
+const BANTER_SCOPE = 'banter:';
 import {
   MAX_BATCH,
   TOOL_HINT,
+  buildBanterEnvelope,
   buildEnvelope,
   selectWindow,
   type Trigger,
@@ -231,6 +239,7 @@ export class AgentRunner {
     this.#gateway.on('chat', (message) => this.#onChat(message, message.distance));
     this.#gateway.on('mention', (message) => this.#onMention(message));
     this.#gateway.on('channelChat', (message) => this.#onChannelChat(message));
+    this.#gateway.on('banter', (event) => this.#onBanter(event));
     this.#gateway.on('error', (error) => {
       this.#log('warn', `office refused something: [${error.code}] ${error.message}`);
       if (error.message.toLowerCase().includes('revoked')) void this.stop();
@@ -489,6 +498,30 @@ export class AgentRunner {
     });
   }
 
+  /**
+   * The office offers a moment with another idle agent.
+   *
+   * Taken only when there is genuinely nothing to do: a turn in flight or a
+   * message waiting means somebody is owed an answer, and a joke told while
+   * they wait is the wrong kind of memorable. The moment simply passes.
+   */
+  #onBanter(event: AgentBanterEvent): void {
+    const waiting = [...this.#queues.values()].some((queue) => queue.length > 0);
+    if (this.#busy || waiting) {
+      this.#log('info', `banter with ${event.partner.name} skipped: busy`);
+      return;
+    }
+    this.#enqueue(`${BANTER_SCOPE}${event.partner.id}`, {
+      fromUserId: event.partner.id,
+      fromName: event.partner.name,
+      fromKind: 'agent',
+      text: event.line ?? '',
+      distance: 1,
+      sentAt: Date.now(),
+      banter: { line: event.line, expiresAt: event.expiresAt },
+    });
+  }
+
   /** The channel or DM a scope is, or null for a spatial scope. */
   #channelOf(scope: string): ChannelRef | null {
     if (!scope.startsWith(CHANNEL_SCOPE)) return null;
@@ -626,6 +659,12 @@ export class AgentRunner {
     const ready = this.#gateway.ready;
     if (!proc || !ready) return;
 
+    const banter = scope.startsWith(BANTER_SCOPE) ? triggers[0]?.banter : undefined;
+    if (banter && Date.now() > banter.expiresAt) {
+      this.#log('info', 'banter skipped: the moment passed');
+      return;
+    }
+
     this.#setState('working');
     this.#setStatus('thinking');
 
@@ -634,19 +673,33 @@ export class AgentRunner {
 
     const triggerTimes = new Set(triggers.map((t) => t.sentAt));
     const channel = this.#channelOf(scope);
-    const envelope = buildEnvelope({
-      agentName: ready.name,
-      zoneLabel: this.#zoneLabel(),
-      ...(channel ? { channel } : {}),
-      triggers,
-      window: selectWindow(this.#history.get(scope) ?? [], triggerTimes),
-      steer,
-    });
+    const envelope = banter
+      ? buildBanterEnvelope({
+          agentName: ready.name,
+          partnerName: triggers[0]?.fromName ?? 'a colleague',
+          zoneLabel: this.#zoneLabel(),
+          line: banter.line,
+        })
+      : buildEnvelope({
+          agentName: ready.name,
+          zoneLabel: this.#zoneLabel(),
+          ...(channel ? { channel } : {}),
+          triggers,
+          window: selectWindow(this.#history.get(scope) ?? [], triggerTimes),
+          steer,
+        });
 
     // A session nobody has spoken to yet gets the standing instructions on the
-    // front of this turn rather than in a turn of its own.
-    const priming = this.#unprimed.has(scope);
-    const text = priming ? `${await this.#systemPrompt()}\n\n${envelope}` : envelope;
+    // front of this turn rather than in a turn of its own. A banter session
+    // is always new and always thrown away, and gets the short version: who
+    // it is and how its owner wants it to behave — not the office manual,
+    // not its memory, not a tool list it has no tools for.
+    const priming = !banter && this.#unprimed.has(scope);
+    const text = banter
+      ? `${this.#banterPreamble()}\n\n${envelope}`
+      : priming
+        ? `${await this.#systemPrompt()}\n\n${envelope}`
+        : envelope;
 
     this.#responseBuffer = '';
     this.#audit('prompt', { scope, session, envelope, priming });
@@ -660,13 +713,23 @@ export class AgentRunner {
     // knowing nothing, and the next one must say it all again.
     if (priming) this.#unprimed.delete(scope);
 
-    this.#speak(this.#responseBuffer, scope);
+    if (banter) this.#speakBanter(this.#responseBuffer);
+    else this.#speak(this.#responseBuffer, scope);
     this.#audit('response', {
       scope,
       session,
       stopReason: response.stopReason,
       text: this.#responseBuffer,
     });
+
+    // One line, one session. Kept, it would be the context the next real
+    // question in this scope is answered from — and there is no next one.
+    if (banter) {
+      this.#sessions.drop(scope, 'rotate');
+      this.#unprimed.delete(scope);
+      this.#history.delete(scope);
+      return;
+    }
 
     // A session that hit the model's ceiling is spent; the next turn in this
     // scope gets a fresh one rather than failing repeatedly.
@@ -721,19 +784,26 @@ export class AgentRunner {
     const bridge = this.#bridge;
     if (!proc || !bridge) throw new Error('agent is not running');
 
+    // A banter session gets no tools: the one turn it lives for is a line
+    // to a colleague, and a model with `say` and `move_to` in reach while
+    // being asked for a joke is a model that can wander off or mention
+    // somebody mid-joke. Cheaper, too — no MCP subprocess, no handshake.
+    const tools = scope.startsWith(BANTER_SCOPE)
+      ? []
+      : [
+          {
+            name: 'quintal-tools',
+            command: process.execPath,
+            args: mcpServerArgs(),
+            env: [
+              { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
+              { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
+            ],
+          },
+        ];
     const created = await proc.newSession({
       cwd: this.config.cwd,
-      mcpServers: [
-        {
-          name: 'quintal-tools',
-          command: process.execPath,
-          args: mcpServerArgs(),
-          env: [
-            { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
-            { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
-          ],
-        },
-      ],
+      mcpServers: tools,
     } as schema.NewSessionRequest);
 
     await this.#applyModel(proc, created);
@@ -824,6 +894,23 @@ export class AgentRunner {
       core.trim().length > 0 ? `\n[Core memory — your own notes]\n${core.trim()}` : '',
       '',
       TOOL_HINT,
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
+  }
+
+  /**
+   * What a banter turn is told about itself: a name, an owner, and the
+   * owner's standing instructions, because a personality is what makes one
+   * agent's joke different from another's. Nothing that costs more.
+   */
+  #banterPreamble(): string {
+    const ready = this.#gateway.ready;
+    const instructions = (ready?.instructions ?? '').trim();
+    return [
+      '[You]',
+      `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
+      instructions.length > 0 ? `\n[Your owner's instructions]\n${instructions}` : '',
     ]
       .filter((line) => line !== '')
       .join('\n');
@@ -993,6 +1080,22 @@ export class AgentRunner {
       return;
     }
     this.#deliver(text, scope);
+  }
+
+  /**
+   * A banter line: one bubble, aloud, with any `@` taken out.
+   *
+   * The envelope asks for no mentions; this makes sure. A mention in a joke
+   * would wake whoever it named, and a reply to a reply to a joke is the
+   * loop the anti-noise rules exist to prevent.
+   */
+  #speakBanter(text: string): void {
+    const [line] = toBubbles(text.replace(/@(?=\w)/g, ''));
+    if (!line) {
+      this.#log('info', 'banter: nothing to say (silence)');
+      return;
+    }
+    this.#send(line, undefined);
   }
 
   /**

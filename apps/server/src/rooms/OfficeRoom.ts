@@ -39,6 +39,7 @@ import {
   mentionedNames,
   messageMaxLength,
   zoneAt,
+  type AgentBanterEvent,
   type AgentChannelChatEvent,
   type AgentChannelsEvent,
   type AgentChatEvent,
@@ -137,17 +138,24 @@ import {
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
 import {
+  BANTER_STAGE_MS,
   SMALL_TALK_MS,
   SMALL_TALK_REPLY_MS,
+  banterOver,
   between,
   idleCapable,
+  mayBanter,
+  newBanterLedger,
   newIdleRecord,
+  noteBanter,
   pickSmallTalk,
   stepIdle,
   touch,
   wake,
   wanderTarget,
   zoneIdAt,
+  type Banter,
+  type BanterLedger,
   type IdleRecord,
 } from './idle-life.js';
 
@@ -252,6 +260,8 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #idle = new Map<string, IdleRecord>();
   /** zoneId -> when the next small talk may start there. */
   readonly #nextTalkAt = new Map<string, number>();
+  /** What banter has cost today, and who has had their turn. */
+  readonly #banter: BanterLedger = newBanterLedger();
   #heartbeatTimer?: NodeJS.Timeout;
   #revocationTimer?: NodeJS.Timeout;
   #settingsTimer?: NodeJS.Timeout;
@@ -947,8 +957,11 @@ export class OfficeRoom extends Room<OfficeState> {
 
       const agent = this.#agents.get(listenerId);
       if (agent) {
-        // Something reached it: whatever it was doing with nothing to do ends.
-        this.#noteActivity(listenerId);
+        // Something reached it: whatever it was doing with nothing to do
+        // ends. A person, or its name — another agent talking nearby is
+        // context, the way the harness also treats it, and a banter line
+        // must not wake every idler in earshot.
+        if (speaker.kind === 'human' || byName) this.#noteActivity(listenerId, true);
         if (withinEarshot) {
           target.send(AgentServerMessage.NearbyChat, {
             from: sessionId,
@@ -1216,7 +1229,7 @@ export class OfficeRoom extends Room<OfficeState> {
         // Only a line that names it is for it; the rest is the quiet an
         // agent in a channel keeps, and a busy channel must not keep every
         // member from ever being idle.
-        if (mentioned.has(listener.userId)) this.#noteActivity(listenerId);
+        if (mentioned.has(listener.userId)) this.#noteActivity(listenerId, true);
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
           ...line,
@@ -1472,6 +1485,8 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
+    // If this is the line the office asked for, the exchange moves on.
+    this.#onBanterLine(client.sessionId, speaker, text, Date.now());
     this.#deliverChat(client.sessionId, speaker, text);
     audit(session.identity.id, 'effect.spoke', { text, heardBy: this.#earshotCount(speaker) });
   }
@@ -1969,9 +1984,13 @@ export class OfficeRoom extends Room<OfficeState> {
    * down, a partner is released. Cheap enough to call from every message
    * an agent sends or receives, which is exactly where it is called from.
    */
-  #noteActivity(sessionId: string): void {
+  #noteActivity(sessionId: string, forced = false): void {
     const record = this.#idle.get(sessionId);
     if (!record) return;
+    // The office asked for a line; the status flips, the say and the emote
+    // that answering takes are the exchange, not an interruption of it. A
+    // person speaking to it is (`forced`), and ends the exchange.
+    if (!forced && record.talk?.banter) return;
     touch(record, Date.now());
     if (record.phase !== 'active') this.#endIdle(sessionId, record);
   }
@@ -2047,7 +2066,8 @@ export class OfficeRoom extends Room<OfficeState> {
       if (!sim?.agent || !player || sim.away) continue;
 
       const tile = this.#tileOf(player);
-      const busy = !idleCapable(player.status);
+      // Thinking of a line is the banter, not work that ends it.
+      const busy = record.talk?.banter ? false : !idleCapable(player.status);
       const action = stepIdle(record, { now, busy, zoneId: zoneIdAt(this.#map, tile) }, Math.random);
 
       switch (action.kind) {
@@ -2111,8 +2131,8 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!this.walkTo(a, beside.x, beside.y)) return;
     simA.idleWalk = true;
 
-    recordA.talk = { partner: b, initiator: true, startedAt: 0, answered: false };
-    recordB.talk = { partner: a, initiator: false, startedAt: 0, answered: false };
+    recordA.talk = { partner: b, initiator: true, startedAt: 0, answered: false, banter: null };
+    recordB.talk = { partner: a, initiator: false, startedAt: 0, answered: false, banter: null };
   }
 
   /**
@@ -2145,7 +2165,14 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#faceEachOther(player, other);
       talk.startedAt = now;
       partner.talk.startedAt = now;
+      // With words, when the office allows it; with balloons otherwise.
+      if (this.#tryBanter(sessionId, record, talk.partner, partner, now)) return;
       this.#idleBalloon(sessionId, record, 'dots', SMALL_TALK_MS);
+      return;
+    }
+
+    if (talk.banter) {
+      this.#stepBanter(sessionId, talk.partner, talk.banter, now);
       return;
     }
 
@@ -2159,6 +2186,114 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#endTalkWith(talk.partner, sessionId);
       this.#endTalkWith(sessionId, talk.partner);
     }
+  }
+
+  // --- banter ---------------------------------------------------------------
+
+  /**
+   * Turn this small talk into one where the agents speak, if the office
+   * allows it right now. Spends the budget and asks the first for a line.
+   */
+  #tryBanter(a: string, recordA: IdleRecord, b: string, recordB: IdleRecord, now: number): boolean {
+    const simA = this.#sims.get(a);
+    const simB = this.#sims.get(b);
+    const playerB = this.state.players.get(b);
+    const client = this.clients.getById(a);
+    if (!simA?.agent || !simB?.agent || !playerB || !client) return false;
+    if (!recordA.talk || !recordB.talk) return false;
+    if (!hasScope(simA.agent.identity, 'chat') || !hasScope(simB.agent.identity, 'chat')) {
+      return false;
+    }
+
+    const idA = simA.agent.identity.id;
+    const idB = simB.agent.identity.id;
+    const allowed = mayBanter(
+      {
+        setting: this.#settings.banter,
+        humansPresent: this.#humansPresent(),
+        a: idA,
+        b: idB,
+        now,
+      },
+      this.#banter,
+    );
+    if (!allowed) return false;
+
+    noteBanter(this.#banter, idA, idB, now);
+    recordA.talk.banter = { stage: 'asked_a', since: now };
+    recordB.talk.banter = { stage: 'listening', since: now };
+    this.#sendBanter(client, { id: idB, name: playerB.name }, null, now);
+    audit(idA, 'effect.banter', { with: idB });
+    return true;
+  }
+
+  #sendBanter(
+    client: Client,
+    partner: { id: string; name: string },
+    line: string | null,
+    now: number,
+  ): void {
+    const player = this.state.players.get(client.sessionId);
+    const tile = player ? this.#tileOf(player) : null;
+    client.send(AgentServerMessage.Banter, {
+      partner,
+      line,
+      zoneId: tile ? (zoneAt(this.#map, tile.x, tile.y)?.id ?? null) : null,
+      expiresAt: now + BANTER_STAGE_MS,
+    } satisfies AgentBanterEvent);
+  }
+
+  /**
+   * A line said aloud by somebody the office asked for one. The first line
+   * is passed to the partner as their invitation; the partner's line ends
+   * the exchange after a moment. Any other line is just speech.
+   */
+  #onBanterLine(sessionId: string, speaker: OfficePlayer, text: string, now: number): void {
+    const talk = this.#idle.get(sessionId)?.talk;
+    if (!talk?.banter) return;
+
+    if (talk.initiator) {
+      if (talk.banter.stage !== 'asked_a') return;
+      const partnerClient = this.clients.getById(talk.partner);
+      const me = this.#sims.get(sessionId)?.agent?.identity.id;
+      if (!partnerClient || !me) {
+        this.#endTalkWith(talk.partner, sessionId);
+        this.#endTalkWith(sessionId, talk.partner);
+        return;
+      }
+      talk.banter = { stage: 'asked_b', since: now };
+      this.#sendBanter(partnerClient, { id: me, name: speaker.name }, text, now);
+      return;
+    }
+
+    const initiator = this.#idle.get(talk.partner)?.talk?.banter;
+    if (initiator?.stage === 'asked_b') {
+      initiator.stage = 'done';
+      initiator.since = now;
+    }
+  }
+
+  /**
+   * The initiator's clock on the exchange: a deadline per stage, then apart.
+   *
+   * Reached only from the initiator's side of `#stepTalk` — the partner
+   * returns before it — and `banterOver` refuses to time a `listening`
+   * stage besides, so a partner asked late is never cut off by a clock
+   * that started before it was asked.
+   */
+  #stepBanter(a: string, b: string, banter: Banter, now: number): void {
+    if (!banterOver(banter, now)) return;
+    // The moment passed, or was had. Either way, back to idling.
+    this.#endTalkWith(b, a);
+    this.#endTalkWith(a, b);
+  }
+
+  /** Is anybody here to overhear? Nobody performs to an empty room. */
+  #humansPresent(): boolean {
+    for (const [sessionId, player] of this.state.players) {
+      if (player.kind === 'human' && !this.#sims.get(sessionId)?.away) return true;
+    }
+    return false;
   }
 
   #faceEachOther(a: OfficePlayer, b: OfficePlayer): void {

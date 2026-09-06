@@ -1,0 +1,1 @@
+ALTER TABLE `office_settings` ADD `banter` text DEFAULT 'off' NOT NULL;

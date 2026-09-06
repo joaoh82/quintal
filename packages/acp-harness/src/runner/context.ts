@@ -30,6 +30,12 @@ export interface Trigger {
   /** The channel or DM this was posted in, when it was not said aloud. */
   channel?: Pick<ChannelRef, 'kind' | 'name' | 'slug'>;
   sentAt: number;
+  /**
+   * Set when this is not a message at all but the office's invitation to
+   * banter: `line` is what the partner said (null when we go first), and
+   * after `expiresAt` the moment has passed and nothing should be said.
+   */
+  banter?: { line: string | null; expiresAt: number };
 }
 
 export interface EnvelopeInput {
@@ -154,4 +160,44 @@ export function selectWindow(
   return history
     .filter((message) => !triggerTimes.has(message.sentAt))
     .slice(-WINDOW_SIZE);
+}
+
+/**
+ * The one prompt a banter is.
+ *
+ * Deliberately small and deliberately unlike a work turn: no window, no
+ * history, no tool hint. The rules are in the envelope rather than the base
+ * prompt because they only apply here — and "say nothing" has to be a
+ * first-class answer, because a model that feels obliged to be funny on
+ * demand is worse than one that shrugs.
+ */
+export function buildBanterEnvelope(input: {
+  agentName: string;
+  partnerName: string;
+  zoneLabel: string;
+  line: string | null;
+}): string {
+  const lines: string[] = [];
+  lines.push('[Context]');
+  lines.push(
+    `You are ${input.agentName}, in ${input.zoneLabel}. Nobody needs you right now, and ` +
+      `${input.partnerName} — another agent, also with nothing to do — has stopped beside you.`,
+  );
+  if (input.line !== null) {
+    lines.push('');
+    lines.push(`${input.partnerName} said to you:`);
+    lines.push(input.line);
+  }
+  lines.push('');
+  lines.push('[Banter]');
+  lines.push(
+    input.line === null
+      ? `Say one short, friendly line to ${input.partnerName}, out loud — a joke is fine, so is a wry remark about the day.`
+      : `Answer ${input.partnerName} with one short line, or with nothing.`,
+  );
+  lines.push(
+    'One sentence, under 120 characters. Nothing about work, no questions that need an answer, ' +
+      'no @-mentions, no tools. If you have nothing worth saying, say nothing — that is a fine answer.',
+  );
+  return lines.join('\n');
 }

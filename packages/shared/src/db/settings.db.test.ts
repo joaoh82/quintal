@@ -64,6 +64,15 @@ describe('how an office works', () => {
     assert.equal(settings.walkUpRadiusTiles, 3);
     assert.equal(settings.replyWindowSeconds, 90);
     assert.equal(settings.idleLife, true);
+    assert.equal(settings.banter, 'off');
+  });
+
+  it('keeps banter on once an office chose it', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+
+    await saveOfficeSettings(db, josh.workspaceId, { banter: 'rare' });
+    assert.equal((await getOfficeSettings(db, josh.workspaceId)).banter, 'rare');
   });
 
   it('keeps idle life off once an office turned it off', async () => {
@@ -142,6 +151,7 @@ describe('how an office works', () => {
       walkUpRadiusTiles: 3,
       replyWindowSeconds: 90,
       idleLife: true,
+      banter: 'off',
     });
   });
 });

@@ -300,6 +300,7 @@ export const officeSettings = sqliteTable('office_settings', {
   walkUpRadiusTiles: integer('walk_up_radius_tiles').notNull().default(3),
   replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),
   idleLife: integer('idle_life', { mode: 'boolean' }).notNull().default(true),
+  banter: text('banter').notNull().default('off'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .default(now)
     .$onUpdate(() => new Date())

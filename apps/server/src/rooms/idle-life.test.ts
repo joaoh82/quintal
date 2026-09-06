@@ -16,6 +16,14 @@ import {
   wake,
   wanderTarget,
   zoneIdAt,
+  BANTER_AFTERGLOW_MS,
+  BANTER_DAILY_CAP,
+  BANTER_PER_AGENT_MS,
+  BANTER_STAGE_MS,
+  banterOver,
+  mayBanter,
+  newBanterLedger,
+  noteBanter,
   type IdleRecord,
 } from './idle-life.js';
 
@@ -116,7 +124,7 @@ describe('the clock of an idle life', () => {
   it('does not wander while stopped for a chat', () => {
     const { record, now } = idleFor(IDLE_AFTER_MS + WANDER_MAX_MS);
     stepIdle(record, { now, busy: false, zoneId: 'bay' }, rngOf(0));
-    record.talk = { partner: 'other', initiator: true, startedAt: now, answered: false };
+    record.talk = { partner: 'other', initiator: true, startedAt: now, answered: false, banter: null };
     assert.deepEqual(stepIdle(record, { now: now + WANDER_MAX_MS, busy: false, zoneId: 'bay' }, rngOf(0)), {
       kind: 'none',
     });
@@ -201,5 +209,81 @@ describe('who stops for a chat', () => {
 
     const later = pickSmallTalk(free, nextTalkAt, 1_000 + 6 * 60_000, rngOf(0, 0, 0.5));
     assert.equal(later.length, 1, 'and off it again');
+  });
+});
+
+describe('whether two idle agents may actually speak', () => {
+  const now = Date.UTC(2026, 8, 6, 12, 0, 0);
+  const allowed = { setting: 'rare', humansPresent: true, a: 'agent-a', b: 'agent-b', now };
+
+  it('is off unless the office turned it on, and never to an empty room', () => {
+    assert.equal(mayBanter({ ...allowed, setting: 'off' }, newBanterLedger()), false);
+    assert.equal(mayBanter({ ...allowed, setting: 'often' }, newBanterLedger()), false, 'unknown is off');
+    assert.equal(mayBanter({ ...allowed, humansPresent: false }, newBanterLedger()), false);
+    assert.equal(mayBanter(allowed, newBanterLedger()), true);
+  });
+
+  it('gives each agent one exchange an hour', () => {
+    const ledger = newBanterLedger();
+    assert.equal(mayBanter(allowed, ledger), true);
+    noteBanter(ledger, 'agent-a', 'agent-b', now);
+
+    assert.equal(mayBanter({ ...allowed, now: now + 10 * 60_000 }, ledger), false, 'both are spent');
+    assert.equal(
+      mayBanter({ ...allowed, b: 'agent-c', now: now + 10 * 60_000 }, ledger),
+      false,
+      'a is spent even with a fresh partner',
+    );
+    assert.equal(
+      mayBanter({ ...allowed, a: 'agent-c', b: 'agent-d', now: now + 10 * 60_000 }, ledger),
+      true,
+      'two fresh agents may',
+    );
+    assert.equal(mayBanter({ ...allowed, now: now + BANTER_PER_AGENT_MS }, ledger), true, 'an hour later');
+  });
+
+  it('stops at the daily cap whatever the setting says, and starts over tomorrow', () => {
+    const ledger = newBanterLedger();
+    for (let i = 0; i < BANTER_DAILY_CAP; i += 1) {
+      const at = now + i * 1_000;
+      assert.equal(mayBanter({ ...allowed, a: `x${i}`, b: `y${i}`, now: at }, ledger), true, `exchange ${i}`);
+      noteBanter(ledger, `x${i}`, `y${i}`, at);
+    }
+    assert.equal(mayBanter({ ...allowed, a: 'fresh-1', b: 'fresh-2', now: now + 60_000 }, ledger), false);
+
+    const tomorrow = now + 24 * 60 * 60_000;
+    assert.equal(mayBanter({ ...allowed, a: 'fresh-1', b: 'fresh-2', now: tomorrow }, ledger), true);
+  });
+
+  it('never pairs an agent with itself', () => {
+    assert.equal(mayBanter({ ...allowed, b: 'agent-a' }, newBanterLedger()), false);
+  });
+});
+
+describe('the clock on an exchange', () => {
+  const t0 = 1_000_000;
+
+  it('gives each line its own full stage, however long the first took', () => {
+    // A is asked at t0 and takes 40s to answer.
+    const a = { stage: 'asked_a' as const, since: t0 };
+    assert.equal(banterOver(a, t0 + 40_000), false, 'still within the first stage');
+    assert.equal(banterOver(a, t0 + BANTER_STAGE_MS), true, 'and it would have expired at the limit');
+
+    // B is asked at t0 + 40s: a fresh stage, not the five seconds left of A's.
+    const b = { stage: 'asked_b' as const, since: t0 + 40_000 };
+    assert.equal(banterOver(b, t0 + BANTER_STAGE_MS), false, 'B is not cut off by A\'s clock');
+    assert.equal(banterOver(b, t0 + 40_000 + BANTER_STAGE_MS - 1), false);
+    assert.equal(banterOver(b, t0 + 40_000 + BANTER_STAGE_MS), true);
+  });
+
+  it('never ends from the listening side', () => {
+    const listening = { stage: 'listening' as const, since: t0 };
+    assert.equal(banterOver(listening, t0 + 10 * BANTER_STAGE_MS), false);
+  });
+
+  it('lingers a moment after the answer, then parts', () => {
+    const done = { stage: 'done' as const, since: t0 };
+    assert.equal(banterOver(done, t0 + BANTER_AFTERGLOW_MS - 1), false);
+    assert.equal(banterOver(done, t0 + BANTER_AFTERGLOW_MS), true);
   });
 });

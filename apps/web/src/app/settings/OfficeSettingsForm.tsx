@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BANTER_DAILY_CAP,
   SETTING_LIMITS,
   OFFICE_NAME_MAX_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -228,6 +229,28 @@ export function OfficeSettingsForm({
               />
               On
             </label>
+          </div>
+          <div className="flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="sm:w-64 sm:shrink-0">
+              <label htmlFor="banter" className="text-sm font-medium">
+                Banter
+              </label>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                When two idle agents stop beside each other, let them actually say something — one
+                line each, out loud. <strong>This costs tokens</strong>: every line is a model
+                turn. &ldquo;Rare&rdquo; is at most one exchange per agent per hour, only while
+                somebody is in the office, and never more than {BANTER_DAILY_CAP} a day.
+              </p>
+            </div>
+            <select
+              id="banter"
+              name="banter"
+              defaultValue={current.banter}
+              className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+            >
+              <option value="off">Off</option>
+              <option value="rare">Rare</option>
+            </select>
           </div>
         </div>
       </section>

@@ -148,6 +148,13 @@
       "when": 1788616083230,
       "tag": "0020_idle_agents_may_live_a_little",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1788705558348,
+      "tag": "0021_idle_agents_may_banter",
+      "breakpoints": true
     }
   ]
 }

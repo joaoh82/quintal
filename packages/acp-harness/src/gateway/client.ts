@@ -1,6 +1,7 @@
 import {
   AgentMessage,
   AgentServerMessage,
+  type AgentBanterEvent,
   type AgentChannelChatEvent,
   type AgentChannelsEvent,
   type AgentChatEvent,
@@ -40,6 +41,8 @@ export interface GatewayEvents {
   /** The office's current word on which channels this agent is in. */
   channels: (event: AgentChannelsEvent) => void;
   roster: (roster: AgentRosterEvent) => void;
+  /** A moment with another idle agent: one line, or nothing. */
+  banter: (event: AgentBanterEvent) => void;
   error: (error: AgentErrorPayload) => void;
   /** The socket dropped. `code` 4000 means we or the server closed on purpose. */
   closed: (code: number) => void;
@@ -165,6 +168,9 @@ export class GatewayClient {
     });
     room.onMessage(AgentServerMessage.Error, (error: AgentErrorPayload) =>
       this.#handlers.error?.(error),
+    );
+    room.onMessage(AgentServerMessage.Banter, (event: AgentBanterEvent) =>
+      this.#handlers.banter?.(event),
     );
     room.onMessage(AgentServerMessage.Heartbeat, () => {
       // Proof of life only; the harness has nothing to do with it.
