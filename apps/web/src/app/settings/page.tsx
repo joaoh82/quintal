@@ -6,7 +6,7 @@ import { getDb, getInstanceSettings, getOfficeSettings, isInstanceAdmin } from '
 import { auth } from '@/lib/auth';
 import { currentOffice } from '@/lib/workspace';
 
-import { Offices } from './Offices';
+import { Servers } from './Servers';
 import { OfficeSettingsForm } from './OfficeSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -50,7 +50,7 @@ export default async function OfficeSettingsPage() {
         canChangeOffice={!session.session.isGuest}
         host={host}
       />
-      <Offices />
+      <Servers />
     </div>
   );
 }

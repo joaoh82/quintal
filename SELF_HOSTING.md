@@ -96,7 +96,7 @@ app. That matters because "the first account" is often not the person running
 things — on any instance that has seen testing, the earliest key may be one
 nobody uses.
 
-## Running two offices on one machine
+## Running two servers on one machine
 
 Only in development, and only because it is the honest way to test that two
 offices are separate. Both dev ports move, and the sign-in origin follows the

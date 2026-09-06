@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import { WhichOffice } from '@/components/WhichOffice';
+import { WhichServer } from '@/components/WhichServer';
 
 export default function LandingPage() {
   return (
@@ -12,7 +12,7 @@ export default function LandingPage() {
             <span className="bg-primary size-1.5 rounded-full" />
             Under construction — building in public
           </p>
-          <WhichOffice className="text-muted-foreground text-xs" />
+          <WhichServer className="text-muted-foreground text-xs" />
         </div>
 
         <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">

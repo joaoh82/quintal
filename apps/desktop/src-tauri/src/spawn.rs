@@ -67,10 +67,10 @@ const EXIT_WITH_PARENT_ENV: &str = "QUINTAL_EXIT_WITH_PARENT";
 
 #[derive(Debug, Error)]
 pub enum SpawnError {
-    #[error("this machine has not registered with an office yet")]
+    #[error("this machine has not registered with a server yet")]
     NotRegistered,
-    #[error("no office is selected")]
-    NoOffice,
+    #[error("no server is selected")]
+    NoServer,
     #[error("{0} is not a directory this machine can work in")]
     BadWorkspace(String),
     #[error("the fleet is already running here")]
@@ -331,10 +331,10 @@ impl Fleet {
     pub fn start(
         &self,
         repos_dir: &Path,
-        office: &str,
+        server: &str,
         host_token: &str,
     ) -> Result<FleetState, SpawnError> {
-        self.start_with(&harness_path()?, repos_dir, office, host_token)
+        self.start_with(&harness_path()?, repos_dir, server, host_token)
     }
 
     /// See `identity::load_or_create_with` for why the harness is an argument:
@@ -344,7 +344,7 @@ impl Fleet {
         &self,
         harness: &Path,
         repos_dir: &Path,
-        office: &str,
+        server: &str,
         host_token: &str,
     ) -> Result<FleetState, SpawnError> {
         if host_token.trim().is_empty() {
@@ -369,7 +369,7 @@ impl Fleet {
             .args(&plan.args)
             .current_dir(&plan.cwd)
             .env(TOKEN_ENV, host_token)
-            .env(URL_ENV, office)
+            .env(URL_ENV, server)
             .env(EXIT_WITH_PARENT_ENV, "1")
             // Piped, and deliberately never read or taken: this pipe is not a
             // channel, it is a liveness signal. We hold the write end for as
@@ -546,7 +546,7 @@ mod tests {
         }
     }
 
-    fn office() -> &'static str {
+    fn server() -> &'static str {
         "http://localhost:3000"
     }
 
@@ -640,7 +640,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let harness = fake_harness(dir.path(), "exit 0");
         let error = Fleet::new()
-            .start_with(&harness, dir.path(), office(), "   ")
+            .start_with(&harness, dir.path(), server(), "   ")
             .expect_err("must refuse");
         assert!(matches!(error, SpawnError::NotRegistered));
     }
@@ -690,13 +690,13 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_secret")
+            .start_with(&harness, dir.path(), server(), "qh_secret")
             .expect("started");
         wait_for(&seen);
 
         assert_eq!(
             std::fs::read_to_string(&seen).expect("recorded"),
-            format!("qh_secret {}", office())
+            format!("qh_secret {}", server())
         );
         fleet
             .stop_within(Duration::from_millis(500))
@@ -722,7 +722,7 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
         wait_for(&ready);
 
@@ -751,13 +751,13 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
         wait_for(&ready);
 
         assert!(matches!(
             fleet
-                .start_with(&harness, dir.path(), office(), "qh_x")
+                .start_with(&harness, dir.path(), server(), "qh_x")
                 .expect_err("must refuse"),
             SpawnError::AlreadyRunning
         ));
@@ -775,7 +775,7 @@ mod tests {
 
         let dies = fake_harness(dir.path(), "exit 1");
         fleet
-            .start_with(&dies, dir.path(), office(), "qh_x")
+            .start_with(&dies, dir.path(), server(), "qh_x")
             .expect("started");
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -790,7 +790,7 @@ mod tests {
             &format!("printf ready > {}\nwhile :; do :; done\n", ready.display()),
         );
         fleet
-            .start_with(&lives, dir.path(), office(), "qh_x")
+            .start_with(&lives, dir.path(), server(), "qh_x")
             .expect("a dead fleet can be restarted");
         wait_for(&ready);
         fleet
@@ -805,7 +805,7 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -835,7 +835,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
         wait_for(&ready);
 
@@ -890,7 +890,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
         wait_for(&ready);
 
@@ -923,7 +923,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), office(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x")
             .expect("started");
         wait_for(&ready);
 

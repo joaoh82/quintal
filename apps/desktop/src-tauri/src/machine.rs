@@ -17,9 +17,9 @@ use crate::secrets::SecretStore;
 
 /// Slot prefixes in the secrets blob, namespaced like `agent:<pubkey>` is.
 ///
-/// Per office, because a `qh_` token is minted *by* an office and means nothing
+/// Per server, because a `qh_` token is minted *by* an office and means nothing
 /// anywhere else. The same laptop is a separate machine in each one — which is
-/// what isolation has to mean when the offices do not talk to each other.
+/// what isolation has to mean when the servers do not talk to each other.
 const HOST_TOKEN_SLOT: &str = "host-token";
 
 /// The name this machine registered under.
@@ -31,20 +31,20 @@ const HOST_TOKEN_SLOT: &str = "host-token";
 /// is a fleet that stops booting and a machine that appears twice.
 const LABEL_SLOT: &str = "machine-label";
 
-fn token_slot(office: &str) -> String {
-    format!("{HOST_TOKEN_SLOT}:{office}")
+fn token_slot(server: &str) -> String {
+    format!("{HOST_TOKEN_SLOT}:{server}")
 }
 
-fn label_slot(office: &str) -> String {
-    format!("{LABEL_SLOT}:{office}")
+fn label_slot(server: &str) -> String {
+    format!("{LABEL_SLOT}:{server}")
 }
 
-/// Move a pre-offices registration under the office it must have belonged to.
+/// Move a pre-servers registration under the server it must have belonged to.
 ///
-/// There was only ever one office before this, so the bare slots are that
-/// office's. Losing them would silently unregister somebody's machine and leave
+/// There was only ever one server before this, so the bare slots are that
+/// server's. Losing them would silently unregister somebody's machine and leave
 /// a live token in the office that nothing on this side could use.
-pub fn migrate_to(store: &SecretStore, office: &str) -> Result<(), IdentityError> {
+pub fn migrate_to(store: &SecretStore, server: &str) -> Result<(), IdentityError> {
     let mut blob = store.load()?;
     let token = blob.slots.remove(HOST_TOKEN_SLOT);
     let label = blob.slots.remove(LABEL_SLOT);
@@ -53,10 +53,10 @@ pub fn migrate_to(store: &SecretStore, office: &str) -> Result<(), IdentityError
     }
 
     if let Some(token) = token {
-        blob.slots.entry(token_slot(office)).or_insert(token);
+        blob.slots.entry(token_slot(server)).or_insert(token);
     }
     if let Some(label) = label {
-        blob.slots.entry(label_slot(office)).or_insert(label);
+        blob.slots.entry(label_slot(server)).or_insert(label);
     }
 
     let Some(existing) = blob.slots.get(crate::identity::IDENTITY_SLOT).cloned() else {
@@ -113,9 +113,9 @@ fn suggested_name() -> String {
 /// this computer as, and therefore what agents are assigned to.
 pub fn registered_label(
     store: &SecretStore,
-    office: &str,
+    server: &str,
 ) -> Result<Option<String>, IdentityError> {
-    Ok(store.load()?.slots.get(&label_slot(office)).cloned())
+    Ok(store.load()?.slots.get(&label_slot(server)).cloned())
 }
 
 /// The host token this machine holds, if it has registered.
@@ -124,8 +124,8 @@ pub fn registered_label(
 /// and "cannot read the token" would otherwise look identical, and the app
 /// would respond to a locked keychain by registering itself a second time —
 /// silently orphaning the first registration on every launch.
-pub fn token(store: &SecretStore, office: &str) -> Result<Option<String>, IdentityError> {
-    Ok(store.load()?.slots.get(&token_slot(office)).cloned())
+pub fn token(store: &SecretStore, server: &str) -> Result<Option<String>, IdentityError> {
+    Ok(store.load()?.slots.get(&token_slot(server)).cloned())
 }
 
 /// Keep a token the office just issued.
@@ -136,7 +136,7 @@ pub fn token(store: &SecretStore, office: &str) -> Result<Option<String>, Identi
 /// every write to the blob re-records the marker.
 pub fn remember(
     store: &SecretStore,
-    office: &str,
+    server: &str,
     token: &str,
     label: &str,
 ) -> Result<(), IdentityError> {
@@ -158,8 +158,8 @@ pub fn remember(
     let secret = decode_secret(existing)?;
     let npub = npub_of(&signing_key(&secret)?.verifying_key().to_bytes().into())?;
 
-    blob.slots.insert(token_slot(office), token.to_string());
-    blob.slots.insert(label_slot(office), label.to_string());
+    blob.slots.insert(token_slot(server), token.to_string());
+    blob.slots.insert(label_slot(server), label.to_string());
     store.store(&blob, &npub)?;
     Ok(())
 }
@@ -168,13 +168,13 @@ pub fn remember(
 ///
 /// Used when the office rejects it — the desktop equivalent of the stale
 /// `~/.quintal/host.json` the CLI walks into.
-pub fn forget_for(store: &SecretStore, office: &str) -> Result<(), IdentityError> {
+pub fn forget_for(store: &SecretStore, server: &str) -> Result<(), IdentityError> {
     let mut blob = store.load()?;
     let Some(existing) = blob.slots.get(crate::identity::IDENTITY_SLOT).cloned() else {
         return Ok(());
     };
-    let had_token = blob.slots.remove(&token_slot(office)).is_some();
-    let had_label = blob.slots.remove(&label_slot(office)).is_some();
+    let had_token = blob.slots.remove(&token_slot(server)).is_some();
+    let had_label = blob.slots.remove(&label_slot(server)).is_some();
     if !had_token && !had_label {
         return Ok(());
     }
@@ -189,7 +189,7 @@ pub fn forget_for(store: &SecretStore, office: &str) -> Result<(), IdentityError
 mod tests {
     use super::*;
 
-    const OFFICE: &str = "https://office.example.com";
+    const SERVER: &str = "https://server.example.com";
     use crate::identity::load_or_create_with;
     use crate::secrets::{Backend, SecretStore};
 
@@ -204,7 +204,7 @@ mod tests {
     fn a_machine_with_no_token_has_not_registered() {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
-        assert_eq!(token(&store, OFFICE).expect("readable"), None);
+        assert_eq!(token(&store, SERVER).expect("readable"), None);
     }
 
     #[test]
@@ -212,9 +212,9 @@ mod tests {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
 
-        remember(&store, OFFICE, "qh_abc", "laptop").expect("stored");
+        remember(&store, SERVER, "qh_abc", "laptop").expect("stored");
         assert_eq!(
-            token(&store, OFFICE).expect("readable").as_deref(),
+            token(&store, SERVER).expect("readable").as_deref(),
             Some("qh_abc")
         );
     }
@@ -227,7 +227,7 @@ mod tests {
             .npub()
             .expect("an npub");
 
-        remember(&store, OFFICE, "qh_abc", "laptop").expect("stored");
+        remember(&store, SERVER, "qh_abc", "laptop").expect("stored");
 
         let after = load_or_create_with(&store, None)
             .expect("the same identity")
@@ -247,10 +247,10 @@ mod tests {
             .npub()
             .expect("an npub");
 
-        remember(&store, OFFICE, "qh_abc", "laptop").expect("stored");
-        forget_for(&store, OFFICE).expect("forgotten");
+        remember(&store, SERVER, "qh_abc", "laptop").expect("stored");
+        forget_for(&store, SERVER).expect("forgotten");
 
-        assert_eq!(token(&store, OFFICE).expect("readable"), None);
+        assert_eq!(token(&store, SERVER).expect("readable"), None);
         let after = load_or_create_with(&store, None)
             .expect("the same identity")
             .npub()
@@ -261,14 +261,14 @@ mod tests {
     #[test]
     fn a_token_cannot_be_stored_without_an_identity() {
         let (_dir, store) = store();
-        assert!(remember(&store, OFFICE, "qh_abc", "laptop").is_err());
+        assert!(remember(&store, SERVER, "qh_abc", "laptop").is_err());
     }
 
     #[test]
     fn an_empty_token_is_refused() {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
-        assert!(remember(&store, OFFICE, "   ", "laptop").is_err());
+        assert!(remember(&store, SERVER, "   ", "laptop").is_err());
     }
 
     #[test]
@@ -281,7 +281,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod per_office_tests {
+mod per_server_tests {
     use super::*;
     use crate::identity::load_or_create_with;
     use crate::secrets::{Backend, SecretStore};
@@ -296,10 +296,10 @@ mod per_office_tests {
         (dir, store)
     }
 
-    /// The property the whole switcher rests on: two offices are two
+    /// The property the whole switcher rests on: two servers are two
     /// environments, and this machine is registered separately in each.
     #[test]
-    fn registrations_do_not_leak_between_offices() {
+    fn registrations_do_not_leak_between_servers() {
         let (_dir, store) = store();
         remember(&store, A, "qh_a", "Laptop").expect("stored");
 
@@ -307,12 +307,12 @@ mod per_office_tests {
         assert_eq!(
             token(&store, B).expect("readable"),
             None,
-            "registering with one office must not register with another"
+            "registering with one server must not register with another"
         );
     }
 
     #[test]
-    fn each_office_keeps_its_own_name_for_this_machine() {
+    fn each_server_keeps_its_own_name_for_this_machine() {
         let (_dir, store) = store();
         remember(&store, A, "qh_a", "Laptop").expect("stored");
         remember(&store, B, "qh_b", "Work laptop").expect("stored");
@@ -328,7 +328,7 @@ mod per_office_tests {
     }
 
     #[test]
-    fn forgetting_one_office_leaves_the_other_alone() {
+    fn forgetting_one_server_leaves_the_other_alone() {
         let (_dir, store) = store();
         remember(&store, A, "qh_a", "Laptop").expect("stored");
         remember(&store, B, "qh_b", "Laptop").expect("stored");
@@ -339,10 +339,10 @@ mod per_office_tests {
         assert_eq!(token(&store, B).expect("readable").as_deref(), Some("qh_b"));
     }
 
-    /// A registration made before offices existed belonged to the only office
+    /// A registration made before the server list existed belonged to the only server
     /// there was. Dropping it would silently unregister somebody's machine.
     #[test]
-    fn a_pre_offices_registration_is_carried_over() {
+    fn a_pre_servers_registration_is_carried_over() {
         let (_dir, store) = store();
 
         let mut blob = store.load().expect("blob");
@@ -382,7 +382,7 @@ mod per_office_tests {
 mod label_tests {
     use super::*;
 
-    const OFFICE: &str = "https://office.example.com";
+    const SERVER: &str = "https://server.example.com";
     use crate::identity::load_or_create_with;
     use crate::secrets::{Backend, SecretStore};
 
@@ -404,11 +404,11 @@ mod label_tests {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
 
-        assert_eq!(registered_label(&store, OFFICE).expect("readable"), None);
+        assert_eq!(registered_label(&store, SERVER).expect("readable"), None);
 
-        remember(&store, OFFICE, "qh_abc", "Laptop").expect("stored");
+        remember(&store, SERVER, "qh_abc", "Laptop").expect("stored");
         assert_eq!(
-            registered_label(&store, OFFICE)
+            registered_label(&store, SERVER)
                 .expect("readable")
                 .as_deref(),
             Some("Laptop"),
@@ -420,20 +420,20 @@ mod label_tests {
     fn a_machine_with_no_name_is_refused() {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
-        assert!(remember(&store, OFFICE, "qh_abc", "  ").is_err());
+        assert!(remember(&store, SERVER, "qh_abc", "  ").is_err());
     }
 
     #[test]
     fn forgetting_drops_the_name_with_the_token() {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
-        remember(&store, OFFICE, "qh_abc", "Laptop").expect("stored");
+        remember(&store, SERVER, "qh_abc", "Laptop").expect("stored");
 
-        forget_for(&store, OFFICE).expect("forgotten");
+        forget_for(&store, SERVER).expect("forgotten");
 
-        assert_eq!(token(&store, OFFICE).expect("readable"), None);
+        assert_eq!(token(&store, SERVER).expect("readable"), None);
         assert_eq!(
-            registered_label(&store, OFFICE).expect("readable"),
+            registered_label(&store, SERVER).expect("readable"),
             None,
             "a name with no token behind it would name a machine that cannot act"
         );

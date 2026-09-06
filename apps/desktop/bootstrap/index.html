@@ -5,8 +5,8 @@
   The bootstrap page, and the only markup this app owns.
 
   `apps/web` is the UI, and this does not compete with it. It is the one screen
-  that *cannot* live in the office: choosing which office to join, at a moment
-  when there may be no office to load a page from. Everything else belongs in
+  that *cannot* live in the office: choosing which server to join, at a moment
+  when there may be no server to load a page from. Everything else belongs in
   the web app, where a browser can see it too.
 -->
 <style>
@@ -45,16 +45,17 @@
 </style>
 
 <main>
-  <p id="status">Connecting to your office…</p>
+  <p id="status">Connecting to your server…</p>
   <p id="escape" hidden style="text-align: center">
-    <button class="link" id="elsewhere">Choose a different office</button>
+    <button class="link" id="elsewhere">Choose a different server</button>
   </p>
 
   <section id="picker" hidden>
-    <h1>Which office?</h1>
+    <h1>Which server?</h1>
     <p class="lede">
-      An office is its own place — its own people, its own agents. They do not
-      talk to each other, and you can have as many as you like.
+      A server is a Quintal deployment with an office on it — its own people,
+      its own agents. They do not talk to each other, and you can have as many
+      as you like.
     </p>
 
     <ul id="list"></ul>
@@ -72,7 +73,7 @@
   const el = (id) => document.getElementById(id);
 
   // Only ever shown inside the app; in a browser there is no bridge and nothing
-  // here would work, which is why the office picker is an app surface.
+  // here would work, which is why the server picker is an app surface.
   if (!window.__TAURI_INTERNALS__) {
     el('status').textContent = 'Open this in the Quintal app.';
   } else {
@@ -88,13 +89,13 @@
   async function render() {
     let listed;
     try {
-      listed = await invoke('list_offices');
+      listed = await invoke('list_servers');
     } catch (error) {
       fail(String(error));
       return;
     }
 
-    // With an office chosen the app is already on its way there; leave the
+    // With a server chosen the app is already on its way there; leave the
     // connecting line alone rather than flashing a picker nobody asked for.
     // Once the picker is up it stays up — cancelling a switch should return you
     // to the list, not to a page that will never navigate.
@@ -110,35 +111,35 @@
     el('picker').hidden = false;
     // Pre-filled and selected: localhost is the development default, and
     // somebody arriving here from a working app should not have to retype the
-    // office they were already using.
+    // server they were already using.
     const input = el('url');
     input.focus();
     input.select();
 
     const list = el('list');
     list.replaceChildren(
-      ...listed.offices.map((office) => {
+      ...listed.servers.map((server) => {
         const row = document.createElement('li');
-        if (office.url === listed.active) row.className = 'active';
+        if (server.url === listed.active) row.className = 'active';
 
         const text = document.createElement('div');
         text.className = 'grow';
         const name = document.createElement('div');
         name.className = 'name';
-        name.textContent = office.label;
+        name.textContent = server.label;
         const url = document.createElement('div');
         url.className = 'url';
-        url.textContent = office.url;
+        url.textContent = server.url;
         text.append(name, url);
 
         const open = document.createElement('button');
         open.textContent = 'Open';
-        open.onclick = () => switchTo(office.url);
+        open.onclick = () => switchTo(server.url);
 
         const forget = document.createElement('button');
         forget.className = 'link';
         forget.textContent = 'Forget';
-        forget.onclick = () => remove(office.url);
+        forget.onclick = () => remove(server.url);
 
         row.append(text, open, forget);
         return row;
@@ -152,11 +153,11 @@
     // alarming if nobody warned you.
     //
     // Except when there is nothing to leave: warning somebody that their first
-    // office will restart an app they have not started using is a dialog that
+    // server will restart an app they have not started using is a dialog that
     // only ever gets clicked through.
     if (leaving && !confirm(`Open ${url}?\n\nQuintal will restart.`)) return;
     try {
-      await invoke('switch_office', { url });
+      await invoke('switch_server', { url });
     } catch (error) {
       fail(error?.message ?? String(error));
     }
@@ -165,33 +166,32 @@
   async function remove(url) {
     if (!confirm(`Forget ${url}?\n\nThis machine's registration with it goes too.`)) return;
     try {
-      await invoke('remove_office', { url });
+      await invoke('remove_server', { url });
       await render();
     } catch (error) {
       fail(error?.message ?? String(error));
     }
   }
 
-  // `open_office_picker` clears the active office and restarts, which lands
+  // `open_server_picker` clears the active server and restarts, which lands
   // here with the picker showing — the same place a first run lands.
   el('elsewhere').onclick = () => {
-    void invoke('open_office_picker').catch((error) => fail(String(error)));
+    void invoke('open_server_picker').catch((error) => fail(String(error)));
   };
 
   el('add').onsubmit = async (event) => {
     event.preventDefault();
     el('problem').hidden = true;
-    const hadOffice = (await invoke('list_offices')).offices.length > 0;
+    const hadServer = (await invoke('list_servers')).servers.length > 0;
     const url = el('url').value.trim();
     if (!url) return;
     try {
-      await invoke('add_office', { url, label: null });
+      await invoke('add_server', { url, label: null });
       el('url').value = '';
-      // The first office added becomes the active one, so go straight in.
       const added = url.replace(/\/+$/, '');
-      // Adding does not choose. On a first office there is nothing to stay for,
+      // Adding does not choose. On a first server there is nothing to stay for,
       // so go straight in; otherwise show the list and let somebody pick.
-      if (!hadOffice) await switchTo(added, { leaving: false });
+      if (!hadServer) await switchTo(added, { leaving: false });
       else await render();
     } catch (error) {
       fail(error?.message ?? String(error));

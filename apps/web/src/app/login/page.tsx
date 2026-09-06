@@ -21,7 +21,7 @@ import {
   type IdentityState,
 } from '@/lib/host';
 import { useHost } from '@/lib/use-host';
-import { WhichOffice } from '@/components/WhichOffice';
+import { WhichServer } from '@/components/WhichServer';
 import {
   createIdentity,
   forgetSavedNsec,
@@ -488,7 +488,7 @@ export default function LoginPage() {
         </CardContent>
       </Card>
 
-      <WhichOffice className="text-muted-foreground mt-4 text-center text-xs" />
+      <WhichServer className="text-muted-foreground mt-4 text-center text-xs" />
 
       <p className="text-muted-foreground mt-4 text-center text-sm">
         <Link
@@ -500,10 +500,10 @@ export default function LoginPage() {
       </p>
 
       {/*
-        The way out of an office you cannot get into.
+        The way out of a server you cannot get into.
         
         Sign-in can fail for reasons that have nothing to do with your key —
-        an office reached by an address it does not trust, a deployment that has
+        a server reached by an address it does not trust, one that has
         moved, one that is simply broken. Without this the app boots straight
         back into it every launch, and the only escape is a tray menu you would
         have to know to look in. Somewhere you cannot sign in is exactly where a
@@ -514,9 +514,9 @@ export default function LoginPage() {
           <button
             type="button"
             className="hover:text-foreground underline-offset-4 hover:underline"
-            onClick={() => void host.openOfficePicker()}
+            onClick={() => void host.openServerPicker()}
           >
-            Open a different office
+            Open a different server
           </button>
         </p>
       ) : null}

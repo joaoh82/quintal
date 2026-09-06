@@ -157,7 +157,7 @@ export interface HostBridge {
    * Run the agents the office has assigned to this machine.
    *
    * Takes nothing. No command, no runtime id, no working directory, and not
-   * even the office URL — the host knows which office it is configured for, and
+   * even the server URL — the host knows which server it is configured for, and
    * the machine credential's destination is not the page's to choose.
    */
   startFleet(): Promise<FleetState>;
@@ -196,30 +196,31 @@ export interface HostBridge {
   setOpensAtLogin(enabled: boolean): Promise<void>;
 
   /**
-   * Every office this app knows about, and which one is live.
+   * Every server this app knows about, and which one is live.
    *
-   * An office is an environment rather than a setting — its own people, its own
-   * agents, its own registration of this machine — so they are a list you move
-   * between rather than a URL you edit.
+   * A server is a Quintal deployment — a URL with an office on it. It is an
+   * environment rather than a setting: its own people, its own agents, its own
+   * registration of this machine. So they are a list you move between rather
+   * than a URL you edit.
    */
-  listOffices(): Promise<OfficeList>;
-  addOffice(url: string, label?: string): Promise<OfficeList>;
+  listServers(): Promise<ServerList>;
+  addServer(url: string, label?: string): Promise<ServerList>;
   /** Make one live. Restarts the app, so exactly one origin is ever granted. */
-  switchOffice(url: string): Promise<void>;
+  switchServer(url: string): Promise<void>;
   /** Forget one, and this machine's registration with it. */
-  removeOffice(url: string): Promise<OfficeList>;
+  removeServer(url: string): Promise<ServerList>;
   /** Go back to the picker, restarting into it. */
-  openOfficePicker(): Promise<void>;
+  openServerPicker(): Promise<void>;
 }
 
-export interface Office {
+export interface Server {
   url: string;
   /** What to call it in a list. The URL when nobody said otherwise. */
   label: string;
 }
 
-export interface OfficeList {
-  offices: Office[];
+export interface ServerList {
+  servers: Server[];
   /** Null on a first run, and whenever the picker is showing. */
   active: string | null;
 }
@@ -321,11 +322,11 @@ function tauriBridge(): HostBridge {
     reposDir: () => call<string>('repos_dir'),
     listRepos: () => call<Repo[]>('list_repos'),
     pickReposDir: () => call<string | null>('pick_repos_dir'),
-    listOffices: () => call<OfficeList>('list_offices'),
-    addOffice: (url, label) => call<OfficeList>('add_office', { url, label: label ?? null }),
-    switchOffice: (url) => call<void>('switch_office', { url }),
-    removeOffice: (url) => call<OfficeList>('remove_office', { url }),
-    openOfficePicker: () => call<void>('open_office_picker'),
+    listServers: () => call<ServerList>('list_servers'),
+    addServer: (url, label) => call<ServerList>('add_server', { url, label: label ?? null }),
+    switchServer: (url) => call<void>('switch_server', { url }),
+    removeServer: (url) => call<ServerList>('remove_server', { url }),
+    openServerPicker: () => call<void>('open_server_picker'),
     opensAtLogin: () => call<boolean>('opens_at_login'),
     setOpensAtLogin: (enabled) => call<void>('set_opens_at_login', { enabled }),
   };

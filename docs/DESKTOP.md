@@ -34,73 +34,80 @@ pnpm desktop
 Starts the office and the app together. If you already have `pnpm dev` running
 in another terminal, use `pnpm desktop:attach` instead.
 
-## Offices
+## Servers
 
-An office is a place, not a setting. It has its own people, its own agents and
-its own registration of this machine, and two offices do not talk to each other
-— the same shape as a Slack workspace or a Buzz community. So the app keeps a
-list and you move between them.
+Two words, and the difference matters. An **office** is the place you are in:
+its people, its agents, its channels, its settings — what a guest link admits
+you to and what every settings page is about. A **server** is a Quintal
+deployment, a URL with an office on it. Today each server has one office per
+person, so switching server and switching office are the same act; they will
+not always be.
 
-Your **identity is one key**, used everywhere. Each office knows you as its own
-user; isolation comes from the office, not from carrying separate keys.
+A server is a place, not a setting. Nothing crosses between two of them — the
+same shape as a Slack workspace or a Buzz community — so the app keeps a list
+and you move between them.
 
-On first launch there is no office, and the app shows a picker rather than
-guessing. Add one by URL — `http://localhost:3000` while developing, or wherever
-yours is deployed. "Add or switch office…" in Settings, and "Switch office…" in
-the menu bar, come back to it later.
+Your **identity is one key**, used everywhere. Each server knows you as its
+own user; isolation comes from the server, not from carrying separate keys.
 
-**An office cannot introduce a new office.** Adding and forgetting are granted
-only while *no* office is loaded — that is, while the picker is what you are
-looking at. Otherwise a page in your office could add an attacker's URL, switch
-to it, and inherit key signing on the next boot.
+On first launch there is no server, and the app shows a picker rather than
+guessing. Add one by URL — `http://localhost:3000` while developing, or
+wherever yours is deployed. "Add or switch server…" in Settings, and "Switch
+server…" in the menu bar, come back to it later.
+
+**A server cannot introduce a new server.** Adding and forgetting are granted
+only while *no* server is loaded — that is, while the picker is what you are
+looking at. Otherwise a page in your office could add an attacker's URL,
+switch to it, and inherit key signing on the next boot.
 
 Switching is different, and allowed: it refuses any URL that is not already on
-your list, so the most an office can do with it is send you to another office
-you added yourself — somewhere you already trust with the same bridge.
+your list, so the most a page can do with it is send you to another server you
+added yourself — somewhere you already trust with the same bridge.
 Introducing a new origin is the dangerous half, and that is what stays behind
 the picker.
 
 **Switching restarts Quintal**, deliberately. IPC is granted to exactly one
-origin at startup, so switching in place would leave the office you left still
-able to ask this process for a signature for the rest of the session. Coming up
-fresh is how "these two do not talk to each other" stays true rather than mostly
-true.
+origin at startup, so switching in place would leave the server you left still
+able to ask this process for a signature for the rest of the session. Coming
+up fresh is how "these two do not talk to each other" stays true rather than
+mostly true.
 
-Only the active office's agents run. Switching stops them; the office you arrive
-in starts its own.
+Only the active server's agents run. Switching stops them; the server you
+arrive at starts its own.
 
-Forgetting an office also forgets this machine's registration with it — that
+Forgetting a server also forgets this machine's registration with it — that
 token names a machine in an office the app no longer has.
 
 ### Getting out of one
 
-Sign-in can fail for reasons that have nothing to do with your key. The clearest
-is an office reached by an address it does not trust: `http://localhost:3000`
-and `http://127.0.0.1:3000` are the same server but different *origins*, and
-sign-in is deliberately bound to the origin the office was configured with, so
-the second is refused with "Sign-in must come from this site." That check is
-there to stop a page elsewhere driving a sign-in, and it is working when it
-does this.
+Sign-in can fail for reasons that have nothing to do with your key. The
+clearest is a server reached by an address it does not trust:
+`http://localhost:3000` and `http://127.0.0.1:3000` are the same server but
+different *origins*, and sign-in is deliberately bound to the origin the
+server was configured with, so the second is refused with "Sign-in must come
+from this site." That check is there to stop a page elsewhere driving a
+sign-in, and it is working when it does this.
 
-An office can also simply be gone, or broken.
+A server can also simply be gone, or broken.
 
-Either way the app would otherwise boot back into it every launch, so there is a
-way out from both places you can get stuck: **Open a different office** under
-the sign-in card, and **Choose a different office** while it waits for one to
-answer. Both land on the picker, as does **Switch office…** in the menu bar.
+Either way the app would otherwise boot back into it every launch, so there is
+a way out from both places you can get stuck: **Open a different server**
+under the sign-in card, and **Choose a different server** while it waits for
+one to answer. Both land on the picker, as does **Switch server…** in the menu
+bar.
 
-## The app needs an office to connect to
+## The app needs a server to connect to
 
-The app is a client. It loads an office over HTTP — by default
+The app is a client. It loads an office from a server over HTTP — by default
 `http://localhost:3000` — and if nothing is answering there it has nothing to
-show. It will say so and keep looking, then go straight in the moment the office
+show. It will say so and keep looking, then go straight in the moment the server
 appears, so starting the app first is a fine order to do things in.
 
 `pnpm desktop` starts both, which is why it is the command in the README. The
-bundled `Quintal.app` starts only itself, so an office has to be running
+bundled `Quintal.app` starts only itself, so a server has to be running
 somewhere it can reach — `pnpm dev` locally, or a deployment.
 
-Add it in the picker. The app grants IPC to the active office's origin and no
+Add it in the picker. The app grants IPC to the active server's origin and no
 other, so changing it is a deliberate act rather than something a page can do to
 you.
 
