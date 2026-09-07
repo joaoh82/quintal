@@ -23,6 +23,7 @@ function agent(over: Partial<RosterEntry>): RosterEntry {
     scopes: [],
     identityId: 'a1',
     lastActionAt: 0,
+    avatar: '',
     isGuest: false,
     description: '',
     pubkey: '',

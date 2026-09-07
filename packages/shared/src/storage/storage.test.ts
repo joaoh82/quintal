@@ -12,6 +12,7 @@ import {
   assertStorageFitForProduction,
   getStorage,
   isObjectKey,
+  pngDimensions,
   putReplacing,
   resolveStorage,
   sniffImageType,
@@ -69,6 +70,16 @@ describe('the limits every upload meets', () => {
     assert.equal(sniffImageType(webp), 'image/webp');
     assert.equal(sniffImageType(new TextEncoder().encode('<svg onload=alert(1)>')), null);
     assert.equal(sniffImageType(new Uint8Array(0)), null);
+  });
+
+  it('reads a PNG\'s size from its header', () => {
+    const png = new Uint8Array(24);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52], 0);
+    new DataView(png.buffer).setUint32(16, 128);
+    new DataView(png.buffer).setUint32(20, 96);
+    assert.deepEqual(pngDimensions(png), { width: 128, height: 96 });
+    assert.equal(pngDimensions(PNG), null, 'a signature with no header is not enough');
+    assert.equal(pngDimensions(new Uint8Array([0xff, 0xd8, 0xff])), null, 'not a PNG');
   });
 });
 

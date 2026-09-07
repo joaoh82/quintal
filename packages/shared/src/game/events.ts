@@ -46,6 +46,8 @@ export interface RosterEntry {
    * nobody to a human being.
    */
   pubkey: string;
+  /** Humans: the object key of a chosen face, or empty for the derived one. */
+  avatar: string;
 }
 
 /**

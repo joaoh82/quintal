@@ -6,6 +6,8 @@
  * a credential.
  */
 export {
+  AVATAR_MAX_BYTES,
+  AVATAR_SIZE,
   IMAGE_TYPES,
   OBJECT_KEY_MAX_LENGTH,
   OBJECT_MAX_BYTES,
@@ -14,6 +16,7 @@ export {
   assertObjectKey,
   extensionFor,
   isObjectKey,
+  pngDimensions,
   putReplacing,
   sniffImageType,
   type ObjectStore,

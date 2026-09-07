@@ -51,6 +51,11 @@ In a browser there is no backup to make: the key is wherever you put it.
 - **Display name** — what appears over your head and in the roster. Two
   people can share a name; the npub is what tells them apart.
 - **Description** — one line on your profile card.
+- **Avatar** — a face for your profile card and the roster. Until you choose
+  one you have a face drawn from your key: the same one everywhere, and
+  nobody else's. Pick any image and the browser crops it square and shrinks
+  it before uploading, so a photograph's metadata never leaves your machine.
+  Remove it to go back to the drawn one.
 - **Conversations panel key** — the key that opens the panel, backtick by
   default.
 

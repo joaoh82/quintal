@@ -184,6 +184,7 @@ type JoinAuth =
       isGuest: boolean;
       description: string;
       pubkey: string;
+      avatar: string;
     }
   | { kind: 'agent'; identity: AgentIdentity };
 
@@ -463,6 +464,7 @@ export class OfficeRoom extends Room<OfficeState> {
       isGuest: user.isGuest,
       description: user.description,
       pubkey: user.pubkey,
+      avatar: user.avatar,
     };
   }
 
@@ -484,6 +486,7 @@ export class OfficeRoom extends Room<OfficeState> {
         isGuest: auth.isGuest,
         description: auth.description,
         pubkey: auth.pubkey,
+        avatar: auth.avatar,
       }),
     );
     this.#sims.set(client.sessionId, { intent: { x: 0, y: 0 }, path: [], away: false });

@@ -529,6 +529,7 @@ export class OfficeScene extends Phaser.Scene {
         isGuest: player.isGuest,
         description: player.description,
         pubkey: player.pubkey,
+        avatar: player.avatar,
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));

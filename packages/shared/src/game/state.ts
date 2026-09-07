@@ -92,6 +92,12 @@ export class OfficePlayer extends Schema {
    * a person could check.
    */
   pubkey = '';
+  /**
+   * For humans: the object key of the face they chose, or empty for the one
+   * derived from their key. A key rather than bytes — the roster fetches it
+   * once and the browser caches it; the state stays small.
+   */
+  avatar = '';
 }
 
 defineTypes(OfficePlayer, {
@@ -114,6 +120,7 @@ defineTypes(OfficePlayer, {
   isGuest: 'boolean',
   description: 'string',
   pubkey: 'string',
+  avatar: 'string',
 });
 
 export class OfficeState extends Schema {
@@ -141,6 +148,7 @@ export interface PlayerInit {
   isGuest?: boolean;
   description?: string;
   pubkey?: string;
+  avatar?: string;
 }
 
 /** Build a populated player. Assignment, not construction — see the note above. */
@@ -161,5 +169,6 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.isGuest = init.isGuest ?? false;
   player.description = init.description ?? '';
   player.pubkey = init.pubkey ?? '';
+  player.avatar = init.avatar ?? '';
   return player;
 }
