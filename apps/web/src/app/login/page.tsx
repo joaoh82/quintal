@@ -22,6 +22,7 @@ import {
 } from '@/lib/host';
 import { useHost } from '@/lib/use-host';
 import { WhichServer } from '@/components/WhichServer';
+import { Wordmark } from '@/components/Wordmark';
 import {
   createIdentity,
   forgetSavedNsec,
@@ -219,7 +220,8 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-10">
+      <Wordmark size="lg" className="self-center" />
       <Card>
         <CardHeader>
           <CardTitle>Sign in to Quintal</CardTitle>

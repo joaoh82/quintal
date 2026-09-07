@@ -25,8 +25,8 @@ export function SettingsTabs() {
             href={tab.href}
             className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
               active
-                ? 'border-foreground font-medium'
-                : 'text-muted-foreground border-transparent hover:text-foreground'
+                ? 'border-primary text-foreground font-medium'
+                : 'text-muted-foreground hover:text-foreground border-transparent'
             }`}
           >
             {tab.label}

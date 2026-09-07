@@ -1,18 +1,19 @@
 import { npubEncode } from '@quintal/shared';
 import { getDb, users } from '@quintal/shared/db';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { auth } from '@/lib/auth';
+
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 import { OverlayKeyField } from './OverlayKeyField';
 import { ProfileForm } from './ProfileForm';
+import { requestSession } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await requestSession();
   if (!session) redirect('/login');
 
   // Read the row rather than the session: the session's copy of the user is
@@ -42,6 +43,14 @@ export default async function ProfilePage() {
         isGuest={session.session.isGuest}
       />
       <OverlayKeyField />
+      <section className="space-y-2 rounded-lg border p-4">
+        <h2 className="text-sm font-medium">Appearance</h2>
+        <p className="text-muted-foreground text-xs">
+          Light or dark for these pages, or whatever your computer is set to.
+          Remembered in this browser. The office itself stays as it is.
+        </p>
+        <ThemeToggle />
+      </section>
     </div>
   );
 }

@@ -3,50 +3,57 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The palette is the website's — paper, ink, moss, line — so the pages that
+ * are not the office look like the same product as quintal.sh. The office
+ * chrome (roster, chat, bubbles) is dark by design and does not read these.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.99 0.005 106);
-  --foreground: oklch(0.21 0.006 285);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.006 285);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.006 285);
-  --primary: oklch(0.52 0.13 160);
-  --primary-foreground: oklch(0.98 0.01 160);
-  --secondary: oklch(0.96 0.004 286);
-  --secondary-foreground: oklch(0.21 0.006 285);
-  --muted: oklch(0.96 0.004 286);
-  --muted-foreground: oklch(0.55 0.014 286);
-  --accent: oklch(0.96 0.004 286);
-  --accent-foreground: oklch(0.21 0.006 285);
+  --radius: 0.75rem;
+  --background: #f7f8f2;
+  --foreground: #242d24;
+  --card: #eef0e7;
+  --card-foreground: #242d24;
+  --popover: #f7f8f2;
+  --popover-foreground: #242d24;
+  --primary: #3d5736;
+  --primary-foreground: #ffffff;
+  --secondary: #e7eadf;
+  --secondary-foreground: #242d24;
+  --muted: #e7eadf;
+  --muted-foreground: #616959;
+  --accent: #e7eadf;
+  --accent-foreground: #242d24;
   --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.92 0.004 286);
-  --input: oklch(0.92 0.004 286);
-  --ring: oklch(0.52 0.13 160);
+  --border: #d8ddcf;
+  --input: #d8ddcf;
+  --ring: #3d5736;
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
 .dark {
-  --background: oklch(0.16 0.005 285);
-  --foreground: oklch(0.98 0 0);
-  --card: oklch(0.21 0.006 285);
-  --card-foreground: oklch(0.98 0 0);
-  --popover: oklch(0.21 0.006 285);
-  --popover-foreground: oklch(0.98 0 0);
-  --primary: oklch(0.7 0.14 162);
-  --primary-foreground: oklch(0.19 0.04 160);
-  --secondary: oklch(0.27 0.006 286);
-  --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.27 0.006 286);
-  --muted-foreground: oklch(0.71 0.013 286);
-  --accent: oklch(0.27 0.006 286);
-  --accent-foreground: oklch(0.98 0 0);
+  --background: #1c231d;
+  --foreground: #eff1e8;
+  --card: #252d25;
+  --card-foreground: #eff1e8;
+  --popover: #252d25;
+  --popover-foreground: #eff1e8;
+  --primary: #b3cd9b;
+  --primary-foreground: #1c231d;
+  --secondary: #303a2c;
+  --secondary-foreground: #eff1e8;
+  --muted: #303a2c;
+  --muted-foreground: #b3bca9;
+  --accent: #303a2c;
+  --accent-foreground: #eff1e8;
   --destructive: oklch(0.7 0.19 22);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.14 162);
+  --border: #3e493b;
+  --input: #3e493b;
+  --ring: #b3cd9b;
 }
 
 @theme inline {
+  --font-sans: var(--font-sans);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -80,4 +87,19 @@
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+/* The brand mark, as the website draws it: the PNG's alpha as a mask, so the
+   mark takes the theme's green rather than shipping one image per theme. */
+.brand-mark {
+  display: inline-block;
+  background: var(--primary);
+  mask: url(/brand/quintal-mark-small.png) center / 165% no-repeat;
+  -webkit-mask: url(/brand/quintal-mark-small.png) center / 165% no-repeat;
+  flex-shrink: 0;
+}
+
+/* Small monospace label above a heading, the website's "eyebrow". */
+.eyebrow {
+  @apply text-primary inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] uppercase;
 }
