@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod identity;
+pub mod links;
 pub mod machine;
 pub mod nip49;
 pub mod runtimes;
@@ -20,6 +21,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         // Off unless somebody turns it on: an app that adds itself to login
         // items uninvited is a thing people uninstall.
         .plugin(tauri_plugin_autostart::init(
@@ -93,7 +95,39 @@ pub fn run() {
             tray::build(app.handle())?;
             tray::watch(app.handle());
 
-            if let Some(window) = app.get_webview_window("main") {
+            // The window is built here rather than declared in the config so
+            // it can carry two rules the config cannot express: it never
+            // navigates off the server, and a link that wants a new window
+            // gets the system browser unless it is the office's own page.
+            // A link to the docs opened *inside* a webview holding the
+            // keychain bridge would be a page with a grant it was never
+            // meant to have.
+            let home = server.clone();
+            let navigation_home = home.clone();
+            let window =
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                    .title("Quintal")
+                    .inner_size(1280.0, 820.0)
+                    .min_inner_size(960.0, 640.0)
+                    .resizable(true)
+                    .on_navigation(move |url| {
+                        if links::is_external(navigation_home.as_deref(), url) {
+                            links::open_externally(url);
+                            return false;
+                        }
+                        true
+                    })
+                    .on_new_window(move |url, _features| {
+                        if links::is_external(home.as_deref(), &url) {
+                            links::open_externally(&url);
+                            tauri::webview::NewWindowResponse::Deny
+                        } else {
+                            tauri::webview::NewWindowResponse::Allow
+                        }
+                    })
+                    .build()?;
+
+            {
                 match server.as_deref().map(str::parse::<tauri::Url>) {
                     Some(Ok(url)) => wait_for_server(window, url),
                     Some(Err(_)) => {

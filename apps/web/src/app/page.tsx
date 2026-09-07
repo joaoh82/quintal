@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { ExternalLink } from '@/components/ExternalLink';
 import { Button } from '@/components/ui/button';
 import { WhichServer } from '@/components/WhichServer';
 import { Wordmark } from '@/components/Wordmark';
@@ -20,12 +21,12 @@ export default function LandingPage() {
       <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <Wordmark size="md" />
         <nav className="text-muted-foreground flex items-center gap-5 text-sm">
-          <a className="hover:text-foreground" href="https://quintal.sh/docs/">
+          <ExternalLink className="hover:text-foreground" href="https://quintal.sh/docs/">
             Docs
-          </a>
-          <a className="hover:text-foreground" href={REPO}>
+          </ExternalLink>
+          <ExternalLink className="hover:text-foreground" href={REPO}>
             GitHub ↗
-          </a>
+          </ExternalLink>
         </nav>
         <WhichServer className="text-muted-foreground ml-auto text-xs" />
       </header>
@@ -49,7 +50,7 @@ export default function LandingPage() {
             <Link href="/login">Sign in</Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <a href="https://quintal.sh/docs/getting-started/">Get started</a>
+            <ExternalLink href="https://quintal.sh/docs/getting-started/">Get started</ExternalLink>
           </Button>
         </div>
 
@@ -71,15 +72,15 @@ export default function LandingPage() {
 
       <footer className="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-4 text-xs">
         <span>Open source. Built in public.</span>
-        <a className="hover:text-foreground" href="https://quintal.sh">
+        <ExternalLink className="hover:text-foreground" href="https://quintal.sh">
           quintal.sh
-        </a>
-        <a className="hover:text-foreground" href={`${REPO}/blob/main/SELF_HOSTING.md`}>
+        </ExternalLink>
+        <ExternalLink className="hover:text-foreground" href={`${REPO}/blob/main/SELF_HOSTING.md`}>
           Self-hosting
-        </a>
-        <a className="hover:text-foreground" href={`${REPO}/blob/main/LICENSE-FAQ.md`}>
+        </ExternalLink>
+        <ExternalLink className="hover:text-foreground" href={`${REPO}/blob/main/LICENSE-FAQ.md`}>
           AGPL-3.0
-        </a>
+        </ExternalLink>
       </footer>
     </main>
   );
