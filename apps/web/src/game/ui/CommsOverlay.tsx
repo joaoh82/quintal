@@ -11,6 +11,7 @@ import { useEffect, useMemo } from 'react';
 
 import { NEARBY, channelKey, parseKey, zoneKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
+import { joinTargets } from './join';
 import { Transcript } from './Transcript';
 import { WorkingLine } from './WorkingLine';
 
@@ -257,7 +258,7 @@ export function CommsOverlay({
 
           <ChatInput
             roster={roster}
-            joinable={available.map((channel) => channel.slug)}
+            joinable={joinTargets(conversations.channels, available)}
             focused
             autoFocus
             onSend={conversations.send}

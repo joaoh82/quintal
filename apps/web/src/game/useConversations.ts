@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 import { gameBridge } from './bridge';
 import type { OfficeSession } from './createGame';
+import { resolveJoin } from './ui/join';
 import { parseSlashCommand } from './ui/slash';
 
 /**
@@ -114,6 +115,12 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
   const [active, setActive] = useState<ConversationKey>(NEARBY);
   const [notice, setNotice] = useState('');
   const activeRef = useRef(active);
+  /**
+   * A channel `/join` asked for that we were not in yet. The office answers
+   * a join with a fresh `channels` list rather than a receipt, so the switch
+   * to the new tab happens when that list arrives with the slug in it.
+   */
+  const pendingJoinRef = useRef<string | null>(null);
   activeRef.current = active;
 
   const patch = useCallback((key: ConversationKey, fn: (current: Transcript) => Transcript) => {
@@ -146,6 +153,16 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
       gameBridge.on('channels', ({ channels: mine, available: open }) => {
         setChannels(mine);
         setAvailable(open);
+        // The channel `/join` just asked for: it is ours now, so go there.
+        const wanted = pendingJoinRef.current;
+        const arrived = wanted
+          ? mine.find((channel) => channel.kind === 'channel' && channel.slug === wanted)
+          : undefined;
+        if (arrived) {
+          pendingJoinRef.current = null;
+          setActive(channelKey(arrived.id));
+          return;
+        }
         // A tab for a channel we were taken out of is a tab that can never
         // send again; fall back to nearby rather than leave it selected.
         const { channelId } = parseKey(activeRef.current);
@@ -218,10 +235,26 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
             if (slash.name.length === 0) setNotice('Who? /msg name');
             else session.openDm({ name: slash.name });
             return;
-          case 'join':
-            if (slash.slug.length === 0) setNotice('Which? /join channel');
-            else session.joinChannel(slash.slug);
+          case 'join': {
+            // "Take me there", whatever there is — see `resolveJoin`.
+            const target = resolveJoin(slash.slug, channels, available);
+            switch (target.kind) {
+              case 'switch':
+                setActive(channelKey(target.channel.id));
+                return;
+              case 'join':
+                pendingJoinRef.current = target.slug;
+                session.joinChannel(target.slug);
+                return;
+              case 'unknown':
+                setNotice(`No #${target.slug} here. Type /join to see the channels.`);
+                return;
+              case 'pick':
+                setNotice('Which channel? Type /join and pick one from the list.');
+                return;
+            }
             return;
+          }
           case 'leave': {
             const { channelId } = parseKey(activeRef.current);
             const channel = channels.find((c) => c.id === channelId);
@@ -250,7 +283,7 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
         session.say(text);
       }
     },
-    [channels, myZone, sessionRef],
+    [channels, myZone, sessionRef, available],
   );
 
   const activeTranscript = transcripts[active] ?? EMPTY;

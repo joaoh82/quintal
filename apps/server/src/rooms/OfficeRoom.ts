@@ -136,6 +136,7 @@ import {
   type AgentSession,
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
+import { channelListSignature } from './channel-list.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
@@ -1138,9 +1139,7 @@ export class OfficeRoom extends Room<OfficeState> {
         }
       }
     }
-    const signature = [...channels, ...available]
-      .map((channel) => `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}`)
-      .join(',');
+    const signature = channelListSignature(channels, available);
     if (this.#channelsSent.get(sessionId) === signature) return;
     this.#channelsSent.set(sessionId, signature);
 
