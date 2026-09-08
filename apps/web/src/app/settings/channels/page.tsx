@@ -5,25 +5,23 @@ import {
   listChannels,
   listPeopleForWorkspace,
 } from '@quintal/shared/db';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { auth } from '@/lib/auth';
-import { currentOffice } from '@/lib/workspace';
 
 import { Channels } from './Channels';
 import { Visiting } from '../Visiting';
+import { requestSession, requestOffice } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Channels · Quintal' };
 
 export default async function ChannelsSettingsPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await requestSession();
   if (!session) redirect('/login');
 
   const db = getDb();
-  const here = await currentOffice(db, session);
+  const here = await requestOffice();
   if (!here) redirect('/login');
   // Channels are places you are put by members; a guest cannot be, so the
   // directory would be a list of doors that do not open.

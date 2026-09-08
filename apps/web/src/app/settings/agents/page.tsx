@@ -5,28 +5,26 @@ import {
   listHostTokens,
   listHostsForWorkspace,
 } from '@quintal/shared/db';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { auth } from '@/lib/auth';
-import { currentOffice } from '@/lib/workspace';
 
 import { AgentsManager } from './AgentsManager';
 import { Visiting } from '../Visiting';
 import { Machines } from './Machines';
 import { FleetControl } from './FleetControl';
 import { RuntimePanels } from './RuntimePanels';
+import { requestSession, requestOffice } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = { title: 'Agents · Quintal' };
 
 export default async function AgentsSettingsPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await requestSession();
   if (!session) redirect('/login');
 
   const db = getDb();
-  const here = await currentOffice(db, session);
+  const here = await requestOffice();
   if (!here) redirect('/login');
   if (here.role === 'guest') {
     return <Visiting office={here.workspace.name} what="agents and machines" />;

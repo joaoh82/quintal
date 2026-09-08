@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod identity;
+pub mod links;
 pub mod machine;
 pub mod nip49;
 pub mod runtimes;
@@ -93,7 +94,44 @@ pub fn run() {
             tray::build(app.handle())?;
             tray::watch(app.handle());
 
-            if let Some(window) = app.get_webview_window("main") {
+            // The window is built here rather than declared in the config so
+            // it can carry two rules the config cannot express: it never
+            // navigates off the server, and a link that wants a new window
+            // gets the system browser unless it is the office's own page.
+            // A link to the docs opened *inside* a webview holding the
+            // keychain bridge would be a page with a grant it was never
+            // meant to have.
+            let home = server.clone();
+            let navigation_home = home.clone();
+            let window =
+                tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                    .title("Quintal")
+                    .inner_size(1280.0, 820.0)
+                    .min_inner_size(960.0, 640.0)
+                    .resizable(true)
+                    .on_navigation(move |url| {
+                        match links::verdict(navigation_home.as_deref(), url) {
+                            links::Verdict::Stay => true,
+                            links::Verdict::OpenOutside => {
+                                links::open_externally(url);
+                                false
+                            }
+                            links::Verdict::Block => false,
+                        }
+                    })
+                    .on_new_window(move |url, _features| {
+                        match links::verdict(home.as_deref(), &url) {
+                            links::Verdict::Stay => tauri::webview::NewWindowResponse::Allow,
+                            links::Verdict::OpenOutside => {
+                                links::open_externally(&url);
+                                tauri::webview::NewWindowResponse::Deny
+                            }
+                            links::Verdict::Block => tauri::webview::NewWindowResponse::Deny,
+                        }
+                    })
+                    .build()?;
+
+            {
                 match server.as_deref().map(str::parse::<tauri::Url>) {
                     Some(Ok(url)) => wait_for_server(window, url),
                     Some(Err(_)) => {

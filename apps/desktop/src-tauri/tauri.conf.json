@@ -8,16 +8,7 @@
     "frontendDist": "../bootstrap"
   },
   "app": {
-    "windows": [
-      {
-        "title": "Quintal",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 960,
-        "minHeight": 640,
-        "resizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

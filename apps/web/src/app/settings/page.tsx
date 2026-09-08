@@ -3,11 +3,10 @@ import { redirect } from 'next/navigation';
 
 import { getDb, getInstanceSettings, getOfficeSettings, isInstanceAdmin } from '@quintal/shared/db';
 
-import { auth } from '@/lib/auth';
-import { currentOffice } from '@/lib/workspace';
 
 import { Servers } from './Servers';
 import { OfficeSettingsForm } from './OfficeSettingsForm';
+import { requestSession, requestOffice } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +14,7 @@ export const metadata = { title: 'Office settings · Quintal' };
 
 export default async function OfficeSettingsPage() {
   const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await requestSession();
   if (!session) redirect('/login');
 
   // From the request, not from `window`: this is handed to a client component
@@ -26,7 +25,7 @@ export default async function OfficeSettingsPage() {
   const db = getDb();
   // The office this session is in — for a guest, the one they are visiting,
   // whose radii are the ones in force around them.
-  const here = await currentOffice(db, session);
+  const here = await requestOffice();
   if (!here) redirect('/login');
   const { workspace } = here;
 
