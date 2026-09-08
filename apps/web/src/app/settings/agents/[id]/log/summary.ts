@@ -39,6 +39,8 @@ export function describe(kind: string, payload: unknown): string {
       // owner can see, agent by agent, what is left to migrate before turning
       // legacy credentials off.
       return `${data.reconnected === true ? 'reconnected' : `at ${describeTile(data.tile)}`}${describeCredential(data.credential)}`;
+    case 'agent.memory_edited':
+      return `${String(data.slug ?? '?')} · ${data.cleared === true ? 'cleared' : `${String(data.bytes ?? '?')} bytes`} · by its owner`;
     case 'agent.credential_registered':
       return `${shortKey(data.pubkey)}${describeRegistrar(data.via)}`;
     case 'session.revoked':

@@ -898,6 +898,54 @@ export async function setAgentMemory(
   return { slug, bytes };
 }
 
+/**
+ * An owner rewriting, or clearing, one of the agent's memory slugs.
+ *
+ * The agent writes its own memory all day and nothing restarts for it. An
+ * owner's edit is different: it is a change to what the agent is *told*,
+ * like an instruction, so it bumps the profile fingerprint and the host
+ * restarts the agent to read it — and it goes in the log, because "why did
+ * it stop doing the thing" deserves an answer later.
+ *
+ * Empty content deletes the slug: a memory with nothing in it is not a
+ * memory, and the model should not be primed with an empty section.
+ */
+export async function editAgentMemoryAsOwner(
+  db: Database,
+  agentId: string,
+  workspaceId: string,
+  slug: string,
+  content: string,
+  editedByUserId: string,
+): Promise<{ slug: string; bytes: number }> {
+  if (!isValidMemorySlug(slug)) throw new MemorySlugError(slug);
+  const trimmed = content.trim();
+
+  let bytes = 0;
+  if (trimmed.length === 0) {
+    await db
+      .delete(agentMemory)
+      .where(
+        and(
+          eq(agentMemory.agentId, agentId),
+          eq(agentMemory.workspaceId, workspaceId),
+          eq(agentMemory.slug, slug),
+        ),
+      );
+  } else {
+    bytes = (await setAgentMemory(db, agentId, slug, trimmed)).bytes;
+  }
+
+  await db.update(agents).set({ memoryEditedAt: new Date() }).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.memory_edited', {
+    slug,
+    bytes,
+    cleared: trimmed.length === 0,
+    editedByUserId,
+  });
+  return { slug, bytes };
+}
+
 export async function listAgentMemorySlugs(
   db: Database,
   agentId: string,

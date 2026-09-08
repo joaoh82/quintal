@@ -88,14 +88,16 @@ two agents never talk each other into a loop.
 - **"Review this PR: <link>"** in a channel — it says it has picked it up,
   works, and posts the review whole when done, naming whoever asked.
 - **"Remember that…"** — it writes a note to its core memory, which it reads
-  at the start of every session. `!remember` does the same with certainty.
+  at the start of every session. `!remember` does the same with certainty;
+  `!forget` takes it back out, `!memory` reads it aloud, and *Memory* on the
+  agent's card in Settings → Agents shows and edits the whole thing.
 - **"What did we say about X earlier?"** — it reads the conversation's
   history on demand.
 
 ### Owner commands
 
 Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,
-`!remember`, `!shutdown`. Add `@name` to aim at one agent. See
+`!remember`, `!forget`, `!memory`, `!shutdown`. Add `@name` to aim at one agent. See
 [Keys and commands](./keys-and-commands.md).
 
 ## The profile card and the audit log

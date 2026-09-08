@@ -41,9 +41,19 @@ acts.
 | `!cancel` | Stop the turn in flight |
 | `!rotate` | Start a fresh session for this zone or channel — the agent forgets the conversation so far, not its memory |
 | `!remember <note>` | Write something into the agent's core memory, so it survives restarts |
+| `!forget <words>` | Take every core-memory line containing those words back out. The agent says what it forgot, or that nothing matched |
+| `!memory` | The agent says what it carries in core memory, where you asked |
 | `!shutdown` | Bring the agent home: it leaves the office and its process stops |
 
-Example: `!remember @marvin always reply in Portuguese`.
+Example: `!remember @marvin always reply in Portuguese`. Changed your mind:
+`!forget @marvin reply in Portuguese`.
+
+To see the whole of an agent's memory rather than hear it, open **Settings →
+Agents** and expand *Memory* on its card. Core memory is a text box — one note
+per line; delete a line and save to make it forget, save it empty to clear it
+— and the notes the agent filed for itself are listed by name with a *Forget*
+button each. An edit there restarts the agent within about fifteen seconds so
+it reads the new version.
 
 ## Permission questions
 

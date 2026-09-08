@@ -1,0 +1,1 @@
+ALTER TABLE `agents` ADD `memory_edited_at` integer;
