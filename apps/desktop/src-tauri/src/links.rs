@@ -17,24 +17,38 @@
 
 use tauri::Url;
 
-/// Should this URL leave the app?
+/// What the window does with a URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// The office, or the app's own pages: load it here.
+    Stay,
+    /// Somewhere on the web, or a mail address: the system browser's job.
+    OpenOutside,
+    /// Neither — `javascript:`, `data:`, `file:` and whatever else. Nothing
+    /// loads, nothing opens. Deny by default next to a keychain bridge.
+    Block,
+}
+
+/// Where a URL goes.
 ///
 /// Anything on the server's origin is the office and stays. The app's own
-/// pages (`tauri://`, `tauri.localhost`) and `about:blank` stay. Every other
-/// web address goes out.
-pub fn is_external(server: Option<&str>, url: &Url) -> bool {
+/// pages (`tauri://`, `tauri.localhost`) and `about:blank` stay. Every web
+/// address elsewhere goes out. Anything that is none of those is refused.
+pub fn verdict(server: Option<&str>, url: &Url) -> Verdict {
     match url.scheme() {
         "http" | "https" => {}
-        "mailto" => return true,
-        _ => return false,
+        "mailto" => return Verdict::OpenOutside,
+        "tauri" | "about" => return Verdict::Stay,
+        _ => return Verdict::Block,
     }
     if url.host_str().is_some_and(|host| host == "tauri.localhost") {
-        return false;
+        return Verdict::Stay;
     }
     match server.and_then(|raw| Url::parse(raw).ok()) {
-        Some(home) => !same_origin(&home, url),
-        // No server chosen yet: nothing on the web is the office.
-        None => true,
+        Some(home) if same_origin(&home, url) => Verdict::Stay,
+        // Another origin — or no server chosen yet, in which case nothing
+        // on the web is the office.
+        _ => Verdict::OpenOutside,
     }
 }
 
@@ -58,60 +72,82 @@ mod tests {
 
     const SERVER: Option<&str> = Some("http://localhost:3000");
 
-    fn url(raw: &str) -> Url {
-        Url::parse(raw).expect("a url")
+    fn of(server: Option<&str>, raw: &str) -> Verdict {
+        verdict(server, &Url::parse(raw).expect("a url"))
     }
 
     #[test]
     fn the_office_stays_in_the_window() {
-        assert!(!is_external(SERVER, &url("http://localhost:3000/office")));
-        assert!(!is_external(
-            SERVER,
-            &url("http://localhost:3000/settings/agents?x=1")
-        ));
+        assert_eq!(of(SERVER, "http://localhost:3000/office"), Verdict::Stay);
+        assert_eq!(
+            of(SERVER, "http://localhost:3000/settings/agents?x=1"),
+            Verdict::Stay
+        );
     }
 
     #[test]
     fn the_same_host_on_another_port_is_somewhere_else() {
         // A second office on this machine is a different server, and the
         // window must not carry its IPC grant across.
-        assert!(is_external(SERVER, &url("http://localhost:3100/office")));
-        assert!(is_external(SERVER, &url("https://localhost:3000/office")));
+        assert_eq!(
+            of(SERVER, "http://localhost:3100/office"),
+            Verdict::OpenOutside
+        );
+        assert_eq!(
+            of(SERVER, "https://localhost:3000/office"),
+            Verdict::OpenOutside
+        );
     }
 
     #[test]
     fn the_web_goes_to_the_browser() {
-        assert!(is_external(SERVER, &url("https://quintal.sh/docs/")));
-        assert!(is_external(
-            SERVER,
-            &url("https://github.com/joaoh82/quintal")
-        ));
-        assert!(is_external(SERVER, &url("mailto:hello@quintal.sh")));
+        assert_eq!(of(SERVER, "https://quintal.sh/docs/"), Verdict::OpenOutside);
+        assert_eq!(
+            of(SERVER, "https://github.com/joaoh82/quintal"),
+            Verdict::OpenOutside
+        );
+        assert_eq!(of(SERVER, "mailto:hello@quintal.sh"), Verdict::OpenOutside);
     }
 
     #[test]
     fn the_apps_own_pages_stay() {
-        assert!(!is_external(SERVER, &url("tauri://localhost/index.html")));
-        assert!(!is_external(
-            SERVER,
-            &url("http://tauri.localhost/index.html")
-        ));
-        assert!(!is_external(SERVER, &url("about:blank")));
+        assert_eq!(of(SERVER, "tauri://localhost/index.html"), Verdict::Stay);
+        assert_eq!(
+            of(SERVER, "http://tauri.localhost/index.html"),
+            Verdict::Stay
+        );
+        assert_eq!(of(SERVER, "about:blank"), Verdict::Stay);
+    }
+
+    #[test]
+    fn anything_else_is_refused_outright() {
+        // Not the office, and not something a browser should be handed
+        // either: a script URL next to a keychain bridge, a data page that
+        // could imitate the office, a local file.
+        assert_eq!(of(SERVER, "javascript:alert(1)"), Verdict::Block);
+        assert_eq!(of(SERVER, "data:text/html,hello"), Verdict::Block);
+        assert_eq!(of(SERVER, "file:///etc/passwd"), Verdict::Block);
     }
 
     #[test]
     fn with_no_server_chosen_nothing_on_the_web_is_home() {
-        assert!(is_external(None, &url("http://localhost:3000/office")));
-        assert!(!is_external(None, &url("tauri://localhost/index.html")));
+        assert_eq!(
+            of(None, "http://localhost:3000/office"),
+            Verdict::OpenOutside
+        );
+        assert_eq!(of(None, "tauri://localhost/index.html"), Verdict::Stay);
     }
 
     #[test]
     fn a_hosted_office_is_home_on_its_default_port() {
         let hosted = Some("https://office.example.com");
-        assert!(!is_external(
-            hosted,
-            &url("https://office.example.com:443/settings")
-        ));
-        assert!(is_external(hosted, &url("https://docs.example.com/")));
+        assert_eq!(
+            of(hosted, "https://office.example.com:443/settings"),
+            Verdict::Stay
+        );
+        assert_eq!(
+            of(hosted, "https://docs.example.com/"),
+            Verdict::OpenOutside
+        );
     }
 }

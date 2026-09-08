@@ -7,8 +7,14 @@
  * The palette is the website's — paper, ink, moss, line — so the pages that
  * are not the office look like the same product as quintal.sh. The office
  * chrome (roster, chat, bubbles) is dark by design and does not read these.
+ *
+ * `.light` re-declares the light set on a subtree: custom properties
+ * inherit, so a `.light` element inside a `.dark` document keeps its own
+ * look. The office page uses it to stay exactly as it was whatever theme
+ * the settings chose.
  */
-:root {
+:root,
+.light {
   --radius: 0.75rem;
   --background: #f7f8f2;
   --foreground: #242d24;
@@ -29,6 +35,10 @@
   --input: #d8ddcf;
   --ring: #3d5736;
   --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+}
+
+.light {
+  color-scheme: light;
 }
 
 .dark {

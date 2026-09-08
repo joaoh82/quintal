@@ -110,18 +110,23 @@ pub fn run() {
                     .min_inner_size(960.0, 640.0)
                     .resizable(true)
                     .on_navigation(move |url| {
-                        if links::is_external(navigation_home.as_deref(), url) {
-                            links::open_externally(url);
-                            return false;
+                        match links::verdict(navigation_home.as_deref(), url) {
+                            links::Verdict::Stay => true,
+                            links::Verdict::OpenOutside => {
+                                links::open_externally(url);
+                                false
+                            }
+                            links::Verdict::Block => false,
                         }
-                        true
                     })
                     .on_new_window(move |url, _features| {
-                        if links::is_external(home.as_deref(), &url) {
-                            links::open_externally(&url);
-                            tauri::webview::NewWindowResponse::Deny
-                        } else {
-                            tauri::webview::NewWindowResponse::Allow
+                        match links::verdict(home.as_deref(), &url) {
+                            links::Verdict::Stay => tauri::webview::NewWindowResponse::Allow,
+                            links::Verdict::OpenOutside => {
+                                links::open_externally(&url);
+                                tauri::webview::NewWindowResponse::Deny
+                            }
+                            links::Verdict::Block => tauri::webview::NewWindowResponse::Deny,
                         }
                     })
                     .build()?;

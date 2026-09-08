@@ -1,5 +1,4 @@
 import { displayName } from '@quintal/shared';
-import { getDb } from '@quintal/shared/db';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
