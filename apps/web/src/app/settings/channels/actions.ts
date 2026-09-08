@@ -37,7 +37,7 @@ async function caller() {
     name: session.user.name,
     pubkey: session.user.pubkey,
   });
-  const membership = await findMembership(db, session.user.id, workspace.id);
+  const membership = await findMembership(db, { userId: session.user.id, workspaceId: workspace.id });
   return {
     db,
     workspaceId: workspace.id,
@@ -101,7 +101,7 @@ export async function addChannelMemberAction(
       const agent = await findAgentById(db, memberId);
       if (!agent || agent.workspaceId !== workspaceId) return { ok: false, error: 'No such agent.' };
       ownerUserId = agent.ownerUserId;
-    } else if (!(await findMembership(db, memberId, workspaceId))) {
+    } else if (!(await findMembership(db, { userId: memberId, workspaceId }))) {
       return { ok: false, error: 'Not a member of this office.' };
     }
 

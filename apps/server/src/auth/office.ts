@@ -38,7 +38,7 @@ export async function mayEnterOffice(
 
   if (user.isGuest) return user.guestWorkspaceId === workspaceId;
 
-  return (await findMembership(db, user.userId, workspaceId)) !== null;
+  return (await findMembership(db, { userId: user.userId, workspaceId })) !== null;
 }
 
 /**

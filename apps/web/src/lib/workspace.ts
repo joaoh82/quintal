@@ -49,7 +49,7 @@ export async function currentOffice(
     name: session.user.name,
     pubkey: session.user.pubkey,
   });
-  const membership = await findMembership(db, session.user.id, workspace.id);
+  const membership = await findMembership(db, { userId: session.user.id, workspaceId: workspace.id });
   // `ensurePersonalWorkspace` returns the office this person *owns* and
   // writes the owner membership when it creates one, so a missing row here
   // is the safety net for an account whose sign-up was cut short — not a

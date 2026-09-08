@@ -33,7 +33,7 @@ export default async function AgentsSettingsPage() {
 
   const [agents, membership, hosts, machines] = await Promise.all([
     listAgentsForWorkspace(db, workspace.id),
-    findMembership(db, workspace.id, session.user.id),
+    findMembership(db, { userId: session.user.id, workspaceId: workspace.id }),
     listHostsForWorkspace(db, workspace.id),
     listHostTokens(db, workspace.id),
   ]);

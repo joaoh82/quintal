@@ -572,7 +572,7 @@ describe('guest links', () => {
     const person = (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0];
     assert.ok(person);
     assert.equal(
-      await findMembership(db, person.id, host.workspaceId),
+      await findMembership(db, { userId: person.id, workspaceId: host.workspaceId }),
       null,
       'and no membership to fall back on — the office they visited is closed to them',
     );

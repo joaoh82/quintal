@@ -105,11 +105,22 @@ export async function listWorkspacesForUser(
   return rows;
 }
 
-/** Membership lookup used to gate room joins. */
+export interface FindMembershipInput {
+  userId: string;
+  workspaceId: string;
+}
+
+/**
+ * Membership lookup used to gate room joins and settings pages.
+ *
+ * Both ids are opaque uuids, so a positional `(db, userId, workspaceId)` let a
+ * caller swap them and still typecheck. The lookup then quietly found nothing,
+ * and on `/settings/agents` "nothing" meant the owner lost the right to edit
+ * anyone else's agents. Naming the two ids makes that slip a type error.
+ */
 export async function findMembership(
   db: Database,
-  userId: string,
-  workspaceId: string,
+  { userId, workspaceId }: FindMembershipInput,
 ) {
   const rows = await db
     .select()

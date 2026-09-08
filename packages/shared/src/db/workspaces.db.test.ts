@@ -7,6 +7,7 @@ import { memberships, users } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
 import {
   ensurePersonalWorkspace,
+  findMembership,
   listWorkspacesForUser,
   renameWorkspace,
 } from './workspaces.js';
@@ -126,6 +127,59 @@ describe('ensurePersonalWorkspace', () => {
       const resolved = await ensurePersonalWorkspace(db, { userId: owner.id });
       assert.equal(resolved.id, owner.workspaceId);
     }
+  });
+});
+
+/**
+ * Who is in the office.
+ *
+ * `/settings/agents` reads the role off this row to decide whether the person
+ * may revoke or edit agents that are not theirs. The ids are both uuids, and a
+ * caller once passed them in the wrong order: the lookup found nothing, and the
+ * owner was treated as an ordinary member. The named-argument shape is what
+ * keeps that from typechecking; these tests keep the lookup itself honest.
+ */
+describe('findMembership', () => {
+  it('returns the owner row for the person who owns the office', async () => {
+    const db = await createTestDb();
+    const { id, pubkey } = await newUserRow(db);
+    const office = await ensurePersonalWorkspace(db, { userId: id, name: 'Ada', pubkey });
+
+    const membership = await findMembership(db, { userId: id, workspaceId: office.id });
+
+    assert.equal(membership?.role, 'owner');
+    assert.equal(membership?.userId, id);
+    assert.equal(membership?.workspaceId, office.id);
+  });
+
+  it('reports the role a member was given, not the owner\'s', async () => {
+    const db = await createTestDb();
+    const owner = await newUserRow(db);
+    const office = await ensurePersonalWorkspace(db, { userId: owner.id, name: 'Ada', pubkey: owner.pubkey });
+    const admin = await newUserRow(db);
+    await addMember(db, office.id, admin.id, 'admin');
+
+    assert.equal((await findMembership(db, { userId: admin.id, workspaceId: office.id }))?.role, 'admin');
+    assert.equal((await findMembership(db, { userId: owner.id, workspaceId: office.id }))?.role, 'owner');
+  });
+
+  it('finds nothing for somebody who is not in the office', async () => {
+    const db = await createTestDb();
+    const owner = await newUserRow(db);
+    const office = await ensurePersonalWorkspace(db, { userId: owner.id, name: 'Ada', pubkey: owner.pubkey });
+    const stranger = await newUserRow(db);
+
+    assert.equal(await findMembership(db, { userId: stranger.id, workspaceId: office.id }), null);
+  });
+
+  it('finds nothing when the two ids are handed over the wrong way round', async () => {
+    // The regression that named the arguments. A swapped call now fails to
+    // compile, but if it ever got through it must still not conjure a row.
+    const db = await createTestDb();
+    const { id, pubkey } = await newUserRow(db);
+    const office = await ensurePersonalWorkspace(db, { userId: id, name: 'Ada', pubkey });
+
+    assert.equal(await findMembership(db, { userId: office.id, workspaceId: id }), null);
   });
 });
 
