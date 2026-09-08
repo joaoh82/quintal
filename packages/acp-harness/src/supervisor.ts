@@ -1,4 +1,5 @@
 import { acpCommandFor, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
+import { redactSecrets } from './secrets.js';
 
 import type { AgentConfig } from './config.js';
 import { probeModels } from './models.js';
@@ -257,7 +258,10 @@ export class Supervisor {
     }));
   }
 
-  #write(name: string, colour: number, level: 'info' | 'warn' | 'error', message: string): void {
+  #write(name: string, colour: number, level: 'info' | 'warn' | 'error', raw: string): void {
+    // Every line from a runner passes through here, including the error a
+    // failed connect threw — which is where a key would end up if one ever did.
+    const message = redactSecrets(raw);
     const time = new Date().toISOString().slice(11, 19);
     const label = name.padEnd(12).slice(0, 12);
     const marker = level === 'error' ? '✖' : level === 'warn' ? '!' : '·';

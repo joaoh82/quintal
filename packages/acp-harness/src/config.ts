@@ -4,6 +4,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { RUNTIMES, acpCommandFor, runtimeById } from '@quintal/shared';
 
+import { noteSecretEnv } from './secrets.js';
+
 /**
  * How a fleet is declared.
  *
@@ -53,9 +55,11 @@ export interface AgentConfig {
   /**
    * Resolved at load time from `key` or `keyEnv`. Never written back to disk.
    *
-   * Empty when this agent was defined in the office: there the credential is
-   * the machine's `hostToken` plus `agentId`, because a key the office could
-   * hand out would be a key the office had to store recoverably.
+   * An `nsec1…` or 64 hex characters is the agent's own secret key
+   * (credentials v2); a `qa_…` string is a legacy key. Empty when this agent
+   * was defined in the office and no key was supplied for it: there the
+   * credential is the machine's `hostToken` plus `agentId`. See
+   * `credentialFor` for which one a join presents.
    */
   key: string;
   /** Machine credential, for an office-defined agent. */
@@ -213,6 +217,9 @@ function resolveKey(raw: RawAgent, name: string): string {
         `agent "${name}": keyEnv "${raw.keyEnv}" is not set in the environment`,
       );
     }
+    // The agent runtime inherits our environment; this variable must not be
+    // part of what it inherits.
+    noteSecretEnv(raw.keyEnv);
     return fromEnv.trim();
   }
 

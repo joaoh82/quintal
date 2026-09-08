@@ -1,17 +1,9 @@
+import { verifyAttestation } from '@quintal/shared';
 import {
-  AUTH_TIMESTAMP_SKEW_MS,
-  buildAuthPayload,
-  isNonceHex,
-  isPubkeyHex,
-  isSignatureHex,
-  verifyAttestation,
-  verifyAuthSignature,
-} from '@quintal/shared';
-import {
-  consumeAgentChallenge,
-  findAgentByPubkey,
   findMembership,
   getDb,
+  verifyAgentChallenge,
+  type AgentChallengeProof,
   type AgentIdentity,
   type Database,
 } from '@quintal/shared/db';
@@ -26,7 +18,9 @@ import { config } from '../config.js';
  * Kept out of the room for the same reason `mayEnterOffice` is: this is a
  * chain of checks with an order and a message for each, and a chain that only
  * exists inside a Colyseus lifecycle method is one nothing can test without
- * standing up a room.
+ * standing up a room. The first half — does a registered agent hold this key —
+ * is `verifyAgentChallenge` in shared, because the office lookup an agent
+ * makes *before* it can name a room asks exactly that question too.
  *
  * The order is the order in which the checks can be abused, cheapest first:
  * a malformed credential, a stale one, a signature that isn't one, a replayed
@@ -36,12 +30,7 @@ import { config } from '../config.js';
  * what was wrong and nothing about what would have been right.
  */
 
-export interface KeypairJoin {
-  agentPubkey?: unknown;
-  sig?: unknown;
-  nonce?: unknown;
-  timestamp?: unknown;
-}
+export type KeypairJoin = AgentChallengeProof;
 
 export type KeypairAuthResult =
   | { ok: true; identity: AgentIdentity; ownerPubkey: string }
@@ -63,42 +52,12 @@ export async function authenticateAgentKeypair(
   const now = deps.now ?? Date.now();
   const refuse = (message: string): KeypairAuthResult => ({ ok: false, message });
 
-  const { agentPubkey, sig, nonce, timestamp } = join;
-  if (
-    !isPubkeyHex(agentPubkey) ||
-    !isSignatureHex(sig) ||
-    !isNonceHex(nonce) ||
-    typeof timestamp !== 'number' ||
-    !Number.isSafeInteger(timestamp)
-  ) {
-    return refuse('Malformed keypair credential: expected agentPubkey, sig, nonce, timestamp.');
-  }
-  const pubkey = agentPubkey as string;
-
-  if (Math.abs(now - timestamp * 1000) > AUTH_TIMESTAMP_SKEW_MS) {
-    return refuse('That signature is stale. Check your clock and try again.');
-  }
-
-  // Signature before nonce: verifying is cheap and consuming is destructive.
-  // The other order would let anyone spend an agent's outstanding challenge
-  // by sending garbage under its key.
-  const payload = buildAuthPayload({ origin, nonce: nonce as string, timestamp });
-  if (!verifyAuthSignature({ pubkey, sig: sig as string, payload })) {
-    return refuse('Signature does not verify against that public key for this origin.');
-  }
-
-  // Spent by key *and* value: a nonce issued for another key, or one this key
-  // no longer holds, finds nothing — and spends nothing.
-  if (!(await consumeAgentChallenge(db, pubkey, nonce as string, new Date(now)))) {
-    return refuse('That challenge has expired, was already used, or was not issued for this key.');
-  }
+  const proof = await verifyAgentChallenge(db, join, { origin, now });
+  if (!proof.ok) return refuse(proof.message);
+  const { credential } = proof;
 
   // --- the caller holds this key, from here on ---
 
-  const credential = await findAgentByPubkey(db, pubkey);
-  if (!credential) {
-    return refuse('No agent has that key, or it was revoked. Register one at /settings/agents.');
-  }
   if (!agentBelongsToOffice(credential.identity, workspaceId)) {
     return refuse('That agent belongs to another office.');
   }
@@ -106,7 +65,7 @@ export async function authenticateAgentKeypair(
   if (
     !verifyAttestation({
       attestation: credential.attestation,
-      agentPubkey: pubkey,
+      agentPubkey: credential.pubkey,
       ownerPubkey: credential.ownerPubkey,
     })
   ) {
@@ -117,7 +76,10 @@ export async function authenticateAgentKeypair(
 
   // Authorisation does not erase authorship — and it does not outlive it
   // either. An owner who left the office takes their agents with them.
-  const membership = await findMembership(db, credential.identity.ownerUserId, workspaceId);
+  const membership = await findMembership(db, {
+    userId: credential.identity.ownerUserId,
+    workspaceId,
+  });
   if (!membership) {
     return refuse("This agent's owner is no longer a member of this office.");
   }

@@ -165,6 +165,8 @@ export function toAgentConfigs(
   host: StoredHost,
   reposDir: string,
   mapId: string,
+  /** Each agent's own key, by agent id, when this machine holds one. */
+  keys: ReadonlyMap<string, string> = new Map(),
 ): { agents: AgentConfig[]; skipped: { name: string; why: string }[] } {
   const agents: AgentConfig[] = [];
   const skipped: { name: string; why: string }[] = [];
@@ -208,8 +210,9 @@ export function toAgentConfigs(
 
     agents.push({
       name: member.name,
-      // The token *is* the credential; the agent id says which agent to be.
-      key: '',
+      // Its own key when this machine holds one (credentials v2); otherwise
+      // the token is the credential and the agent id says which agent to be.
+      key: keys.get(member.agentId) ?? '',
       hostToken: host.token,
       agentId: member.agentId,
       harness: 'custom',

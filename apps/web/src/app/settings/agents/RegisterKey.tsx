@@ -7,6 +7,7 @@ import {
   getPublicKeyHex,
   npubEncode,
   nsecEncode,
+  parsePubkey,
   truncateNpub,
 } from '@quintal/shared';
 import { useRouter } from 'next/navigation';
@@ -47,6 +48,12 @@ export function RegisterKey({
   const [error, setError] = useState<string | null>(null);
   const [nsec, setNsec] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // A key made elsewhere — `quintal-acp keygen`, a keychain — arrives as its
+  // npub. Then there is nothing to generate and nothing to show once: the
+  // secret was never here.
+  const [existing, setExisting] = useState('');
+  const [bringOwn, setBringOwn] = useState(false);
+  const [registered, setRegistered] = useState<string | null>(null);
 
   async function register(signer: Identity) {
     if (signer.pubkey !== ownerPubkey) {
@@ -55,8 +62,17 @@ export function RegisterKey({
       );
       return;
     }
-    const secretKey = generateSecretKey();
-    const agentPubkey = getPublicKeyHex(secretKey);
+    const provided = bringOwn ? parsePubkey(existing) : null;
+    if (bringOwn && provided === null) {
+      setError('That is not an npub or a 64-character hex public key.');
+      return;
+    }
+    const secretKey = provided ? null : generateSecretKey();
+    const agentPubkey = provided ?? getPublicKeyHex(secretKey!);
+    if (agentPubkey === ownerPubkey) {
+      setError('That is your own key. An agent needs one of its own.');
+      return;
+    }
     const sig = await signPayload(signer, buildAttestationPreimage(agentPubkey));
     const attestation = attestationTag({ ownerPubkey: signer.pubkey, conditions: '', sig });
 
@@ -74,8 +90,10 @@ export function RegisterKey({
           : 'Registering the key failed.';
       throw new Error(message);
     }
-    setNsec(nsecEncode(secretKey));
+    if (secretKey) setNsec(nsecEncode(secretKey));
+    else setRegistered(npubEncode(agentPubkey));
     setNeedsKey(false);
+    setExisting('');
     router.refresh();
   }
 
@@ -130,6 +148,18 @@ export function RegisterKey({
     );
   }
 
+  if (registered) {
+    return (
+      <span className="order-last w-full text-xs text-emerald-600">
+        {agentName} now joins with {truncateNpub(registered)}. Its secret stays where it
+        was made.{' '}
+        <button type="button" className="underline underline-offset-2" onClick={() => setRegistered(null)}>
+          Done
+        </button>
+      </span>
+    );
+  }
+
   if (!open) {
     return (
       <button
@@ -145,10 +175,30 @@ export function RegisterKey({
   return (
     <div className="order-last flex w-full flex-wrap items-center gap-2 pt-1">
       <span className="text-muted-foreground text-xs">
-        {currentPubkey
-          ? `A new keypair for ${agentName}; the current one stops working.`
-          : `A keypair for ${agentName}, generated here and vouched for by your key.`}
+        {bringOwn
+          ? `${agentName}'s existing key, vouched for by yours.${currentPubkey ? ' The current one stops working.' : ''}`
+          : currentPubkey
+            ? `A new keypair for ${agentName}; the current one stops working.`
+            : `A keypair for ${agentName}, generated here and vouched for by your key.`}
       </span>
+      {bringOwn ? (
+        <Input
+          value={existing}
+          onChange={(event) => setExisting(event.target.value)}
+          placeholder="npub1… — the key it already has"
+          className="h-7 w-72 font-mono text-xs"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      ) : (
+        <button
+          type="button"
+          className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+          onClick={() => setBringOwn(true)}
+        >
+          I already have a key
+        </button>
+      )}
       {needsKey ? (
         <Input
           value={pasted}
@@ -160,7 +210,13 @@ export function RegisterKey({
         />
       ) : null}
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void start()}>
-        {busy ? 'Signing…' : needsKey ? 'Sign and register' : 'Generate and register'}
+        {busy
+          ? 'Signing…'
+          : needsKey
+            ? 'Sign and register'
+            : bringOwn
+              ? 'Register this key'
+              : 'Generate and register'}
       </Button>
       <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
         Cancel
