@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { isAbsolute, resolve } from 'node:path';
 
+import { generateSecretKey, getPublicKeyHex, npubEncode, nsecEncode } from '@quintal/shared';
+
 import {
   ALL_REPOS,
   ConfigError,
@@ -21,7 +23,9 @@ import {
   toAgentConfigs,
   writeStoredHost,
 } from './host.js';
+import { readAgentKeyMap } from './credential.js';
 import { runMcpServer } from './mcp/server.js';
+import { redactSecrets } from './secrets.js';
 import { Supervisor } from './supervisor.js';
 
 /**
@@ -42,6 +46,8 @@ const USAGE = `quintal-acp — bridge ACP agents into a Quintal office
   quintal-acp status           show the fleet's connection and status lines
   quintal-acp --key <KEY> --agent <harness> --cwd <dir> [--url <url>]
                                run a single agent without a config file
+  quintal-acp keygen           make a keypair for an agent: nsec on stdout,
+                               npub on stderr — register the npub on its card
 
 Options
   --config <path>   fleet file (default: quintal.fleet.json, .quintal/fleet.json)
@@ -54,6 +60,10 @@ Options
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
   -h, --help
+
+Keys: an agent's own nsec1… (or 64 hex chars), or a legacy qa_… key. Never on
+the command line for a fleet — use keyEnv, or QUINTAL_AGENT_KEYS (JSON, agent
+id to nsec) for agents the office assigns to this machine.
 
 Harnesses: claude-code, goose, codex, custom
 Protocol:  docs/GATEWAY.md — anything speaking it is a valid agent.
@@ -191,6 +201,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (positional[0] === 'keygen') {
+    const secretKey = generateSecretKey();
+    // The secret alone on stdout so `KEY=$(quintal-acp keygen)` works; the
+    // public half and what to do with it on stderr, where a capture won't
+    // swallow it.
+    process.stderr.write(
+      `${npubEncode(getPublicKeyHex(secretKey))}\nRegister that npub on the agent's card at /settings/agents (Register a key → I already have a key). The nsec below is the agent's secret: put it in keyEnv, never in a file you commit.\n`,
+    );
+    process.stdout.write(`${nsecEncode(secretKey)}\n`);
+    return;
+  }
+
   if (positional[0] === 'login') {
     const token = stringFlag(flags, 'token');
     if (!token) throw new ConfigError('login needs --token <qh_…> from /settings/agents');
@@ -238,6 +260,8 @@ async function main(): Promise<void> {
     // moment a machine was registered.
     const stored = readStoredHost();
     const localFleet = stringFlag(flags, 'config') ?? findFleetFile(cwd);
+    // Keys the desktop app holds for office-defined agents, one per agent id.
+    const agentKeys = readAgentKeyMap();
 
     if (localFleet === null && stored !== null) {
       // Null lets the office answer for the name the token was registered
@@ -249,7 +273,7 @@ async function main(): Promise<void> {
 
       const mapId = stringFlag(flags, 'map') ?? 'hq';
       const fleet = await fetchFleet(stored, label ?? null);
-      const built = toAgentConfigs(fleet, stored, reposDir, mapId);
+      const built = toAgentConfigs(fleet, stored, reposDir, mapId, agentKeys);
       agents = built.agents;
       only = positional[1];
       // Poll under the name the office actually used, so a later rename in the
@@ -322,7 +346,13 @@ async function main(): Promise<void> {
       void (async () => {
         try {
           const fleet = await fetchFleet(officeFleet.host, officeFleet.label);
-          const built = toAgentConfigs(fleet, officeFleet.host, reposDir, officeFleet.mapId);
+          const built = toAgentConfigs(
+            fleet,
+            officeFleet.host,
+            reposDir,
+            officeFleet.mapId,
+            readAgentKeyMap(),
+          );
           const { added, removed } = await supervisor.reconcile(built.agents);
           for (const name of removed) process.stdout.write(`— ${name} left the fleet\n`);
           for (const name of added) process.stdout.write(`+ ${name} joined the fleet\n`);
@@ -447,11 +477,13 @@ export function watchForOrphaning(
 }
 
 main().catch((error: unknown) => {
+  // Whatever went wrong, the message must not be the key that went wrong.
+  const message = redactSecrets(error instanceof Error ? error.message : String(error));
   if (error instanceof ConfigError) {
-    process.stderr.write(`config: ${error.message}\n`);
+    process.stderr.write(`config: ${message}\n`);
     process.exitCode = 1;
     return;
   }
-  process.stderr.write(`quintal-acp: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`quintal-acp: ${message}\n`);
   process.exitCode = 1;
 });

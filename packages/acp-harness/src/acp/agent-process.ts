@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+
+import { scrubbedEnv } from '../secrets.js';
 import { Readable, Writable } from 'node:stream';
 
 import {
@@ -57,7 +59,10 @@ export class AgentProcess {
 
     const child = spawn(command, args, {
       cwd: this.options.cwd,
-      env: { ...process.env, ...this.options.env },
+      // The runtime is a model with a shell. It gets our environment minus
+      // every credential we were handed — a key it could print is a key it
+      // could be talked into printing.
+      env: { ...scrubbedEnv(process.env), ...this.options.env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.#child = child;

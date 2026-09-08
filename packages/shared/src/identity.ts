@@ -118,6 +118,27 @@ export function nsecDecode(nsec: string): Uint8Array {
   return decodeBech32('nsec', nsec.trim());
 }
 
+/**
+ * Parse a secret key written as `nsec1…` or 64 hex characters. Null if neither.
+ *
+ * The two spellings an agent's key arrives in: the `nsec` a person copied off
+ * the settings page, or the hex a tool printed. Anything else — a `qa_` key,
+ * a host token, a typo — is not a secret key, and the caller decides what it
+ * is instead.
+ */
+export function parseSecretKey(input: string): Uint8Array | null {
+  const trimmed = input.trim();
+  if (isHexOfLength(trimmed, PUBKEY_HEX_LENGTH)) return hexToBytes(trimmed);
+  if (trimmed.toLowerCase().startsWith('nsec1')) {
+    try {
+      return nsecDecode(trimmed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** Parse either an `npub1…` or bare hex into a public key hex. Null if neither. */
 export function parsePubkey(input: string): string | null {
   const trimmed = input.trim();

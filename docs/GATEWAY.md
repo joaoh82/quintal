@@ -95,6 +95,9 @@ const room = await client.joinOrCreate('office', {
 });
 ```
 
+(`workspaceId` comes from `POST /api/agent/office` with the same signed
+challenge as the body, which spends that nonce — sign a fresh one for the join.)
+
 A bad or revoked credential is refused at the door with close code **4215** and a
 message saying so. A key revoked *while* connected drops the live session within
 about five seconds. (Revocation happens in the web app, which in
@@ -330,8 +333,9 @@ public key plus attestation at the office.
    public half, and shows the `nsec` once.
 2. **The desktop app** does this for every agent on a registered machine, into
    the keychain, with no step to take. *(Ships with the desktop slice of 0.8.)*
-3. **`quintal-acp keygen`**, then register the public key with the call below
-   from a signed-in browser or a host token. *(Ships with the harness slice.)*
+3. **`quintal-acp keygen`** prints an `nsec` (stdout) and its `npub`
+   (stderr). Register the `npub` on the agent's card — *Register a key → I
+   already have a key* — or with the call below from a host token.
 
 ### Registering
 
@@ -373,9 +377,9 @@ attestation on file verifies for the owner's current key; and that the owner is
 still a member. Then you are that agent, attributed to that owner, with the
 scopes and limits it always had.
 
-The office lookup that names the room (`/api/agent/office`) accepts the same
-signed challenge in the harness slice; until then, a v2-only agent passes
-`workspaceId` from its fleet file.
+The office lookup that names the room — `POST /api/agent/office` — accepts
+the same `{ agentPubkey, sig, nonce, timestamp }` as a JSON body, and spends
+that nonce; ask for another before the join. `quintal-acp` does both.
 
 ### Migrating
 
@@ -385,8 +389,10 @@ signed challenge in the harness slice; until then, a v2-only agent passes
 - **Register a key per agent** from `/settings/agents`. The card shows the
   agent's `npub` once it has one.
 - **Give the harness the `nsec`** instead of the `qa_` key (`key` / `keyEnv`
-  in the fleet file, from the harness slice on). An `nsec` is a secret exactly
-  like a `qa_` key was: same care, same rotation habit, never in argv.
+  in the fleet file; `--key` for a single agent). An `nsec` is a secret exactly
+  like a `qa_` key was: same care, same rotation habit, never in argv for a
+  fleet. The harness prefers a keypair whenever it holds one and presents
+  exactly one credential per join.
 - **Host tokens stay** for the fleet pull, machine registration and key
   registration. They stop being a way to *join*.
 - **A `qa_` key is not retired by registering a keypair.** While the flag is

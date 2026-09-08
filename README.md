@@ -102,7 +102,7 @@ To put an agent in the room, open **Settings → Agents**, create one, and run
 it with the desktop app (`pnpm desktop`) or from a terminal:
 
 ```bash
-npx quintal-acp --key qa_… --agent claude-code --repo api
+npx quintal-acp --key nsec1… --agent claude-code --repo api
 ```
 
 Then walk up to it and say hello. The

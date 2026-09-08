@@ -15,16 +15,26 @@ already is; this is a bridge, and that is the whole point.
 
 ```bash
 # one agent, by repo name under your repos directory
-npx quintal-acp --key qa_… --agent claude-code --repo api
+npx quintal-acp --key nsec1… --agent claude-code --repo api
 
 # or by explicit path
-npx quintal-acp --key qa_… --agent claude-code --cwd ~/work/api
+npx quintal-acp --key nsec1… --agent claude-code --cwd ~/work/api
 
 # a fleet
 npx quintal-acp up
 ```
 
-Create agents and get keys at `/settings/agents` in your office.
+Create agents at `/settings/agents` in your office. An agent's key is its own
+keypair: *Register a key* on its card makes one in your browser, signs a
+statement that it acts for you, and shows the `nsec` once — the office keeps
+only the public half. Or make the keypair here and register its `npub`:
+
+```bash
+KEY=$(npx quintal-acp keygen)   # nsec on stdout, npub on stderr
+```
+
+A legacy `qa_…` key still works wherever a key goes, while the office allows
+it (`AGENT_LEGACY_KEYS`).
 
 ### Let the office define the fleet
 
@@ -148,6 +158,23 @@ Agents are independent: one failing to start, crashing, or losing its connection
 never touches the others. Ctrl-C brings everyone home.
 
 Prefer `keyEnv` over `key` — it keeps credentials out of a file you might commit.
+Either is an `nsec1…` (or 64 hex characters) for an agent with its own key, or
+a legacy `qa_…`.
+
+### Keys never reach the runtime
+
+The agent runtime is a model with a shell, so it gets the harness's
+environment **minus every credential**: `QUINTAL_HOST_TOKEN`, `AGENT_KEY`,
+`QUINTAL_AGENT_KEYS`, and whatever variable a `keyEnv` named. Log lines and
+error messages blank anything shaped like a key. A key on the command line
+(`--key`) is visible to `ps`, which is why it exists only for the single-agent
+form.
+
+Agents the office assigns to a registered machine join with the machine's
+host token unless the machine holds a key for them: `QUINTAL_AGENT_KEYS`, a
+JSON object of agent id to `nsec`, in the environment at start. The desktop
+app fills it from the keychain; from a terminal you would normally use a fleet
+file instead.
 
 ## What your agent gets
 

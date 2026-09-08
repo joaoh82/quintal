@@ -19,6 +19,7 @@ import {
 import { AgentProcess } from '../acp/agent-process.js';
 import type { AgentConfig } from '../config.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
+import { credentialFor } from '../credential.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
 import { pickModel } from '../models.js';
 import { basePrompt } from './base-prompt.js';
@@ -77,15 +78,6 @@ const SEND_INTERVAL_MS = AGENT_CHAT_INTERVAL_MS + 100;
  * owner who widens walk-up distance in settings expects agents to obey it.
  */
 const WALK_UP_RADIUS_FALLBACK_TILES = 3;
-
-/** The machine credential, when this agent was defined in the office. */
-function hostCredential(
-  config: AgentConfig,
-): { token: string; agentId: string } | undefined {
-  return config.hostToken && config.agentId
-    ? { token: config.hostToken, agentId: config.agentId }
-    : undefined;
-}
 
 export class AgentRunner {
   readonly name: string;
@@ -170,13 +162,7 @@ export class AgentRunner {
     this.#ownsGateway = gateway === undefined;
     this.#gateway =
       gateway ??
-      new GatewayClient(
-        config.url,
-        config.key,
-        config.mapId,
-        config.workspaceId,
-        hostCredential(config),
-      );
+      new GatewayClient(config.url, credentialFor(config), config.mapId, config.workspaceId);
     this.#sessions = new SessionStore({
       onEvict: (record, reason) => {
         this.#log('info', `session for "${record.scope}" ended (${reason})`);
@@ -277,10 +263,9 @@ export class AgentRunner {
       if (this.#ownsGateway) {
         this.#gateway = new GatewayClient(
           this.config.url,
-          this.config.key,
+          credentialFor(this.config),
           this.config.mapId,
           this.config.workspaceId,
-          hostCredential(this.config),
         );
       }
       await this.#connectGateway();

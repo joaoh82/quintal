@@ -299,6 +299,8 @@ export async function findAgentIdentityById(
 
 export interface AgentCredential {
   identity: AgentIdentity;
+  /** The key the lookup was by — the agent's own. */
+  pubkey: string;
   /** The owner's *current* key — what the attestation must have been signed with. */
   ownerPubkey: string;
   /** The stored attestation tag, unverified. */
@@ -355,6 +357,7 @@ export async function findAgentByPubkey(
       scopes: parseScopes(row.scopes),
       status: row.status,
     },
+    pubkey: pubkey as string,
     ownerPubkey: row.ownerPubkey,
     attestation: row.attestation,
   };

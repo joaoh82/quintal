@@ -103,6 +103,12 @@ test:
 agent-new NAME:
     @pnpm -s tsx scripts/agent-new.mts {{NAME}}
 
+# Create (or re-key) an agent with a keypair of its own and print its nsec.
+# Your key vouches for it, so it has to be present:
+#   KEY=$(QUINTAL_OWNER_NSEC=nsec1… just agent-key reviewer)
+agent-key NAME:
+    @pnpm -s tsx scripts/agent-key.mts {{NAME}}
+
 # Put one scripted agent in the office. No model, no tokens, no config file.
 # Needs `just dev` running in another terminal.
 agent-demo:

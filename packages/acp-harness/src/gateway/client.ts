@@ -22,7 +22,10 @@ import {
   type MemorySetResult,
   type MessagesGetResult,
 } from '@quintal/shared';
+import { buildAuthPayload, signAuthPayload } from '@quintal/shared';
 import { Client, type Room } from 'colyseus.js';
+
+import type { AgentCredential } from '../credential.js';
 
 /**
  * The harness's half of the gateway protocol from step 0.4.
@@ -50,6 +53,24 @@ export interface GatewayEvents {
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/** A signed challenge: the agent's key, and proof it holds the other half. */
+interface ChallengeProof {
+  agentPubkey: string;
+  sig: string;
+  nonce: string;
+  timestamp: number;
+}
+
+/**
+ * The network, replaceable. A test hands in a `fetch` that answers the
+ * challenge and a `join` that records what was presented at the door, and
+ * the client's whole credential ceremony runs without an office.
+ */
+export interface GatewayDeps {
+  fetch?: typeof fetch;
+  join?: (endpoint: string, options: Record<string, unknown>) => Promise<Room>;
+}
+
 export class GatewayClient {
   #room: Room | null = null;
   #requestSeq = 0;
@@ -63,15 +84,23 @@ export class GatewayClient {
   #roster: AgentRosterEvent | null = null;
   #channels: ChannelRef[] | null = null;
 
+  readonly #fetch: typeof fetch;
+  readonly #join: (endpoint: string, options: Record<string, unknown>) => Promise<Room>;
+
   constructor(
     private readonly url: string,
-    private readonly agentKey: string,
+    /** What to present at the door. See `credentialFor`. */
+    private readonly credential: AgentCredential,
     private readonly mapId: string,
-    /** Which office's room to join. Empty when the key alone decides. */
+    /** Which office's room to join. Empty when the credential alone decides. */
     private readonly workspaceId: string,
-    /** Machine credential, when this agent was defined in the office. */
-    private readonly host?: { token: string; agentId: string },
-  ) {}
+    deps: GatewayDeps = {},
+  ) {
+    this.#fetch = deps.fetch ?? ((input, init) => fetch(input, init));
+    this.#join =
+      deps.join ??
+      ((endpoint, options) => new Client(endpoint).joinOrCreate('office', options));
+  }
 
   on<K extends keyof GatewayEvents>(event: K, handler: GatewayEvents[K]): void {
     this.#handlers[event] = handler;
@@ -90,6 +119,40 @@ export class GatewayClient {
   }
 
   /**
+   * Prove we hold our key: ask for a challenge, sign it, hand back the pieces.
+   *
+   * Fresh every time. A nonce is single-use, so a reconnect that reused one
+   * would be refused; and the origin is the office's to decide — it comes
+   * back with the challenge rather than being derived from the URL we were
+   * given, for the same reason a person's sign-in does.
+   */
+  async #prove(): Promise<ChallengeProof> {
+    if (this.credential.kind !== 'keypair') {
+      throw new Error('only a keypair can sign a challenge');
+    }
+    const response = await this.#fetch(new URL('/api/agent/challenge', this.url), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pubkey: this.credential.pubkey }),
+    });
+    if (!response.ok) {
+      throw new Error(`The office would not issue a challenge (${response.status}).`);
+    }
+    const body = (await response.json()) as { nonce?: unknown; origin?: unknown };
+    if (typeof body.nonce !== 'string' || typeof body.origin !== 'string') {
+      throw new Error('The office issued a challenge we cannot sign.');
+    }
+    const timestamp = Math.floor(Date.now() / 1000);
+    const payload = buildAuthPayload({ origin: body.origin, nonce: body.nonce, timestamp });
+    return {
+      agentPubkey: this.credential.pubkey,
+      sig: signAuthPayload(this.credential.secretKey, payload),
+      nonce: body.nonce,
+      timestamp,
+    };
+  }
+
+  /**
    * The office to join.
    *
    * Office-defined agents are told by the fleet response. An agent holding
@@ -100,14 +163,27 @@ export class GatewayClient {
   async #office(): Promise<string> {
     if (this.workspaceId.length > 0) return this.workspaceId;
 
-    const response = await fetch(new URL('/api/agent/office', this.url), {
-      method: 'POST',
-      headers: { authorization: `Bearer ${this.agentKey}` },
-    });
+    if (this.credential.kind === 'host') {
+      throw new Error('An office-defined agent is told its office by the fleet; none was given.');
+    }
+
+    const response =
+      this.credential.kind === 'keypair'
+        ? await this.#fetch(new URL('/api/agent/office', this.url), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(await this.#prove()),
+          })
+        : await this.#fetch(new URL('/api/agent/office', this.url), {
+            method: 'POST',
+            headers: { authorization: `Bearer ${this.credential.key}` },
+          });
     if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+      const reason = typeof body?.error === 'string' ? body.error : '';
       throw new Error(
         response.status === 401
-          ? 'That agent key is unknown or revoked.'
+          ? reason || 'That agent credential is unknown or revoked.'
           : `Could not find this agent's office (${response.status}).`,
       );
     }
@@ -118,16 +194,28 @@ export class GatewayClient {
     return body.workspaceId;
   }
 
+  /**
+   * Exactly one credential travels. A keypair is preferred whenever we hold
+   * one — it is the credential the office cannot forge — then a host token,
+   * which identifies the machine and names the agent, then a legacy key.
+   * Sending two would leave which one authorised the join ambiguous in the
+   * audit log.
+   */
+  async #joinOptions(): Promise<Record<string, unknown>> {
+    switch (this.credential.kind) {
+      case 'keypair':
+        return { ...(await this.#prove()) };
+      case 'host':
+        return { hostToken: this.credential.token, agentId: this.credential.agentId };
+      case 'key':
+        return { agentKey: this.credential.key };
+    }
+  }
+
   async connect(): Promise<AgentReadyPayload> {
     const workspaceId = await this.#office();
-    const client = new Client(new URL('/colyseus', this.url).toString());
-    const room = await client.joinOrCreate('office', {
-      // Exactly one credential travels: a host token identifies the machine
-      // and names the agent, an agent key is the agent. Sending both would
-      // leave which one authorised the join ambiguous in the audit log.
-      ...(this.host
-        ? { hostToken: this.host.token, agentId: this.host.agentId }
-        : { agentKey: this.agentKey }),
+    const room = await this.#join(new URL('/colyseus', this.url).toString(), {
+      ...(await this.#joinOptions()),
       mapId: this.mapId,
       workspaceId,
     });
