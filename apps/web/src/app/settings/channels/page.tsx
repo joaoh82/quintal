@@ -32,7 +32,7 @@ export default async function ChannelsSettingsPage() {
     listChannels(db, workspace.id),
     listPeopleForWorkspace(db, workspace.id),
     listAgentsForWorkspace(db, workspace.id),
-    findMembership(db, session.user.id, workspace.id),
+    findMembership(db, { userId: session.user.id, workspaceId: workspace.id }),
   ]);
 
   return (

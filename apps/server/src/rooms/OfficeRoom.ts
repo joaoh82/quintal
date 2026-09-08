@@ -866,7 +866,7 @@ export class OfficeRoom extends Room<OfficeState> {
             scopes: agent.scopes,
           };
         }
-      } else if (await findMembership(db, memberId, this.#workspaceId)) {
+      } else if (await findMembership(db, { userId: memberId, workspaceId: this.#workspaceId })) {
         subject = { id: memberId, kind: 'human' };
       }
 
@@ -1125,7 +1125,7 @@ export class OfficeRoom extends Room<OfficeState> {
   async #actorFor(player: OfficePlayer): Promise<ChannelActor> {
     const membership = player.isGuest
       ? null
-      : await findMembership(getDb(), player.userId, this.#workspaceId);
+      : await findMembership(getDb(), { userId: player.userId, workspaceId: this.#workspaceId });
     return {
       userId: player.userId,
       role: (membership?.role as MembershipRole | undefined) ?? null,
