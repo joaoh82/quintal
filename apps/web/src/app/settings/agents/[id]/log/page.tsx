@@ -11,57 +11,13 @@ import { notFound, redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
 
+import { describe } from './summary';
+
 export const dynamic = 'force-dynamic';
 
 interface LogPageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ kind?: string }>;
-}
-
-/** Compact one-line summary of a payload — the log is scanned, not read. */
-function describe(kind: string, payload: unknown): string {
-  if (payload === null || typeof payload !== 'object') return '';
-  const data = payload as Record<string, unknown>;
-
-  switch (kind) {
-    case 'command.say':
-    case 'effect.spoke':
-      return typeof data.text === 'string'
-        ? `“${data.text}”${typeof data.heardBy === 'number' ? ` · heard by ${data.heardBy}` : ''}`
-        : '';
-    case 'command.move_to':
-      return typeof data.zoneId === 'string'
-        ? `zone ${data.zoneId}`
-        : `${String(data.x ?? '?')},${String(data.y ?? '?')}`;
-    case 'effect.moved':
-      return `arrived ${describeTile(data.tile)}${data.zoneId ? ` · ${String(data.zoneId)}` : ''}`;
-    case 'command.set_status':
-    case 'effect.status_changed':
-      return typeof data.status === 'string' ? `“${data.status}”` : '';
-    case 'command.memory_set':
-    case 'effect.memory_written':
-      return `${String(data.slug ?? '?')} · ${String(data.bytes ?? '?')} bytes`;
-    case 'command.memory_get':
-      return String(data.slug ?? '');
-    case 'command.messages_get':
-      return `${String(data.scope ?? '')} · n=${String(data.n ?? '')}`;
-    case 'command.rejected':
-      return `${String(data.code ?? '')}: ${String(data.message ?? '')}`;
-    case 'session.connected':
-      return data.reconnected === true ? 'reconnected' : `at ${describeTile(data.tile)}`;
-    case 'session.revoked':
-      return String(data.reason ?? 'revoked');
-    default:
-      return JSON.stringify(payload).slice(0, 120);
-  }
-}
-
-function describeTile(tile: unknown): string {
-  if (tile && typeof tile === 'object') {
-    const point = tile as { x?: unknown; y?: unknown };
-    return `${String(point.x ?? '?')},${String(point.y ?? '?')}`;
-  }
-  return '?';
 }
 
 function toneFor(kind: string): string {
