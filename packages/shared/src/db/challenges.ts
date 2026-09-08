@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, asc, eq, lt, sql } from 'drizzle-orm';
 
 import { agentChallengeIdentifier } from '../attestation.js';
 import {
@@ -57,11 +57,15 @@ export async function issueAgentChallenge(db: Database, pubkey: string): Promise
   // its live row or never had one. (A libSQL `:memory:` database also opens a
   // fresh connection per transaction, which tests would notice.)
   await db.delete(verifications).where(lt(verifications.expiresAt, now));
+  // Oldest by insertion, not by timestamp: two challenges issued in the same
+  // millisecond share a createdAt, and "oldest" decided by a random id would
+  // sometimes evict the one just handed out. SQLite's rowid is the order rows
+  // arrived in, which is the only order that means anything here.
   const live = await db
     .select({ id: verifications.id })
     .from(verifications)
     .where(eq(verifications.identifier, identifier))
-    .orderBy(asc(verifications.createdAt), asc(verifications.id));
+    .orderBy(asc(sql`rowid`));
   const excess = live.length - (AGENT_CHALLENGES_PER_KEY - 1);
   for (const row of live.slice(0, Math.max(0, excess))) {
     await db.delete(verifications).where(eq(verifications.id, row.id));

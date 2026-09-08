@@ -119,6 +119,8 @@ describe('what the runtime inherits', () => {
       QUINTAL_AGENT_KEYS: '{}',
       QUINTAL_HOST_TOKEN: 'qh_x',
       AGENT_KEY: 'qa_x',
+      // Exported for `just agent-key` and never unexported — the owner's own key.
+      QUINTAL_OWNER_NSEC: nsec,
       MY_AGENT_KEY: nsec,
     });
     assert.deepEqual(env, { PATH: '/usr/bin' });

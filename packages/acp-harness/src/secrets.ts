@@ -11,7 +11,15 @@
  * No imports, so nothing in the harness can create a cycle by needing this.
  */
 
-const ALWAYS = ['QUINTAL_AGENT_KEYS', 'QUINTAL_HOST_TOKEN', 'AGENT_KEY'] as const;
+const ALWAYS = [
+  'QUINTAL_AGENT_KEYS',
+  'QUINTAL_HOST_TOKEN',
+  'AGENT_KEY',
+  // The owner's own key, which `just agent-key` reads. The most privileged
+  // secret in the system and one a shell might have exported for that
+  // command; the runtime must never inherit it.
+  'QUINTAL_OWNER_NSEC',
+] as const;
 
 const noted = new Set<string>(ALWAYS);
 
