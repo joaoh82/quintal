@@ -37,11 +37,17 @@ async function fetchTicket(signal?: AbortSignal): Promise<JoinTicket> {
   return (await response.json()) as JoinTicket;
 }
 
+/** A live seat in the office, and the client that can get it back. */
+export interface OfficeConnection {
+  room: Room<OfficeState>;
+  client: Client;
+}
+
 /** Connect and join the office for a map. Throws if the session isn't valid. */
 export async function joinOffice(
   mapId: string,
   signal?: AbortSignal,
-): Promise<Room<OfficeState>> {
+): Promise<OfficeConnection> {
   const ticket = await fetchTicket(signal);
 
   // `wsUrl` is a path; resolve it against the page origin so http→ws and
@@ -56,5 +62,20 @@ export async function joinOffice(
     mapId,
     workspaceId: ticket.workspaceId,
   };
-  return client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
+  const room = await client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
+  return { room, client };
+}
+
+/**
+ * Take a dropped seat back, while the server is still holding it.
+ *
+ * The token is the room's own (`roomId:token`), minted at join; it is the
+ * one thing that says "this is the same person who was standing there", so
+ * the avatar comes back where it was rather than at the door.
+ */
+export async function resumeOffice(
+  client: Client,
+  reconnectionToken: string,
+): Promise<Room<OfficeState>> {
+  return client.reconnect<OfficeState>(reconnectionToken, OfficeState);
 }

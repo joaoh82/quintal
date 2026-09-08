@@ -6,7 +6,8 @@ import type { Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { gameBridge } from './bridge';
-import { NotSignedInError, joinOffice } from './net/connection';
+import { NotSignedInError, joinOffice, resumeOffice, type OfficeConnection } from './net/connection';
+import { recover } from './net/recovery';
 import { OfficeScene } from './scenes/OfficeScene';
 
 const MAP_ID = 'hq';
@@ -51,9 +52,9 @@ export async function createGame(
 ): Promise<OfficeSession> {
   gameBridge.emit('connection', { status: 'connecting' });
 
-  let room: Room<OfficeState>;
+  let connection: OfficeConnection;
   try {
-    room = await joinOffice(MAP_ID, signal);
+    connection = await joinOffice(MAP_ID, signal);
   } catch (error) {
     const detail =
       error instanceof NotSignedInError
@@ -64,13 +65,17 @@ export async function createGame(
   }
 
   if (signal.aborted) {
-    await room.leave(true);
+    await connection.room.leave(true);
     throw new Error('aborted');
   }
 
   gameBridge.emit('connection', { status: 'online' });
 
-  const game = new Phaser.Game({
+  let room = connection.room;
+  let client = connection.client;
+  let closedByUs = false;
+
+  const build = (): Phaser.Game => new Phaser.Game({
     type: Phaser.AUTO,
     parent,
     backgroundColor: '#14141c',
@@ -96,36 +101,133 @@ export async function createGame(
     scene: [],
   });
 
-  game.scene.add(OfficeScene.KEY, OfficeScene, true, { bridge: gameBridge, room });
+  let game = build();
 
-  if (process.env.NODE_ENV !== 'production') {
-    // A handle on the running game, for poking at the scene from the console.
-    // Development only — nothing in the app reads it.
-    (window as unknown as { __QUINTAL_GAME__?: Phaser.Game }).__QUINTAL_GAME__ = game;
-  }
+  /**
+   * Put a scene on the game for this room. Done again after every recovery:
+   * the scene binds to one room at creation — its handlers, its state
+   * callbacks, its idea of which player is us — and a resumed seat is a new
+   * `Room` object even when it is the same seat. Rebuilding the game is the
+   * honest way to rebind; the alternative is a scene that half-remembers a
+   * socket that no longer exists.
+   */
+  const attach = (): void => {
+    game.scene.add(OfficeScene.KEY, OfficeScene, true, { bridge: gameBridge, room });
 
-  let closedByUs = false;
+    if (process.env.NODE_ENV !== 'production') {
+      // Handles on the running game and room, for poking at them from the
+      // console — and for cutting the socket to watch recovery happen.
+      // Development only — nothing in the app reads them.
+      const dev = window as unknown as { __QUINTAL_GAME__?: Phaser.Game; __QUINTAL_ROOM__?: Room<OfficeState> };
+      dev.__QUINTAL_GAME__ = game;
+      dev.__QUINTAL_ROOM__ = room;
+    }
 
-  room.onLeave((code) => {
-    if (closedByUs) return;
-    // 1000 is a clean close; anything else dropped us. The server holds the
-    // avatar in place for RECONNECTION_SECONDS, so say so rather than
-    // pretending the connection is fine.
-    gameBridge.emit('connection', {
-      status: code === 1000 ? 'offline' : 'reconnecting',
-      detail:
-        code === 1000
-          ? 'You left the office.'
-          : `Connection lost — your avatar stays put for ${RECONNECTION_SECONDS}s.`,
+    room.onLeave((code) => {
+      if (closedByUs) return;
+      // 1000 is a clean close; anything else dropped us.
+      if (code === 1000) {
+        gameBridge.emit('connection', { status: 'offline', detail: 'You left the office.' });
+        return;
+      }
+      void comeBack();
     });
-  });
 
-  room.onError((code, message) => {
-    gameBridge.emit('connection', {
-      status: 'error',
-      detail: message ?? `Room error ${code}`,
+    room.onError((code, message) => {
+      gameBridge.emit('connection', {
+        status: 'error',
+        detail: message ?? `Room error ${code}`,
+      });
     });
-  });
+  };
+
+  /**
+   * Wait, but not past the moment something changes: a tab becoming visible
+   * or a network coming back is exactly when the next attempt should happen,
+   * not after whatever pause was scheduled while the lid was shut.
+   */
+  const waitOrWake = (ms: number): Promise<void> =>
+    new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        document.removeEventListener('visibilitychange', onVisible);
+        window.removeEventListener('online', done);
+        resolve();
+      };
+      const onVisible = (): void => {
+        if (document.visibilityState === 'visible') done();
+      };
+      const timer = setTimeout(done, ms);
+      document.addEventListener('visibilitychange', onVisible);
+      window.addEventListener('online', done);
+    });
+
+  let recovering = false;
+
+  /**
+   * Get back in. The seat first, while the server still holds it; a fresh
+   * session after that, for as long as the page is open. See `recover` for
+   * the policy — this is only the wiring.
+   */
+  const comeBack = async (): Promise<void> => {
+    if (recovering) return;
+    recovering = true;
+    const token = room.reconnectionToken;
+
+    gameBridge.emit('connection', {
+      status: 'reconnecting',
+      detail: `Connection lost — reconnecting (your seat is kept for ${RECONNECTION_SECONDS}s)…`,
+    });
+
+    const outcome = await recover<OfficeConnection>(
+      {
+        resume: async () => ({ room: await resumeOffice(client, token), client }),
+        join: () => joinOffice(MAP_ID),
+        wait: waitOrWake,
+        now: () => Date.now(),
+        cancelled: () => closedByUs,
+        report: (phase, attempt) => {
+          if (phase === 'rejoining') {
+            gameBridge.emit('connection', {
+              status: 'reconnecting',
+              detail:
+                attempt === 1
+                  ? 'Your seat was given up — rejoining the office…'
+                  : `Rejoining the office (attempt ${attempt})…`,
+            });
+          }
+        },
+      },
+      { resumeWindowMs: RECONNECTION_SECONDS * 1000 },
+    );
+    recovering = false;
+
+    switch (outcome.kind) {
+      case 'cancelled':
+        return;
+      case 'refused':
+        gameBridge.emit('connection', {
+          status: 'error',
+          detail:
+            outcome.error instanceof Error ? outcome.error.message : 'Could not rejoin the office.',
+        });
+        return;
+      case 'resumed':
+      case 'rejoined': {
+        room = outcome.room.room;
+        client = outcome.room.client;
+        // The old game is bound to the old socket. Replace it whole; the UI
+        // above the canvas keeps what it has — transcripts merge by id.
+        game.destroy(true);
+        game = build();
+        attach();
+        gameBridge.emit('connection', { status: 'online' });
+        return;
+      }
+    }
+  };
+
+  attach();
 
   const scene = (): OfficeScene | undefined =>
     game.scene.getScene(OfficeScene.KEY) as OfficeScene | undefined;
