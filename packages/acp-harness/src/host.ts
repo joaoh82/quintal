@@ -87,6 +87,8 @@ interface FleetResponse {
     repoSpec: string;
     profile: string;
     modelId?: string | null;
+    /** Its registered public key, or null. The desktop reads it; the harness does not need to. */
+    pubkey?: string | null;
   }[];
 }
 

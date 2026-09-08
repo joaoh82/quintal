@@ -268,6 +268,14 @@ export interface FleetMember {
    * never read as content — which is why it is a digest and not the text.
    */
   profile: string;
+  /**
+   * The agent's own public key, if one is registered (credentials v2).
+   *
+   * Public by definition, and here so a machine that holds a key for this
+   * agent can tell whether the office still knows it — a rotation elsewhere,
+   * or a recreated database, shows up as a key that is not this one.
+   */
+  pubkey: string | null;
 }
 
 /**
@@ -298,6 +306,7 @@ export async function fleetForHost(
       enabled: agents.enabled,
       revokedAt: agents.revokedAt,
       ownerUserId: agents.ownerUserId,
+      pubkey: agents.pubkey,
     })
     .from(agents)
     .where(eq(agents.workspaceId, host.workspaceId));
@@ -333,6 +342,7 @@ export async function fleetForHost(
        * thing it is good for.
        */
       profile: profileFingerprint(row.description, row.instructions),
+      pubkey: row.pubkey,
       runtimeId: row.runtimeId,
       repoSpec: row.repoSpec,
       modelId: row.modelId,

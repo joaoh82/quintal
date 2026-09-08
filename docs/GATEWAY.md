@@ -331,8 +331,13 @@ public key plus attestation at the office.
    the keypair, signs the attestation with whatever signs you in (a saved key,
    the desktop app, a NIP-07 extension that can sign a raw digest), sends the
    public half, and shows the `nsec` once.
-2. **The desktop app** does this for every agent on a registered machine, into
-   the keychain, with no step to take. *(Ships with the desktop slice of 0.8.)*
+2. **The desktop app** does this for every agent assigned to a registered
+   machine, with no step to take: when the fleet starts, each agent without a
+   key gets one generated into the keychain, vouched for by the identity the
+   app holds, and registered with the machine's host token. The harness
+   receives the keys in its environment. A key the office has forgotten — a
+   recreated database, a rotation elsewhere — is registered again, never
+   replaced; a locked keychain stops the start rather than minting anything.
 3. **`quintal-acp keygen`** prints an `nsec` (stdout) and its `npub`
    (stderr). Register the `npub` on the agent's card — *Register a key → I
    already have a key* — or with the call below from a host token.

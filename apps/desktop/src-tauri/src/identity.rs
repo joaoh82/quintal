@@ -37,6 +37,9 @@ pub enum IdentityError {
     EmptyToken,
     #[error("a machine needs a name")]
     EmptyLabel,
+    /// The office could not be asked, or refused. Carries what it said.
+    #[error("{0}")]
+    Office(String),
 }
 
 /// What the UI is allowed to know about the state of the key.

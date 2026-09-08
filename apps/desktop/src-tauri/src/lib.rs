@@ -5,6 +5,7 @@
 //! one narrow bridge. Anything added here that the web UI cannot reach, or that
 //! duplicates a screen the web app already has, is a mistake.
 
+pub mod agent_keys;
 pub mod commands;
 pub mod identity;
 pub mod links;

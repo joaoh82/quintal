@@ -53,6 +53,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 # Off-origin navigation goes to the system browser; see `links.rs`.
 open = "5"
+# Registering an agent's key with the office at spawn: one GET, one POST per
+# agent. Small and synchronous; the fleet start already blocks on the spawn.
+ureq = { version = "2", features = ["json"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

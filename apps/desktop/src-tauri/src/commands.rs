@@ -8,6 +8,7 @@
 use serde::Serialize;
 use tauri::State;
 
+use crate::agent_keys;
 use crate::identity::{self, IdentityError, IdentityState};
 use crate::machine;
 use crate::nip49::Nip49Error;
@@ -76,6 +77,7 @@ impl From<IdentityError> for HostError {
             IdentityError::Backup(Nip49Error::Undecryptable) => "bad_passphrase",
             IdentityError::Backup(Nip49Error::NotNcryptsec) => "not_a_backup",
             IdentityError::Backup(Nip49Error::CostTooHigh { .. }) => "cost_too_high",
+            IdentityError::Office(_) => "office",
             _ => "host_error",
         };
         HostError {
@@ -275,14 +277,41 @@ pub fn start_fleet(
     app: tauri::AppHandle,
     state: State<'_, HostState>,
 ) -> Result<FleetState, HostError> {
-    // Both the working directory and the office come from this side. The page
-    // asks to start the fleet; it does not get to say where, or where the
-    // credential is sent.
+    let started = start_fleet_here(&state)?;
+    crate::tray::refresh(&app, &started);
+    Ok(started)
+}
+
+/// Start the fleet, from the page or from the tray: the one place the
+/// sequence lives.
+///
+/// Both the working directory and the office come from this side. The page
+/// asks to start the fleet; it does not get to say where, or where the
+/// credential is sent.
+pub fn start_fleet_here(state: &HostState) -> Result<FleetState, HostError> {
     let server = state.server.as_deref().ok_or(SpawnError::NoServer)?;
     let token = machine::token(&state.store, server)?.ok_or(SpawnError::NotRegistered)?;
     let dir = spawn::repos_dir(&state.dir);
-    let started = state.fleet.start(&dir, server, &token)?;
-    crate::tray::refresh(&app, &started);
+
+    // Every agent assigned here gets a key of its own before the harness is
+    // started — generated into the keychain, vouched for by this identity,
+    // registered with the machine's token — and the harness receives the
+    // map in its environment. An agent the office would not take a key for
+    // is reported and boots on the host token while legacy credentials last.
+    let office = agent_keys::HttpOffice::new(server, &token);
+    let provisioned = agent_keys::provision(&state.store, server, &office)?;
+    let keys = agent_keys::env_value(&provisioned.keys);
+
+    let started = state.fleet.start(&dir, server, &token, Some(&keys))?;
+    for name in &provisioned.registered {
+        state.fleet.note(format!("registered a key for {name}"));
+    }
+    for skipped in &provisioned.skipped {
+        state.fleet.note(format!(
+            "{}: no key of its own ({}) — joining with the host token",
+            skipped.name, skipped.why
+        ));
+    }
     Ok(started)
 }
 
