@@ -1,7 +1,11 @@
 import { deploymentOrigin, getDb } from '@quintal/shared/db';
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { isHostTokenHeader, registerAgentCredential } from '@/lib/agent-credential';
+import {
+  isHostTokenHeader,
+  isSameOriginRequest,
+  registerAgentCredential,
+} from '@/lib/agent-credential';
 import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -28,8 +32,7 @@ export async function POST(
     return NextResponse.json(outcome.body, { status: outcome.status });
   }
 
-  const origin = request.headers.get('origin');
-  if (origin && origin !== deploymentOrigin()) {
+  if (!isSameOriginRequest(request.headers.get('origin'), deploymentOrigin())) {
     return NextResponse.json({ error: 'Requests must come from this site.' }, { status: 403 });
   }
 

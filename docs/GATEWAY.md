@@ -343,7 +343,8 @@ public key plus attestation at the office.
   `sha256("quintal:agent-auth:" + agentPubkeyHex + ":" + conditions)`.
   `conditions` is `""` today; its grammar — `name=value` clauses joined by
   `&`, signed verbatim, never normalised — is reserved so constraints can be
-  added without changing the ceremony.
+  added without changing the ceremony. **Nothing in it is enforced yet:** an
+  `exp=` clause is bytes under a signature, not an expiry.
 
 Two callers may register: the owner (or a workspace admin) from a signed-in
 browser, and a machine with a host token that may act as the agent. Neither is
@@ -357,7 +358,8 @@ join. Every registration is a row in the agent's log.
 
 1. `POST /api/agent/challenge` `{ pubkey }` → `{ nonce, origin, expiresInMs }`.
    Issued to anyone; a nonce is worthless without the secret. Sixty seconds,
-   single use, and asking again replaces it.
+   single use; a key may hold a few at once, and asking again does not cancel
+   the one you are about to sign.
 2. Sign `quintal-auth:v1:<origin>:<nonce>:<unix seconds>` — the same payload a
    person signs to log in — with the agent key. Use the origin the challenge
    returned; the office decides what a signature is bound to.
@@ -387,6 +389,10 @@ signed challenge in the harness slice; until then, a v2-only agent passes
   like a `qa_` key was: same care, same rotation habit, never in argv.
 - **Host tokens stay** for the fleet pull, machine registration and key
   registration. They stop being a way to *join*.
+- **A `qa_` key is not retired by registering a keypair.** While the flag is
+  on, an agent with both can join with either — so the harness you have not
+  migrated keeps working. To retire a leaked `qa_` key today, revoke the agent
+  and make another; turning the flag off retires all of them at once.
 - The connect event in the agent's log records which door was used
   (`credential: "key" | "host" | "v2"`), so an operator can see what is left
   to migrate before turning the flag off.

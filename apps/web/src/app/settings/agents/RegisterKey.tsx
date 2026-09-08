@@ -173,7 +173,8 @@ export function RegisterKey({
       ) : null}
       {error ? (
         <span className="text-destructive w-full text-xs" role="alert">
-          {error}
+          {error} If the office registered the key before this failed, the secret is
+          gone with it — rotate to get a new one.
         </span>
       ) : null}
     </div>

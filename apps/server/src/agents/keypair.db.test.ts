@@ -158,15 +158,28 @@ describe('an agent at the door with its own key', () => {
     const w = await world();
     const credential = await join(w);
     assert.equal((await open(w, credential)).ok, true);
-    await refused(open(w, credential), 'expired or was already used');
+    await refused(open(w, credential), 'already used');
   });
 
-  it('cannot use a nonce issued for another key', async () => {
+  it('cannot use a nonce issued for another key, and spends nothing trying', async () => {
     const w = await world();
     const other = keypair();
     const nonce = await issueAgentChallenge(w.db, other.pubkey);
+    const mine = await join(w);
     // Signed correctly by our key, over a nonce the office issued to another.
-    await refused(open(w, await join(w, { nonce })), 'expired or was already used');
+    await refused(open(w, await join(w, { nonce })), 'not issued for this key');
+    // Our own outstanding challenge is untouched by the mistake.
+    assert.equal((await open(w, mine)).ok, true);
+  });
+
+  it('is not locked out by somebody else asking for challenges under its key', async () => {
+    const w = await world();
+    const mine = await join(w);
+    // Anyone can ask: the key is on the agent's card. Asking must not cancel
+    // the join in flight.
+    await issueAgentChallenge(w.db, w.key.pubkey);
+    await issueAgentChallenge(w.db, w.key.pubkey);
+    assert.equal((await open(w, mine)).ok, true);
   });
 
   it('is refused for a key nobody registered', async () => {

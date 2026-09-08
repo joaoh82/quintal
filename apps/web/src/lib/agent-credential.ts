@@ -34,6 +34,18 @@ export interface CredentialOutcome {
   body: { pubkey: string; npub: string } | { error: string };
 }
 
+/**
+ * Did this cookie-authenticated request come from our own pages?
+ *
+ * Fail closed: a browser sends `Origin` on every cross-origin request and on
+ * every same-origin POST, so a JSON POST with the cookie and no `Origin` is
+ * not something our pages produce. The first version let an absent header
+ * through, which turned "must match" into "must not contradict".
+ */
+export function isSameOriginRequest(origin: string | null, expected: string): boolean {
+  return origin !== null && origin.length > 0 && origin === expected;
+}
+
 export function isHostTokenHeader(authorization: string | null): string | null {
   const header = authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
@@ -64,12 +76,18 @@ export async function registerAgentCredential(
     if (!(await canAdministerAgent(db, caller.userId, agent))) {
       return { status: 403, body: { error: 'That is not your agent.' } };
     }
+  }
+
+  let registeredBy: { via: 'session'; userId: string } | { via: 'host'; hostId: string };
+  if (caller.via === 'session') {
+    registeredBy = { via: 'session', userId: caller.userId };
   } else {
     const host = await findHostByToken(db, caller.token);
     if (!host) return { status: 401, body: { error: 'Unknown or revoked host token.' } };
     if (!hostMayActAs(host, agent)) {
       return { status: 403, body: { error: 'That machine may not act as this agent.' } };
     }
+    registeredBy = { via: 'host', hostId: host.id };
   }
 
   try {
@@ -77,9 +95,7 @@ export async function registerAgentCredential(
       db,
       agentId,
       { pubkey: fields.agentPubkey, attestation: fields.attestation },
-      caller.via === 'session'
-        ? { via: 'session', userId: caller.userId }
-        : { via: 'host', hostId: (await findHostByToken(db, caller.token))?.id ?? '' },
+      registeredBy,
     );
     return { status: 200, body: { pubkey, npub: npubEncode(pubkey) } };
   } catch (error) {

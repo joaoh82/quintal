@@ -443,10 +443,26 @@ export async function setAgentCredential(
     );
   }
 
-  await db
-    .update(agents)
-    .set({ pubkey: input.pubkey, attestation: input.attestation })
-    .where(eq(agents.id, agentId));
+  // A key is one agent. Checked before the write so the answer is a message
+  // rather than a unique-index error, and caught after it in case two
+  // registrations race — either way the caller hears the same thing.
+  const holder = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.pubkey, input.pubkey), sql`${agents.id} <> ${agentId}`))
+    .limit(1);
+  if (holder.length > 0) throw new CredentialError('That key is already registered to another agent.');
+  try {
+    await db
+      .update(agents)
+      .set({ pubkey: input.pubkey, attestation: input.attestation })
+      .where(eq(agents.id, agentId));
+  } catch (error) {
+    if (String(error).includes('UNIQUE constraint failed: agents.pubkey')) {
+      throw new CredentialError('That key is already registered to another agent.');
+    }
+    throw error;
+  }
 
   await recordAgentEvent(db, agentId, 'agent.credential_registered', {
     pubkey: input.pubkey,

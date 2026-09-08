@@ -1,5 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
-
 import {
   AUTH_TIMESTAMP_SKEW_MS,
   buildAuthPayload,
@@ -32,7 +30,7 @@ import { config } from '../config.js';
  *
  * The order is the order in which the checks can be abused, cheapest first:
  * a malformed credential, a stale one, a signature that isn't one, a replayed
- * nonce, a nonce for somebody else's key, a key nobody registered, an agent
+ * nonce (or one issued for somebody else's key), a key nobody registered, an agent
  * from another office, an attestation the owner's current key did not sign,
  * and an owner who is no longer a member. Each stops with a message that says
  * what was wrong and nothing about what would have been right.
@@ -53,13 +51,6 @@ export interface KeypairAuthDeps {
   db?: Database;
   origin?: string;
   now?: number;
-}
-
-function constantTimeHexEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'hex');
-  const right = Buffer.from(b, 'hex');
-  if (left.length !== right.length || left.length === 0) return false;
-  return timingSafeEqual(left, right);
 }
 
 export async function authenticateAgentKeypair(
@@ -96,10 +87,10 @@ export async function authenticateAgentKeypair(
     return refuse('Signature does not verify against that public key for this origin.');
   }
 
-  const stored = await consumeAgentChallenge(db, pubkey, new Date(now));
-  if (!stored) return refuse('That challenge has expired or was already used.');
-  if (!constantTimeHexEqual(stored, nonce as string)) {
-    return refuse('That challenge was not issued for this key.');
+  // Spent by key *and* value: a nonce issued for another key, or one this key
+  // no longer holds, finds nothing — and spends nothing.
+  if (!(await consumeAgentChallenge(db, pubkey, nonce as string, new Date(now)))) {
+    return refuse('That challenge has expired, was already used, or was not issued for this key.');
   }
 
   // --- the caller holds this key, from here on ---

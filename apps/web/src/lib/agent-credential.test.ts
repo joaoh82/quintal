@@ -5,7 +5,7 @@ import { generateSecretKey, getPublicKeyHex, signAttestation } from '@quintal/sh
 import { createAgent, createHostToken, findAgentByPubkey, memberships } from '@quintal/shared/db';
 import { createTestDb, createTestUser } from '@quintal/shared/db/testing';
 
-import { isHostTokenHeader, registerAgentCredential } from './agent-credential';
+import { isHostTokenHeader, isSameOriginRequest, registerAgentCredential } from './agent-credential';
 
 /**
  * Who may hand the office an agent's key — and the one thing neither caller
@@ -131,6 +131,33 @@ describe('registering a key for an agent', () => {
     assert.equal((await registerAgentCredential(w.db, w.agent.id, null, me)).status, 400);
     assert.equal((await registerAgentCredential(w.db, w.agent.id, { agentPubkey: 1 }, me)).status, 400);
     assert.equal((await registerAgentCredential(w.db, 'nope', w.body, me)).status, 404);
+  });
+});
+
+describe('a key already in use', () => {
+  it('is a 422 with a reason, not a 500', async () => {
+    const w = await world();
+    const me = { via: 'session' as const, userId: w.josh.id, isGuest: false };
+    const other = await createAgent(w.db, {
+      workspaceId: w.josh.workspaceId,
+      ownerUserId: w.josh.id,
+      name: 'ann',
+      spriteKey: 'slate',
+    });
+    assert.equal((await registerAgentCredential(w.db, w.agent.id, w.body, me)).status, 200);
+    const outcome = await registerAgentCredential(w.db, other.id, w.body, me);
+    assert.equal(outcome.status, 422);
+    assert.match('error' in outcome.body ? outcome.body.error : '', /already registered/);
+  });
+});
+
+describe('a cookie-authenticated request', () => {
+  it('must carry our origin — absent is refused, not excused', () => {
+    const ours = 'https://office.example.test';
+    assert.equal(isSameOriginRequest(ours, ours), true);
+    assert.equal(isSameOriginRequest('https://evil.example.test', ours), false);
+    assert.equal(isSameOriginRequest(null, ours), false);
+    assert.equal(isSameOriginRequest('', ours), false);
   });
 });
 

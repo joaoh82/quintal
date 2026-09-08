@@ -14,7 +14,7 @@ import {
   revokeAgent,
   setAgentCredential,
 } from './agents.js';
-import { consumeAgentChallenge, issueAgentChallenge } from './challenges.js';
+import { AGENT_CHALLENGES_PER_KEY, consumeAgentChallenge, issueAgentChallenge } from './challenges.js';
 import { agents, memberships, verifications } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
 
@@ -139,7 +139,7 @@ describe('registering an agent key', () => {
     assert.equal((await findAgentByPubkey(db, second.pubkey))?.identity.id, agent.id);
   });
 
-  it('never lets two agents share a key', async () => {
+  it('never lets two agents share a key, and says so', async () => {
     const db = await createTestDb();
     const josh = await createTestUser(db, 'Josh');
     const a = await agentFor(db, josh);
@@ -149,7 +149,10 @@ describe('registering an agent key', () => {
     await setAgentCredential(db, a.id, { pubkey: key.pubkey, attestation }, { via: 'session', userId: josh.id });
     await assert.rejects(
       setAgentCredential(db, b.id, { pubkey: key.pubkey, attestation }, { via: 'session', userId: josh.id }),
+      (error: unknown) => error instanceof CredentialError && /already registered/.test(error.message),
     );
+    // Re-registering the same key to the same agent is not a conflict.
+    await setAgentCredential(db, a.id, { pubkey: key.pubkey, attestation }, { via: 'session', userId: josh.id });
   });
 
   it('nothing the office lists about an agent can carry a secret', async () => {
@@ -176,28 +179,54 @@ describe('registering an agent key', () => {
 describe('the challenge an agent spends', () => {
   const key = keypair();
 
-  it('is consumed exactly once', async () => {
+  it('is consumed exactly once, and only with its own value', async () => {
     const db = await createTestDb();
     const nonce = await issueAgentChallenge(db, key.pubkey);
-    assert.equal(await consumeAgentChallenge(db, key.pubkey), nonce);
-    assert.equal(await consumeAgentChallenge(db, key.pubkey), null);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, 'f'.repeat(64)), false);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, nonce), true);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, nonce), false);
   });
 
-  it('asking again replaces the outstanding one', async () => {
+  it('asking again does not cancel the one in flight', async () => {
     const db = await createTestDb();
     const first = await issueAgentChallenge(db, key.pubkey);
     const second = await issueAgentChallenge(db, key.pubkey);
     assert.notEqual(first, second);
-    assert.equal(await consumeAgentChallenge(db, key.pubkey), second);
-    assert.equal(await consumeAgentChallenge(db, key.pubkey), null);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, first), true);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, second), true);
   });
 
-  it('an expired one is gone, not merely refused', async () => {
+  it('holds only so many per key: the oldest goes first', async () => {
     const db = await createTestDb();
-    await issueAgentChallenge(db, key.pubkey);
+    const issued: string[] = [];
+    for (let i = 0; i < AGENT_CHALLENGES_PER_KEY + 2; i += 1) {
+      issued.push(await issueAgentChallenge(db, key.pubkey));
+    }
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, issued[0]!), false);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, issued[1]!), false);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, issued[2]!), true);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, issued.at(-1)!), true);
+  });
+
+  it('an expired one is gone, not merely refused, and sweeps other keys too', async () => {
+    const db = await createTestDb();
+    const nonce = await issueAgentChallenge(db, key.pubkey);
     const later = new Date(Date.now() + 5 * 60_000);
-    assert.equal(await consumeAgentChallenge(db, key.pubkey, later), null);
+    assert.equal(await consumeAgentChallenge(db, key.pubkey, nonce, later), false);
     assert.equal((await db.select().from(verifications)).length, 0);
+
+    // Expired rows under any agent identifier are swept when a new one is issued.
+    await db.insert(verifications).values({
+      id: 'old',
+      identifier: 'agent:' + 'c'.repeat(64),
+      value: 'stale',
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    await issueAgentChallenge(db, key.pubkey);
+    assert.deepEqual(
+      (await db.select({ id: verifications.id }).from(verifications)).map((row) => row.id).includes('old'),
+      false,
+    );
   });
 
   it("never touches a human's nonce for the same key", async () => {
@@ -208,8 +237,8 @@ describe('the challenge an agent spends', () => {
       value: 'human-nonce',
       expiresAt: new Date(Date.now() + 60_000),
     });
-    await issueAgentChallenge(db, key.pubkey);
-    await consumeAgentChallenge(db, key.pubkey);
+    const nonce = await issueAgentChallenge(db, key.pubkey);
+    await consumeAgentChallenge(db, key.pubkey, nonce);
     const rows = await db.select().from(verifications);
     assert.deepEqual(rows.map((row) => row.value), ['human-nonce']);
   });
