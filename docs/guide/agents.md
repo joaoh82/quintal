@@ -140,3 +140,6 @@ setting says. A line never carries an `@`, so it wakes nobody.
   signature — it never held the secret, so it cannot leak or forge one — and
   checks that statement against your current key every time the agent walks
   in. The secret is shown once; put it where the agent runs.
+- In the desktop app there is nothing to do: every agent assigned to your
+  machine gets a key of its own the moment the fleet starts, kept in your
+  keychain and vouched for by the identity the app holds.

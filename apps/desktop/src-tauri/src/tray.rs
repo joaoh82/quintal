@@ -153,25 +153,13 @@ fn toggle_fleet(app: &AppHandle) {
     let next = if matches!(state.fleet.status(), FleetState::Running { .. }) {
         state.fleet.stop().err().map(|error| error.to_string())
     } else {
-        match state.server.as_deref().map_or(Ok(None), |server| {
-            crate::machine::token(&state.store, server)
-        }) {
-            Ok(Some(token)) => match state.server.as_deref() {
-                Some(server) => {
-                    let dir = crate::spawn::repos_dir(&state.dir);
-                    state
-                        .fleet
-                        .start(&dir, server, &token)
-                        .err()
-                        .map(|error| error.to_string())
-                }
-                None => Some("no server is selected".into()),
-            },
-            // Nothing useful the tray can do about either: an unregistered
-            // machine needs the office, and a locked keychain needs the OS.
-            Ok(None) => Some("this machine has not registered with a server yet".into()),
-            Err(error) => Some(error.to_string()),
-        }
+        // The same sequence the page runs — keys provisioned, then the
+        // harness — so the tray cannot start a fleet the page would not.
+        // Nothing useful the tray can do about a failure: an unregistered
+        // machine needs the office, a locked keychain needs the OS.
+        crate::commands::start_fleet_here(&state)
+            .err()
+            .map(|error| error.message)
     };
 
     if let Some(message) = next {

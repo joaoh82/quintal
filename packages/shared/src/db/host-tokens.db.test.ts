@@ -187,6 +187,9 @@ describe('the fleet a host pulls', () => {
     const serialised = JSON.stringify(await fleetForHost(db, host!, 'laptop'));
     assert.ok(!serialised.includes(agent.key));
     assert.ok(!serialised.includes('qa_'));
+    assert.ok(!serialised.includes('nsec'));
+    // The public half of a keypair is the one thing a machine needs to see.
+    assert.equal((await fleetForHost(db, host!, 'laptop'))[0]?.pubkey, null);
   });
 
   it('omits a teammate’s agent even when it names this machine', async () => {

@@ -52,6 +52,10 @@ const LOG_LINES: usize = 500;
 /// had a `login` step and never writes a token to disk.
 const TOKEN_ENV: &str = "QUINTAL_HOST_TOKEN";
 const URL_ENV: &str = "QUINTAL_URL";
+/// Each agent's own key, as a JSON map — see `agent_keys`. Same rule as the
+/// token: environment only, and the harness strips it from what the agent
+/// runtime inherits.
+const AGENT_KEYS_ENV: &str = crate::agent_keys::AGENT_KEYS_ENV;
 
 /// Asks the harness to stop when this process is no longer its parent.
 ///
@@ -333,8 +337,9 @@ impl Fleet {
         repos_dir: &Path,
         server: &str,
         host_token: &str,
+        agent_keys: Option<&str>,
     ) -> Result<FleetState, SpawnError> {
-        self.start_with(&harness_path()?, repos_dir, server, host_token)
+        self.start_with(&harness_path()?, repos_dir, server, host_token, agent_keys)
     }
 
     /// See `identity::load_or_create_with` for why the harness is an argument:
@@ -346,6 +351,8 @@ impl Fleet {
         repos_dir: &Path,
         server: &str,
         host_token: &str,
+        // `QUINTAL_AGENT_KEYS`, when this machine holds keys for its agents.
+        agent_keys: Option<&str>,
     ) -> Result<FleetState, SpawnError> {
         if host_token.trim().is_empty() {
             return Err(SpawnError::NotRegistered);
@@ -365,12 +372,17 @@ impl Fleet {
         }
 
         let plan = plan(harness, repos_dir)?;
-        let mut child = Command::new(&plan.program)
+        let mut command = Command::new(&plan.program);
+        command
             .args(&plan.args)
             .current_dir(&plan.cwd)
             .env(TOKEN_ENV, host_token)
             .env(URL_ENV, server)
-            .env(EXIT_WITH_PARENT_ENV, "1")
+            .env(EXIT_WITH_PARENT_ENV, "1");
+        if let Some(keys) = agent_keys {
+            command.env(AGENT_KEYS_ENV, keys);
+        }
+        let mut child = command
             // Piped, and deliberately never read or taken: this pipe is not a
             // channel, it is a liveness signal. We hold the write end for as
             // long as this app is alive, so when it exits — tidily, by crash,
@@ -444,6 +456,13 @@ impl Fleet {
     }
 
     /// What the harness has said recently.
+    /// A line from this side of the fence — what the host did before or
+    /// around the harness — shown in the same log so a person has one place
+    /// to look.
+    pub fn note(&self, text: impl Into<String>) {
+        self.logs.push("host", text.into());
+    }
+
     pub fn logs(&self) -> Vec<LogLine> {
         self.logs.snapshot()
     }
@@ -640,7 +659,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let harness = fake_harness(dir.path(), "exit 0");
         let error = Fleet::new()
-            .start_with(&harness, dir.path(), server(), "   ")
+            .start_with(&harness, dir.path(), server(), "   ", None)
             .expect_err("must refuse");
         assert!(matches!(error, SpawnError::NotRegistered));
     }
@@ -690,7 +709,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_secret")
+            .start_with(&harness, dir.path(), server(), "qh_secret", None)
             .expect("started");
         wait_for(&seen);
 
@@ -698,6 +717,37 @@ mod tests {
             std::fs::read_to_string(&seen).expect("recorded"),
             format!("qh_secret {}", server())
         );
+        fleet
+            .stop_within(Duration::from_millis(500))
+            .expect("stopped");
+    }
+
+    /// The agents' own keys travel the same way as the token, and — the part
+    /// worth proving — never on the command line, where every process on the
+    /// machine could read them out of `ps`.
+    #[test]
+    fn agent_keys_reach_the_child_through_its_environment_and_never_argv() {
+        let dir = tempfile::tempdir().unwrap();
+        let seen = dir.path().join("seen");
+        let harness = fake_harness(
+            dir.path(),
+            &format!(
+                "printf '%s|%s' \"$QUINTAL_AGENT_KEYS\" \"$*\" > {}\nwhile :; do :; done\n",
+                seen.display()
+            ),
+        );
+        let keys = r#"{"a1":"nsec1secret"}"#;
+
+        let fleet = Fleet::new();
+        fleet
+            .start_with(&harness, dir.path(), server(), "qh_x", Some(keys))
+            .expect("started");
+        wait_for(&seen);
+
+        let recorded = std::fs::read_to_string(&seen).expect("recorded");
+        let (env, argv) = recorded.split_once('|').expect("two fields");
+        assert_eq!(env, keys, "the map arrives whole through the environment");
+        assert!(!argv.contains("nsec1"), "and never as an argument: {argv}");
         fleet
             .stop_within(Duration::from_millis(500))
             .expect("stopped");
@@ -722,7 +772,7 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
         wait_for(&ready);
 
@@ -751,13 +801,13 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
         wait_for(&ready);
 
         assert!(matches!(
             fleet
-                .start_with(&harness, dir.path(), server(), "qh_x")
+                .start_with(&harness, dir.path(), server(), "qh_x", None)
                 .expect_err("must refuse"),
             SpawnError::AlreadyRunning
         ));
@@ -775,7 +825,7 @@ mod tests {
 
         let dies = fake_harness(dir.path(), "exit 1");
         fleet
-            .start_with(&dies, dir.path(), server(), "qh_x")
+            .start_with(&dies, dir.path(), server(), "qh_x", None)
             .expect("started");
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -790,7 +840,7 @@ mod tests {
             &format!("printf ready > {}\nwhile :; do :; done\n", ready.display()),
         );
         fleet
-            .start_with(&lives, dir.path(), server(), "qh_x")
+            .start_with(&lives, dir.path(), server(), "qh_x", None)
             .expect("a dead fleet can be restarted");
         wait_for(&ready);
         fleet
@@ -805,7 +855,7 @@ mod tests {
         let fleet = Fleet::new();
 
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
 
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -835,7 +885,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
         wait_for(&ready);
 
@@ -890,7 +940,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
         wait_for(&ready);
 
@@ -923,7 +973,7 @@ mod tests {
 
         let fleet = Fleet::new();
         fleet
-            .start_with(&harness, dir.path(), server(), "qh_x")
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
             .expect("started");
         wait_for(&ready);
 
