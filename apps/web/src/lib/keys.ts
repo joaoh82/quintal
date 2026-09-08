@@ -176,6 +176,47 @@ export function npubFor(identity: Identity): string {
 
 // --- signing ----------------------------------------------------------------
 
+/**
+ * Sign any canonical payload as this identity — the login challenge, or an
+ * owner attestation for one of your agents. The same three signers, so
+ * anything that can sign you in can vouch for an agent.
+ */
+export async function signPayload(identity: Identity, payload: string): Promise<string> {
+  return sign(identity, payload);
+}
+
+/**
+ * The signer this page can use without asking, in the order we prefer them:
+ * the desktop host, a key saved to this browser, a signing extension. Null
+ * when there is none — a session cookie says who you are, not how to sign as
+ * you, and a page that needs a signature has to find one of these or ask.
+ */
+export async function resolveSigner(): Promise<Identity | null> {
+  if (getHost()) {
+    try {
+      return await identityFromHost();
+    } catch {
+      // Locked keychain, or a host that could not answer. Fall through.
+    }
+  }
+  const saved = loadSavedNsec();
+  if (saved) {
+    try {
+      return identityFromNsec(saved);
+    } catch {
+      // A corrupt saved key is not a signer.
+    }
+  }
+  if (hasExtension()) {
+    try {
+      return await identityFromExtension();
+    } catch {
+      // The extension refused. Nothing to sign with.
+    }
+  }
+  return null;
+}
+
 async function sign(identity: Identity, payload: string): Promise<string> {
   if (identity.kind === 'local') {
     return signAuthPayload(identity.secretKey, payload);

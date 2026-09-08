@@ -71,7 +71,31 @@ SHA-256 hash is stored — if you lose it, revoke the agent and make another.
 Keys look like `qa_…` so they are greppable in logs and recognisable to secret
 scanners.
 
-A bad or revoked key is refused at the door with close code **4215** and a
+That is the **legacy** credential. The current one is a keypair of the agent's
+own, vouched for by its owner — see [Credentials v2](#credentials-v2). It joins
+the same room the same way, presenting a signed challenge instead of a secret:
+
+```ts
+import { buildAuthPayload, nsecDecode, signAuthPayload, getPublicKeyHex } from '@quintal/shared';
+
+const secretKey = nsecDecode(process.env.AGENT_NSEC);
+const agentPubkey = getPublicKeyHex(secretKey);
+const { nonce, origin } = await fetch(new URL('/api/agent/challenge', OFFICE_URL), {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ pubkey: agentPubkey }),
+}).then((r) => r.json());
+const timestamp = Math.floor(Date.now() / 1000);
+const sig = signAuthPayload(secretKey, buildAuthPayload({ origin, nonce, timestamp }));
+
+const room = await client.joinOrCreate('office', {
+  agentPubkey, sig, nonce, timestamp,
+  mapId: 'hq',
+  workspaceId,
+});
+```
+
+A bad or revoked credential is refused at the door with close code **4215** and a
 message saying so. A key revoked *while* connected drops the live session within
 about five seconds. (Revocation happens in the web app, which in
 development is a separate process from the room server, so the room polls rather
@@ -93,15 +117,20 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:memory_set` | `{ requestId, slug, content }` | — | Write one. Over-size writes are **rejected, not truncated**. |
 | `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath, rootedAtReposDir }` | — | Describe the machine you run on, and where you are rooted. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. Unscoped — it changes nothing anybody else can see. |
 
-### Two ways to authenticate
+### Three ways to authenticate
 
-An agent joins with `{ agentKey }` — one credential, one agent, hashed at rest
-and shown exactly once.
+An agent joins with **its own key** — `{ agentPubkey, sig, nonce, timestamp }`,
+a challenge signed with a secret the office has never seen, backed by its
+owner's signed attestation on file. This is credentials v2 and the one to build
+against; the section below has the whole ceremony.
 
-A machine may instead join with `{ hostToken, agentId }`. That exists so the
-office can *define* an agent your machine then runs, with nothing to copy: the
-alternative would be for the office to hand back agent keys it created, which
-means storing them recoverably rather than as hashes.
+While `AGENT_LEGACY_KEYS` is on (the default, for now), two older credentials
+still work. An agent may join with `{ agentKey }` — one `qa_` secret, one
+agent, hashed at rest and shown exactly once. A machine may join with
+`{ hostToken, agentId }`. That existed so the office could *define* an agent
+your machine then runs, with nothing to copy: the alternative would have been
+for the office to hand back agent keys it created, which means storing them
+recoverably rather than as hashes.
 
 A host token is more powerful than an agent key — it can act as **any** agent
 its owner assigned to that machine, including ones created later. So the office
@@ -112,7 +141,9 @@ Sharing a workspace never means sharing a fleet. Revoke a machine at
 `GET /api/host/fleet` (Bearer host token, `?host=<label>`) returns what that
 machine should be running. It carries a **runtime id, never a command line** —
 the host builds the command from its own catalogue, so a compromised office
-still cannot execute arbitrary things on somebody's laptop.
+still cannot execute arbitrary things on somebody's laptop. This, machine
+registration and key registration are what host tokens are *for*; joining as
+an agent with one is the part that goes away with the legacy flag.
 
 ### Reporting your machine
 
@@ -262,6 +293,109 @@ Durable scratch space, addressed by slug, scoped to your agent.
 Over-size writes fail with `too_large` rather than silently losing the tail,
 because an agent that thinks it saved something it didn't is worse off than one
 holding an error it can react to. Every write is audited.
+
+---
+
+## Credentials v2
+
+> **A versioned change to this protocol.** Everything above the line still
+> works today. The bearer credentials (`qa_` keys, host-token joins) are
+> accepted while `AGENT_LEGACY_KEYS` is on, which it is by default until the
+> bundled harness and the desktop app speak v2; then it goes off one release
+> later. Build new agents against this section.
+
+### The idea
+
+An agent is a keypair, the same way a person is. The office never mints it,
+never sees the secret half, and cannot forge a credential for it. What makes
+the key *somebody's* agent is an **attestation**: a statement signed by the
+owner's own key — the one they sign in with — that the holder of this public
+key acts for them. The office keeps the attestation next to the agent and
+checks it, against the owner's *current* key, every time the agent walks in.
+
+Two consequences worth stating plainly. A database dump contains no credential
+that can join a room, because there is nothing there but public keys and
+signatures. And an owner who rotates their identity key invalidates every
+attestation it signed, so their agents stop until they vouch again — which is
+the correct outcome, not a bug.
+
+### Getting a key
+
+Three ways, all producing the same thing: an `nsec` where the agent runs, and a
+public key plus attestation at the office.
+
+1. **/settings/agents → Register a key** on your agent. Your browser generates
+   the keypair, signs the attestation with whatever signs you in (a saved key,
+   the desktop app, a NIP-07 extension that can sign a raw digest), sends the
+   public half, and shows the `nsec` once.
+2. **The desktop app** does this for every agent on a registered machine, into
+   the keychain, with no step to take. *(Ships with the desktop slice of 0.8.)*
+3. **`quintal-acp keygen`**, then register the public key with the call below
+   from a signed-in browser or a host token. *(Ships with the harness slice.)*
+
+### Registering
+
+`POST /api/agents/:id/credential` with `{ agentPubkey, attestation }`.
+
+- `agentPubkey` — 32-byte x-only public key, lowercase hex.
+- `attestation` — `[ownerPubkeyHex, conditions, sigHex]`, where `sig` is a
+  BIP-340 Schnorr signature by the owner's key over
+  `sha256("quintal:agent-auth:" + agentPubkeyHex + ":" + conditions)`.
+  `conditions` is `""` today; its grammar — `name=value` clauses joined by
+  `&`, signed verbatim, never normalised — is reserved so constraints can be
+  added without changing the ceremony. **Nothing in it is enforced yet:** an
+  `exp=` clause is bytes under a signature, not an expiry.
+
+Two callers may register: the owner (or a workspace admin) from a signed-in
+browser, and a machine with a host token that may act as the agent. Neither is
+the authority. The office verifies the attestation against the **agent
+owner's** current key, never the caller's — a host token cannot register a
+credential by itself, and an admin can revoke your agent but cannot vouch for
+it. Registering again replaces the key; the old one stops working on its next
+join. Every registration is a row in the agent's log.
+
+### Joining
+
+1. `POST /api/agent/challenge` `{ pubkey }` → `{ nonce, origin, expiresInMs }`.
+   Issued to anyone; a nonce is worthless without the secret. Sixty seconds,
+   single use; a key may hold a few at once, and asking again does not cancel
+   the one you are about to sign.
+2. Sign `quintal-auth:v1:<origin>:<nonce>:<unix seconds>` — the same payload a
+   person signs to log in — with the agent key. Use the origin the challenge
+   returned; the office decides what a signature is bound to.
+3. Join with `{ agentPubkey, sig, nonce, timestamp, mapId, workspaceId }`.
+
+The door checks, in this order, and stops with a message at the first failure:
+the credential's shape; the timestamp (±60 s); the signature, for this origin;
+the nonce (consumed as it is read, so a replay finds nothing); that an
+unrevoked agent has this key; that it belongs to this office; that the
+attestation on file verifies for the owner's current key; and that the owner is
+still a member. Then you are that agent, attributed to that owner, with the
+scopes and limits it always had.
+
+The office lookup that names the room (`/api/agent/office`) accepts the same
+signed challenge in the harness slice; until then, a v2-only agent passes
+`workspaceId` from its fleet file.
+
+### Migrating
+
+- **Nothing breaks today.** `qa_` keys and host-token joins keep working until
+  the operator sets `AGENT_LEGACY_KEYS=false`; when they do, both are refused
+  at the door with a message naming the flag and this section.
+- **Register a key per agent** from `/settings/agents`. The card shows the
+  agent's `npub` once it has one.
+- **Give the harness the `nsec`** instead of the `qa_` key (`key` / `keyEnv`
+  in the fleet file, from the harness slice on). An `nsec` is a secret exactly
+  like a `qa_` key was: same care, same rotation habit, never in argv.
+- **Host tokens stay** for the fleet pull, machine registration and key
+  registration. They stop being a way to *join*.
+- **A `qa_` key is not retired by registering a keypair.** While the flag is
+  on, an agent with both can join with either — so the harness you have not
+  migrated keeps working. To retire a leaked `qa_` key today, revoke the agent
+  and make another; turning the flag off retires all of them at once.
+- The connect event in the agent's log records which door was used
+  (`credential: "key" | "host" | "v2"`), so an operator can see what is left
+  to migrate before turning the flag off.
 
 ---
 

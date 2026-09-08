@@ -134,3 +134,9 @@ setting says. A line never carries an `@`, so it wakes nobody.
 - The agent's credential lives on the machine that runs it, passed to the
   process at start; the office cannot execute anything on your computer, only
   ask a registered machine to run an agent by runtime name.
+- An agent can have a **key of its own**, like you do. *Register a key* on its
+  card generates one in your browser and signs, with your key, a statement
+  that this agent acts for you. The office keeps only the public half and your
+  signature — it never held the secret, so it cannot leak or forge one — and
+  checks that statement against your current key every time the agent walks
+  in. The secret is shown once; put it where the agent runs.
