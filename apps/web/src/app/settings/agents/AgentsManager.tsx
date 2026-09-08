@@ -7,13 +7,16 @@ import {
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
+  npubEncode,
   runtimeById,
+  truncateNpub,
   type AgentScope,
   type RuntimeStatus,
 } from '@quintal/shared';
 import type { AgentListEntry } from '@quintal/shared/db';
 import Link from 'next/link';
 
+import { RegisterKey } from './RegisterKey';
 import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
 
@@ -42,6 +45,8 @@ export interface ReportedHost {
 interface AgentsManagerProps {
   agents: AgentListEntry[];
   currentUserId: string;
+  /** The key the signed-in person signs with — what an attestation is made with. */
+  currentUserPubkey: string;
   canAdministerAll: boolean;
   /** Registered machines, for assigning an agent somewhere it can boot. */
   machines: string[];
@@ -130,6 +135,7 @@ function ModelSelect({
 export function AgentsManager({
   agents,
   currentUserId,
+  currentUserPubkey,
   canAdministerAll,
   machines,
   hosts,
@@ -347,6 +353,7 @@ export function AgentsManager({
                 key={agent.id}
                 agent={agent}
                 canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
+                ownerPubkey={agent.ownerUserId === currentUserId ? currentUserPubkey : null}
                 machines={machines}
                 hosts={hosts}
               />
@@ -378,11 +385,18 @@ export function AgentsManager({
 function AgentRow({
   agent,
   canRevoke,
+  ownerPubkey = null,
   machines,
   hosts,
 }: {
   agent: AgentListEntry;
   canRevoke: boolean;
+  /**
+   * The signed-in person's key when they own this agent, else null. Only an
+   * owner can vouch for an agent — an admin may revoke it, but cannot sign
+   * for somebody else.
+   */
+  ownerPubkey?: string | null;
   machines: string[];
   hosts: ReportedHost[];
 }) {
@@ -410,6 +424,18 @@ function AgentRow({
       {agent.status ? (
         <span className="text-muted-foreground truncate font-mono text-xs">
           {agent.status}
+        </span>
+      ) : null}
+
+      {/* Its own key, when it has one: the same fact a person's card shows,
+          because an agent with a key of its own is somebody the office can
+          name without having minted anything for it. */}
+      {agent.pubkey ? (
+        <span
+          className="text-muted-foreground font-mono text-[11px]"
+          title={npubEncode(agent.pubkey)}
+        >
+          {truncateNpub(npubEncode(agent.pubkey))}
         </span>
       ) : null}
 
@@ -509,6 +535,15 @@ function AgentRow({
       >
         log
       </Link>
+
+      {ownerPubkey && agent.revokedAt === null ? (
+        <RegisterKey
+          agentId={agent.id}
+          agentName={agent.name}
+          ownerPubkey={ownerPubkey}
+          currentPubkey={agent.pubkey}
+        />
+      ) : null}
 
       {canRevoke && agent.hostLabel !== null && agent.revokedAt === null ? (
         <form action={setAgentEnabledAction}>

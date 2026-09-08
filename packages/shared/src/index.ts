@@ -5,6 +5,7 @@
  * `@quintal/shared/db`.
  */
 export * from './agent.js';
+export * from './attestation.js';
 export * from './constants.js';
 export * from './conversation.js';
 export * from './emotes.js';

@@ -117,7 +117,7 @@ import {
   type StoredMessage,
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
-import { tileBeside } from '@quintal/shared';
+import { tileBeside, type AgentCredentialKind } from '@quintal/shared';
 
 import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
 
@@ -135,6 +135,8 @@ import {
   persistStatus,
   type AgentSession,
 } from '../agents/gateway.js';
+import { authenticateAgentKeypair } from '../agents/keypair.js';
+import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
 import {
@@ -173,6 +175,11 @@ interface OfficeRoomOptions {
   /** A machine's credential, used with `agentId` instead of an agent key. */
   hostToken?: unknown;
   agentId?: unknown;
+  /** Credentials v2: the agent's own key, a signed challenge. See `agents/keypair.ts`. */
+  agentPubkey?: unknown;
+  sig?: unknown;
+  nonce?: unknown;
+  timestamp?: unknown;
 }
 
 /** What `onAuth` hands to `onJoin`. Humans and agents come through one door. */
@@ -186,7 +193,7 @@ type JoinAuth =
       pubkey: string;
       avatar: string;
     }
-  | { kind: 'agent'; identity: AgentIdentity };
+  | { kind: 'agent'; identity: AgentIdentity; credential: AgentCredentialKind };
 
 interface PlayerSim {
   intent: MoveIntent;
@@ -378,9 +385,12 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
-   * One door, three credentials. An agent presents `{ agentKey }`; a machine
-   * running an office-defined agent presents `{ hostToken, agentId }`; a human
-   * presents a Better Auth session token. Anything else is turned away.
+   * One door, four credentials. An agent presents its own key as a signed
+   * challenge (`{ agentPubkey, sig, nonce, timestamp }` — credentials v2); an
+   * agent may still present `{ agentKey }`, and a machine running an
+   * office-defined agent `{ hostToken, agentId }`, while legacy credentials
+   * are on; a human presents a Better Auth session token. Anything else is
+   * turned away.
    */
   /**
    * The office this room belongs to, learned from the first join that created
@@ -410,8 +420,29 @@ export class OfficeRoom extends Room<OfficeState> {
     // ServerError, not Error: a plain throw reaches the client as an empty
     // 4213 with no message, which for a documented public protocol means an
     // agent developer gets a bare number and no idea what they did wrong.
-    // A machine acting as one of its owner's agents. Checked first because it
-    // carries an explicit agent id; an agent key carries only itself.
+    // Credentials v2: a key the office never minted, vouched for by its owner.
+    // Checked first because it is the one credential the office cannot forge.
+    if (options.agentPubkey !== undefined) {
+      const result = await authenticateAgentKeypair(options, workspaceId);
+      if (!result.ok) throw new ServerError(ErrorCode.AUTH_FAILED, result.message);
+      return { kind: 'agent', identity: result.identity, credential: 'v2' };
+    }
+
+    // The two bearer credentials. Off by a flag once every harness speaks v2;
+    // refused with the flag's name so an operator who turned it off on purpose
+    // and an agent that was never migrated both get told the same thing.
+    if (
+      !config.legacyAgentKeys &&
+      (options.hostToken !== undefined || options.agentKey !== undefined)
+    ) {
+      throw new ServerError(
+        ErrorCode.AUTH_FAILED,
+        'This office no longer accepts agent keys or host-token joins (AGENT_LEGACY_KEYS=false). Register a keypair for this agent — see docs/GATEWAY.md, "Credentials v2".',
+      );
+    }
+
+    // A machine acting as one of its owner's agents. Checked before the agent
+    // key because it carries an explicit agent id; an agent key carries only itself.
     if (options.hostToken !== undefined) {
       const identity = await authenticateHostAgent(options.hostToken, options.agentId);
       if (!identity) {
@@ -423,7 +454,7 @@ export class OfficeRoom extends Room<OfficeState> {
       if (!agentBelongsToOffice(identity, workspaceId)) {
         throw new ServerError(ErrorCode.AUTH_FAILED, 'That agent belongs to another office.');
       }
-      return { kind: 'agent', identity };
+      return { kind: 'agent', identity, credential: 'host' };
     }
 
     if (options.agentKey !== undefined) {
@@ -437,7 +468,7 @@ export class OfficeRoom extends Room<OfficeState> {
       if (!agentBelongsToOffice(identity, workspaceId)) {
         throw new ServerError(ErrorCode.AUTH_FAILED, 'That agent belongs to another office.');
       }
-      return { kind: 'agent', identity };
+      return { kind: 'agent', identity, credential: 'key' };
     }
 
     const user = await verifySessionToken(options.token);
@@ -470,7 +501,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
   override onJoin(client: Client, _options: OfficeRoomOptions, auth: JoinAuth): void {
     if (auth.kind === 'agent') {
-      this.#joinAsAgent(client, auth.identity);
+      this.#joinAsAgent(client, auth.identity, auth.credential);
       return;
     }
 
@@ -495,7 +526,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#broadcastRosterToAgents();
   }
 
-  #joinAsAgent(client: Client, identity: AgentIdentity): void {
+  #joinAsAgent(client: Client, identity: AgentIdentity, credential: AgentCredentialKind): void {
     // Agents wake up in the Agent Bay, not the human lobby. Where a worker
     // stands says what it is as loudly as any badge.
     const spawn = this.#agentSpawn();
@@ -531,6 +562,8 @@ export class OfficeRoom extends Room<OfficeState> {
       sessionId: client.sessionId,
       roomId: this.roomId,
       tile: spawn,
+      // Which door it came through. 'v2' is a key the office never minted.
+      credential,
     });
     markSeen(identity.id);
 

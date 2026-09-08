@@ -16,7 +16,8 @@ import {
   type AgentEventKind,
   type AgentScope,
 } from '../agent.js';
-import { displayName } from '../identity.js';
+import { verifyAttestation } from '../attestation.js';
+import { displayName, isPubkeyHex } from '../identity.js';
 import type { Database } from './client.js';
 import { agentEvents, agentMemory, agents, memberships, users } from './schema.js';
 
@@ -225,7 +226,7 @@ export async function findAgentByKey(
     .limit(1);
 
   const row = rows[0];
-  if (!row || row.revokedAt !== null) return null;
+  if (!row || row.revokedAt !== null || row.apiKeyHash === null) return null;
   // The lookup was by hash, so this can only fail on a hash collision; check it
   // anyway, in constant time, because the cost is nothing.
   if (!hashesMatch(row.apiKeyHash, hash)) return null;
@@ -294,6 +295,167 @@ export async function findAgentIdentityById(
   };
 }
 
+// --- credentials v2 --------------------------------------------------------
+
+export interface AgentCredential {
+  identity: AgentIdentity;
+  /** The owner's *current* key — what the attestation must have been signed with. */
+  ownerPubkey: string;
+  /** The stored attestation tag, unverified. */
+  attestation: unknown;
+}
+
+/**
+ * Resolve an agent's own public key to the agent, its owner's key and the
+ * attestation on file. Null for unknown *and* revoked, like the other lookups.
+ *
+ * Does not verify anything: this is the row, and the room does the checking
+ * so that the order of checks — and the message for each — lives in one place.
+ */
+export async function findAgentByPubkey(
+  db: Database,
+  pubkey: unknown,
+): Promise<AgentCredential | null> {
+  if (!isPubkeyHex(pubkey)) return null;
+
+  const rows = await db
+    .select({
+      id: agents.id,
+      workspaceId: agents.workspaceId,
+      ownerUserId: agents.ownerUserId,
+      ownerName: users.name,
+      ownerPubkey: users.pubkey,
+      name: agents.name,
+      description: agents.description,
+      instructions: agents.instructions,
+      spriteKey: agents.spriteKey,
+      scopes: agents.scopes,
+      status: agents.status,
+      attestation: agents.attestation,
+      revokedAt: agents.revokedAt,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.ownerUserId))
+    .where(eq(agents.pubkey, pubkey as string))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.revokedAt !== null) return null;
+
+  return {
+    identity: {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
+      ownerName: displayName({ name: row.ownerName, pubkey: row.ownerPubkey }),
+      name: row.name,
+      description: row.description,
+      instructions: row.instructions,
+      spriteKey: row.spriteKey,
+      scopes: parseScopes(row.scopes),
+      status: row.status,
+    },
+    ownerPubkey: row.ownerPubkey,
+    attestation: row.attestation,
+  };
+}
+
+/** What a credential is checked against: who owns the agent, and where it lives. */
+export interface AgentOwnership {
+  id: string;
+  workspaceId: string;
+  ownerUserId: string;
+  ownerPubkey: string;
+  revoked: boolean;
+}
+
+export async function findAgentOwnership(
+  db: Database,
+  agentId: string,
+): Promise<AgentOwnership | null> {
+  const rows = await db
+    .select({
+      id: agents.id,
+      workspaceId: agents.workspaceId,
+      ownerUserId: agents.ownerUserId,
+      ownerPubkey: users.pubkey,
+      revokedAt: agents.revokedAt,
+    })
+    .from(agents)
+    .innerJoin(users, eq(users.id, agents.ownerUserId))
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    ownerUserId: row.ownerUserId,
+    ownerPubkey: row.ownerPubkey,
+    revoked: row.revokedAt !== null,
+  };
+}
+
+export class CredentialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CredentialError';
+  }
+}
+
+/**
+ * Register an agent's keypair: its public key and its owner's attestation.
+ *
+ * The attestation is verified here, against the owner's current key from the
+ * `users` row — never against whoever is calling. That is the whole rule that
+ * makes registration safe to expose to a host token: the token says which
+ * machine is asking, the signature says the owner agreed, and only the second
+ * is an authority.
+ *
+ * Replaces whatever key was registered before. The old one stops working on
+ * the next join, which is what rotating a key means.
+ */
+export async function setAgentCredential(
+  db: Database,
+  agentId: string,
+  input: { pubkey: string; attestation: unknown },
+  /** Recorded in the log: 'session' or 'host', and which one. */
+  registeredBy: { via: 'session'; userId: string } | { via: 'host'; hostId: string },
+): Promise<{ pubkey: string }> {
+  const agent = await findAgentOwnership(db, agentId);
+  if (!agent) throw new CredentialError('No such agent.');
+  if (agent.revoked) throw new CredentialError('That agent was revoked.');
+  if (!isPubkeyHex(input.pubkey)) {
+    throw new CredentialError('pubkey must be a 32-byte x-only public key in hex.');
+  }
+  if (input.pubkey === agent.ownerPubkey) {
+    throw new CredentialError('An agent cannot use its owner\'s key.');
+  }
+  if (
+    !verifyAttestation({
+      attestation: input.attestation,
+      agentPubkey: input.pubkey,
+      ownerPubkey: agent.ownerPubkey,
+    })
+  ) {
+    throw new CredentialError(
+      "The attestation does not verify against the owner's current key.",
+    );
+  }
+
+  await db
+    .update(agents)
+    .set({ pubkey: input.pubkey, attestation: input.attestation })
+    .where(eq(agents.id, agentId));
+
+  await recordAgentEvent(db, agentId, 'agent.credential_registered', {
+    pubkey: input.pubkey,
+    ...registeredBy,
+  });
+
+  return { pubkey: input.pubkey };
+}
+
 /** Which of these agent ids have been revoked. Used to kick live sessions. */
 export async function findRevokedAgentIds(
   db: Database,
@@ -338,6 +500,8 @@ export interface AgentListEntry {
   /** Where its harness said it is rooted. Empty until one connects. */
   workspacePath: string;
   rootedAtReposDir: boolean;
+  /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
+  pubkey: string | null;
   createdAt: number;
   lastSeenAt: number | null;
   revokedAt: number | null;
@@ -369,6 +533,7 @@ export async function listAgentsForWorkspace(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
+      pubkey: agents.pubkey,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -414,6 +579,7 @@ export async function findAgentById(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       rootedAtReposDir: agents.rootedAtReposDir,
+      pubkey: agents.pubkey,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,

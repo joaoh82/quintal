@@ -67,6 +67,7 @@ export default async function AgentsSettingsPage() {
       <AgentsManager
         agents={agents}
         currentUserId={session.user.id}
+        currentUserPubkey={session.user.pubkey}
         canAdministerAll={canAdministerAll}
         machines={machines.filter((row) => row.revokedAt === null).map((row) => row.label)}
         hosts={hosts.map((host) => ({ label: host.label, runtimes: host.runtimes }))}

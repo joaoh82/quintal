@@ -120,6 +120,8 @@ export const AGENT_EVENT_KINDS = [
   'agent.revoked',
   /** Its owner changed what it says it is, or how it was told to behave. */
   'agent.profile_changed',
+  /** A keypair was registered for it (credentials v2), replacing any before. */
+  'agent.credential_registered',
   'session.connected',
   'session.disconnected',
   'session.rejected',

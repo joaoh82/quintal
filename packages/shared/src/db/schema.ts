@@ -349,7 +349,30 @@ export const agents = sqliteTable(
      * what its owner told it to be.
      */
     instructions: text('instructions').notNull().default(''),
-    apiKeyHash: text('api_key_hash').notNull().unique(),
+    /**
+     * SHA-256 of a `qa_` key, or null for an agent that only ever had a
+     * keypair. Legacy after credentials v2 — see `pubkey`.
+     */
+    apiKeyHash: text('api_key_hash').unique(),
+    /**
+     * The agent's own x-only public key, hex — credentials v2.
+     *
+     * The office never sees the matching secret. It was generated where the
+     * agent runs, and what is stored here is the half that proves nothing
+     * on its own: an agent joins by signing a challenge with the other half.
+     * Null until a key is registered.
+     */
+    pubkey: text('pubkey').unique(),
+    /**
+     * The owner's signed statement that the holder of `pubkey` acts for
+     * them, as an `AttestationTag` — `[ownerPubkey, conditions, sig]`.
+     *
+     * Stored rather than carried by the agent so the harness holds one thing
+     * (its key), and so the office can re-check it against the owner's
+     * *current* key on every join: a rotated owner key invalidates every
+     * attestation it signed, which is the point.
+     */
+    attestation: text('attestation', { mode: 'json' }).$type<unknown>(),
     /** JSON array of AgentScope. Text, because SQLite has no array type. */
     scopes: text('scopes', { mode: 'json' })
       .$type<(typeof AGENT_SCOPES)[number][]>()
