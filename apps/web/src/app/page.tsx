@@ -1,33 +1,23 @@
 import Link from 'next/link';
 
-import { ExternalLink } from '@/components/ExternalLink';
 import { Button } from '@/components/ui/button';
 import { WhichServer } from '@/components/WhichServer';
 import { Wordmark } from '@/components/Wordmark';
-
-const REPO = 'https://github.com/joaoh82/quintal';
 
 /**
  * The first page of an instance, before anybody has signed in.
  *
  * Says what this is in the words the website uses, and which server this
  * is — somebody arriving at a URL has to recognise the place. Nothing here
- * needs a session, and nothing here is a feature: the office is behind the
- * sign-in.
+ * needs a session, nothing here is a feature, and nothing here leaves: the
+ * office is behind the sign-in, and the docs and the repo are on the
+ * website people arrived from.
  */
 export default function LandingPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col px-6 py-8">
       <header className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <Wordmark size="md" />
-        <nav className="text-muted-foreground flex items-center gap-5 text-sm">
-          <ExternalLink className="hover:text-foreground" href="https://quintal.sh/docs/">
-            Docs
-          </ExternalLink>
-          <ExternalLink className="hover:text-foreground" href={REPO}>
-            GitHub ↗
-          </ExternalLink>
-        </nav>
         <WhichServer className="text-muted-foreground ml-auto text-xs" />
       </header>
 
@@ -49,9 +39,6 @@ export default function LandingPage() {
           <Button asChild size="lg">
             <Link href="/login">Sign in</Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <ExternalLink href="https://quintal.sh/docs/getting-started/">Get started</ExternalLink>
-          </Button>
         </div>
 
         <dl className="text-muted-foreground grid max-w-2xl gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
@@ -70,17 +57,11 @@ export default function LandingPage() {
         </dl>
       </section>
 
+      {/* No links out: the docs, the repo and the site are where somebody
+          came from, and a page in the desktop app is not the place to
+          leave it. */}
       <footer className="text-muted-foreground flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-4 text-xs">
-        <span>Open source. Built in public.</span>
-        <ExternalLink className="hover:text-foreground" href="https://quintal.sh">
-          quintal.sh
-        </ExternalLink>
-        <ExternalLink className="hover:text-foreground" href={`${REPO}/blob/main/SELF_HOSTING.md`}>
-          Self-hosting
-        </ExternalLink>
-        <ExternalLink className="hover:text-foreground" href={`${REPO}/blob/main/LICENSE-FAQ.md`}>
-          AGPL-3.0
-        </ExternalLink>
+        <span>Open source. Built in public. quintal.sh</span>
       </footer>
     </main>
   );

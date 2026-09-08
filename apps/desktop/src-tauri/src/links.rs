@@ -4,9 +4,16 @@
 //! The webview is granted IPC for exactly one origin — the server's — and a
 //! page from anywhere else loaded into it would be a page with a bridge to
 //! the keychain it was never meant to have. So the window never navigates
-//! off the server. A link to the docs, GitHub or the website opens where a
-//! link like that belongs, in the browser the person already uses, whether
-//! it asked for a new window or not.
+//! off the server. The app's own pages carry no links out — the docs and
+//! the repo are on the website people came from — so this is a safety net
+//! for whatever else a page might link to: it opens in the browser the
+//! person already uses, whether it asked for a new window or not.
+//!
+//! Done with the `open` crate rather than the opener plugin: the plugin
+//! also injects a script that hooks every `target="_blank"` click in the
+//! page and routes it through a plugin command, which the capability does
+//! not grant — so the office's own new-window links (the audit log) broke
+//! with "not allowed by ACL". These hooks need no script and no grant.
 
 use tauri::Url;
 
@@ -40,7 +47,7 @@ fn same_origin(a: &Url, b: &Url) -> bool {
 /// Hand the URL to the system browser. Logged rather than raised: a link
 /// that will not open is not a reason for the app to fall over.
 pub fn open_externally(url: &Url) {
-    if let Err(error) = tauri_plugin_opener::open_url(url.as_str(), None::<&str>) {
+    if let Err(error) = open::that_detached(url.as_str()) {
         eprintln!("[quintal] could not open {url} in the browser: {error}");
     }
 }

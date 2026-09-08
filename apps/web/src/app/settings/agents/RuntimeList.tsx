@@ -69,16 +69,7 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
       ))}
 
       <p className="text-muted-foreground text-xs">
-        Quintal speaks{' '}
-        <a
-          href="https://agentclientprotocol.com"
-          className="underline underline-offset-2"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          ACP
-        </a>
-        , so there is nothing to install <em>into</em> your agent CLI and nothing to
+        Quintal speaks ACP (the Agent Client Protocol), so there is nothing to install <em>into</em> your agent CLI and nothing to
         register. A runtime marked <strong>via adapter</strong> is wrapped by a small
         published process that <code className="font-mono">npx</code> fetches on
         demand. All Quintal needs from your machine is the CLI itself, installed and

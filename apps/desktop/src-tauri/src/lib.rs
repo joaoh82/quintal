@@ -21,7 +21,6 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         // Off unless somebody turns it on: an app that adds itself to login
         // items uninvited is a thing people uninstall.
         .plugin(tauri_plugin_autostart::init(
