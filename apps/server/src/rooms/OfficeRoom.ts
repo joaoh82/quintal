@@ -264,6 +264,12 @@ export class OfficeRoom extends Room<OfficeState> {
   >();
   /** sessionId -> agent identity, for everyone in the room who isn't a person. */
   readonly #agents = new Map<string, AgentIdentity>();
+  /**
+   * Which door each agent session came through, kept so a reconnect can say
+   * so too. A resumed session opened no new door, but an owner reading the
+   * log for what is left on a host token should not find rows that go quiet.
+   */
+  readonly #credentials = new Map<string, AgentCredentialKind>();
   /** sessionId -> what an agent with nothing to do is up to. See `idle-life.ts`. */
   readonly #idle = new Map<string, IdleRecord>();
   /** zoneId -> when the next small talk may start there. */
@@ -556,6 +562,7 @@ export class OfficeRoom extends Room<OfficeState> {
       agent: session,
     });
     this.#agents.set(client.sessionId, identity);
+    this.#credentials.set(client.sessionId, credential);
     this.#idle.set(client.sessionId, newIdleRecord(Date.now()));
 
     audit(identity.id, 'session.connected', {
@@ -629,7 +636,12 @@ export class OfficeRoom extends Room<OfficeState> {
       await this.allowReconnection(client, RECONNECTION_SECONDS);
       sim.away = false;
       player.status = agent ? agent.status : '';
-      if (agent) audit(agent.id, 'session.connected', { reconnected: true });
+      if (agent) {
+        audit(agent.id, 'session.connected', {
+          reconnected: true,
+          credential: this.#credentials.get(client.sessionId),
+        });
+      }
       logger.info(`[office] ${client.sessionId} reconnected to ${this.roomId}`);
     } catch {
       this.#removePlayer(client.sessionId);
@@ -2400,6 +2412,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.state.players.delete(sessionId);
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
+    this.#credentials.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
     this.#followed.delete(sessionId);

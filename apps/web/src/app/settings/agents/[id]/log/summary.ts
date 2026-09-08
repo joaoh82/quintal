@@ -1,4 +1,4 @@
-import { npubEncode, truncateNpub } from '@quintal/shared';
+import { displayNameFromPubkey } from '@quintal/shared';
 
 /**
  * One line per audit row. The log is scanned, not read, so each kind gets
@@ -6,7 +6,6 @@ import { npubEncode, truncateNpub } from '@quintal/shared';
  * connect row says which credential opened the door, because that is the
  * fact an owner needs before turning the old doors off.
  */
-/** Compact one-line summary of a payload — the log is scanned, not read. */
 export function describe(kind: string, payload: unknown): string {
   if (payload === null || typeof payload !== 'object') return '';
   const data = payload as Record<string, unknown>;
@@ -39,11 +38,9 @@ export function describe(kind: string, payload: unknown): string {
       // Which door it came through matters more than the tile: it is how an
       // owner can see, agent by agent, what is left to migrate before turning
       // legacy credentials off.
-      return data.reconnected === true
-        ? 'reconnected'
-        : `at ${describeTile(data.tile)}${describeCredential(data.credential)}`;
+      return `${data.reconnected === true ? 'reconnected' : `at ${describeTile(data.tile)}`}${describeCredential(data.credential)}`;
     case 'agent.credential_registered':
-      return `${shortKey(data.pubkey)} · by ${data.via === 'host' ? 'this machine' : 'its owner'}`;
+      return `${shortKey(data.pubkey)}${describeRegistrar(data.via)}`;
     case 'session.revoked':
       return String(data.reason ?? 'revoked');
     default:
@@ -65,10 +62,26 @@ function describeCredential(credential: unknown): string {
   }
 }
 
+/**
+ * Who handed the office the key. An audit line says nothing rather than the
+ * wrong actor: a `via` this code does not know is not "its owner".
+ */
+function describeRegistrar(via: unknown): string {
+  switch (via) {
+    case 'host':
+      return ' · by this machine';
+    case 'session':
+      return ' · by its owner';
+    default:
+      return '';
+  }
+}
+
+/** The npub, the way every card shows it; a key that will not encode is shown as its first bytes. */
 function shortKey(pubkey: unknown): string {
   if (typeof pubkey !== 'string') return '?';
   try {
-    return truncateNpub(npubEncode(pubkey));
+    return displayNameFromPubkey(pubkey);
   } catch {
     return pubkey.slice(0, 12);
   }
