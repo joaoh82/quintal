@@ -117,7 +117,7 @@ import {
   type StoredMessage,
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
-import { tileBeside, type AgentCredentialKind } from '@quintal/shared';
+import { EarshotTracker, tileBeside, type AgentCredentialKind, type EarshotPlayer } from '@quintal/shared';
 
 import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
 
@@ -137,6 +137,7 @@ import {
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
 import { channelListSignature } from './channel-list.js';
+import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
 import { ChatRateLimiter } from './chat-limiter.js';
@@ -211,6 +212,8 @@ interface PlayerSim {
 }
 
 const STATUS_MAX_LENGTH = 60;
+/** How often earshot is recomputed for voice, in ms. */
+const EARSHOT_SWEEP_MS = 250;
 
 /** Tiles of clearance an arriving agent tries to leave around everyone else. */
 const AGENT_SPAWN_GAP_TILES = 4;
@@ -271,6 +274,12 @@ export class OfficeRoom extends Room<OfficeState> {
    * log for what is left on a host token should not find rows that go quiet.
    */
   readonly #credentials = new Map<string, AgentCredentialKind>();
+  /**
+   * Who can hear whom, for voice. Computed here, from positions, on the
+   * tick — never by the relay and never by a client. Agents never enter it.
+   */
+  readonly #earshot = new EarshotTracker();
+  #nextEarshotSweep = 0;
   /** sessionId -> what an agent with nothing to do is up to. See `idle-life.ts`. */
   readonly #idle = new Map<string, IdleRecord>();
   /** zoneId -> when the next small talk may start there. */
@@ -312,6 +321,15 @@ export class OfficeRoom extends Room<OfficeState> {
 
     this.setPatchRate(TICK_MS);
     this.setSimulationInterval((deltaMs) => this.#tick(deltaMs), TICK_MS);
+
+    // The relay learns of this office from the office, not the other way
+    // round: it asks the room who a session is, and the room tells it what
+    // changed. A room is the only thing that knows both.
+    voiceRelay.registerRoom({
+      roomId: this.roomId,
+      workspaceId: this.#workspaceId,
+      human: (sessionId) => this.#voiceHuman(sessionId),
+    });
 
     // --- human protocol ---
     this.onMessage(ClientMessage.Input, (client, payload: InputPayload) =>
@@ -652,6 +670,7 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   override onDispose(): void {
+    voiceRelay.unregisterRoom(this.roomId);
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     if (this.#revocationTimer) clearInterval(this.#revocationTimer);
     if (this.#settingsTimer) clearInterval(this.#settingsTimer);
@@ -742,6 +761,12 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#nextEmoteSweep = now + 1_000;
       this.#sweepEmotes(now);
       this.#stepIdleLife(now);
+    }
+    // Four times a second, not every tick: a peer table is rebuilt when a
+    // pair crosses the line, and nobody crosses it more often than that.
+    if (now >= this.#nextEarshotSweep) {
+      this.#nextEarshotSweep = now + EARSHOT_SWEEP_MS;
+      this.#sweepEarshot();
     }
 
     for (const [sessionId, sim] of this.#sims) {
@@ -2403,7 +2428,40 @@ export class OfficeRoom extends Room<OfficeState> {
     return count;
   }
 
+  /**
+   * The person holding a session, as the voice relay may know them — or
+   * null. Null for an agent is the whole "agents have no voice" rule from
+   * the door's side; `EarshotTracker` is the same rule from the graph's.
+   */
+  #voiceHuman(sessionId: string): { name: string; userId: string } | null {
+    const player = this.state.players.get(sessionId);
+    const sim = this.#sims.get(sessionId);
+    if (!player || !sim || sim.away || sim.agent || this.#agents.has(sessionId)) return null;
+    return { name: player.name, userId: player.userId };
+  }
+
+  #sweepEarshot(): void {
+    const players: EarshotPlayer[] = [];
+    for (const [sessionId, player] of this.state.players) {
+      // The same question the door asks, so the graph and the door can never
+      // disagree about who is a person: away seats are out, agents are agents.
+      if (!this.#sims.has(sessionId)) continue;
+      players.push({
+        id: sessionId,
+        kind: this.#voiceHuman(sessionId) ? 'human' : 'agent',
+        x: player.x / this.#map.tileSize,
+        y: player.y / this.#map.tileSize,
+      });
+    }
+    // Voice carries as far as your voice would: the chat radius, literally.
+    const deltas = this.#earshot.update(players, this.#settings.chatRadiusTiles);
+    if (deltas.length > 0) voiceRelay.updatePeers(this.roomId, deltas);
+  }
+
   #removePlayer(sessionId: string): void {
+    voiceRelay.sessionLeft(this.roomId, sessionId);
+    const ended = this.#earshot.remove(sessionId);
+    if (ended.length > 0) voiceRelay.updatePeers(this.roomId, ended);
     // Whoever it was chatting with is released before the record goes.
     const record = this.#idle.get(sessionId);
     if (record?.talk) this.#endTalkWith(record.talk.partner, sessionId);

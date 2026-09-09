@@ -1,4 +1,4 @@
-import { COLYSEUS_PATH, HEALTH_PATH, devGamePort } from '@quintal/shared';
+import { COLYSEUS_PATH, HEALTH_PATH, VOICE_PATH, devGamePort } from '@quintal/shared';
 import { loadRootEnv } from '@quintal/shared/db';
 import type { NextConfig } from 'next';
 
@@ -35,6 +35,8 @@ const nextConfig: NextConfig = {
       // The game server owns /health in production too; proxying it here means
       // the URL is the same in both modes.
       { source: HEALTH_PATH, destination: `${gameServer}${HEALTH_PATH}` },
+      // The voice relay lives in the game server too; same origin in both modes.
+      { source: VOICE_PATH, destination: `${gameServer}${VOICE_PATH}` },
     ];
   },
 };
