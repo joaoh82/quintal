@@ -1,6 +1,7 @@
 'use server';
 
 import {
+  AGENT_CORE_MEMORY_SLUG,
   DEFAULT_AGENT_SCOPES,
   runtimeById,
   isAgentScope,
@@ -10,8 +11,11 @@ import {
   type AgentScope,
 } from '@quintal/shared';
 import {
+  MemoryLimitError,
+  MemorySlugError,
   canAdministerAgent,
   createAgent,
+  editAgentMemoryAsOwner,
   createHostToken,
   ensurePersonalWorkspace,
   findAgentById,
@@ -235,6 +239,56 @@ export async function saveAgentProfileAction(
   // now; a running agent is restarted by its host on the next fleet poll.
   revalidatePath('/office');
   return { ok: true, agentId };
+}
+
+export interface SaveAgentMemoryState {
+  ok: boolean;
+  error?: string;
+  agentId?: string;
+  slug?: string;
+}
+
+/**
+ * An owner rewriting one of the agent's memory slugs — or clearing it, by
+ * saving it empty. What `!remember` and `!forget` do from the chat box, with
+ * the whole text in front of you.
+ */
+export async function saveAgentMemoryAction(
+  _previous: SaveAgentMemoryState,
+  formData: FormData,
+): Promise<SaveAgentMemoryState> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const slug = String(formData.get('slug') ?? AGENT_CORE_MEMORY_SLUG);
+  const content = String(formData.get('content') ?? '');
+
+  const agent = await findAgentById(db, agentId);
+  if (!agent) return { ok: false, error: 'No such agent.', agentId, slug };
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    return { ok: false, error: 'That is not your agent to change.', agentId, slug };
+  }
+
+  try {
+    await editAgentMemoryAsOwner(db, agentId, agent.workspaceId, slug, content, session.user.id);
+  } catch (error: unknown) {
+    if (error instanceof MemoryLimitError) {
+      return {
+        ok: false,
+        error: `That is ${error.bytes} bytes; ${slug} holds ${error.limit}.`,
+        agentId,
+        slug,
+      };
+    }
+    if (error instanceof MemorySlugError) {
+      return { ok: false, error: 'That is not a memory slug.', agentId, slug };
+    }
+    throw error;
+  }
+
+  revalidatePath('/settings/agents');
+  return { ok: true, agentId, slug };
 }
 
 export async function revokeAgentAction(formData: FormData): Promise<void> {

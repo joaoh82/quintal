@@ -423,6 +423,15 @@ export const agents = sqliteTable(
     modelId: text('model_id'),
     /** Whether a host that pulls its fleet should be running this. */
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /**
+     * When its owner last changed its memory from the settings page.
+     *
+     * Part of the profile fingerprint, so a running agent restarts and reads
+     * the edit — the same way it picks up new instructions. Only owner edits
+     * bump this: the agent writes its own memory during work, and a restart
+     * every time it took a note would be an agent that never finishes one.
+     */
+    memoryEditedAt: integer('memory_edited_at', { mode: 'timestamp_ms' }),
     /** Last time this agent did anything at all. Drives "last seen" in the UI. */
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' })

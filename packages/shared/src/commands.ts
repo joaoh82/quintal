@@ -43,6 +43,18 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
       'Appends a line to what this agent carries into every conversation, and keeps it across restarts. Use it when you want something to stick rather than hoping the agent writes it down itself.',
   },
   {
+    name: 'forget',
+    summary: 'Take something out of the agent\u2019s core memory',
+    detail:
+      'Removes every line of core memory containing the words you give — `!forget finish with a joke`. The agent says what it forgot, or that nothing matched. The whole of its memory can be read and edited under Settings → Agents.',
+  },
+  {
+    name: 'memory',
+    summary: 'Ask the agent what it carries in core memory',
+    detail:
+      'The agent says its core memory out loud — where you are, or in the channel you asked in. The same notes, with the rest of its memory, are under Settings → Agents.',
+  },
+  {
     name: 'shutdown',
     summary: 'Bring the agent home',
     detail:

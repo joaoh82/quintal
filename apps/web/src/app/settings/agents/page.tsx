@@ -1,6 +1,9 @@
+import { AGENT_CORE_MEMORY_SLUG } from '@quintal/shared';
 import {
   findMembership,
+  getAgentMemory,
   getDb,
+  listAgentMemorySlugs,
   listAgentsForWorkspace,
   listHostTokens,
   listHostsForWorkspace,
@@ -8,7 +11,7 @@ import {
 import { redirect } from 'next/navigation';
 
 
-import { AgentsManager } from './AgentsManager';
+import { AgentsManager, type AgentMemoryView } from './AgentsManager';
 import { Visiting } from '../Visiting';
 import { Machines } from './Machines';
 import { FleetControl } from './FleetControl';
@@ -40,6 +43,26 @@ export default async function AgentsSettingsPage() {
 
   const canAdministerAll = membership?.role === 'owner' || membership?.role === 'admin';
 
+  // What each live agent carries: its core memory whole, the other slugs by
+  // name and size. Read here so the card can show it without another round
+  // trip, and only for agents this person could edit.
+  const memories: Record<string, AgentMemoryView> = {};
+  await Promise.all(
+    agents
+      .filter((agent) => agent.revokedAt === null)
+      .filter((agent) => canAdministerAll || agent.ownerUserId === session.user.id)
+      .map(async (agent) => {
+        const [core, slugs] = await Promise.all([
+          getAgentMemory(db, agent.id, workspace.id, AGENT_CORE_MEMORY_SLUG),
+          listAgentMemorySlugs(db, agent.id, workspace.id),
+        ]);
+        memories[agent.id] = {
+          core: core?.content ?? '',
+          others: slugs.filter((entry) => entry.slug !== AGENT_CORE_MEMORY_SLUG),
+        };
+      }),
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-muted-foreground max-w-2xl text-sm">
@@ -69,6 +92,7 @@ export default async function AgentsSettingsPage() {
         currentUserId={session.user.id}
         currentUserPubkey={session.user.pubkey}
         canAdministerAll={canAdministerAll}
+        memories={memories}
         machines={machines.filter((row) => row.revokedAt === null).map((row) => row.label)}
         hosts={hosts.map((host) => ({ label: host.label, runtimes: host.runtimes }))}
       />

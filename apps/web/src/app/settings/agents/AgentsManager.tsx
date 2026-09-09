@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  AGENT_CORE_MEMORY_MAX_BYTES,
+  AGENT_CORE_MEMORY_SLUG,
   AGENT_DESCRIPTION_MAX_LENGTH,
   AGENT_INSTRUCTIONS_MAX_LENGTH,
   AGENT_SCOPES,
@@ -28,7 +30,9 @@ import {
   assignAgentAction,
   createAgentAction,
   revokeAgentAction,
+  saveAgentMemoryAction,
   saveAgentProfileAction,
+  type SaveAgentMemoryState,
   type SaveAgentProfileState,
   setAgentEnabledAction,
   type CreateAgentState,
@@ -42,8 +46,18 @@ export interface ReportedHost {
   runtimes: RuntimeStatus[];
 }
 
+/** What an agent carries, as its owner may read and change it. */
+export interface AgentMemoryView {
+  /** The `core` slug, whole: identity, standing instructions, `!remember` notes. */
+  core: string;
+  /** Every other slug, by name and size. Filed notes; read only if it comes up. */
+  others: Array<{ slug: string; bytes: number; updatedAt: number }>;
+}
+
 interface AgentsManagerProps {
   agents: AgentListEntry[];
+  /** By agent id, for the agents this person may edit. */
+  memories: Record<string, AgentMemoryView>;
   currentUserId: string;
   /** The key the signed-in person signs with — what an attestation is made with. */
   currentUserPubkey: string;
@@ -134,6 +148,7 @@ function ModelSelect({
 
 export function AgentsManager({
   agents,
+  memories,
   currentUserId,
   currentUserPubkey,
   canAdministerAll,
@@ -354,6 +369,7 @@ export function AgentsManager({
                 agent={agent}
                 canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
                 ownerPubkey={agent.ownerUserId === currentUserId ? currentUserPubkey : null}
+                memory={memories[agent.id]}
                 machines={machines}
                 hosts={hosts}
               />
@@ -386,11 +402,14 @@ function AgentRow({
   agent,
   canRevoke,
   ownerPubkey = null,
+  memory,
   machines,
   hosts,
 }: {
   agent: AgentListEntry;
   canRevoke: boolean;
+  /** What it carries, when this person may edit it. */
+  memory?: AgentMemoryView | undefined;
   /**
    * The signed-in person's key when they own this agent, else null. Only an
    * owner can vouch for an agent — an admin may revoke it, but cannot sign
@@ -576,6 +595,19 @@ function AgentRow({
           <AgentProfileForm agent={agent} />
         </details>
       ) : null}
+
+      {/* What `!remember` put there, and what the agent wrote itself: read it,
+          change it, or take a line out. The chat box has `!forget` for the
+          quick case; this is for seeing the whole thing. */}
+      {canRevoke && agent.revokedAt === null && memory ? (
+        <details className="w-full pt-1">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            Memory
+            {memory.core.trim().length > 0 || memory.others.length > 0 ? '' : ' (empty)'}
+          </summary>
+          <AgentMemoryForm agent={agent} memory={memory} />
+        </details>
+      ) : null}
     </li>
   );
 }
@@ -648,5 +680,105 @@ function AgentProfileForm({ agent }: { agent: AgentListEntry }) {
         </span>
       ) : null}
     </form>
+  );
+}
+
+/**
+ * The agent's memory, in front of its owner.
+ *
+ * Core is a textarea, because it is prose the owner may have dictated with
+ * `!remember` and may now want to prune line by line — "always finish with a
+ * joke" was funny for a week. Saving it empty clears it. The other slugs are
+ * the agent's own filing and are listed by name and size; each can be
+ * forgotten whole, which is all an owner needs to do with a note they cannot
+ * see the point of.
+ *
+ * Applied by restarting the agent, like an instruction: an owner's edit is a
+ * change to what the agent is told, and a running session has already been
+ * told the old version.
+ */
+function AgentMemoryForm({ agent, memory }: { agent: AgentListEntry; memory: AgentMemoryView }) {
+  const [state, formAction, pending] = useActionState(saveAgentMemoryAction, {
+    ok: false,
+  } as SaveAgentMemoryState);
+  const mine = state.agentId === agent.id;
+
+  return (
+    <div className="mt-2 flex flex-col gap-3">
+      <form action={formAction} className="flex flex-col gap-2">
+        <input type="hidden" name="agentId" value={agent.id} />
+        <input type="hidden" name="slug" value={AGENT_CORE_MEMORY_SLUG} />
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium">Core memory</span>
+          <span className="text-muted-foreground text-[11px]">
+            Loaded into every session. What you said with{' '}
+            <code className="font-mono">!remember</code>, and what it kept for itself.
+            One note per line; delete a line to make it forget. Save empty to clear.
+          </span>
+          <textarea
+            name="content"
+            rows={Math.min(12, Math.max(3, memory.core.split('\n').length + 1))}
+            defaultValue={memory.core}
+            maxLength={AGENT_CORE_MEMORY_MAX_BYTES}
+            disabled={pending}
+            spellCheck={false}
+            className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 font-mono text-xs outline-none focus-visible:ring-[3px] disabled:opacity-50"
+            placeholder="Nothing yet. `!remember` in the office writes here."
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <Button type="submit" size="sm" variant="outline" disabled={pending}>
+            {pending ? 'Saving…' : 'Save memory'}
+          </Button>
+          {mine && state.slug === AGENT_CORE_MEMORY_SLUG && state.ok ? (
+            <span className="text-xs text-emerald-600">
+              Saved — {agent.name} restarts within about 15 seconds to read it.
+            </span>
+          ) : null}
+          {mine && state.slug === AGENT_CORE_MEMORY_SLUG && state.error ? (
+            <span className="text-destructive text-xs" role="alert">
+              {state.error}
+            </span>
+          ) : null}
+        </div>
+      </form>
+
+      {memory.others.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium">Filed notes</span>
+          <span className="text-muted-foreground text-[11px]">
+            Slugs the agent wrote for itself and reads back only when they come up.
+          </span>
+          <ul className="divide-y rounded border text-xs">
+            {memory.others.map((entry) => (
+              <li key={entry.slug} className="flex items-center gap-3 px-3 py-1.5">
+                <code className="font-mono">{entry.slug}</code>
+                <span className="text-muted-foreground">{entry.bytes} bytes</span>
+                <span className="text-muted-foreground ml-auto">
+                  <RelativeTime at={entry.updatedAt} />
+                </span>
+                <form action={formAction}>
+                  <input type="hidden" name="agentId" value={agent.id} />
+                  <input type="hidden" name="slug" value={entry.slug} />
+                  <input type="hidden" name="content" value="" />
+                  <button
+                    type="submit"
+                    disabled={pending}
+                    className="text-rose-600 underline-offset-2 hover:underline disabled:opacity-50"
+                  >
+                    Forget
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+          {mine && state.slug !== AGENT_CORE_MEMORY_SLUG && state.error ? (
+            <span className="text-destructive text-xs" role="alert">
+              {state.error}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

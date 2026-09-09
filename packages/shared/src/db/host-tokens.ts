@@ -176,11 +176,19 @@ export async function revokeHostToken(db: Database, id: string): Promise<void> {
  * Not a security hash and not stored — a short digest is enough to answer "did
  * this change?", which is the only question asked of it.
  */
-function profileFingerprint(description: string, instructions: string): string {
+function profileFingerprint(
+  description: string,
+  instructions: string,
+  memoryEditedAt: Date | null,
+): string {
   return createHash('sha256')
     .update(description)
     .update('\u0000')
     .update(instructions)
+    .update('\u0000')
+    // An owner's memory edit is a change to what the agent is told, the same
+    // as an instruction; the timestamp is enough to make the fingerprint move.
+    .update(memoryEditedAt ? String(memoryEditedAt.getTime()) : '')
     .digest('hex')
     .slice(0, 16);
 }
@@ -307,6 +315,7 @@ export async function fleetForHost(
       revokedAt: agents.revokedAt,
       ownerUserId: agents.ownerUserId,
       pubkey: agents.pubkey,
+      memoryEditedAt: agents.memoryEditedAt,
     })
     .from(agents)
     .where(eq(agents.workspaceId, host.workspaceId));
@@ -341,7 +350,7 @@ export async function fleetForHost(
        * wrong one. This cannot be mistaken for content: comparing it is the only
        * thing it is good for.
        */
-      profile: profileFingerprint(row.description, row.instructions),
+      profile: profileFingerprint(row.description, row.instructions, row.memoryEditedAt),
       pubkey: row.pubkey,
       runtimeId: row.runtimeId,
       repoSpec: row.repoSpec,

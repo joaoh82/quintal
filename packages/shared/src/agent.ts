@@ -122,6 +122,8 @@ export const AGENT_EVENT_KINDS = [
   'agent.profile_changed',
   /** A keypair was registered for it (credentials v2), replacing any before. */
   'agent.credential_registered',
+  /** Its owner changed or cleared one of its memory slugs from the settings page. */
+  'agent.memory_edited',
   'session.connected',
   'session.disconnected',
   'session.rejected',

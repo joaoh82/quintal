@@ -79,6 +79,25 @@ const SEND_INTERVAL_MS = AGENT_CHAT_INTERVAL_MS + 100;
  */
 const WALK_UP_RADIUS_FALLBACK_TILES = 3;
 
+/**
+ * Which lines of a memory contain these words. Pure, so the rule can be
+ * tested without an agent: a case-insensitive substring match on the whole
+ * phrase, whitespace collapsed, so "finish  with a joke" still finds "always
+ * finish with a joke".
+ */
+export function forgetLines(memory: string, words: string): { kept: string; dropped: string[] } {
+  const needle = words.trim().replace(/\s+/g, ' ').toLowerCase();
+  const lines = memory.split('\n');
+  const dropped: string[] = [];
+  const kept: string[] = [];
+  for (const line of lines) {
+    const haystack = line.replace(/\s+/g, ' ').toLowerCase();
+    if (needle.length > 0 && haystack.includes(needle)) dropped.push(line.trim());
+    else kept.push(line);
+  }
+  return { kept: kept.join('\n').trim(), dropped };
+}
+
 export class AgentRunner {
   readonly name: string;
 
@@ -577,6 +596,18 @@ export class AgentRunner {
         void this.#writeCoreMemory(parsed.body, scope);
         return true;
       }
+      case '!forget': {
+        if (parsed.body.length === 0) {
+          this.#speak('Forget what? `!forget` takes the words to look for.', scope);
+          return true;
+        }
+        void this.#forgetCoreMemory(parsed.body, scope);
+        return true;
+      }
+      case '!memory': {
+        void this.#recallCoreMemory(scope);
+        return true;
+      }
       case '!shutdown': {
         this.#log('info', 'shutdown requested by owner');
         void this.stop().then(() => process.exit(0));
@@ -931,6 +962,54 @@ export class AgentRunner {
       // be kept; silence would look exactly like success.
       this.#log('warn', `could not remember that: ${describe(error)}`);
       this.#speak('I could not write that to memory, so it will not survive a restart.', scope);
+    }
+  }
+
+  /**
+   * Take lines out of core memory, on the owner's say-so.
+   *
+   * The other half of `!remember`. Matched by words, case-insensitively,
+   * because the owner is quoting themselves from memory — "finish with a
+   * joke" — not pasting the exact line. Everything that matches goes, and
+   * the agent says what went, out loud: silence would look like the note is
+   * still there, which is the one thing this command exists to settle.
+   */
+  async #forgetCoreMemory(words: string, scope: string): Promise<void> {
+    try {
+      const existing = (await this.#gateway.memoryGet('core')).content;
+      const { kept, dropped } = forgetLines(existing, words);
+      if (dropped.length === 0) {
+        this.#speak(`Nothing in my core memory says "${words}".`, scope);
+        return;
+      }
+
+      await this.#gateway.memorySet('core', kept);
+      for (const scope of this.#sessions.scopes()) this.#unprimed.add(scope);
+
+      this.#log('info', `forgot: ${dropped.join(' | ')}`);
+      this.#speak(
+        dropped.length === 1
+          ? `Forgotten: "${dropped[0]}"`
+          : `Forgotten ${dropped.length} notes: ${dropped.map((line) => `"${line}"`).join(', ')}`,
+        scope,
+      );
+    } catch (error: unknown) {
+      this.#log('warn', `could not forget that: ${describe(error)}`);
+      this.#speak('I could not change my memory, so that is still in there.', scope);
+    }
+  }
+
+  /** Say what core memory holds, where the owner asked. */
+  async #recallCoreMemory(scope: string): Promise<void> {
+    try {
+      const core = (await this.#gateway.memoryGet('core')).content.trim();
+      this.#speak(
+        core.length > 0 ? `What I carry:\n${core}` : 'My core memory is empty.',
+        scope,
+      );
+    } catch (error: unknown) {
+      this.#log('warn', `could not read core memory: ${describe(error)}`);
+      this.#speak('I could not read my memory just now.', scope);
     }
   }
 
