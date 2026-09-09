@@ -143,7 +143,7 @@ export async function createGame(
       sessionId: room.sessionId,
       workspaceId: ticket.workspaceId,
       room,
-      tileSize: () => scene()?.tileSize() ?? 32,
+      tileSize: () => scene()?.tileSize() ?? null,
       onState: (state) => gameBridge.emit('voice', state),
       onSpeaking: (sessionId, speaking) => scene()?.setSpeaking(sessionId, speaking),
     });

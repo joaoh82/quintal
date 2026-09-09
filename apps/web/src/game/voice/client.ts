@@ -55,7 +55,8 @@ export interface VoiceClientOptions {
   workspaceId: string;
   room: Room<OfficeState>;
   /** Pixels per tile, once the map is known. */
-  tileSize: () => number;
+  /** Pixels per tile, or `null` while the scene has no map yet. */
+  tileSize: () => number | null;
   onState: (state: VoiceUiState) => void;
   /** A ring to light or put out, on the avatar of this session. */
   onSpeaking: (sessionId: string, speaking: boolean) => void;
@@ -224,9 +225,12 @@ export class VoiceClient {
 
   #tick(): void {
     if (this.#stopped) return;
+    // No map yet means no tiles to measure in — and nobody drawn to hear.
+    // The scene is handed out before its assets land; wait for them.
+    const tile = this.#opts.tileSize();
+    if (!tile) return;
     const players = this.#opts.room.state.players;
     const me = players.get(this.#opts.sessionId);
-    const tile = this.#opts.tileSize() || 32;
 
     let nearest: number | null = null;
     if (me) {
