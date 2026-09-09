@@ -1,4 +1,5 @@
 import { VOICE_FRAME_MS, VOICE_LEVEL_MAX, VOICE_LEVEL_MIN, clampLevel } from '@quintal/shared';
+import type { VoiceUiState } from '@quintal/shared';
 
 /**
  * The parts of the voice client that are arithmetic, kept away from the
@@ -206,3 +207,28 @@ export class JitterScheduler {
 }
 
 export const LEVEL_RANGE = { min: VOICE_LEVEL_MIN, max: VOICE_LEVEL_MAX } as const;
+
+// --- the button ------------------------------------------------------------------
+
+/** What the microphone button says, and in which colour. */
+export interface MicButton {
+  label: string;
+  tone: 'muted' | 'ready' | 'live';
+}
+
+/**
+ * The button reports the switch, not the wire.
+ *
+ * Alone with agents there is no socket, so nothing is sent whatever the
+ * switch says — and a button that derived its word from "is audio flowing"
+ * read "Muted" to somebody who had just pressed M, and could never read
+ * anything else while they stood alone. So: muted is the person's choice
+ * and says so; live is the wire's and says so; unmuted with nobody to hear
+ * is "Unmuted", and the socket line beside it says why nothing flows.
+ * Push-to-talk held counts as unmuted for as long as the key is down.
+ */
+export function micButton(state: Pick<VoiceUiState, 'muted' | 'talking' | 'mic'>): MicButton {
+  if (state.mic === 'live') return { label: state.talking ? 'Talking' : 'Mic live', tone: 'live' };
+  if (state.muted && !state.talking) return { label: 'Muted', tone: 'muted' };
+  return { label: 'Unmuted', tone: 'ready' };
+}

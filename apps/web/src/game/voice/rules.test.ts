@@ -8,6 +8,7 @@ import {
   gainFor,
   isSilence,
   levelDbov,
+  micButton,
   shouldBeOpen,
 } from './rules.js';
 
@@ -127,5 +128,27 @@ describe('when a frame plays', () => {
     let last = first;
     for (let i = 0; i < 30; i += 1) last = jitter.next(10);
     assert.ok(last - 10 < 0.5, `pulled in: ${last - 10}`);
+  });
+});
+
+describe('the microphone button', () => {
+  it('says Muted by default, before the mic was ever asked for', () => {
+    assert.deepEqual(micButton({ muted: true, talking: false, mic: 'off' }), { label: 'Muted', tone: 'muted' });
+  });
+
+  it('says Unmuted, not Muted, when the switch is off but nobody is near to send to', () => {
+    // The bug: alone with agents the mic is let go and nothing flows, and the
+    // old label came from the flow. The person had pressed M; say so.
+    assert.deepEqual(micButton({ muted: false, talking: false, mic: 'off' }), { label: 'Unmuted', tone: 'ready' });
+    assert.deepEqual(micButton({ muted: false, talking: false, mic: 'open' }), { label: 'Unmuted', tone: 'ready' });
+  });
+
+  it('goes live from the wire, and calls a held key Talking', () => {
+    assert.deepEqual(micButton({ muted: false, talking: false, mic: 'live' }), { label: 'Mic live', tone: 'live' });
+    assert.deepEqual(micButton({ muted: true, talking: true, mic: 'live' }), { label: 'Talking', tone: 'live' });
+  });
+
+  it('treats a held key as unmuted even while there is nobody to hear', () => {
+    assert.deepEqual(micButton({ muted: true, talking: true, mic: 'off' }), { label: 'Unmuted', tone: 'ready' });
   });
 });

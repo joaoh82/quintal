@@ -2,6 +2,7 @@
 
 import type { VoiceUiState } from '@quintal/shared';
 
+import { micButton } from '../voice/rules';
 import { UNSUPPORTED_NOTICE } from '../voice/support';
 
 /**
@@ -28,14 +29,13 @@ export function VoiceBar({
     return <span className="text-white/45">{UNSUPPORTED_NOTICE}</span>;
   }
 
-  const live = state.mic === 'live';
-  const label =
-    state.mic === 'off' ? 'Mic off' : live ? (state.talking ? 'Talking' : 'Mic live') : 'Muted';
+  const button = micButton(state);
+  const live = button.tone === 'live';
   const tone = live
     ? 'border-emerald-400/70 bg-emerald-400/15 text-emerald-200'
-    : state.mic === 'muted'
+    : button.tone === 'muted'
       ? 'border-amber-400/60 text-amber-200'
-      : 'border-white/20 text-white/70';
+      : 'border-white/40 text-white/90';
 
   return (
     <span className="pointer-events-auto flex items-center gap-2">
@@ -46,7 +46,7 @@ export function VoiceBar({
         title="M to toggle · hold Space to talk"
         className={`rounded border px-1.5 leading-5 hover:bg-white/10 ${tone}`}
       >
-        {label}
+        {button.label}
       </button>
       {state.socket === 'open' ? (
         <span className="text-white/45">

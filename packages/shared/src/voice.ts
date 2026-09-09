@@ -238,8 +238,13 @@ export interface VoiceUiState {
   support: 'ok' | 'unsupported' | 'blocked';
   /** The relay socket. Closed while alone with agents — deliberately. */
   socket: 'closed' | 'connecting' | 'open';
-  /** `off`: no microphone yet. `muted`: mic held, nothing sent. `live`: sending. */
-  mic: 'off' | 'muted' | 'live';
+  /** The switch the person controls. Muted is the default, and muted is silence on the wire. */
+  muted: boolean;
+  /**
+   * The microphone itself. `off`: not held — never asked for, or let go
+   * because nobody is near. `open`: held, nothing sent. `live`: sending.
+   */
+  mic: 'off' | 'open' | 'live';
   /** Push-to-talk held right now. */
   talking: boolean;
   /** Session ids of the peers speaking now, by their frames. */

@@ -131,6 +131,7 @@ export class VoiceClient {
     this.#state = {
       support: voiceSupport() === 'ok' ? 'ok' : 'unsupported',
       socket: 'closed',
+      muted: true,
       mic: 'off',
       talking: false,
       speaking: [],
@@ -541,15 +542,33 @@ export class VoiceClient {
       this.#emit();
       return;
     }
-    if (this.#stopped) {
+    // Nobody in earshot means no socket, and nothing to capture into. The
+    // permission was still worth asking for now — the prompt belongs to the
+    // moment the key was pressed, not to whoever walks up later — but the
+    // stream is let go at once, so the browser's "mic in use" light is off
+    // while there is nobody to hear. The next socket asks again, and a
+    // granted permission does not prompt twice.
+    if (this.#stopped || this.#state.socket !== 'open') {
       for (const track of stream.getTracks()) track.stop();
-      return;
+    } else {
+      await this.#attach(stream);
     }
+    await this.#listDevices();
+    this.#state = { ...this.#state, error: null };
+    this.#emit();
+  }
 
+  /** Put an open microphone into the graph and behind the encoder. */
+  async #attach(stream: MediaStream): Promise<void> {
     const ctx = await this.#ensureContext();
     if (!this.#workletLoaded) {
       await ctx.audioWorklet.addModule(WORKLET_URL);
       this.#workletLoaded = true;
+    }
+    // The socket may have gone while the worklet loaded.
+    if (this.#stopped || this.#state.socket !== 'open') {
+      for (const track of stream.getTracks()) track.stop();
+      return;
     }
     this.#mic = stream;
     this.#micSource = ctx.createMediaStreamSource(stream);
@@ -582,7 +601,10 @@ export class VoiceClient {
       opus: { application: 'voip', usedtx: true, frameDuration: 20_000 },
     };
     this.#encoder.configure(config);
+  }
 
+  /** The microphones the browser will name, now that permission was given. */
+  async #listDevices(): Promise<void> {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       this.#state = {
@@ -592,10 +614,8 @@ export class VoiceClient {
           .map((device, index) => ({ id: device.deviceId, label: device.label || `Microphone ${index + 1}` })),
       };
     } catch {
-      // No list is not a failure; the default microphone is still open.
+      // No list is not a failure; the default microphone still works.
     }
-    this.#state = { ...this.#state, error: null };
-    this.#emit();
   }
 
   #releaseMic(): void {
@@ -674,9 +694,10 @@ export class VoiceClient {
   // --- telling ---------------------------------------------------------------------
 
   #emit(): void {
-    const mic: VoiceUiState['mic'] = !this.#mic ? 'off' : this.#sending() ? 'live' : 'muted';
+    const mic: VoiceUiState['mic'] = !this.#mic ? 'off' : this.#sending() ? 'live' : 'open';
     this.#state = {
       ...this.#state,
+      muted: this.#muted,
       mic,
       talking: this.#talking,
       speaking: [...this.#lit],
