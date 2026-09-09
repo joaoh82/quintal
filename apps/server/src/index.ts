@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import type { Duplex } from 'node:stream';
 
 import { Server, logger } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
@@ -7,6 +8,7 @@ import {
   devWebPort,
   HEALTH_PATH,
   ROOM_OFFICE,
+  VOICE_PATH,
 } from '@quintal/shared';
 import {
   closeDb,
@@ -26,6 +28,7 @@ import { sendJson } from './http/json.js';
 import { handleMatchmaking, isMatchmakingRequest } from './http/matchmaking.js';
 import { createNextHandler, type NextRequestHandler } from './http/next-app.js';
 import { OfficeRoom } from './rooms/OfficeRoom.js';
+import { voiceRelay } from './voice/index.js';
 
 loadRootEnv();
 
@@ -100,15 +103,6 @@ const httpServer = createServer((req, res) => {
   });
 });
 
-// Colyseus' ws server accepts every upgrade on this http server, so rewrite the
-// URL before it gets there. `prependListener` keeps us ahead of ws regardless of
-// registration order.
-httpServer.prependListener('upgrade', (req: IncomingMessage) => {
-  const stripped = stripColyseusPrefix(req.url?.split('?')[0]);
-  if (stripped === null || !req.url) return;
-  const queryIndex = req.url.indexOf('?');
-  req.url = queryIndex === -1 ? stripped : stripped + req.url.slice(queryIndex);
-});
 
 const gameServer = new Server({
   transport: new WebSocketTransport({
@@ -129,6 +123,34 @@ const gameServer = new Server({
   gracefullyShutdown: false,
 });
 
+/**
+ * One router for every WebSocket upgrade on this server.
+ *
+ * Colyseus' ws server attached itself to the http server when the transport
+ * was built and would take every upgrade it sees — including `/voice`, which
+ * it would answer with a 400. So its listeners are taken off and called from
+ * here, after the two rules this server adds: `/voice` goes to the relay,
+ * and `/colyseus/…` has its prefix stripped so Colyseus sees the paths it
+ * expects. Anything else still reaches Colyseus, which refuses it as before.
+ */
+const colyseusUpgrade = httpServer.listeners('upgrade') as Array<
+  (req: IncomingMessage, socket: Duplex, head: Buffer) => void
+>;
+httpServer.removeAllListeners('upgrade');
+httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+  const pathname = req.url?.split('?')[0];
+  if (pathname === VOICE_PATH) {
+    voiceRelay.handleUpgrade(req, socket, head);
+    return;
+  }
+  const stripped = stripColyseusPrefix(pathname);
+  if (stripped !== null && req.url) {
+    const queryIndex = req.url.indexOf('?');
+    req.url = queryIndex === -1 ? stripped : stripped + req.url.slice(queryIndex);
+  }
+  for (const listener of colyseusUpgrade) listener.call(httpServer, req, socket, head);
+});
+
 // Keyed by mapId: everyone asking for the same map lands in the same room,
 // and a second map creates a second room rather than sharing one.
 gameServer.define(ROOM_OFFICE, OfficeRoom).filterBy(['workspaceId', 'mapId']);
@@ -144,6 +166,7 @@ logger.info(
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     logger.info(`[quintal] ${signal} received, shutting down`);
+    voiceRelay.close();
     gameServer
       .gracefullyShutdown(false)
       .catch((error: unknown) => logger.error('[quintal] shutdown failed', error))

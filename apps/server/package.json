@@ -18,10 +18,12 @@
     "@colyseus/ws-transport": "^0.16.5",
     "@quintal/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "next": "15.5.23"
+    "next": "15.5.23",
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@types/ws": "^8.18.1",
     "cross-env": "^10.1.0",
     "tsx": "^4.23.9",
     "typescript": "^5.9.3"

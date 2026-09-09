@@ -17,4 +17,5 @@ export * from './player.js';
 export * from './commands.js';
 export * from './runtimes.js';
 export * from './settings.js';
+export * from './voice.js';
 export * from './workspace.js';
