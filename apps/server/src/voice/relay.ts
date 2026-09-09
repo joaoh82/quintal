@@ -54,6 +54,13 @@ export interface VoiceRelayDeps {
   backpressure?: (ws: WebSocket) => number;
   /** Audio is dropped, not queued, past this many bytes waiting. Control never is. */
   audioHighWater?: number;
+  /**
+   * How fast one mouth may send: a token bucket refilled at this many frames
+   * a second, holding at most `burst`. Opus at 20 ms is fifty; eighty leaves
+   * room for a clock that runs fast and none for a loop that does not stop.
+   */
+  framesPerSecond?: number;
+  burst?: number;
   log?: (line: string) => void;
   now?: () => number;
 }
@@ -66,6 +73,9 @@ const MAX_PEER_INDEX = 255;
 const SPEAKING_WINDOW_MS = 1_000;
 /** How often a receiver's dropped-frame count is worth a log line. */
 const DROP_LOG_EVERY_MS = 60_000;
+/** A sender's allowance: 50/s is the cadence, 80/s the ceiling, 100 the burst. */
+const FRAMES_PER_SECOND = 80;
+const BURST_FRAMES = 100;
 
 class Connection {
   /** Sender session id → the byte this receiver knows them by. */
@@ -75,6 +85,11 @@ class Connection {
   missedPongs = 0;
   dropped = 0;
   lastDropLog = 0;
+  /** The sender's bucket: frames it may still send, and when it was last topped up. */
+  tokens: number;
+  lastRefill: number;
+  /** Frames this sender lost to its own rate, not to a receiver. */
+  throttled = 0;
   /** Who has sent this receiver audio lately, for the soft cap. */
   readonly recentSenders = new Map<string, number>();
 
@@ -82,7 +97,12 @@ class Connection {
     readonly ws: WebSocket,
     readonly sessionId: string,
     readonly roomId: string,
-  ) {}
+    burst: number,
+    now: number,
+  ) {
+    this.tokens = burst;
+    this.lastRefill = now;
+  }
 
   allocate(sender: string): number | null {
     const existing = this.indexOf.get(sender);
@@ -115,7 +135,6 @@ interface RoomState {
 export class VoiceRelay {
   readonly #wss = new WebSocketServer({ noServer: true, maxPayload: VOICE_FRAME_MAX_BYTES });
   readonly #rooms = new Map<string, RoomState>();
-  readonly #roomsByWorkspace = new Map<string, string>();
   readonly #connections = new Map<string, Connection>();
   readonly #verifyToken: VoiceRelayDeps['verifyToken'];
   readonly #heartbeatMs: number;
@@ -123,6 +142,8 @@ export class VoiceRelay {
   readonly #speakersCap: number;
   readonly #backpressure: (ws: WebSocket) => number;
   readonly #audioHighWater: number;
+  readonly #framesPerSecond: number;
+  readonly #burst: number;
   readonly #log: (line: string) => void;
   readonly #now: () => number;
   #heartbeat: NodeJS.Timeout | null = null;
@@ -134,6 +155,8 @@ export class VoiceRelay {
     this.#speakersCap = deps.speakersCap ?? VOICE_SPEAKERS_SOFT_CAP;
     this.#backpressure = deps.backpressure ?? ((ws) => ws.bufferedAmount);
     this.#audioHighWater = deps.audioHighWater ?? 8 * VOICE_FRAME_MAX_BYTES;
+    this.#framesPerSecond = deps.framesPerSecond ?? FRAMES_PER_SECOND;
+    this.#burst = deps.burst ?? BURST_FRAMES;
     this.#log = deps.log ?? (() => undefined);
     this.#now = deps.now ?? (() => Date.now());
   }
@@ -163,7 +186,6 @@ export class VoiceRelay {
 
   registerRoom(presence: VoicePresence): void {
     this.#rooms.set(presence.roomId, { presence, hearers: new Map() });
-    this.#roomsByWorkspace.set(presence.workspaceId, presence.roomId);
   }
 
   unregisterRoom(roomId: string): void {
@@ -175,8 +197,24 @@ export class VoiceRelay {
         this.#connections.delete(connection.sessionId);
       }
     }
-    this.#roomsByWorkspace.delete(room.presence.workspaceId);
     this.#rooms.delete(roomId);
+  }
+
+  /**
+   * The room in this office that holds this seat. An office may have more
+   * than one room live — one per map — so the answer is whichever room says
+   * a human holds the session, not whichever registered last.
+   */
+  #roomFor(
+    workspaceId: string,
+    sessionId: string,
+  ): { roomId: string; room: RoomState; human: { name: string; userId: string } } | null {
+    for (const [roomId, room] of this.#rooms) {
+      if (room.presence.workspaceId !== workspaceId) continue;
+      const human = room.presence.human(sessionId);
+      if (human) return { roomId, room, human };
+    }
+    return null;
   }
 
   /**
@@ -252,6 +290,11 @@ export class VoiceRelay {
     return this.#connections.get(sessionId)?.dropped ?? 0;
   }
 
+  /** For tests and diagnostics: what one sender has lost to its own rate. */
+  throttled(sessionId: string): number {
+    return this.#connections.get(sessionId)?.throttled ?? 0;
+  }
+
   // --- the door ------------------------------------------------------------------
 
   #accept(ws: WebSocket): void {
@@ -279,19 +322,26 @@ export class VoiceRelay {
     // Presence first: it is the cheap check, and "no such person here"
     // is the answer for an agent as much as for a stranger — the relay has
     // no separate notion of an agent, only of humans in the office.
-    const roomId = this.#roomsByWorkspace.get(hello.workspaceId);
-    const room = roomId ? this.#rooms.get(roomId) : undefined;
-    const human = room?.presence.human(hello.sessionId) ?? null;
-    if (!room || !roomId || !human) {
+    const found = this.#roomFor(hello.workspaceId, hello.sessionId);
+    if (!found) {
       ws.close(VOICE_CLOSE.NO_PRESENCE, 'no such person in that office right now');
       return;
     }
+    const { roomId, room } = found;
 
     let holder: { userId: string } | null = null;
     try {
       holder = await this.#verifyToken(hello.token);
     } catch {
       holder = null;
+    }
+    // Presence again, after the wait: the seat may have emptied while the
+    // token was being checked, and a socket for an empty seat would sit
+    // there until the heartbeat noticed.
+    const human = room.presence.human(hello.sessionId);
+    if (!human) {
+      ws.close(VOICE_CLOSE.NO_PRESENCE, 'that seat emptied while the token was checked');
+      return;
     }
     // Bound to the session's owner, not just to a valid token: a valid
     // session of yours does not let you speak as somebody else's seat.
@@ -308,7 +358,7 @@ export class VoiceRelay {
       previous.ws.close(VOICE_CLOSE.REPLACED, 'a newer socket took over');
     }
 
-    const connection = new Connection(ws, hello.sessionId, roomId);
+    const connection = new Connection(ws, hello.sessionId, roomId, this.#burst, this.#now());
     this.#connections.set(hello.sessionId, connection);
 
     ws.on('pong', () => {
@@ -347,10 +397,11 @@ export class VoiceRelay {
     // header is forwarded as it came; receivers clamp what they read.
     if (!parseVoiceHeader(frame)) return;
 
+    const now = this.#now();
+    if (!this.#allowed(sender, now)) return;
+
     const hearers = room.hearers.get(sender.sessionId);
     if (!hearers || hearers.size === 0) return;
-
-    const now = this.#now();
     for (const receiverId of hearers) {
       const receiver = this.#connections.get(receiverId);
       if (!receiver) continue;
@@ -370,6 +421,27 @@ export class VoiceRelay {
 
       receiver.ws.send(Buffer.concat([Buffer.from([index]), frame]), { binary: true });
     }
+  }
+
+  /**
+   * One mouth, one cadence. A client that sends faster than Opus at 20 ms
+   * could is a loop, not a person, and the receivers' sockets are what it
+   * would burn. The bucket refills at the ceiling rate and holds a burst,
+   * so a clock that drifts is fine and a flood is not.
+   */
+  #allowed(sender: Connection, now: number): boolean {
+    const elapsed = Math.max(0, now - sender.lastRefill) / 1000;
+    sender.tokens = Math.min(this.#burst, sender.tokens + elapsed * this.#framesPerSecond);
+    sender.lastRefill = now;
+    if (sender.tokens < 1) {
+      sender.throttled += 1;
+      if (sender.throttled === 1 || sender.throttled % 1000 === 0) {
+        this.#log(`[voice] ${sender.sessionId} sends faster than speech; ${sender.throttled} frames dropped`);
+      }
+      return false;
+    }
+    sender.tokens -= 1;
+    return true;
   }
 
   /**

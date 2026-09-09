@@ -60,9 +60,9 @@ let relay: VoiceRelay;
 let url = '';
 let pressure = 0;
 
-function connect(sessionId: string, token: string, workspaceId = 'ws-1'): Promise<Client> {
+function connect(sessionId: string, token: string, workspaceId = 'ws-1', at = url): Promise<Client> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url + VOICE_PATH);
+    const ws = new WebSocket(at + VOICE_PATH);
     const messages: VoiceServerMessage[] = [];
     const frames: Buffer[] = [];
     const order: string[] = [];
@@ -146,23 +146,31 @@ function joinedOf(message: VoiceServerMessage): Array<{ sessionId: string; name:
   return message.type === 'peers' ? message.joined : [];
 }
 
-before(async () => {
-  relay = new VoiceRelay({
+/** A relay on its own port, for a suite that needs its own knobs. */
+async function standUp(
+  extra: Partial<ConstructorParameters<typeof VoiceRelay>[0]> = {},
+): Promise<{ relay: VoiceRelay; server: Server; url: string }> {
+  const instance = new VoiceRelay({
     verifyToken: async (token) => TOKENS[String(token)] ?? null,
     backpressure: () => pressure,
     audioHighWater: 100,
     heartbeatMs: 60_000,
+    ...extra,
   });
-  relay.registerRoom(presence);
-  server = createServer();
-  server.on('upgrade', (req, socket, head) => {
-    if ((req.url ?? '').split('?')[0] === VOICE_PATH) relay.handleUpgrade(req, socket, head);
+  instance.registerRoom(presence);
+  const http = createServer();
+  http.on('upgrade', (req, socket, head) => {
+    if ((req.url ?? '').split('?')[0] === VOICE_PATH) instance.handleUpgrade(req, socket, head);
     else socket.destroy();
   });
-  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-  const address = server.address();
+  await new Promise<void>((done) => http.listen(0, '127.0.0.1', done));
+  const address = http.address();
   if (!address || typeof address === 'string') throw new Error('no port');
-  url = `ws://127.0.0.1:${address.port}`;
+  return { relay: instance, server: http, url: `ws://127.0.0.1:${address.port}` };
+}
+
+before(async () => {
+  ({ relay, server, url } = await standUp());
 });
 
 after(async () => {
@@ -350,5 +358,89 @@ describe('sessions', () => {
     assert.deepEqual(await b.next('peers'), { type: 'peers', joined: [], left: ['A'] });
     b.ws.close();
     await b.closed;
+  });
+});
+
+describe('an office with more than one room live', () => {
+  it('finds the room that holds the seat, and losing one room does not lose the other', async () => {
+    // A second map in the same workspace. Registered after the first, so a
+    // "last one wins" lookup would send the first floor's people to 4404.
+    relay.registerRoom({
+      roomId: 'room-2',
+      workspaceId: 'ws-1',
+      human: (sessionId) => (sessionId === 'D' ? { name: 'Dee', userId: 'u-ann' } : null),
+    });
+
+    const a = await connect('A', 'tok-ann');
+    assert.deepEqual(await a.next('welcome'), { type: 'welcome', sessionId: 'A' });
+    const d = await connect('D', 'tok-ann');
+    assert.deepEqual(await d.next('welcome'), { type: 'welcome', sessionId: 'D' });
+
+    relay.unregisterRoom('room-2');
+    assert.equal(await d.closed, VOICE_CLOSE.GONE, 'the second floor closed');
+    // The first floor is untouched: a fresh socket for it still gets in.
+    const again = await connect('B', 'tok-bob');
+    assert.deepEqual(await again.next('welcome'), { type: 'welcome', sessionId: 'B' });
+
+    a.ws.close();
+    again.ws.close();
+    await Promise.all([a.closed, again.closed]);
+  });
+});
+
+describe('limits', () => {
+  it('drops the newest speaker for an ear that already has too many', async () => {
+    const own = await standUp({ speakersCap: 1 });
+    try {
+      const a = await connect('A', 'tok-ann', 'ws-1', own.url);
+      const b = await connect('B', 'tok-bob', 'ws-1', own.url);
+      const c = await connect('C', 'tok-cy', 'ws-1', own.url);
+      await Promise.all([a.next('welcome'), b.next('welcome'), c.next('welcome')]);
+      own.relay.updatePeers('room-1', [
+        { a: 'A', b: 'C', kind: 'enter' },
+        { a: 'B', b: 'C', kind: 'enter' },
+      ]);
+      await c.next('peers');
+
+      a.ws.send(frameWith(1), { binary: true });
+      await c.frame();
+      b.ws.send(frameWith(1), { binary: true });
+      await settle();
+      assert.equal(c.frames.length, 1, 'a second mouth into a full ear is dropped');
+      a.ws.send(frameWith(2), { binary: true });
+      await c.frame();
+      for (const client of [a, b, c]) client.ws.close();
+      await Promise.all([a.closed, b.closed, c.closed]);
+    } finally {
+      own.relay.close();
+      await new Promise<void>((done) => own.server.close(() => done()));
+    }
+  });
+
+  it('lets one mouth send at the cadence of speech and no faster', async () => {
+    // No refill at all: exactly the burst gets through, the rest is dropped
+    // at the sender — the receiver never sees it, and never pays for it.
+    const own = await standUp({ framesPerSecond: 0, burst: 10 });
+    try {
+      const a = await connect('A', 'tok-ann', 'ws-1', own.url);
+      const b = await connect('B', 'tok-bob', 'ws-1', own.url);
+      await Promise.all([a.next('welcome'), b.next('welcome')]);
+      own.relay.updatePeers('room-1', [{ a: 'A', b: 'B', kind: 'enter' }]);
+      await b.next('peers');
+
+      for (let seq = 0; seq < 40; seq += 1) a.ws.send(frameWith(seq), { binary: true });
+      await settle();
+      await settle();
+      assert.equal(b.frames.length, 10, 'the burst, and not one more');
+      assert.equal(own.relay.throttled('A'), 30);
+      assert.equal(own.relay.dropped('B'), 0, 'the receiver was never the problem');
+
+      a.ws.close();
+      b.ws.close();
+      await Promise.all([a.closed, b.closed]);
+    } finally {
+      own.relay.close();
+      await new Promise<void>((done) => own.server.close(() => done()));
+    }
   });
 });

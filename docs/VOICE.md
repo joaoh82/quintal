@@ -129,6 +129,9 @@ private zones ship, the same computation gains that rule in one place.
 - A receiver whose socket is not draining loses audio, oldest first, and
   never a control message: a peer table that lags is worse than a dropped
   frame. The relay logs a receiver that is falling behind, once a minute.
+- One mouth sends at most about 80 frames a second, with a burst of 100 —
+  Opus at 20 ms is 50. Faster than that is a loop, not a person, and the
+  excess is dropped at the sender.
 - More than 25 people talking into one ear at once is a soft cap: the newest
   speaker is dropped for that receiver until somebody stops.
 - One voice socket per game session. Reconnecting the game session — the
@@ -141,6 +144,7 @@ Capture → 20 ms frames → Opus → header → socket; socket → header → p
 jitter buffer → Opus → per-peer gain by distance → one output. The reference
 client lives in `apps/web/src/game/voice/` and uses WebCodecs
 (`AudioEncoder` / `AudioDecoder` with `opus`); anything that produces the
-frames above is equally welcome. Open the socket lazily — only when a
+frames above is equally welcome. *(The reference client is the next slice of
+this work and is not in the repository yet; the relay is.)* Open the socket lazily — only when a
 second human is within earshot — and close it when alone again: a person
 alone with their agents should cost the server nothing.

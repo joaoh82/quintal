@@ -2443,11 +2443,12 @@ export class OfficeRoom extends Room<OfficeState> {
   #sweepEarshot(): void {
     const players: EarshotPlayer[] = [];
     for (const [sessionId, player] of this.state.players) {
-      const sim = this.#sims.get(sessionId);
-      if (!sim || sim.away) continue;
+      // The same question the door asks, so the graph and the door can never
+      // disagree about who is a person: away seats are out, agents are agents.
+      if (!this.#sims.has(sessionId)) continue;
       players.push({
         id: sessionId,
-        kind: this.#agents.has(sessionId) ? 'agent' : 'human',
+        kind: this.#voiceHuman(sessionId) ? 'human' : 'agent',
         x: player.x / this.#map.tileSize,
         y: player.y / this.#map.tileSize,
       });
