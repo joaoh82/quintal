@@ -37,6 +37,22 @@ async function fetchTicket(signal?: AbortSignal): Promise<JoinTicket> {
   return (await response.json()) as JoinTicket;
 }
 
+/**
+ * One client per endpoint, for the life of the page. A rejoin loop that made
+ * a new one per attempt would leave a trail of them behind it; there is only
+ * ever one office to talk to from here.
+ */
+const clients = new Map<string, Client>();
+
+function clientFor(endpoint: string): Client {
+  let client = clients.get(endpoint);
+  if (!client) {
+    client = new Client(endpoint);
+    clients.set(endpoint, client);
+  }
+  return client;
+}
+
 /** A live seat in the office, and the client that can get it back. */
 export interface OfficeConnection {
   room: Room<OfficeState>;
@@ -53,7 +69,7 @@ export async function joinOffice(
   // `wsUrl` is a path; resolve it against the page origin so http→ws and
   // https→wss are decided by how the page itself was served.
   const endpoint = new URL(ticket.wsUrl, window.location.origin).toString();
-  const client = new Client(endpoint);
+  const client = clientFor(endpoint);
 
   // `workspaceId` picks the room; the server proves you belong in it. Two
   // offices on one deployment are two rooms, and neither can see the other.

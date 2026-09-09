@@ -48,7 +48,12 @@ export interface RecoveryOptions {
 export type RecoveryOutcome<T> =
   | { kind: 'resumed'; room: T }
   | { kind: 'rejoined'; room: T }
-  | { kind: 'cancelled' }
+  /**
+   * Cancelled. `stray` is a room that arrived *after* the caller stopped
+   * wanting one — an attempt was in flight when it was cancelled — and it is
+   * the caller's to leave, or it stays in the office as a seat nobody holds.
+   */
+  | { kind: 'cancelled'; stray?: T }
   /** The join said no for a reason retrying cannot fix. */
   | { kind: 'refused'; error: unknown };
 
@@ -72,7 +77,10 @@ export async function recover<T>(
     attempt += 1;
     deps.report('resuming', attempt);
     try {
-      return { kind: 'resumed', room: await deps.resume() };
+      const room = await deps.resume();
+      // Cancelled while the attempt was out: this seat is not wanted.
+      if (deps.cancelled()) return { kind: 'cancelled', stray: room };
+      return { kind: 'resumed', room };
     } catch {
       // The server has not noticed we dropped yet, or we are still offline.
       // Either way the answer is to ask again shortly, not to give up on the
@@ -89,7 +97,9 @@ export async function recover<T>(
     attempt += 1;
     deps.report('rejoining', attempt);
     try {
-      return { kind: 'rejoined', room: await deps.join() };
+      const room = await deps.join();
+      if (deps.cancelled()) return { kind: 'cancelled', stray: room };
+      return { kind: 'rejoined', room };
     } catch (error) {
       if (isPermanent(error)) return { kind: 'refused', error };
     }

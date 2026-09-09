@@ -74,6 +74,10 @@ export async function createGame(
   let room = connection.room;
   let client = connection.client;
   let closedByUs = false;
+  /** Ends a recovery wait early — a wake-up, or the page going away. */
+  let wake: (() => void) | null = null;
+  /** Aborts a join in flight when the page goes away. */
+  const leaving = new AbortController();
 
   const build = (): Phaser.Game => new Phaser.Game({
     type: Phaser.AUTO,
@@ -152,8 +156,11 @@ export async function createGame(
         clearTimeout(timer);
         document.removeEventListener('visibilitychange', onVisible);
         window.removeEventListener('online', done);
+        wake = null;
         resolve();
       };
+      // Unmounting must not sit out the rest of a fifteen-second pause.
+      wake = done;
       const onVisible = (): void => {
         if (document.visibilityState === 'visible') done();
       };
@@ -182,7 +189,7 @@ export async function createGame(
     const outcome = await recover<OfficeConnection>(
       {
         resume: async () => ({ room: await resumeOffice(client, token), client }),
-        join: () => joinOffice(MAP_ID),
+        join: () => joinOffice(MAP_ID, leaving.signal),
         wait: waitOrWake,
         now: () => Date.now(),
         cancelled: () => closedByUs,
@@ -198,12 +205,18 @@ export async function createGame(
           }
         },
       },
-      { resumeWindowMs: RECONNECTION_SECONDS * 1000 },
+      // No token, no seat to resume: straight to a fresh join rather than
+      // twenty seconds of asking for something that cannot be given back.
+      { resumeWindowMs: token ? RECONNECTION_SECONDS * 1000 : 0 },
     );
     recovering = false;
 
     switch (outcome.kind) {
       case 'cancelled':
+        // A seat that arrived after the page was torn down is a seat nobody
+        // holds; leave it rather than let an avatar stand in for a tab that
+        // is gone.
+        if (outcome.stray) void outcome.stray.room.leave(true);
         return;
       case 'refused':
         gameBridge.emit('connection', {
@@ -214,6 +227,12 @@ export async function createGame(
         return;
       case 'resumed':
       case 'rejoined': {
+        // Belt and braces with the policy's own check: nothing rebuilds a
+        // game the React tree has already torn down.
+        if (closedByUs) {
+          void outcome.room.room.leave(true);
+          return;
+        }
         room = outcome.room.room;
         client = outcome.room.client;
         // The old game is bound to the old socket. Replace it whole; the UI
@@ -262,6 +281,8 @@ export async function createGame(
     },
     destroy() {
       closedByUs = true;
+      leaving.abort();
+      wake?.();
       void room.leave(true);
       game.destroy(true);
     },

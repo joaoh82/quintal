@@ -88,6 +88,34 @@ describe('getting back into the office', () => {
     assert.equal(w.joins, 2, 'not a third time');
   });
 
+  it('hands back a room that arrived after it was cancelled, rather than pretending it resumed', async () => {
+    // The page unmounted while a resume was in flight. The seat came back;
+    // nobody wants it; the caller must be told so it can leave, or the office
+    // keeps an avatar for a tab that is gone.
+    const w = new World(['ok'], []);
+    const deps = w.deps();
+    const original = deps.resume;
+    deps.resume = async () => {
+      const room = await original();
+      w.stop = true;
+      return room;
+    };
+    assert.deepEqual(await recover(deps, WINDOW), { kind: 'cancelled', stray: 'seat-1' });
+
+    const late = new World([], ['ok']);
+    const lateDeps = late.deps();
+    const lateJoin = lateDeps.join;
+    lateDeps.join = async () => {
+      const room = await lateJoin();
+      late.stop = true;
+      return room;
+    };
+    assert.deepEqual(await recover(lateDeps, { ...WINDOW, resumeWindowMs: 0 }), {
+      kind: 'cancelled',
+      stray: 'fresh-1',
+    });
+  });
+
   it('stops the moment it is cancelled, in either phase', async () => {
     const early = new World(['fail', 'fail'], []);
     const deps = early.deps();
