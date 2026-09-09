@@ -37,17 +37,39 @@ async function fetchTicket(signal?: AbortSignal): Promise<JoinTicket> {
   return (await response.json()) as JoinTicket;
 }
 
+/**
+ * One client per endpoint, for the life of the page. A rejoin loop that made
+ * a new one per attempt would leave a trail of them behind it; there is only
+ * ever one office to talk to from here.
+ */
+const clients = new Map<string, Client>();
+
+function clientFor(endpoint: string): Client {
+  let client = clients.get(endpoint);
+  if (!client) {
+    client = new Client(endpoint);
+    clients.set(endpoint, client);
+  }
+  return client;
+}
+
+/** A live seat in the office, and the client that can get it back. */
+export interface OfficeConnection {
+  room: Room<OfficeState>;
+  client: Client;
+}
+
 /** Connect and join the office for a map. Throws if the session isn't valid. */
 export async function joinOffice(
   mapId: string,
   signal?: AbortSignal,
-): Promise<Room<OfficeState>> {
+): Promise<OfficeConnection> {
   const ticket = await fetchTicket(signal);
 
   // `wsUrl` is a path; resolve it against the page origin so http→ws and
   // https→wss are decided by how the page itself was served.
   const endpoint = new URL(ticket.wsUrl, window.location.origin).toString();
-  const client = new Client(endpoint);
+  const client = clientFor(endpoint);
 
   // `workspaceId` picks the room; the server proves you belong in it. Two
   // offices on one deployment are two rooms, and neither can see the other.
@@ -56,5 +78,20 @@ export async function joinOffice(
     mapId,
     workspaceId: ticket.workspaceId,
   };
-  return client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
+  const room = await client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
+  return { room, client };
+}
+
+/**
+ * Take a dropped seat back, while the server is still holding it.
+ *
+ * The token is the room's own (`roomId:token`), minted at join; it is the
+ * one thing that says "this is the same person who was standing there", so
+ * the avatar comes back where it was rather than at the door.
+ */
+export async function resumeOffice(
+  client: Client,
+  reconnectionToken: string,
+): Promise<Room<OfficeState>> {
+  return client.reconnect<OfficeState>(reconnectionToken, OfficeState);
 }
