@@ -22,6 +22,8 @@ export const ClientMessage = {
   ChannelChat: 'channel_chat',
   /** Which channels am I in. Answered with `channels`, and again whenever that changes. */
   ChannelsGet: 'channels_get',
+  /** Ask how far a voice carries here. Asked after the handlers exist, like history. */
+  EarshotGet: 'earshot_get',
   /** Open a direct message with somebody. Answered with `dm_opened`, then `channels`. */
   DmOpen: 'dm_open',
   /**

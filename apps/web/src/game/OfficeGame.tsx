@@ -46,6 +46,23 @@ const INITIAL_HUD: Hud = {
  * only fires when something a human would notice actually changes: a roster
  * update, a message, a tile crossing. Positions never come through here.
  */
+/**
+ * Is the keyboard busy in some text field other than the chat box — the
+ * device picker, a form in an overlay? A space there is a space, not a
+ * push-to-talk; an M is a letter.
+ */
+function typingElsewhere(): boolean {
+  const active = document.activeElement;
+  if (!active || active === document.body) return false;
+  const tag = active.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    (active as HTMLElement).isContentEditable
+  );
+}
+
 export default function OfficeGame() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<OfficeSession | null>(null);
@@ -177,9 +194,9 @@ export default function OfficeGame() {
       } else if (event.key === 'Escape' && chatFocused) {
         event.preventDefault();
         setChatFocused(false);
-      } else if (!chatFocused && (event.key === 'm' || event.key === 'M')) {
+      } else if (!chatFocused && !typingElsewhere() && (event.key === 'm' || event.key === 'M')) {
         sessionRef.current?.toggleMute();
-      } else if (!chatFocused && event.key === ' ') {
+      } else if (!chatFocused && !typingElsewhere() && event.key === ' ') {
         // Push-to-talk: held is talking. The page must not scroll under it,
         // and a key repeat is not a second press.
         event.preventDefault();

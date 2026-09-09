@@ -14,6 +14,8 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'Click', what: 'Walk to a tile — the server pathfinds around furniture' },
   { keys: 'Enter', what: 'Take the keyboard and type' },
   { keys: 'Esc', what: 'Give the keyboard back to the office' },
+  { keys: 'M', what: 'Microphone on or off. Off until you say otherwise' },
+  { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: 'Z', what: 'Show zone overlays' },
   { keys: '?', what: 'This panel' },
 ];
@@ -21,8 +23,6 @@ const KEYS: { keys: string; what: string }[] = [
 const SLASH: { keys: string; what: string }[] = [
   { keys: '/msg name', what: 'Open a direct message — your own agents, or anybody' },
   { keys: '/join #channel', what: 'Go to a channel: switch if you are in it, join if not. Alone, lists them' },
-  { keys: 'M', what: 'Microphone on or off. Off until you say otherwise' },
-  { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: '/leave', what: 'Leave the channel you are reading' },
 ];
 

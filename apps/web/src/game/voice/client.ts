@@ -107,6 +107,8 @@ export class VoiceClient {
   #mic: MediaStream | null = null;
   #micSource: MediaStreamAudioSourceNode | null = null;
   #capture: AudioWorkletNode | null = null;
+  /** Keeps the worklet in the graph without letting the mic be heard. */
+  #sink: GainNode | null = null;
   #encoder: AudioEncoder | null = null;
   #micPending: Promise<void> | null = null;
   #unlock: (() => void) | null = null;
@@ -273,8 +275,18 @@ export class VoiceClient {
       );
     };
     ws.onmessage = (event: MessageEvent) => {
-      if (typeof event.data === 'string') this.#control(JSON.parse(event.data) as VoiceServerMessage);
-      else if (event.data instanceof ArrayBuffer) this.#frame(new Uint8Array(event.data));
+      if (typeof event.data === 'string') {
+        let message: VoiceServerMessage | null = null;
+        try {
+          message = JSON.parse(event.data) as VoiceServerMessage;
+        } catch {
+          // Not ours to crash on: the relay's control messages are JSON, and
+          // anything else is ignored the way a bad frame is.
+        }
+        if (message && typeof message === 'object' && 'type' in message) this.#control(message);
+      } else if (event.data instanceof ArrayBuffer) {
+        this.#frame(new Uint8Array(event.data));
+      }
     };
     ws.onclose = (event: CloseEvent) => {
       if (this.#ws !== ws) return;
@@ -299,6 +311,10 @@ export class VoiceClient {
     this.#ws = null;
     if (ws) ws.close(1000, 'leaving earshot');
     for (const peer of [...this.#peersById.values()]) this.#dropPeer(peer);
+    // Nobody to talk to means no microphone either: the browser's "mic in
+    // use" indicator should be as honest as the wire. The mute switch is
+    // remembered; the next socket re-opens the mic if it is set to send.
+    this.#releaseMic();
     this.#state = { ...this.#state, socket: 'closed', peers: 0 };
     this.#emit();
   }
@@ -308,6 +324,9 @@ export class VoiceClient {
       case 'welcome':
         this.#state = { ...this.#state, socket: 'open', error: null };
         void this.#ensureContext();
+        // Set to send — unmuted, or the key already held — so the mic comes
+        // back with the socket, without asking permission again.
+        if (!this.#muted || this.#talking) void this.#ensureMic();
         this.#emit();
         return;
       case 'peers':
@@ -508,11 +527,11 @@ export class VoiceClient {
     });
     // A worklet only runs while it is part of the graph that reaches the
     // output; a silent gain keeps it there without letting the mic be heard.
-    const sink = ctx.createGain();
-    sink.gain.value = 0;
+    this.#sink = ctx.createGain();
+    this.#sink.gain.value = 0;
     this.#micSource.connect(this.#capture);
-    this.#capture.connect(sink);
-    sink.connect(ctx.destination);
+    this.#capture.connect(this.#sink);
+    this.#sink.connect(ctx.destination);
     this.#capture.port.onmessage = (event: MessageEvent<Float32Array>) => this.#captured(event.data);
 
     this.#encoder = new AudioEncoder({
@@ -547,9 +566,12 @@ export class VoiceClient {
   }
 
   #releaseMic(): void {
+    if (!this.#mic && !this.#capture && !this.#encoder) return;
     this.#capture?.port.close();
     this.#capture?.disconnect();
     this.#micSource?.disconnect();
+    this.#sink?.disconnect();
+    this.#sink = null;
     for (const track of this.#mic?.getTracks() ?? []) track.stop();
     try {
       this.#encoder?.close();

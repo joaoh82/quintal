@@ -219,6 +219,7 @@ export class OfficeScene extends Phaser.Scene {
     // join — a message sent before anybody is listening is sent to nobody.
     room.send(ClientMessage.HistoryGet, {});
     room.send(ClientMessage.ChannelsGet, {});
+    room.send(ClientMessage.EarshotGet, {});
 
     // Schema callbacks go through a proxy in 0.16 rather than living on the
     // schema instances themselves.
