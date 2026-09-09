@@ -52,6 +52,9 @@ const AGENT_LABEL_STYLE = {
  */
 const EMOTE_OFFSET = { x: 0, y: -40 } as const;
 
+/** The speaking ring: the roster's green, so the two read as one signal. */
+const SPEAKING_RING_COLOR = 0x34d399;
+
 /** Glyph on every agent nameplate. Non-human, and obviously so. */
 const AGENT_GLYPH = '◆';
 
@@ -97,6 +100,8 @@ export class Avatar {
   readonly #label: Phaser.GameObjects.Text;
   /** Agents only: the ring on the floor and the status line under the plate. */
   readonly #ring: Phaser.GameObjects.Ellipse | null = null;
+  /** Anybody, while talking: a brighter ring under the feet. Made on first use. */
+  #voiceRing: Phaser.GameObjects.Ellipse | null = null;
   readonly #statusLine: Phaser.GameObjects.Text | null = null;
   #bubble: Phaser.GameObjects.Text | null = null;
   #bubbleUntil = 0;
@@ -275,10 +280,30 @@ export class Avatar {
     this.setFacing(to.dir, to.moving);
   }
 
+  /**
+   * Somebody is talking. The ring is the office's one visual for voice, so
+   * a person reading the room can see who is speaking without hearing it —
+   * the roster shows the same thing in a list.
+   */
+  setSpeaking(speaking: boolean): void {
+    if (!speaking) {
+      this.#voiceRing?.setVisible(false);
+      return;
+    }
+    if (!this.#voiceRing) {
+      this.#voiceRing = this.#scene.add
+        .ellipse(this.#sprite.x, this.#sprite.y + 6, 26, 12, SPEAKING_RING_COLOR, 0.14)
+        .setStrokeStyle(2, SPEAKING_RING_COLOR, 0.9)
+        .setDepth(9);
+    }
+    this.#voiceRing.setVisible(true);
+  }
+
   setPosition(x: number, y: number): void {
     this.#sprite.setPosition(x, y);
     this.#label.setPosition(x, y - 22);
     this.#ring?.setPosition(x, y + 6);
+    this.#voiceRing?.setPosition(x, y + 6);
     this.#statusLine?.setPosition(x, y - 12);
     if (this.#bubble) this.#bubble.setPosition(x, y - 36);
     this.#emoteSprite?.setPosition(x + EMOTE_OFFSET.x, y + EMOTE_OFFSET.y);
@@ -318,6 +343,7 @@ export class Avatar {
     this.#sprite.destroy();
     this.#label.destroy();
     this.#ring?.destroy();
+    this.#voiceRing?.destroy();
     this.#statusLine?.destroy();
     this.#bubble?.destroy();
     this.#emoteSprite?.destroy();

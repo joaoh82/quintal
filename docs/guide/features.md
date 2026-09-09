@@ -37,6 +37,17 @@ pages go deeper.
   channel and DM in one panel, with full history. The key can be changed in
   Settings → Profile.
 
+- **Voice.** Walk up to a person and you can hear each other; walk away and
+  it fades, then stops. Your microphone is off until you press `M`, and
+  `Space` held is push-to-talk whatever the switch says. A green ring under
+  an avatar, and beside a name in the roster, means they are talking. Voice
+  relays through your own office server — nothing is decoded there and
+  nothing is recorded — and it only exists while a second person is near:
+  alone with your agents there is no socket and no microphone. Agents never
+  speak and never hear; you will be able to speak *to* them later and they
+  answer in text. Needs a browser with WebCodecs Opus (any Chromium, Safari
+  17.4+, recent Firefox); the desktop app has it.
+
 ## Agents
 
 Agents are members of the office, not a sidebar. Each one has an identity, an

@@ -23,6 +23,7 @@ import {
   type Direction,
   type DmOpenPayload,
   type DmOpenedPayload,
+  type EarshotPayload,
   type ErrorPayload,
   type GameBridge,
   type HistoryGetPayload,
@@ -211,6 +212,9 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage(ServerMessage.ZoneChat, (message: ZoneChatPayload) => {
       this.#bridge.emit('zoneChat', message);
     });
+    room.onMessage(ServerMessage.Earshot, (earshot: EarshotPayload) => {
+      this.#bridge.emit('earshot', earshot);
+    });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
     room.send(ClientMessage.HistoryGet, {});
@@ -360,6 +364,16 @@ export class OfficeScene extends Phaser.Scene {
    * wall while you type), *and* it stops calling preventDefault on them (so the
    * characters actually reach the input).
    */
+  /** Pixels per tile, for anything outside the scene that reasons in tiles. */
+  tileSize(): number {
+    return this.#map.tileSize;
+  }
+
+  /** Light, or put out, the ring that says somebody is talking. */
+  setSpeaking(sessionId: string, speaking: boolean): void {
+    this.#avatars.get(sessionId)?.setSpeaking(speaking);
+  }
+
   setInputCaptured(captured: boolean): void {
     this.#inputCaptured = captured;
     const keyboard = this.input.keyboard;

@@ -36,6 +36,8 @@ function sinceLabel(at: number): string {
 interface RosterPanelProps {
   players: RosterEntry[];
   connection: ConnectionStatus;
+  /** Session ids of the people talking right now — the same ring as on the map. */
+  speaking?: string[];
   /** Open a direct message with this occupant. */
   onMessage: (entry: RosterEntry) => void;
 }
@@ -60,7 +62,7 @@ function canMessage(viewer: RosterEntry | undefined, entry: RosterEntry): boolea
  * "what is my fleet doing" without reading past the humans, and every agent
  * line carries whose it is.
  */
-export function RosterPanel({ players, connection, onMessage }: RosterPanelProps) {
+export function RosterPanel({ players, connection, speaking = [], onMessage }: RosterPanelProps) {
   const [openCard, setOpenCard] = useState<string | null>(null);
 
   const humans = players.filter((player) => player.kind === 'human');
@@ -104,7 +106,15 @@ export function RosterPanel({ players, connection, onMessage }: RosterPanelProps
                     openCard === player.sessionId ? 'bg-white/10' : ''
                   }`}
                 >
-                  <Avatar avatar={player.avatar} pubkey={player.pubkey} size={16} />
+                  <span
+                    className={
+                      speaking.includes(player.sessionId)
+                        ? 'rounded-full ring-2 ring-emerald-400 ring-offset-1 ring-offset-black/60'
+                        : ''
+                    }
+                  >
+                    <Avatar avatar={player.avatar} pubkey={player.pubkey} size={16} />
+                  </span>
                   <span className={player.isSelf ? 'text-emerald-300' : 'text-white/85'}>
                     {player.name}
                   </span>

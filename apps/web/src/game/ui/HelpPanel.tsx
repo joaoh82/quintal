@@ -21,6 +21,8 @@ const KEYS: { keys: string; what: string }[] = [
 const SLASH: { keys: string; what: string }[] = [
   { keys: '/msg name', what: 'Open a direct message — your own agents, or anybody' },
   { keys: '/join #channel', what: 'Go to a channel: switch if you are in it, join if not. Alone, lists them' },
+  { keys: 'M', what: 'Microphone on or off. Off until you say otherwise' },
+  { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: '/leave', what: 'Leave the channel you are reading' },
 ];
 

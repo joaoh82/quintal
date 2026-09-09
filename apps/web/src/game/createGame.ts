@@ -9,6 +9,7 @@ import { gameBridge } from './bridge';
 import { NotSignedInError, joinOffice, resumeOffice, type OfficeConnection } from './net/connection';
 import { recover } from './net/recovery';
 import { OfficeScene } from './scenes/OfficeScene';
+import { VoiceClient } from './voice/client';
 
 const MAP_ID = 'hq';
 
@@ -41,6 +42,11 @@ export interface OfficeSession {
   /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
   joinChannel(slug: string): void;
   leaveChannel(channelId: string): void;
+  /** The microphone switch. Off by default; M in the office. */
+  toggleMute(): void;
+  /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
+  setTalking(down: boolean): void;
+  setVoiceDevice(deviceId: string): void;
   destroy(): void;
 }
 
@@ -73,7 +79,14 @@ export async function createGame(
 
   let room = connection.room;
   let client = connection.client;
+  let ticket = connection.ticket;
   let closedByUs = false;
+  /**
+   * Voice belongs to the session: opened with its token, bound to its seat,
+   * torn down before a rebuild and made again after — so it follows a
+   * reconnect and can never speak from a seat that is gone.
+   */
+  let voice: VoiceClient | null = null;
   /** Ends a recovery wait early — a wake-up, or the page going away. */
   let wake: (() => void) | null = null;
   /** Aborts a join in flight when the page goes away. */
@@ -107,6 +120,12 @@ export async function createGame(
 
   let game = build();
 
+  const scene = (): OfficeScene | undefined =>
+    game.scene.getScene(OfficeScene.KEY) as OfficeScene | undefined;
+
+  // How far a voice carries: the office says on join and when it changes.
+  const offEarshot = gameBridge.on('earshot', ({ radiusTiles }) => voice?.setRadius(radiusTiles));
+
   /**
    * Put a scene on the game for this room. Done again after every recovery:
    * the scene binds to one room at creation — its handlers, its state
@@ -117,6 +136,18 @@ export async function createGame(
    */
   const attach = (): void => {
     game.scene.add(OfficeScene.KEY, OfficeScene, true, { bridge: gameBridge, room });
+
+    voice = new VoiceClient({
+      origin: window.location.origin,
+      token: ticket.token,
+      sessionId: room.sessionId,
+      workspaceId: ticket.workspaceId,
+      room,
+      tileSize: () => scene()?.tileSize() ?? 32,
+      onState: (state) => gameBridge.emit('voice', state),
+      onSpeaking: (sessionId, speaking) => scene()?.setSpeaking(sessionId, speaking),
+    });
+    voice.start();
 
     if (process.env.NODE_ENV !== 'production') {
       // Handles on the running game and room, for poking at them from the
@@ -188,7 +219,7 @@ export async function createGame(
 
     const outcome = await recover<OfficeConnection>(
       {
-        resume: async () => ({ room: await resumeOffice(client, token), client }),
+        resume: async () => ({ room: await resumeOffice(client, token), client, ticket }),
         join: () => joinOffice(MAP_ID, leaving.signal),
         wait: waitOrWake,
         now: () => Date.now(),
@@ -235,6 +266,10 @@ export async function createGame(
         }
         room = outcome.room.room;
         client = outcome.room.client;
+        if (outcome.kind === 'rejoined') ticket = outcome.room.ticket;
+        // The voice socket was bound to the old seat; it goes with the game.
+        voice?.stop();
+        voice = null;
         // The old game is bound to the old socket. Replace it whole; the UI
         // above the canvas keeps what it has — transcripts merge by id.
         game.destroy(true);
@@ -247,9 +282,6 @@ export async function createGame(
   };
 
   attach();
-
-  const scene = (): OfficeScene | undefined =>
-    game.scene.getScene(OfficeScene.KEY) as OfficeScene | undefined;
 
   return {
     resize(width_, height_) {
@@ -279,8 +311,20 @@ export async function createGame(
     leaveChannel(channelId) {
       scene()?.leaveChannel(channelId);
     },
+    toggleMute() {
+      voice?.toggleMute();
+    },
+    setTalking(down) {
+      voice?.setTalking(down);
+    },
+    setVoiceDevice(deviceId) {
+      void voice?.setDevice(deviceId);
+    },
     destroy() {
       closedByUs = true;
+      offEarshot();
+      voice?.stop();
+      voice = null;
       leaving.abort();
       wake?.();
       void room.leave(true);

@@ -229,3 +229,26 @@ export class EarshotTracker {
     return out;
   }
 }
+
+// --- what the page shows -------------------------------------------------------
+
+/** The voice client, as the UI sees it. Emitted on every change. */
+export interface VoiceUiState {
+  /** Whether this browser can do voice at all, and why not. */
+  support: 'ok' | 'unsupported' | 'blocked';
+  /** The relay socket. Closed while alone with agents — deliberately. */
+  socket: 'closed' | 'connecting' | 'open';
+  /** `off`: no microphone yet. `muted`: mic held, nothing sent. `live`: sending. */
+  mic: 'off' | 'muted' | 'live';
+  /** Push-to-talk held right now. */
+  talking: boolean;
+  /** Session ids of the peers speaking now, by their frames. */
+  speaking: string[];
+  /** How many people this socket can hear. */
+  peers: number;
+  /** Microphones the browser will admit to, once permission was given. */
+  devices: Array<{ id: string; label: string }>;
+  deviceId: string | null;
+  /** A one-line reason the last thing did not work, or null. */
+  error: string | null;
+}

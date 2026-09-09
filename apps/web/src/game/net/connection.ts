@@ -57,6 +57,8 @@ function clientFor(endpoint: string): Client {
 export interface OfficeConnection {
   room: Room<OfficeState>;
   client: Client;
+  /** What we joined with; the voice socket presents the same token. */
+  ticket: JoinTicket;
 }
 
 /** Connect and join the office for a map. Throws if the session isn't valid. */
@@ -79,7 +81,7 @@ export async function joinOffice(
     workspaceId: ticket.workspaceId,
   };
   const room = await client.joinOrCreate<OfficeState>(ROOM_OFFICE, options, OfficeState);
-  return { room, client };
+  return { room, client, ticket };
 }
 
 /**

@@ -1,6 +1,11 @@
 'use client';
 
-import { type ConnectionStatus, type MapZone, type RosterEntry } from '@quintal/shared';
+import {
+  type ConnectionStatus,
+  type MapZone,
+  type RosterEntry,
+  type VoiceUiState,
+} from '@quintal/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getOverlayKey } from '@/lib/preferences';
@@ -11,6 +16,7 @@ import { ChatPanel } from './ui/ChatPanel';
 import { CommsOverlay } from './ui/CommsOverlay';
 import { HelpPanel } from './ui/HelpPanel';
 import { RosterPanel } from './ui/RosterPanel';
+import { VoiceBar } from './ui/VoiceBar';
 import { useConversations } from './useConversations';
 
 interface Hud {
@@ -54,6 +60,7 @@ export default function OfficeGame() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayKey, setOverlayKey] = useState('`');
+  const [voice, setVoice] = useState<VoiceUiState | null>(null);
 
   const conversations = useConversations(sessionRef);
 
@@ -146,6 +153,7 @@ export default function OfficeGame() {
         setConnection(status);
         setConnectionDetail(detail ?? '');
       }),
+      gameBridge.on('voice', (state) => setVoice(state)),
     ];
     return () => {
       for (const off of unsubscribe) off();
@@ -169,10 +177,29 @@ export default function OfficeGame() {
       } else if (event.key === 'Escape' && chatFocused) {
         event.preventDefault();
         setChatFocused(false);
+      } else if (!chatFocused && (event.key === 'm' || event.key === 'M')) {
+        sessionRef.current?.toggleMute();
+      } else if (!chatFocused && event.key === ' ') {
+        // Push-to-talk: held is talking. The page must not scroll under it,
+        // and a key repeat is not a second press.
+        event.preventDefault();
+        if (!event.repeat) sessionRef.current?.setTalking(true);
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === ' ') sessionRef.current?.setTalking(false);
+    };
+    // Letting go of the key while the window is not focused would leave the
+    // mic open; a blur is a release.
+    const onBlur = () => sessionRef.current?.setTalking(false);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
   }, [chatFocused, overlayOpen]);
 
   // One place decides whether the office or a text box owns the keyboard.
@@ -194,7 +221,12 @@ export default function OfficeGame() {
       <div ref={containerRef} className="h-full w-full" data-testid="phaser-container" />
 
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end gap-3 p-3">
-        <RosterPanel players={roster} connection={connection} onMessage={openDm} />
+        <RosterPanel
+          players={roster}
+          connection={connection}
+          speaking={voice?.speaking ?? []}
+          onMessage={openDm}
+        />
       </div>
 
       <div className="pointer-events-none absolute bottom-10 left-3">
@@ -239,10 +271,15 @@ export default function OfficeGame() {
           {hud.zone ? `${hud.zone.label} · ${hud.zone.kind}` : 'open floor'}
         </span>
         {hud.pathLength > 0 ? <span className="text-sky-300">walking · {hud.pathLength}</span> : null}
+        <VoiceBar
+          state={voice}
+          onToggleMute={() => sessionRef.current?.toggleMute()}
+          onDevice={(deviceId) => sessionRef.current?.setVoiceDevice(deviceId)}
+        />
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
         <button
           type="button"

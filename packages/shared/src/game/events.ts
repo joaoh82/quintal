@@ -1,10 +1,12 @@
 import type { MapZone } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
+import type { VoiceUiState } from '../voice.js';
 import type {
   ChannelChatPayload,
   ChannelsPayload,
   ChatBroadcastPayload,
   DmOpenedPayload,
+  EarshotPayload,
   HistoryPayload,
   ZoneChatPayload,
 } from './protocol.js';
@@ -100,6 +102,10 @@ export type GameEvents = {
   connection: { status: ConnectionStatus; detail?: string };
   /** The server rejected something — rate limit, bad move. */
   notice: { code: string; message: string };
+  /** How far a voice carries in this office. */
+  earshot: EarshotPayload;
+  /** The voice client changed: socket, mic, who is speaking. */
+  voice: VoiceUiState;
 };
 
 export type GameEventName = keyof GameEvents;

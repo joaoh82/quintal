@@ -63,6 +63,7 @@ import {
   type ChannelChatPayload,
   type ChannelChatSendPayload,
   type ChannelJoinPayload,
+  type EarshotPayload,
   type ChannelLeavePayload,
   type ChannelRef,
   type ChannelSubject,
@@ -529,6 +530,13 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#joinAsAgent(client, auth.identity, auth.credential);
       return;
     }
+
+    // For the voice client's own arithmetic — how loud somebody is by
+    // distance, whether a second person is close enough to open a socket
+    // for. Receipt of audio is decided here, not there.
+    client.send(ServerMessage.Earshot, {
+      radiusTiles: this.#settings.chatRadiusTiles,
+    } satisfies EarshotPayload);
 
     const spawn = spawnFor(this.#map, 'human');
     this.state.players.set(
@@ -1492,7 +1500,16 @@ export class OfficeRoom extends Room<OfficeState> {
 
   async #refreshSettings(): Promise<void> {
     try {
+      const before = this.#settings.chatRadiusTiles;
       this.#settings = await getOfficeSettings(getDb(), this.#workspaceId);
+      if (this.#settings.chatRadiusTiles !== before) {
+        for (const client of this.clients) {
+          if (this.#agents.has(client.sessionId)) continue;
+          client.send(ServerMessage.Earshot, {
+            radiusTiles: this.#settings.chatRadiusTiles,
+          } satisfies EarshotPayload);
+        }
+      }
     } catch (error: unknown) {
       logger.error('[office] could not read settings', error);
     }

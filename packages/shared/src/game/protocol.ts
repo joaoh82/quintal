@@ -59,6 +59,8 @@ export const ServerMessage = {
   ChannelChat: 'channel_chat',
   /** The channels you are in. In reply to `channels_get`, and whenever it changes. */
   Channels: 'channels',
+  /** How far a voice carries here, in tiles. Sent on join and when the office changes it. */
+  Earshot: 'earshot',
   /** The DM you asked for is open; here it is, so you can switch to it. */
   DmOpened: 'dm_opened',
   /** Somebody spoke in the zone you are following. Sent whether or not you also heard it. */
@@ -243,3 +245,8 @@ export const RECONNECTION_SECONDS = 20;
  * packet doesn't turn into a visible stutter.
  */
 export const INTERPOLATION_DELAY_MS = 120;
+
+/** How far nearby chat and voice carry in this office, for the client's own arithmetic. */
+export interface EarshotPayload {
+  radiusTiles: number;
+}
