@@ -20,5 +20,13 @@
   -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
+  <!--
+    The hardened runtime that signing applies forbids audio input unless the
+    app asks for it. Together with NSMicrophoneUsageDescription in Info.plist
+    this is what lets the webview's getUserMedia reach the microphone; the
+    webview's own capture-permission request is granted by wry.
+  -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
 </dict>
 </plist>

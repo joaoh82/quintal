@@ -11,6 +11,7 @@ pub mod identity;
 pub mod links;
 pub mod machine;
 pub mod nip49;
+pub mod ptt;
 pub mod runtimes;
 pub mod secrets;
 pub mod server;
@@ -28,6 +29,10 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        // One chord, registered at setup, for push-to-talk while some other
+        // window has the keyboard. Registered from here, not from the page:
+        // the page cannot register a global key on its own.
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::has_identity,
             commands::detect_runtimes,
@@ -55,6 +60,8 @@ pub fn run() {
             commands::switch_server,
             commands::remove_server,
             commands::open_server_picker,
+            commands::push_to_talk_chord,
+            commands::set_push_to_talk_chord,
         ])
         .setup(|app| {
             // Before anything looks for a binary. An app launched from Finder
@@ -94,6 +101,13 @@ pub fn run() {
 
             tray::build(app.handle())?;
             tray::watch(app.handle());
+
+            // A chord that fails to register is a line in the log, not a
+            // reason the app cannot start: the page's own Space key still
+            // works with the window focused.
+            if let Err(error) = ptt::register(app.handle(), &ptt::chord(&dir)) {
+                eprintln!("[quintal] push-to-talk: {error}");
+            }
 
             // The window is built here rather than declared in the config so
             // it can carry two rules the config cannot express: it never

@@ -87,6 +87,9 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // Off unless somebody turns it on. Read rather than toggled: flipping a
     // login item on a contributor's machine is not a test's business.
     await run('opens_at_login', 'opens_at_login', {});
+    await run('push_to_talk_chord', 'push_to_talk_chord', {});
+    await run('set_push_to_talk_chord (bad)', 'set_push_to_talk_chord', { chord: 'not a chord' });
+    await run('set_push_to_talk_chord (default)', 'set_push_to_talk_chord', { chord: '' });
 
     // Servers, from the outside. Adding and listing only: switching restarts
     // the app, which would end this check mid-run rather than test anything.

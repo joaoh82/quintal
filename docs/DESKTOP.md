@@ -184,11 +184,24 @@ the same silence from the outside, and treating the second as the first would
 generate a *new* identity over a perfectly good one. A marker file records that
 a key exists, so a locked or denied keychain is reported, never worked around.
 
+### Microphone
+
+Asked for the first time you unmute or hold push-to-talk in the office, and
+only then. Two things make the prompt possible, both in the bundle: a usage
+description in `Info.plist` (without it macOS does not ask — it terminates the
+process the moment the page opens the microphone), and the hardened runtime's
+`com.apple.security.device.audio-input` entitlement. The webview's own
+capture-permission request is granted by the webview layer, so the system
+prompt is the only one. Nothing is recorded, nothing is decoded on the server,
+and agents never hear it — see [VOICE.md](./VOICE.md).
+
 ### Accessibility
 
-Not requested. It will be, when push-to-talk becomes a global hotkey — that
-needs to see key presses while Quintal is not focused, and macOS gates it behind
-Accessibility. There is nothing to grant until voice ships.
+Not needed, and not requested — an earlier version of this page said it would
+be. Global push-to-talk is a *registered* hotkey: the system delivers the chord
+to Quintal rather than Quintal watching every key, and that needs no grant. The
+chord is `⌘⇧Space` (Ctrl+Shift+Space elsewhere), changeable under Settings →
+Profile, and works while any other window has the keyboard.
 
 ## Inspecting it
 
