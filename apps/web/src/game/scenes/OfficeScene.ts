@@ -365,9 +365,17 @@ export class OfficeScene extends Phaser.Scene {
    * wall while you type), *and* it stops calling preventDefault on them (so the
    * characters actually reach the input).
    */
-  /** Pixels per tile, for anything outside the scene that reasons in tiles. */
-  tileSize(): number {
-    return this.#map.tileSize;
+  /**
+   * Pixels per tile, for anything outside the scene that reasons in tiles.
+   *
+   * `null` until `create` has parsed the map. The scene exists — and is
+   * handed out by `game.scene.getScene` — from the moment it is added, while
+   * the map arrives with the assets some time later. The voice watcher
+   * ticks ten times a second from the first moment, and its first ticks
+   * landed in that gap: a TypeError on a field that was not there yet.
+   */
+  tileSize(): number | null {
+    return this.#map ? this.#map.tileSize : null;
   }
 
   /** Light, or put out, the ring that says somebody is talking. */
