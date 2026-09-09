@@ -190,6 +190,9 @@ pub fn capability_for(server: Option<&str>) -> String {
         "allow-pick-repos-dir",
         "allow-opens-at-login",
         "allow-set-opens-at-login",
+        // A device preference, like open-at-login: the chord for this keyboard.
+        "allow-push-to-talk-chord",
+        "allow-set-push-to-talk-chord",
         "allow-list-servers",
         "allow-open-server-picker",
         // Safe from the office: it can only select a server already on the
@@ -515,6 +518,51 @@ mod tests {
         assert!(
             checked >= 9,
             "expected the real command list, found {checked}"
+        );
+    }
+
+    /// Every handler must also be declared.
+    ///
+    /// The other direction. A command wired in `lib.rs` but missing from the
+    /// list in `build.rs` gets no `allow-` permission generated at all, so the
+    /// grant above has nothing to name and the office is told "command not
+    /// found" — with every other command working. That shipped once too, with
+    /// push-to-talk: the runtime was fine, the grant was written, and the
+    /// permission it named did not exist.
+    #[test]
+    fn every_handler_is_declared() {
+        let declared = include_str!("../build.rs")
+            .split_once(".commands(&[")
+            .expect("build.rs declares a command list")
+            .1
+            .split_once("])")
+            .expect("the list is closed")
+            .0
+            .to_string();
+        let handlers = include_str!("lib.rs")
+            .split_once("generate_handler![")
+            .expect("lib.rs wires the handlers")
+            .1
+            .split_once("])")
+            .expect("the handler list is closed")
+            .0
+            .to_string();
+
+        let mut checked = 0;
+        for line in handlers.lines() {
+            let Some(name) = line.trim().strip_prefix("commands::") else {
+                continue;
+            };
+            let name = name.trim_end_matches(',');
+            assert!(
+                declared.contains(&format!("\"{name}\"")),
+                "`{name}` is a handler in lib.rs but not declared in build.rs, so no permission exists to grant it"
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 9,
+            "expected the real handler list, found {checked}"
         );
     }
 

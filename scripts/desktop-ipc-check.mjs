@@ -315,6 +315,11 @@ const EXPECTED = {
   // harness with no credential — which would fail later and less clearly.
   'start_fleet (unregistered)': { ok: false },
   'confirm_backup (junk token)': { ok: false },
+  // The chord is a device preference: readable, refused when the system
+  // could not register it, and empty puts the default back.
+  'push_to_talk_chord': { ok: true, value: 'CommandOrControl+Shift+Space' },
+  'set_push_to_talk_chord (bad)': { ok: false },
+  'set_push_to_talk_chord (default)': { ok: true, value: 'CommandOrControl+Shift+Space' },
   'export_backup': { ok: true },
   'import_identity': { ok: true },
   // Importing replaces the identity, so the confirmation must not carry over.

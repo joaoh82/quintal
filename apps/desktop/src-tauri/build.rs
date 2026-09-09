@@ -30,6 +30,8 @@ fn main() {
             "pick_repos_dir",
             "opens_at_login",
             "set_opens_at_login",
+            "push_to_talk_chord",
+            "set_push_to_talk_chord",
             "list_servers",
             "add_server",
             "switch_server",
