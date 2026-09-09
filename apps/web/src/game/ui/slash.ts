@@ -17,7 +17,7 @@ export interface SlashCommand {
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { name: 'msg', argument: 'name', summary: 'Open a direct message' },
-  { name: 'join', argument: 'channel', summary: 'Join a channel' },
+  { name: 'join', argument: '#channel', summary: 'Go to a channel — yours, or one to join' },
   { name: 'leave', argument: '', summary: 'Leave this channel' },
 ] as const;
 

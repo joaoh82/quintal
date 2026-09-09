@@ -12,6 +12,7 @@ import {
 } from '@quintal/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { matchJoinTargets, type JoinTarget } from './join';
 import { SLASH_COMMANDS, slashQueryAt } from './slash';
 
 /**
@@ -35,8 +36,8 @@ type PickerItem =
 export interface ChatInputProps {
   /** Everyone in the room, for @ autocomplete. */
   roster: RosterEntry[];
-  /** Channel slugs `/join` can complete to. */
-  joinable: string[];
+  /** Every channel `/join` could take you to, yours first. See `joinTargets`. */
+  joinable: JoinTarget[];
   /** True while the input owns the keyboard. */
   focused: boolean;
   onSend: (text: string) => void;
@@ -98,10 +99,12 @@ export function ChatInput({
     }
     if (slash?.part === 'argument') {
       if (slash.verb === 'join') {
-        return joinable
-          .filter((entry) => entry.startsWith(slash.query))
-          .slice(0, 6)
-          .map((entry) => ({ kind: 'slash', key: entry, text: `/join ${entry}`, summary: 'channel' }));
+        return matchJoinTargets(joinable, slash.query).map((target) => ({
+          kind: 'slash',
+          key: target.slug,
+          text: `/join ${target.slug}`,
+          summary: target.joined ? '#' + target.slug + ' — you are in it' : '#' + target.slug + ' — open',
+        }));
       }
       if (slash.verb === 'msg' || slash.verb === 'dm') {
         return roster
@@ -311,10 +314,13 @@ export function ChatInput({
               // Typing the whole thing yourself and pressing Enter must send,
               // not "complete" to the line you already have. That was the
               // bug: `/msg Marvin` + Enter chose `/msg Marvin`, forever.
+              // `/join #engineering` is the whole thing too: the `#` is how
+              // people write a channel, and the picker's line has none.
               if (
                 event.key === 'Enter' &&
                 picked?.kind === 'slash' &&
-                picked.text.trim() === draft.trim()
+                (picked.text.trim() === draft.trim() ||
+                  picked.text.trim() === draft.trim().replace(/^(\/\w+\s+)#/, '$1'))
               ) {
                 submit();
                 return;

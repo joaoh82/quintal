@@ -20,7 +20,7 @@ const KEYS: { keys: string; what: string }[] = [
 
 const SLASH: { keys: string; what: string }[] = [
   { keys: '/msg name', what: 'Open a direct message — your own agents, or anybody' },
-  { keys: '/join channel', what: 'Join a channel' },
+  { keys: '/join #channel', what: 'Go to a channel: switch if you are in it, join if not. Alone, lists them' },
   { keys: '/leave', what: 'Leave the channel you are reading' },
 ];
 

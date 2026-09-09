@@ -4,6 +4,7 @@ import { channelLabel, messageMaxLength, type RosterEntry } from '@quintal/share
 
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
+import { joinTargets } from './join';
 import { Transcript } from './Transcript';
 import { WorkingLine } from './WorkingLine';
 
@@ -104,7 +105,7 @@ export function ChatPanel({
 
       <ChatInput
         roster={roster}
-        joinable={conversations.available.map((channel) => channel.slug)}
+        joinable={joinTargets(conversations.channels, conversations.available)}
         focused={focused}
         onSend={send}
         onFocusChange={onFocusChange}
