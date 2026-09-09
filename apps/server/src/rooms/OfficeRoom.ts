@@ -63,6 +63,7 @@ import {
   type ChannelChatPayload,
   type ChannelChatSendPayload,
   type ChannelJoinPayload,
+  type EarshotPayload,
   type ChannelLeavePayload,
   type ChannelRef,
   type ChannelSubject,
@@ -351,6 +352,11 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#onChannelChat(client, payload),
     );
     this.onMessage(ClientMessage.ChannelsGet, (client) => this.#sendChannels(client.sessionId));
+    // For the voice client's own arithmetic — how loud somebody is by
+    // distance, whether a second person is close enough to open a socket
+    // for. Asked for, not pushed at join: a message sent before the scene
+    // has its handlers is sent to nobody. Receipt of audio is decided here.
+    this.onMessage(ClientMessage.EarshotGet, (client) => this.#sendEarshot(client));
     this.onMessage(ClientMessage.DmOpen, (client, payload: DmOpenPayload) =>
       void this.#onDmOpen(client, payload),
     );
@@ -1492,10 +1498,22 @@ export class OfficeRoom extends Room<OfficeState> {
 
   async #refreshSettings(): Promise<void> {
     try {
+      const before = this.#settings.chatRadiusTiles;
       this.#settings = await getOfficeSettings(getDb(), this.#workspaceId);
+      if (this.#settings.chatRadiusTiles !== before) {
+        for (const client of this.clients) this.#sendEarshot(client);
+      }
     } catch (error: unknown) {
       logger.error('[office] could not read settings', error);
     }
+  }
+
+  /** How far a voice carries here. Humans only: an agent has nothing to do with it. */
+  #sendEarshot(client: Client): void {
+    if (this.#agents.has(client.sessionId)) return;
+    client.send(ServerMessage.Earshot, {
+      radiusTiles: this.#settings.chatRadiusTiles,
+    } satisfies EarshotPayload);
   }
 
   // --- agent messages ------------------------------------------------------

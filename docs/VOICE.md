@@ -144,7 +144,25 @@ Capture → 20 ms frames → Opus → header → socket; socket → header → p
 jitter buffer → Opus → per-peer gain by distance → one output. The reference
 client lives in `apps/web/src/game/voice/` and uses WebCodecs
 (`AudioEncoder` / `AudioDecoder` with `opus`); anything that produces the
-frames above is equally welcome. *(The reference client is the next slice of
-this work and is not in the repository yet; the relay is.)* Open the socket lazily — only when a
+frames above is equally welcome. Open the socket lazily — only when a
 second human is within earshot — and close it when alone again: a person
 alone with their agents should cost the server nothing.
+
+What the reference client does, for anyone writing another:
+
+- **Exists only when needed.** It watches the room's players ten times a
+  second and opens the socket when the nearest other human is within the
+  radius plus two tiles, closing it four tiles past the radius. The
+  microphone is not touched until the person unmutes or holds push-to-talk,
+  so alone with agents there is no socket and no mic.
+- **Sends nothing while muted.** Mute is a gate at the worklet; push-to-talk
+  (hold Space) opens it while held. After five frames of silence it sends
+  no more until there is sound — that is what DTX means on the wire.
+- **Plays with a per-peer jitter buffer** that targets 60 ms, grows toward
+  200 ms after repeated late frames and shrinks toward 40 ms when calm; a
+  pause in the frames is not counted as lateness. Volume follows tile
+  distance: full within two tiles, fading to nothing at the radius.
+- **Lights rings from frames, not level:** five non-silence frames in half a
+  second means speaking, on the avatar and in the roster.
+- **Belongs to the game session.** Torn down before the session rebuilds
+  after a dropped connection and made again with the new seat and token.
