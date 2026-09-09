@@ -145,16 +145,28 @@ pub fn plan(harness: &Path, repos_dir: &Path) -> Result<Plan, SpawnError> {
 const SETTINGS_FILE: &str = "settings.json";
 
 #[derive(Debug, Default, Serialize, serde::Deserialize)]
-struct Settings {
+pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    repos_dir: Option<String>,
+    pub repos_dir: Option<String>,
+    /// The global push-to-talk chord, or none for the default. A device
+    /// preference: the key you hold is about this keyboard, not the office.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_to_talk: Option<String>,
 }
 
 fn settings_path(dir: &Path) -> PathBuf {
     dir.join(SETTINGS_FILE)
 }
 
-fn read_settings(dir: &Path) -> Settings {
+/// Write the whole file. Callers read, change one field, and write back —
+/// a setting saved by writing only its own field would erase the others.
+pub fn write_settings(dir: &Path, settings: &Settings) -> Result<(), SpawnError> {
+    let text = serde_json::to_string_pretty(settings)
+        .map_err(|error| SpawnError::Io(error.to_string()))?;
+    std::fs::write(settings_path(dir), text).map_err(|error| SpawnError::Io(error.to_string()))
+}
+
+pub fn read_settings(dir: &Path) -> Settings {
     std::fs::read_to_string(settings_path(dir))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
@@ -176,12 +188,9 @@ pub fn set_repos_dir(app_dir: &Path, chosen: &Path) -> Result<(), SpawnError> {
     if !chosen.is_dir() {
         return Err(SpawnError::BadWorkspace(chosen.display().to_string()));
     }
-    let settings = Settings {
-        repos_dir: Some(chosen.display().to_string()),
-    };
-    let text = serde_json::to_string_pretty(&settings)
-        .map_err(|error| SpawnError::Io(error.to_string()))?;
-    std::fs::write(settings_path(app_dir), text).map_err(|error| SpawnError::Io(error.to_string()))
+    let mut settings = read_settings(app_dir);
+    settings.repos_dir = Some(chosen.display().to_string());
+    write_settings(app_dir, &settings)
 }
 
 /// Where this machine keeps its repositories, matching the harness's default.

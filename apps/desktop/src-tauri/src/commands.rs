@@ -66,6 +66,20 @@ impl From<SpawnError> for HostError {
     }
 }
 
+impl From<crate::ptt::PttError> for HostError {
+    fn from(error: crate::ptt::PttError) -> Self {
+        let code = match &error {
+            crate::ptt::PttError::BadChord(_) => "bad_chord",
+            crate::ptt::PttError::Register(_) => "shortcut",
+            crate::ptt::PttError::Settings(_) => "settings",
+        };
+        HostError {
+            code: code.into(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<IdentityError> for HostError {
     fn from(error: IdentityError) -> Self {
         let code = match &error {
@@ -500,4 +514,26 @@ pub fn open_server_picker(
     })?;
     let _ = state.fleet.stop();
     app.restart();
+}
+
+// --- push-to-talk -----------------------------------------------------------
+
+/// The chord that talks while some other window has the keyboard.
+#[tauri::command]
+pub fn push_to_talk_chord(state: State<'_, HostState>) -> String {
+    crate::ptt::chord(&state.dir)
+}
+
+/// Change it. Empty restores the default. Refused, and unchanged, for a chord
+/// the system cannot register — a key that never fires is worse than a
+/// message.
+#[tauri::command]
+pub fn set_push_to_talk_chord(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+    chord: String,
+) -> Result<String, HostError> {
+    let stored = crate::ptt::set_chord(&state.dir, &chord)?;
+    crate::ptt::register(&app, &stored)?;
+    Ok(stored)
 }

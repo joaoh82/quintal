@@ -84,6 +84,20 @@ export default function OfficeGame() {
   // The key is a device preference; read it once the page has a window.
   useEffect(() => setOverlayKey(getOverlayKey()), []);
 
+  // The desktop app's global push-to-talk lands here: the same `setTalking`
+  // the Space key drives, from a chord pressed while some other window had
+  // the keyboard. Defined only while this page is up, so a settings screen
+  // holding the key is not a settings screen that talks.
+  useEffect(() => {
+    const hook = (down: boolean): void => {
+      sessionRef.current?.setTalking(down);
+    };
+    (window as unknown as { __quintalPushToTalk?: (down: boolean) => void }).__quintalPushToTalk = hook;
+    return () => {
+      delete (window as unknown as { __quintalPushToTalk?: unknown }).__quintalPushToTalk;
+    };
+  }, []);
+
   // `?` opens help; the overlay key opens the conversations panel. The chat
   // input stops keydown propagation, so typing either in a sentence never
   // reaches this.

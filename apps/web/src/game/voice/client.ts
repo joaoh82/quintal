@@ -137,7 +137,26 @@ export class VoiceClient {
       devices: [],
       deviceId: null,
       error: null,
+      stats: { connectedMs: 0, peersMax: 0 },
     };
+  }
+
+  /** When the socket opened, for the connected-time counter. */
+  #openedAt: number | null = null;
+
+  #accountSocket(open: boolean): void {
+    const now = Date.now();
+    if (open) {
+      this.#openedAt = now;
+      return;
+    }
+    if (this.#openedAt !== null) {
+      this.#state = {
+        ...this.#state,
+        stats: { ...this.#state.stats, connectedMs: this.#state.stats.connectedMs + (now - this.#openedAt) },
+      };
+      this.#openedAt = null;
+    }
   }
 
   get state(): VoiceUiState {
@@ -292,6 +311,7 @@ export class VoiceClient {
       if (this.#ws !== ws) return;
       this.#ws = null;
       this.#retryAt = Date.now() + RETRY_MS;
+      this.#accountSocket(false);
       for (const peer of [...this.#peersById.values()]) this.#dropPeer(peer);
       this.#state = {
         ...this.#state,
@@ -310,6 +330,7 @@ export class VoiceClient {
     const ws = this.#ws;
     this.#ws = null;
     if (ws) ws.close(1000, 'leaving earshot');
+    this.#accountSocket(false);
     for (const peer of [...this.#peersById.values()]) this.#dropPeer(peer);
     // Nobody to talk to means no microphone either: the browser's "mic in
     // use" indicator should be as honest as the wire. The mute switch is
@@ -323,6 +344,7 @@ export class VoiceClient {
     switch (message.type) {
       case 'welcome':
         this.#state = { ...this.#state, socket: 'open', error: null };
+        this.#accountSocket(true);
         void this.#ensureContext();
         // Set to send — unmuted, or the key already held — so the mic comes
         // back with the socket, without asking permission again.
@@ -335,7 +357,14 @@ export class VoiceClient {
           const peer = this.#peersById.get(sessionId);
           if (peer) this.#dropPeer(peer);
         }
-        this.#state = { ...this.#state, peers: this.#peersById.size };
+        this.#state = {
+          ...this.#state,
+          peers: this.#peersById.size,
+          stats: {
+            ...this.#state.stats,
+            peersMax: Math.max(this.#state.stats.peersMax, this.#peersById.size),
+          },
+        };
         this.#emit();
         return;
       case 'error':

@@ -87,6 +87,9 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // Off unless somebody turns it on. Read rather than toggled: flipping a
     // login item on a contributor's machine is not a test's business.
     await run('opens_at_login', 'opens_at_login', {});
+    await run('push_to_talk_chord', 'push_to_talk_chord', {});
+    await run('set_push_to_talk_chord (bad)', 'set_push_to_talk_chord', { chord: 'not a chord' });
+    await run('set_push_to_talk_chord (default)', 'set_push_to_talk_chord', { chord: '' });
 
     // Servers, from the outside. Adding and listing only: switching restarts
     // the app, which would end this check mid-run rather than test anything.
@@ -312,6 +315,11 @@ const EXPECTED = {
   // harness with no credential — which would fail later and less clearly.
   'start_fleet (unregistered)': { ok: false },
   'confirm_backup (junk token)': { ok: false },
+  // The chord is a device preference: readable, refused when the system
+  // could not register it, and empty puts the default back.
+  'push_to_talk_chord': { ok: true, value: 'CommandOrControl+Shift+Space' },
+  'set_push_to_talk_chord (bad)': { ok: false },
+  'set_push_to_talk_chord (default)': { ok: true, value: 'CommandOrControl+Shift+Space' },
   'export_backup': { ok: true },
   'import_identity': { ok: true },
   // Importing replaces the identity, so the confirmation must not carry over.

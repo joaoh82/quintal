@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Merged into the bundle's Info.plist by the Tauri bundler. The one key here
+    is the reason the webview may open the microphone at all: without a usage
+    description, macOS does not ask the person — it terminates the process the
+    moment `getUserMedia` runs. The wording is what the system prompt shows.
+  -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Quintal uses the microphone for voice with the people near you in the office. Nothing is recorded, and your agents never hear it.</string>
+</dict>
+</plist>

@@ -251,4 +251,9 @@ export interface VoiceUiState {
   deviceId: string | null;
   /** A one-line reason the last thing did not work, or null. */
   error: string | null;
+  /**
+   * For instrumentation (Step 0.12), kept by the client and read by nobody
+   * yet: time with a socket open, and the most people heard at once.
+   */
+  stats: { connectedMs: number; peersMax: number };
 }

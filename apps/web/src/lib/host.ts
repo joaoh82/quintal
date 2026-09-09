@@ -211,6 +211,16 @@ export interface HostBridge {
   removeServer(url: string): Promise<ServerList>;
   /** Go back to the picker, restarting into it. */
   openServerPicker(): Promise<void>;
+
+  /**
+   * The chord that is push-to-talk while some other window has the keyboard.
+   *
+   * A device preference, like the theme: which key you hold is about this
+   * keyboard, not the office. Empty restores the default; a chord the
+   * system cannot register is refused and nothing changes.
+   */
+  pushToTalkChord(): Promise<string>;
+  setPushToTalkChord(chord: string): Promise<string>;
 }
 
 export interface Server {
@@ -327,6 +337,8 @@ function tauriBridge(): HostBridge {
     switchServer: (url) => call<void>('switch_server', { url }),
     removeServer: (url) => call<ServerList>('remove_server', { url }),
     openServerPicker: () => call<void>('open_server_picker'),
+    pushToTalkChord: () => call<string>('push_to_talk_chord'),
+    setPushToTalkChord: (chord) => call<string>('set_push_to_talk_chord', { chord }),
     opensAtLogin: () => call<boolean>('opens_at_login'),
     setOpensAtLogin: (enabled) => call<void>('set_opens_at_login', { enabled }),
   };

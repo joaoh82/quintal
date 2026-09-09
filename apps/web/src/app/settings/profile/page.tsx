@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 import { OverlayKeyField } from './OverlayKeyField';
+import { PushToTalkField } from './PushToTalkField';
 import { ProfileForm } from './ProfileForm';
 import { requestSession } from '@/lib/session';
 
@@ -51,6 +52,8 @@ export default async function ProfilePage() {
         </p>
         <ThemeToggle />
       </section>
+
+      <PushToTalkField />
     </div>
   );
 }
