@@ -153,8 +153,11 @@ What the reference client does, for anyone writing another:
 - **Exists only when needed.** It watches the room's players ten times a
   second and opens the socket when the nearest other human is within the
   radius plus two tiles, closing it four tiles past the radius. The
-  microphone is not touched until the person unmutes or holds push-to-talk,
-  so alone with agents there is no socket and no mic.
+  microphone is asked for when the person first unmutes or holds
+  push-to-talk — the prompt belongs to that key press — and held only
+  while a socket is open: alone with agents there is no socket and no mic.
+  The button reports the switch (Muted / Unmuted), not the wire; the line
+  beside it says whether anybody is near.
 - **Sends nothing while muted.** Mute is a gate at the worklet; push-to-talk
   (hold Space) opens it while held. After five frames of silence it sends
   no more until there is sound — that is what DTX means on the wire.
