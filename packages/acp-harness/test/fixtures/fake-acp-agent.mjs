@@ -14,6 +14,7 @@
  *   FAKE_CHUNKS         split the reply into N chunks (default 1)
  *   FAKE_RECORD         append every received request to this file as JSONL
  *   FAKE_DELAY_MS       pause this long mid-turn, so a status line is observable
+ *   FAKE_HEARTBEAT_MS   while pausing, send a thought chunk this often — a slow turn that is alive
  *   FAKE_WARNING        emit "Warning: <text>\n\n" as one message chunk before the reply
  *   FAKE_TOOL_CALL      "say:{\"text\":\"on it\"}": call a quintal tool mid-turn, before
  *                       the reply, the way the MCP server would — straight at the bridge
@@ -60,6 +61,7 @@ const crashAfter = process.env.FAKE_CRASH_AFTER
   : Number.POSITIVE_INFINITY;
 const chunks = Number(process.env.FAKE_CHUNKS ?? 1);
 const delayMs = Number(process.env.FAKE_DELAY_MS ?? 0);
+const heartbeatMs = Number(process.env.FAKE_HEARTBEAT_MS ?? 0);
 const models = (process.env.FAKE_MODELS ?? '')
   .split(',')
   .map((entry) => entry.trim())
@@ -199,7 +201,22 @@ async function handle(message) {
         });
       }
 
-      if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+      if (delayMs > 0) {
+        if (heartbeatMs > 0) {
+          // Thinking out loud while it waits: the shape of a model that is
+          // slow but not gone.
+          const until = Date.now() + delayMs;
+          while (Date.now() < until) {
+            await new Promise((r) => setTimeout(r, Math.min(heartbeatMs, until - Date.now())));
+            notify('session/update', {
+              sessionId,
+              update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: '…' } },
+            });
+          }
+        } else {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      }
 
       if (toolCall) {
         const result = await callTool(toolCall);

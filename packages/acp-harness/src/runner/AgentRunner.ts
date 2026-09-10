@@ -88,6 +88,20 @@ export interface RunnerEvents {
 const PERMISSION_TIMEOUT_MS = 300_000;
 
 /**
+ * How long a turn may go with no sign of life from the runtime — no chunk,
+ * no thought, no tool call — before it is stopped. Five minutes: a model
+ * that is thinking streams its thoughts, and a tool that is running reports
+ * its status, so silence this long is a connection that has died, not work.
+ * Buzz allows fifteen; a provider that dropped the socket at seven and hung
+ * again at twelve is what set this one. `QUINTAL_TURN_IDLE_MS` overrides it,
+ * for tests.
+ */
+function turnIdleMs(): number {
+  const raw = Number(process.env.QUINTAL_TURN_IDLE_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 300_000;
+}
+
+/**
  * Gap between two lines we send. The office allows an agent one every
  * `AGENT_CHAT_INTERVAL_MS`; a little over, so a burst is paced rather than
  * refused and then lost.
@@ -763,6 +777,9 @@ export class AgentRunner {
         prompted: false,
         cancelled: false,
         memoryGeneration: this.#memoryGeneration,
+        idleTimer: null,
+        idled: false,
+        awaitingOwner: 0,
       };
       // Claimed in the same tick: nothing else can take this worker now.
       worker.turn = turn;
@@ -787,6 +804,8 @@ export class AgentRunner {
     } catch (error: unknown) {
       requeued = this.#turnFailed(turn, triggers, steer, error);
     } finally {
+      if (turn.idleTimer) clearTimeout(turn.idleTimer);
+      turn.idleTimer = null;
       this.#turns.delete(turn.id);
       if (turn.sessionId !== null) this.#turnBySession.delete(sessionKey(worker, turn.sessionId));
       this.#inFlight.delete(scope);
@@ -922,6 +941,7 @@ export class AgentRunner {
     this.#audit('prompt', { scope, session, worker: worker.index, envelope, priming });
 
     turn.prompted = true;
+    this.#touch(turn);
     const response = await worker.prompt({
       sessionId: session,
       prompt: [{ type: 'text', text }],
@@ -1337,6 +1357,7 @@ export class AgentRunner {
     content: string,
     expectedHash?: string,
   ): Promise<unknown> {
+    if (worker.turn) this.#touch(worker.turn);
     const result = await this.#gateway.memorySet(slug, content, expectedHash);
     if (slug === 'core') {
       const turn = worker.turn;
@@ -1373,6 +1394,64 @@ export class AgentRunner {
 
   // --- ACP updates ---------------------------------------------------------
 
+  /**
+   * A sign of life from the runtime: restart the turn's idle clock.
+   *
+   * Called for every session update and every tool the turn calls through
+   * the bridge. A turn whose clock runs out is stopped by `#stalled`.
+   */
+  #touch(turn: Turn): void {
+    if (turn.idled || turn.cancelled || !this.#turns.has(turn.id)) return;
+    if (turn.idleTimer) clearTimeout(turn.idleTimer);
+    turn.idleTimer = null;
+    // Waiting on the owner is not the runtime being silent. The question has
+    // its own clock; this one starts again when it is answered.
+    if (turn.awaitingOwner > 0) return;
+    turn.idleTimer = setTimeout(() => this.#stalled(turn), turnIdleMs());
+    turn.idleTimer.unref?.();
+  }
+
+  /**
+   * A tool-approval question was put to the owner: hold the idle clock until
+   * it is answered. Returns the matching release, which restarts it.
+   */
+  #holdIdle(turn: Turn): () => void {
+    turn.awaitingOwner += 1;
+    if (turn.idleTimer) clearTimeout(turn.idleTimer);
+    turn.idleTimer = null;
+    return () => {
+      turn.awaitingOwner = Math.max(0, turn.awaitingOwner - 1);
+      this.#touch(turn);
+    };
+  }
+
+  /**
+   * The runtime went silent for the whole idle allowance. Nothing has moved
+   * — no words, no thoughts, no tools — and nothing is going to: this is a
+   * provider that dropped the connection, or a model that hung, and without
+   * this the nameplate would say "thinking" until somebody typed `!cancel`.
+   *
+   * Said where the turn was asked, before the cancel, so the person waiting
+   * learns why the answer is not coming — and then the turn is cancelled the
+   * way the owner would have. Whatever the runtime had streamed before it
+   * went quiet is posted by the usual path when the prompt returns.
+   */
+  #stalled(turn: Turn): void {
+    turn.idleTimer = null;
+    if (turn.idled || turn.cancelled || turn.awaitingOwner > 0 || !this.#turns.has(turn.id)) return;
+    turn.idled = true;
+    const span = describeSpan(turnIdleMs());
+    this.#log('warn', `no word from the runtime for ${span} — stopping the turn in "${turn.scope}"`);
+    if (!isBanterScope(turn.scope) && !isForgetScope(turn.scope)) {
+      this.#speak(
+        `My model has said nothing for ${span}, so I have stopped that turn. Ask again and I will start over.`,
+        turn.scope,
+      );
+    }
+    turn.cancelled = true;
+    if (turn.sessionId) turn.worker.cancel(turn.sessionId);
+  }
+
   #onAcpUpdate(worker: Worker, params: schema.SessionNotification): void {
     const update = params.update as { sessionUpdate?: string } & Record<string, unknown>;
     // By session first — that is what the protocol keys on, and each
@@ -1380,6 +1459,8 @@ export class AgentRunner {
     // worker otherwise, since a worker runs one turn at a time.
     const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId)) ?? worker.turn;
     if (!turn) return;
+    // Any update at all is a sign of life, thoughts included.
+    this.#touch(turn);
 
     switch (update.sessionUpdate) {
       case 'agent_message_chunk': {
@@ -1461,6 +1542,9 @@ export class AgentRunner {
     const me = ready?.name ?? this.name;
 
     if (turn) this.#setTurnStatus(turn, `waiting for ${owner}`);
+    // The idle clock is the runtime's; the wait that follows is the owner's.
+    // Held until the answer, or the question's own timeout.
+    const release = turn ? this.#holdIdle(turn) : () => {};
     // The tool is always named in the offered replies: whether a second
     // question will be open by the time the owner reads this is not known
     // when it is asked, and a bare "yes" still answers the oldest one.
@@ -1470,22 +1554,27 @@ export class AgentRunner {
     );
     this.#log('info', `permission requested: ${toolName}`);
 
-    const decision = await new Promise<PermissionDecision>((resolve) => {
-      const timer = setTimeout(() => {
-        this.#permissionWaiters.delete(callId);
-        this.#log('warn', `permission for ${toolName} timed out — denying`);
-        resolve('deny');
-      }, PERMISSION_TIMEOUT_MS);
-
-      this.#permissionWaiters.set(callId, {
-        toolName,
-        resolve: (answer) => {
-          clearTimeout(timer);
+    let decision: PermissionDecision;
+    try {
+      decision = await new Promise<PermissionDecision>((resolve) => {
+        const timer = setTimeout(() => {
           this.#permissionWaiters.delete(callId);
-          resolve(answer);
-        },
+          this.#log('warn', `permission for ${toolName} timed out — denying`);
+          resolve('deny');
+        }, PERMISSION_TIMEOUT_MS);
+
+        this.#permissionWaiters.set(callId, {
+          toolName,
+          resolve: (answer) => {
+            clearTimeout(timer);
+            this.#permissionWaiters.delete(callId);
+            resolve(answer);
+          },
+        });
       });
-    });
+    } finally {
+      release();
+    }
 
     this.#audit('permission', { tool: toolName, decision });
     return select(options, decision);
@@ -1564,6 +1653,7 @@ export class AgentRunner {
    * mistaken for another conversation's.
    */
   #sayNow(worker: Worker, text: string): { posted_to: string; parts: number } {
+    if (worker.turn) this.#touch(worker.turn);
     const scope = worker.turn?.scope ?? this.#scopeOf();
     const parts = this.#deliver(text, scope);
     this.#audit('say', { scope, worker: worker.index, text });
@@ -1584,7 +1674,10 @@ export class AgentRunner {
    */
   #statusFromTool(worker: Worker, status: string): void {
     const turn = worker.turn;
-    if (turn) this.#setTurnStatus(turn, status);
+    if (turn) {
+      this.#touch(turn);
+      this.#setTurnStatus(turn, status);
+    }
     // No turn: a tool call that landed after its turn ended. Sent to the
     // office on its own it would say the work is nowhere, and blank out
     // every other turn's conversation.
@@ -1740,6 +1833,23 @@ export class AgentRunner {
 
 /** What the owner said, or what silence means. */
 type PermissionDecision = 'once' | 'always' | 'deny';
+
+/**
+ * A span of time, said the way a person would: "5 minutes", "30 seconds",
+ * "500 ms". The stall notice quotes the allowance, and an allowance set
+ * short for a test must not be reported as a minute.
+ */
+export function describeSpan(ms: number): string {
+  if (ms >= 60_000) {
+    const minutes = Math.round(ms / 60_000);
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  }
+  if (ms >= 1_000) {
+    const seconds = Math.round(ms / 1_000);
+    return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  }
+  return `${Math.round(ms)} ms`;
+}
 
 /**
  * Pick the runtime's option that matches the decision. `always` falls back

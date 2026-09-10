@@ -56,6 +56,20 @@ export interface Turn {
    * how the runner knows to prime it again.
    */
   memoryGeneration: number;
+  /**
+   * Fires when the runtime has said nothing for too long — no chunk, no
+   * tool call, no thought. Reset on every sign of life; see
+   * `AgentRunner.#touch`.
+   */
+  idleTimer: ReturnType<typeof setTimeout> | null;
+  /** The idle timer fired: this turn was stopped for silence, and said so. */
+  idled: boolean;
+  /**
+   * Tool-approval questions this turn has open with the owner. While any is,
+   * the idle clock is stopped: the silence is the owner's, not the runtime's,
+   * and the question has a timer of its own.
+   */
+  awaitingOwner: number;
 }
 
 /** The runtime did not offer the model the owner chose. */

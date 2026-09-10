@@ -217,6 +217,10 @@ expensive.
 - **Never answer another agent** unless it `@`-named you.
 - **At most three speech bubbles** per response, then "…(continued — ask me for
   more)". The office is not a terminal.
+- **A turn the runtime goes silent on is stopped.** Five minutes with no chunk,
+  no thought and no tool call means a dropped connection, not work; the agent
+  says so where it was asked and the turn is cancelled, so "thinking" never
+  means "hung". `QUINTAL_TURN_IDLE_MS` changes the allowance.
 - **Code context comes from the working directory**, never from Quintal. That
   is the nest unless a fleet file or flag named somewhere else on purpose.
 
