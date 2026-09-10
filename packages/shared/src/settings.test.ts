@@ -28,6 +28,16 @@ describe('normaliseSettings', () => {
     assert.equal(normaliseSettings({ replyWindowSeconds: 0 }).replyWindowSeconds, 0);
   });
 
+  it('keeps agent parallelism between one and thirty-two, ten by default', () => {
+    // A row written before the column existed, and a form that sent nothing.
+    assert.equal(normaliseSettings(null).agentParallelism, 10);
+    assert.equal(normaliseSettings({}).agentParallelism, 10);
+    // Zero would be an agent that never answers; it is not a setting.
+    assert.equal(normaliseSettings({ agentParallelism: 0 }).agentParallelism, 1);
+    assert.equal(normaliseSettings({ agentParallelism: 500 }).agentParallelism, 32);
+    assert.equal(normaliseSettings({ agentParallelism: 4 }).agentParallelism, 4);
+  });
+
   it('leaves idle life on unless an office turned it off', () => {
     assert.equal(normaliseSettings(null).idleLife, true);
     assert.equal(normaliseSettings({}).idleLife, true);

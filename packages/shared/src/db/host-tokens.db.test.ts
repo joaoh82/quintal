@@ -10,6 +10,7 @@ import {
   revokeAgent,
   setAgentEnabled,
   setAgentLaunch,
+  setAgentMaxSessions,
 } from './agents.js';
 import {
   createHostToken,
@@ -20,6 +21,7 @@ import {
   registerMachineForUser,
   revokeHostToken,
 } from './host-tokens.js';
+import { saveOfficeSettings } from './settings.js';
 import { createTestDb, createTestUser } from './testing.js';
 
 /**
@@ -110,6 +112,43 @@ describe('resolving a host token', () => {
 });
 
 describe('what a host token may act as, end to end', () => {
+  it('tells a host how many conversations each agent may answer at once', async () => {
+    const { db, josh } = await setup();
+    const created = await createHostToken(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'laptop',
+    });
+    const launch = { runtimeId: 'claude-code', repoSpec: 'api', hostLabel: 'laptop' };
+    const follows = await makeAgent(db, josh, 'follows-office', launch);
+    const own = await createAgent(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      name: 'has-its-own',
+      spriteKey: 'slate',
+      launch,
+      maxSessions: 3,
+    });
+    const host = (await findHostByToken(db, created.token))!;
+
+    const byName = async () =>
+      Object.fromEntries((await fleetForHost(db, host, 'laptop')).map((m) => [m.name, m.parallelism]));
+
+    // The office default, resolved for the host: it sizes a pool by this and
+    // should not have to know where the number came from.
+    assert.deepEqual(await byName(), { 'follows-office': 10, 'has-its-own': 3 });
+
+    // Changing the office default moves only the agent that follows it.
+    await saveOfficeSettings(db, josh.workspaceId, { agentParallelism: 2 });
+    assert.deepEqual(await byName(), { 'follows-office': 2, 'has-its-own': 3 });
+
+    // An agent's own setting is clamped where it is written, never refused
+    // into a row a harness cannot use.
+    await setAgentMaxSessions(db, follows.id, 500);
+    await setAgentMaxSessions(db, own.id, null);
+    assert.deepEqual(await byName(), { 'follows-office': 32, 'has-its-own': 2 });
+  });
+
   it('lets a machine act as its owner’s agent', async () => {
     const { db, josh } = await setup();
     const created = await createHostToken(db, {

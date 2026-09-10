@@ -60,10 +60,16 @@ export class OfficePlayer extends Schema {
   /** When the balloon comes down, ms since epoch. 0 means "when cleared". */
   emoteUntil = 0;
   /**
-   * For agents: the channel or DM the current turn is for, or empty when the
-   * work is spatial (a zone) or there is none. A status line says *what* an
-   * agent is doing; this says *where*, so the conversation it is answering
-   * can show it working there rather than only the map.
+   * For agents: where the work is. A status line says *what* an agent is
+   * doing; this says *where*, so each conversation it is answering can show
+   * it working there rather than only the map.
+   *
+   * Comma-separated, because an agent may answer several conversations at
+   * once: each entry is a channel or DM id, or the word `zone` for spatial
+   * work in the room it stands in. Empty means either no work or — for a
+   * harness that predates parallel turns — spatial work; `workingInTokens`
+   * reads both the same way. A string rather than an array because every
+   * client already syncs and diffs it as one, and ids never contain commas.
    */
   workingIn = '';
   /**
@@ -122,6 +128,22 @@ defineTypes(OfficePlayer, {
   pubkey: 'string',
   avatar: 'string',
 });
+
+/** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */
+export const WORKING_IN_ZONE = 'zone';
+
+/**
+ * Read `workingIn` as the places an agent is working: channel or DM ids, and
+ * `WORKING_IN_ZONE` for the room. An empty value with any status at all is a
+ * harness that predates parallel turns saying "spatial", and reads as such.
+ */
+export function workingInTokens(workingIn: string): string[] {
+  const tokens = workingIn
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  return tokens.length === 0 ? [WORKING_IN_ZONE] : tokens;
+}
 
 export class OfficeState extends Schema {
   mapId = 'hq';

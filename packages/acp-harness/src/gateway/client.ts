@@ -316,11 +316,25 @@ export class GatewayClient {
     this.#room?.send(AgentMessage.HostReport, payload);
   }
 
-  /** The status line, and — for a channel or DM turn — where the work is. */
-  setStatus(status: string, channelId?: string): void {
+  /**
+   * The status line, and where the work is.
+   *
+   * `channelId` is the conversation the status is mostly about — the turn
+   * that last said something — and is what an older office reads. `where`
+   * is the whole picture for an agent answering several conversations at
+   * once: every channel or DM with a turn in flight, and whether any of the
+   * work is spatial.
+   */
+  setStatus(
+    status: string,
+    channelId?: string,
+    where?: { channelIds?: string[]; spatial?: boolean },
+  ): void {
     this.#room?.send(AgentMessage.SetStatus, {
       status,
       ...(channelId ? { channelId } : {}),
+      ...(where?.channelIds !== undefined ? { channelIds: where.channelIds } : {}),
+      ...(where?.spatial !== undefined ? { spatial: where.spatial } : {}),
     } satisfies AgentSetStatusPayload);
   }
 
@@ -352,8 +366,17 @@ export class GatewayClient {
     return this.#request<MemoryGetResult>(AgentMessage.MemoryGet, { slug });
   }
 
-  memorySet(slug: string, content: string): Promise<MemorySetResult> {
-    return this.#request<MemorySetResult>(AgentMessage.MemorySet, { slug, content });
+  /**
+   * Write a slug. With `expectedHash` — the `hash` a read returned — the
+   * office refuses the write if the slug changed in between, so two
+   * sessions of one agent cannot silently overwrite each other.
+   */
+  memorySet(slug: string, content: string, expectedHash?: string): Promise<MemorySetResult> {
+    return this.#request<MemorySetResult>(AgentMessage.MemorySet, {
+      slug,
+      content,
+      ...(expectedHash !== undefined ? { expectedHash } : {}),
+    });
   }
 
   /** Occupants as of the last roster the office sent. */

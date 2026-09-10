@@ -1,15 +1,17 @@
 /**
- * One ACP session per (agent, zone), LRU-capped.
+ * One ACP session per scope, LRU-capped — one store per runtime process.
  *
- * Why zones and not one session per agent: a zone is a context scope. The
- * conversation you have standing in the Deep Work room is a different thread
- * from the one in the Agent Bay, and giving each its own session is what stops
- * an agent dragging the whole day's context into every exchange. It also means
- * a task that gets its own room gets its own fresh session for free.
+ * A scope is a context: a zone, a channel, a direct message. The conversation
+ * you have standing in the Deep Work room is a different thread from the one
+ * in the Agent Bay, and from the one in #engineering, and giving each its own
+ * session is what stops an agent dragging the whole day's context into every
+ * exchange. It also means a task that gets its own room gets its own fresh
+ * session for free.
  *
- * The cap exists because sessions cost tokens and harnesses keep them warm. Four
- * is enough for a lobby plus three rooms; past that the least recently used one
- * is ended rather than left to rot.
+ * The cap exists because sessions cost tokens and harnesses keep them warm.
+ * Four is enough for a lobby plus three rooms; past that the least recently
+ * used one is ended rather than left to rot. An agent answering several
+ * conversations at once runs several processes, each with a store of its own.
  */
 
 /** The open floor is a scope too — everything outside a named zone. */
@@ -53,6 +55,11 @@ export class SessionStore {
 
   scopes(): string[] {
     return [...this.#sessions.keys()];
+  }
+
+  /** Whether a session exists for this scope — without touching its recency. */
+  has(scope: string): boolean {
+    return this.#sessions.has(scope);
   }
 
   get(scope: string): SessionRecord | undefined {

@@ -150,6 +150,7 @@ describe('how an office works', () => {
       chatRadiusTiles: 12,
       walkUpRadiusTiles: 3,
       replyWindowSeconds: 90,
+      agentParallelism: 10,
       idleLife: true,
       banter: 'off',
     });

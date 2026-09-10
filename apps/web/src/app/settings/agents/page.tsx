@@ -2,6 +2,7 @@ import { AGENT_CORE_MEMORY_SLUG } from '@quintal/shared';
 import {
   findMembership,
   getAgentMemory,
+  getOfficeSettings,
   getDb,
   listAgentMemorySlugs,
   listAgentsForWorkspace,
@@ -89,6 +90,7 @@ export default async function AgentsSettingsPage() {
 
       <AgentsManager
         agents={agents}
+        officeParallelism={(await getOfficeSettings(db, workspace.id)).agentParallelism}
         currentUserId={session.user.id}
         currentUserPubkey={session.user.pubkey}
         canAdministerAll={canAdministerAll}

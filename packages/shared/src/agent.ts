@@ -89,6 +89,47 @@ export const AGENT_MOVE_INTERVAL_MS = 500;
 /** Presence line under the nameplate: "running tests…". */
 export const AGENT_STATUS_MAX_LENGTH = 60;
 
+// --- parallelism -----------------------------------------------------------
+
+/**
+ * How many conversations one agent may answer at the same time.
+ *
+ * A number of *turns in flight*, not of sessions: an agent keeps a session per
+ * conversation regardless, and this is how many of them may be running a
+ * prompt at once. One is the old behaviour — a DM sent while the agent is
+ * reviewing a pull request in a channel waits for the review to finish, with
+ * nothing to show for it. Ten is enough that a person and a couple of
+ * channels never queue behind each other; thirty-two is where a laptop stops
+ * being the right machine to run it on.
+ *
+ * Each turn is one runtime process (Claude Code, Codex, …), spawned when it
+ * is first needed, so the number is a ceiling and not a cost until it is
+ * used.
+ */
+export const AGENT_PARALLELISM_DEFAULT = 10;
+export const AGENT_PARALLELISM_MIN = 1;
+export const AGENT_PARALLELISM_MAX = 32;
+
+/**
+ * Coerce a parallelism setting from a form, an API or a row. `null` for
+ * "use the office default" (blank, absent, or not a number); out-of-range
+ * values are clamped rather than refused so a stale row keeps working.
+ */
+export function normaliseParallelism(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'string' && raw.trim().length === 0) return null;
+  const parsed = Math.round(Number(raw));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.min(AGENT_PARALLELISM_MAX, Math.max(AGENT_PARALLELISM_MIN, parsed));
+}
+
+/** Whether a value is a parallelism the settings page may save as given. */
+export function isValidParallelism(value: number): boolean {
+  return (
+    Number.isInteger(value) && value >= AGENT_PARALLELISM_MIN && value <= AGENT_PARALLELISM_MAX
+  );
+}
+
 // --- memory ----------------------------------------------------------------
 
 /**

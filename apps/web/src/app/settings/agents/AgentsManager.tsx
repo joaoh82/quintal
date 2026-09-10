@@ -5,6 +5,8 @@ import {
   AGENT_CORE_MEMORY_SLUG,
   AGENT_DESCRIPTION_MAX_LENGTH,
   AGENT_INSTRUCTIONS_MAX_LENGTH,
+  AGENT_PARALLELISM_MAX,
+  AGENT_PARALLELISM_MIN,
   AGENT_SCOPES,
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
@@ -56,6 +58,8 @@ export interface AgentMemoryView {
 
 interface AgentsManagerProps {
   agents: AgentListEntry[];
+  /** How many conversations an agent answers at once when its card is blank. */
+  officeParallelism: number;
   /** By agent id, for the agents this person may edit. */
   memories: Record<string, AgentMemoryView>;
   currentUserId: string;
@@ -148,6 +152,7 @@ function ModelSelect({
 
 export function AgentsManager({
   agents,
+  officeParallelism,
   memories,
   currentUserId,
   currentUserPubkey,
@@ -246,6 +251,25 @@ export function AgentsManager({
               ))}
             </div>
           </fieldset>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium">
+              Parallelism <span className="text-muted-foreground">— optional</span>
+            </span>
+            <Input
+              name="maxSessions"
+              type="number"
+              min={AGENT_PARALLELISM_MIN}
+              max={AGENT_PARALLELISM_MAX}
+              placeholder={`Office default (${officeParallelism})`}
+              className="w-44"
+            />
+            <span className="text-muted-foreground text-xs">
+              Conversations it answers at once. Leave blank to use the office default
+              (currently {officeParallelism}). Custom values may be {AGENT_PARALLELISM_MIN}–
+              {AGENT_PARALLELISM_MAX}.
+            </span>
+          </label>
 
           <label className="flex w-full flex-col gap-1">
             <span className="text-xs font-medium">
@@ -367,6 +391,7 @@ export function AgentsManager({
                 memory={memories[agent.id]}
                 machines={machines}
                 hosts={hosts}
+                officeParallelism={officeParallelism}
               />
             ))}
           </ul>
@@ -384,7 +409,14 @@ export function AgentsManager({
           </p>
           <ul className="mt-3 divide-y rounded-lg border opacity-60">
             {revoked.map((agent) => (
-              <AgentRow key={agent.id} agent={agent} canRevoke={false} machines={[]} hosts={[]} />
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                canRevoke={false}
+                machines={[]}
+                hosts={[]}
+                officeParallelism={officeParallelism}
+              />
             ))}
           </ul>
         </section>
@@ -400,9 +432,12 @@ function AgentRow({
   memory,
   machines,
   hosts,
+  officeParallelism,
 }: {
   agent: AgentListEntry;
   canRevoke: boolean;
+  /** What the office answers with when this agent's own setting is blank. */
+  officeParallelism: number;
   /** What it carries, when this person may edit it. */
   memory?: AgentMemoryView | undefined;
   /**
@@ -459,6 +494,7 @@ function AgentRow({
         <span className="text-muted-foreground font-mono text-[11px]">
           {runtimeById(agent.runtimeId)?.label ?? agent.runtimeId}
           {agent.modelId ? ` · ${agent.modelId}` : ''}
+          {agent.maxSessions !== null ? ` · ×${agent.maxSessions}` : ''}
         </span>
       ) : null}
 
@@ -574,7 +610,7 @@ function AgentRow({
           <summary className="text-muted-foreground cursor-pointer text-xs">
             Description and instructions
           </summary>
-          <AgentProfileForm agent={agent} />
+          <AgentProfileForm agent={agent} officeParallelism={officeParallelism} />
         </details>
       ) : null}
 
@@ -607,7 +643,13 @@ function AgentRow({
  * is restarted by its host on the next fleet poll, and without a word from the
  * form there is no way to tell "waiting" from "broken".
  */
-function AgentProfileForm({ agent }: { agent: AgentListEntry }) {
+function AgentProfileForm({
+  agent,
+  officeParallelism,
+}: {
+  agent: AgentListEntry;
+  officeParallelism: number;
+}) {
   const [state, formAction, pending] = useActionState(saveAgentProfileAction, {
     ok: false,
   } as SaveAgentProfileState);
@@ -639,6 +681,24 @@ function AgentProfileForm({ agent }: { agent: AgentListEntry }) {
           disabled={pending}
           className="border-input placeholder:text-muted-foreground focus-visible:ring-ring/50 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px] disabled:opacity-50"
         />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">Parallelism</span>
+        <Input
+          name="maxSessions"
+          type="number"
+          defaultValue={agent.maxSessions ?? ''}
+          min={AGENT_PARALLELISM_MIN}
+          max={AGENT_PARALLELISM_MAX}
+          placeholder={`Office default (${officeParallelism})`}
+          disabled={pending}
+          className="w-44"
+        />
+        <span className="text-muted-foreground text-xs">
+          Conversations it answers at once — a DM while it reviews a PR in a channel.
+          Leave blank to use the office default (currently {officeParallelism}). Custom
+          values may be {AGENT_PARALLELISM_MIN}–{AGENT_PARALLELISM_MAX}.
+        </span>
       </label>
       <div className="flex items-center gap-3">
         <Button type="submit" size="sm" variant="outline" disabled={pending}>

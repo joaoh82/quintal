@@ -67,6 +67,20 @@ describe('who is working here', () => {
     assert.deepEqual(workingHere(roster, 'nearby', 'agent-bay'), []);
   });
 
+  it('shows an agent in every conversation it is answering at once', () => {
+    const roster = [agent({ name: 'Marvin', status: 'thinking', workingIn: 'ch-1,ch-2' })];
+    assert.equal(workingHere(roster, 'channel:ch-1', 'lobby').length, 1);
+    assert.equal(workingHere(roster, 'channel:ch-2', 'lobby').length, 1);
+    assert.equal(workingHere(roster, 'channel:ch-3', 'lobby').length, 0);
+    assert.equal(workingHere(roster, 'nearby', 'agent-bay').length, 0, 'none of it is spatial');
+  });
+
+  it('shows a zone turn beside a channel turn when both are in flight', () => {
+    const roster = [agent({ name: 'Marvin', status: 'thinking', workingIn: 'ch-1,zone' })];
+    assert.equal(workingHere(roster, 'channel:ch-1', 'lobby').length, 1);
+    assert.equal(workingHere(roster, 'nearby', 'agent-bay').length, 1);
+  });
+
   it('counts a balloon alone as worth showing', () => {
     const roster = [agent({ name: 'Marvin', emote: 'laugh', workingIn: 'ch-1' })];
     assert.equal(workingHere(roster, 'channel:ch-1', 'lobby')[0]?.emote, 'laugh');

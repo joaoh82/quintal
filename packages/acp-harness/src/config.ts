@@ -2,7 +2,13 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-import { RUNTIMES, acpCommandFor, runtimeById } from '@quintal/shared';
+import {
+  AGENT_PARALLELISM_MAX,
+  AGENT_PARALLELISM_MIN,
+  RUNTIMES,
+  acpCommandFor,
+  runtimeById,
+} from '@quintal/shared';
 
 import { noteSecretEnv } from './secrets.js';
 
@@ -105,6 +111,14 @@ export interface AgentConfig {
    * another.
    */
   modelId?: string;
+  /**
+   * How many conversations this agent may answer at once — the size of its
+   * pool of runtime processes. Undefined defers to what the office says in
+   * `agent:ready`, which is the agent's own setting or the office default.
+   * From a fleet file or `--parallelism`, it overrides the office: the
+   * machine running the processes has the last word on how many.
+   */
+  parallelism?: number;
 }
 
 export interface FleetConfig {
@@ -124,6 +138,7 @@ interface RawAgent {
   cwd?: unknown;
   repo?: unknown;
   model?: unknown;
+  parallelism?: unknown;
 }
 
 interface RawFleet {
@@ -333,6 +348,10 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     if (cwdRaw.length > 0) assertDirectory(cwd, name, cwdRaw);
 
     const model = typeof rawAgent.model === 'string' ? rawAgent.model.trim() : '';
+    const parallelism =
+      rawAgent.parallelism === undefined || rawAgent.parallelism === null
+        ? undefined
+        : parseParallelism(rawAgent.parallelism, name);
 
     return {
       name,
@@ -345,10 +364,30 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
       workspaceId: '',
       profile: '',
       ...(model.length > 0 ? { modelId: model } : {}),
+      ...(parallelism !== undefined ? { parallelism } : {}),
     } satisfies AgentConfig;
   });
 
   return { url, mapId, reposDir, agents };
+}
+
+/**
+ * A parallelism written by a person, checked rather than clamped: a fleet
+ * file is edited by hand, and `"parallelism": 100` silently becoming 32 is
+ * how somebody spends an afternoon wondering why the number does nothing.
+ */
+export function parseParallelism(raw: unknown, agent: string): number {
+  const value = typeof raw === 'number' ? raw : Number(String(raw).trim());
+  if (
+    !Number.isInteger(value) ||
+    value < AGENT_PARALLELISM_MIN ||
+    value > AGENT_PARALLELISM_MAX
+  ) {
+    throw new ConfigError(
+      `agent "${agent}": parallelism must be a whole number from ${AGENT_PARALLELISM_MIN} to ${AGENT_PARALLELISM_MAX}, not ${JSON.stringify(raw)}`,
+    );
+  }
+  return value;
 }
 
 function assertDirectory(path: string, agent: string, asWritten: string): void {

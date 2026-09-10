@@ -69,6 +69,7 @@ export async function getOfficeSettings(
     replyWindowSeconds: row.replyWindowSeconds,
     idleLife: row.idleLife,
     banter: row.banter as OfficeSettings['banter'],
+    agentParallelism: row.agentParallelism,
   });
 }
 

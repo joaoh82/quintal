@@ -41,6 +41,17 @@ export interface BridgeHandle {
  */
 export interface BridgeHooks {
   say?: (text: string) => unknown;
+  /**
+   * `set_status` from the model, routed through the runner so the line lands
+   * on the turn that set it. Sent straight to the office it would say where
+   * the work is for nobody — and blank out every other turn's conversation.
+   */
+  setStatus?: (status: string) => unknown;
+  /**
+   * `memory_set`, routed through the runner so the sessions that did not
+   * write can be told their standing instructions moved.
+   */
+  memorySet?: (slug: string, content: string, expectedHash?: string) => Promise<unknown>;
 }
 
 export async function startBridge(
@@ -180,7 +191,8 @@ async function dispatch(
       const scopes = gateway.ready?.scopes ?? [];
       if (!scopes.includes('status')) throw new Error('you do not have the "status" scope');
       const status = String(call.args.status ?? '').trim();
-      gateway.setStatus(status);
+      if (hooks.setStatus) hooks.setStatus(status);
+      else gateway.setStatus(status);
       return { status };
     }
 
@@ -237,11 +249,16 @@ async function dispatch(
     case 'memory_get':
       return gateway.memoryGet(String(call.args.slug ?? 'core'));
 
-    case 'memory_set':
-      return gateway.memorySet(
-        String(call.args.slug ?? ''),
-        String(call.args.content ?? ''),
-      );
+    case 'memory_set': {
+      const slug = String(call.args.slug ?? '');
+      const content = String(call.args.content ?? '');
+      const expected =
+        typeof call.args.expected_hash === 'string' && call.args.expected_hash.length > 0
+          ? call.args.expected_hash
+          : undefined;
+      if (hooks.memorySet) return hooks.memorySet(slug, content, expected);
+      return gateway.memorySet(slug, content, expected);
+    }
 
     case 'emote': {
       const emote = String(call.args.emote ?? '');

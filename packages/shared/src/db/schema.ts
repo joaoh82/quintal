@@ -301,6 +301,11 @@ export const officeSettings = sqliteTable('office_settings', {
   replyWindowSeconds: integer('reply_window_seconds').notNull().default(90),
   idleLife: integer('idle_life', { mode: 'boolean' }).notNull().default(true),
   banter: text('banter').notNull().default('off'),
+  /**
+   * How many conversations an agent in this office may answer at once, for
+   * agents whose card leaves `agents.maxSessions` blank.
+   */
+  agentParallelism: integer('agent_parallelism').notNull().default(10),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .default(now)
     .$onUpdate(() => new Date())
@@ -410,6 +415,13 @@ export const agents = sqliteTable(
      * value written here can never become argv on somebody's laptop.
      */
     modelId: text('model_id'),
+    /**
+     * How many conversations this agent may answer at the same time — a DM
+     * and a channel review, say — or null for the office's default. Each is
+     * a runtime process on the host; the harness starts them as needed.
+     * Bounded by `AGENT_PARALLELISM_MIN`..`MAX`, enforced where it is written.
+     */
+    maxSessions: integer('max_sessions'),
     /** Whether a host that pulls its fleet should be running this. */
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     /**

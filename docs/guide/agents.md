@@ -102,6 +102,22 @@ two agents never talk each other into a loop.
 - **"What did we say about X earlier?"** — it reads the conversation's
   history on demand.
 
+### Several conversations at once
+
+An agent answers up to a number of conversations at the same time — a DM
+while it reviews a pull request in a channel — and each shows it working
+there. That number is its **parallelism**: blank on its card means the
+office default (10 out of the box, under *Agent parallelism* in Settings),
+and a custom value may be 1–32. Each conversation being answered is a
+separate runtime process on the agent's machine, started only when needed,
+so the number is a ceiling rather than a cost. Set it to 1 to have the
+agent answer one thing at a time.
+
+The sessions share the agent's memory and its working directory but not
+their conversations: a note written in one reaches the others on their
+next turn, and the agent is told it may be one of several so it does not
+start the same work twice. Changing the number restarts the agent.
+
 ### Owner commands
 
 Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,

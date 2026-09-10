@@ -8,6 +8,7 @@ import {
   isAgentSpriteKey,
   modelChoice,
   normaliseAgentName,
+  normaliseParallelism,
   type AgentScope,
 } from '@quintal/shared';
 import {
@@ -27,6 +28,7 @@ import {
   forgetHostReport,
   setAgentEnabled,
   setAgentLaunch,
+  setAgentMaxSessions,
   setAgentProfile,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -173,6 +175,10 @@ export async function createAgentAction(
       description: String(formData.get('description') ?? ''),
       instructions: String(formData.get('instructions') ?? ''),
       scopes: scopes.length > 0 ? scopes : DEFAULT_AGENT_SCOPES,
+      // Blank is the office default; a number is clamped, not refused — the
+      // field says its range and a browser enforces it, so anything outside
+      // it here is a crafted submission, not a typo worth a message.
+      maxSessions: normaliseParallelism(formData.get('maxSessions')),
       ...(wantsLaunch ? { launch: { runtimeId, hostLabel, modelId } } : {}),
     });
 
@@ -229,6 +235,14 @@ export async function saveAgentProfileAction(
     description: field('description'),
     instructions: field('instructions'),
   });
+
+  // Same rule: absent leaves it alone, blank means the office default. Not
+  // part of the profile fingerprint, because the fleet carries the resolved
+  // number itself and a host restarts the agent when that moves.
+  const maxSessions = field('maxSessions');
+  if (maxSessions !== undefined) {
+    await setAgentMaxSessions(db, agentId, normaliseParallelism(maxSessions));
+  }
 
   revalidatePath('/settings/agents');
   // The office reads both on connect, so a change lands for anybody joining

@@ -6,6 +6,7 @@ import { AGENT_KEY_BYTES, HOST_TOKEN_PREFIX } from '../agent.js';
 import { displayName } from '../identity.js';
 import type { Database } from './client.js';
 import { agents, hostTokens, users } from './schema.js';
+import { getOfficeSettings } from './settings.js';
 
 /**
  * Host tokens — a machine's credential, as distinct from an agent's.
@@ -266,6 +267,14 @@ export interface FleetMember {
    */
   modelId: string | null;
   /**
+   * How many conversations it may answer at once — its own setting, or the
+   * office's default when it has none. Already resolved, because the host
+   * needs a number to size its pool by and should not have to know which of
+   * two places it came from. A change to either restarts the agent, the same
+   * way a model change does.
+   */
+  parallelism: number;
+  /**
    * A fingerprint of what its owner says this agent is.
    *
    * Here so a running harness can notice that it changed. The instructions the
@@ -307,6 +316,7 @@ export async function fleetForHost(
       instructions: agents.instructions,
       hostLabel: agents.hostLabel,
       modelId: agents.modelId,
+      maxSessions: agents.maxSessions,
       enabled: agents.enabled,
       revokedAt: agents.revokedAt,
       ownerUserId: agents.ownerUserId,
@@ -315,6 +325,8 @@ export async function fleetForHost(
     })
     .from(agents)
     .where(eq(agents.workspaceId, host.workspaceId));
+
+  const settings = await getOfficeSettings(db, host.workspaceId);
 
   return rows
     .filter(
@@ -349,5 +361,6 @@ export async function fleetForHost(
       pubkey: row.pubkey,
       runtimeId: row.runtimeId,
       modelId: row.modelId,
+      parallelism: row.maxSessions ?? settings.agentParallelism,
     }));
 }

@@ -12,6 +12,7 @@ import {
   normaliseAgentDescription,
   normaliseAgentInstructions,
   normaliseAgentName,
+  normaliseParallelism,
   parseScopes,
   type AgentEventKind,
   type AgentScope,
@@ -72,6 +73,13 @@ export interface CreateAgentInput {
    * machine's nest.
    */
   launch?: { runtimeId: string; hostLabel: string; modelId?: string | null };
+  /**
+   * How many conversations it may answer at once. Null, or absent, for the
+   * office's default. Clamped to the allowed range here rather than refused:
+   * this is the last door before the row, and a row must never hold a value
+   * the harness cannot use.
+   */
+  maxSessions?: number | null;
 }
 
 export interface CreatedAgent {
@@ -98,6 +106,7 @@ export async function createAgent(
     instructions: normaliseAgentInstructions(input.instructions),
     apiKeyHash: hashAgentKey(key),
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
+    maxSessions: normaliseParallelism(input.maxSessions),
     ...(input.launch
       ? {
           runtimeId: input.launch.runtimeId,
@@ -190,6 +199,11 @@ export interface AgentIdentity {
   spriteKey: string;
   scopes: AgentScope[];
   status: string;
+  /**
+   * How many conversations it may answer at once, or null for the office's
+   * default. Served to the harness in `agent:ready` as the effective number.
+   */
+  maxSessions: number | null;
 }
 
 /**
@@ -218,6 +232,7 @@ export async function findAgentByKey(
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
+      maxSessions: agents.maxSessions,
       apiKeyHash: agents.apiKeyHash,
       revokedAt: agents.revokedAt,
     })
@@ -243,6 +258,7 @@ export async function findAgentByKey(
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
     status: row.status,
+    maxSessions: row.maxSessions,
   };
 }
 
@@ -272,6 +288,7 @@ export async function findAgentIdentityById(
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
+      maxSessions: agents.maxSessions,
       revokedAt: agents.revokedAt,
     })
     .from(agents)
@@ -293,6 +310,7 @@ export async function findAgentIdentityById(
     spriteKey: row.spriteKey,
     scopes: parseScopes(row.scopes),
     status: row.status,
+    maxSessions: row.maxSessions,
   };
 }
 
@@ -334,6 +352,7 @@ export async function findAgentByPubkey(
       spriteKey: agents.spriteKey,
       scopes: agents.scopes,
       status: agents.status,
+      maxSessions: agents.maxSessions,
       attestation: agents.attestation,
       revokedAt: agents.revokedAt,
     })
@@ -357,6 +376,7 @@ export async function findAgentByPubkey(
       spriteKey: row.spriteKey,
       scopes: parseScopes(row.scopes),
       status: row.status,
+      maxSessions: row.maxSessions,
     },
     pubkey: pubkey as string,
     ownerPubkey: row.ownerPubkey,
@@ -514,6 +534,8 @@ export interface AgentListEntry {
   hostLabel: string | null;
   /** The model its owner chose, by the runtime's own id. Null for the runtime's default. */
   modelId: string | null;
+  /** How many conversations it may answer at once. Null for the office's default. */
+  maxSessions: number | null;
   /** Whether a host pulling its fleet should be running this. */
   enabled: boolean;
   /** Where its harness said it works. Empty until one connects. */
@@ -547,6 +569,7 @@ export async function listAgentsForWorkspace(
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
       modelId: agents.modelId,
+      maxSessions: agents.maxSessions,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
@@ -591,6 +614,7 @@ export async function findAgentById(
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
       modelId: agents.modelId,
+      maxSessions: agents.maxSessions,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
@@ -719,6 +743,25 @@ export async function setAgentLaunch(
 }
 
 /**
+ * How many conversations an agent may answer at once, or null to follow the
+ * office. Its own setting rather than part of the launch block: it matters
+ * just as much to an agent somebody starts by hand, which reads it from
+ * `agent:ready`. A running agent picks the change up by being restarted —
+ * the number is how many runtime processes its harness keeps, and that is
+ * not something a live process changes about itself.
+ */
+export async function setAgentMaxSessions(
+  db: Database,
+  agentId: string,
+  maxSessions: number | null,
+): Promise<void> {
+  await db
+    .update(agents)
+    .set({ maxSessions: normaliseParallelism(maxSessions) })
+    .where(eq(agents.id, agentId));
+}
+
+/**
  * Whether a host that pulls its fleet should be running this agent.
  *
  * Distinct from revoking, and deliberately so: revoking destroys a credential
@@ -832,12 +875,48 @@ export class MemorySlugError extends Error {
   }
 }
 
+/**
+ * A write that named the version it was based on, and that version has gone.
+ *
+ * Only ever raised when the writer asked for the check. It exists because an
+ * agent may now be answering several conversations at once, each in its own
+ * session with its own idea of what memory says; two of them rewriting `core`
+ * from what they read a minute ago would leave whichever wrote last as the
+ * only one that counts. Telling the loser is cheaper than a lock and lets it
+ * read again and merge.
+ */
+export class MemoryConflictError extends Error {
+  constructor(
+    readonly slug: string,
+    readonly expectedHash: string,
+    readonly actualHash: string,
+  ) {
+    super(
+      `"${slug}" changed since you read it (expected ${expectedHash}, now ${actualHash}) — read it again and merge`,
+    );
+    this.name = 'MemoryConflictError';
+  }
+}
+
+/**
+ * A short fingerprint of a memory slug's content, for compare-and-swap writes.
+ *
+ * Returned by every read and accepted by every write. Content rather than a
+ * version counter, so it needs no column and means the same thing to a
+ * harness that read the slug an hour ago as to one that read it just now.
+ * Sixteen hex characters: plenty to tell two versions apart, short enough
+ * for a model to copy back without error.
+ */
+export function memoryHash(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16);
+}
+
 export async function getAgentMemory(
   db: Database,
   agentId: string,
   workspaceId: string,
   slug: string,
-): Promise<{ slug: string; content: string; updatedAt: number } | null> {
+): Promise<{ slug: string; content: string; updatedAt: number; hash: string } | null> {
   if (!isValidMemorySlug(slug)) throw new MemorySlugError(slug);
 
   const rows = await db
@@ -854,25 +933,84 @@ export async function getAgentMemory(
 
   const row = rows[0];
   if (!row) return null;
-  return { slug: row.slug, content: row.content, updatedAt: row.updatedAt.getTime() };
+  return {
+    slug: row.slug,
+    content: row.content,
+    updatedAt: row.updatedAt.getTime(),
+    hash: memoryHash(row.content),
+  };
 }
 
 /**
  * Write a memory slug. Over-size writes are **rejected, not truncated** — an
  * agent silently losing the tail of what it just saved is a worse failure than
  * an error it can react to.
+ *
+ * With `expectedHash`, the write only lands if the slug still reads as it
+ * did when that hash was taken — the hash of the empty string for a slug
+ * that did not exist. Without it the write is unconditional, as it always
+ * was. Read-then-write from two sessions at once is the reason to pass it.
  */
 export async function setAgentMemory(
   db: Database,
   agentId: string,
   slug: string,
   content: string,
-): Promise<{ slug: string; bytes: number }> {
+  expectedHash?: string,
+): Promise<{ slug: string; bytes: number; hash: string }> {
   if (!isValidMemorySlug(slug)) throw new MemorySlugError(slug);
 
   const bytes = Buffer.byteLength(content, 'utf8');
   const limit = memoryLimitFor(slug);
   if (bytes > limit) throw new MemoryLimitError(slug, bytes, limit);
+
+  if (expectedHash !== undefined) {
+    // The write itself is conditional — a `WHERE` on the stored content, or
+    // an insert that yields to an existing row — and zero rows changed is
+    // the conflict. A read followed by a compare would leave a window
+    // between two awaited round trips in which the other session lands its
+    // write, and both are told they won; that window is the whole reason
+    // this parameter exists.
+    const current = await db
+      .select({ content: agentMemory.content })
+      .from(agentMemory)
+      .where(and(eq(agentMemory.agentId, agentId), eq(agentMemory.slug, slug)))
+      .limit(1);
+    const existing = current[0]?.content;
+    const actual = memoryHash(existing ?? '');
+    if (actual !== expectedHash) throw new MemoryConflictError(slug, expectedHash, actual);
+
+    const result =
+      existing === undefined
+        ? await db
+            .insert(agentMemory)
+            .values({
+              agentId,
+              workspaceId: sql`(select ${agents.workspaceId} from ${agents} where ${agents.id} = ${agentId})`,
+              slug,
+              content,
+            })
+            .onConflictDoNothing()
+        : await db
+            .update(agentMemory)
+            .set({ content, updatedAt: new Date() })
+            .where(
+              and(
+                eq(agentMemory.agentId, agentId),
+                eq(agentMemory.slug, slug),
+                eq(agentMemory.content, existing),
+              ),
+            );
+    if (result.rowsAffected === 0) {
+      const now = await db
+        .select({ content: agentMemory.content })
+        .from(agentMemory)
+        .where(and(eq(agentMemory.agentId, agentId), eq(agentMemory.slug, slug)))
+        .limit(1);
+      throw new MemoryConflictError(slug, expectedHash, memoryHash(now[0]?.content ?? ''));
+    }
+    return { slug, bytes, hash: memoryHash(content) };
+  }
 
   await db
     .insert(agentMemory)
@@ -887,7 +1025,7 @@ export async function setAgentMemory(
       set: { content, updatedAt: new Date() },
     });
 
-  return { slug, bytes };
+  return { slug, bytes, hash: memoryHash(content) };
 }
 
 /**

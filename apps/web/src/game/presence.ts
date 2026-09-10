@@ -1,4 +1,4 @@
-import type { RosterEntry } from '@quintal/shared';
+import { WORKING_IN_ZONE, workingInTokens, type RosterEntry } from '@quintal/shared';
 
 import { parseKey, type ConversationKey } from './useConversations';
 
@@ -14,6 +14,10 @@ import { parseKey, type ConversationKey } from './useConversations';
  * For a channel or DM: agents whose work is that conversation. For a zone or
  * nearby: agents standing in that zone doing spatial work — a channel reply
  * is not happening in the room, even if the agent is.
+ *
+ * An agent may be answering several conversations at once, so `workingIn`
+ * is a list: it shows in every conversation it names, and in its zone only
+ * when some of the work is spatial.
  */
 export interface Working {
   name: string;
@@ -32,8 +36,11 @@ export function workingHere(
   return roster
     .filter((entry) => entry.kind === 'agent')
     .filter((entry) => entry.status.length > 0 || entry.emote.length > 0)
-    .filter((entry) =>
-      channelId ? entry.workingIn === channelId : entry.workingIn === '' && entry.zoneId === here,
-    )
+    .filter((entry) => {
+      const where = workingInTokens(entry.workingIn);
+      return channelId
+        ? where.includes(channelId)
+        : where.includes(WORKING_IN_ZONE) && entry.zoneId === here;
+    })
     .map((entry) => ({ name: entry.name, status: entry.status, emote: entry.emote }));
 }
