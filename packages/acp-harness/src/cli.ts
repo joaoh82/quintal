@@ -317,7 +317,7 @@ async function main(): Promise<void> {
   const officeUrl = officeFleet?.host.url ?? agents[0]?.url ?? stringFlag(flags, 'url');
   const label = officeFleet?.label ?? hostLabel();
   const inNest = agents.some((agent) => agent.cwd === nestRoot());
-  if (command === 'up' || inNest) {
+  if (command === 'up' || (command === 'single' && inNest)) {
     const settled = settleNest(agents, reposDir, officeUrl, label);
     // An agent about to be spawned into a workspace that could not be made
     // would start with a bare ENOENT — or, if the root is a symlink, start

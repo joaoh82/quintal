@@ -112,11 +112,15 @@ export function ensureNest(options: NestOptions = {}): NestResult {
   const leaked = join(root, HOST_FILE);
   if (existsSync(leaked)) {
     const moved = evictLegacyHostFile(leaked, hostFilePath());
-    warnings.push(
-      moved === null
-        ? `${leaked} is a credential inside the agents' workspace and could not be moved; move it to ${hostFilePath()} yourself`
-        : `moved ${leaked} to ${moved}: credentials do not live in the agents' workspace`,
-    );
+    // A move that failed is the one path back to the leak this exists to
+    // close, so it is not a warning: nothing gets spawned into this
+    // directory until the file is out of it.
+    if (moved === null || existsSync(leaked)) {
+      throw new Error(
+        `${leaked} is a credential inside the agents' workspace and could not be moved; move it to ${hostFilePath()} yourself`,
+      );
+    }
+    warnings.push(`moved ${leaked} to ${moved}: credentials do not live in the agents' workspace`);
   }
 
   const repos = ensureRepos(root, options.reposDir, warnings);

@@ -9,12 +9,11 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { HOST_TOKEN_PREFIX, acpCommandFor, runtimeById } from '@quintal/shared';
 
-import { ALL_REPOS, ConfigError, NEST_DIRNAME, configDir, nestRoot, type AgentConfig } from './config.js';
+import { ALL_REPOS, ConfigError, configDir, nestRoot, type AgentConfig } from './config.js';
 import { hostLabel } from './runtimes.js';
 
 /**
@@ -56,12 +55,13 @@ export function hostFilePath(): string {
 }
 
 /**
- * Where `login` used to put the token, before `~/.quintal` became every
- * agent's working directory. Fixed at the old location on purpose: it is a
- * place to move a file *from*, not a setting.
+ * Where `login` used to put the token, before the nest became every agent's
+ * working directory: inside it. Resolved through `nestRoot()` rather than
+ * spelled out, so `QUINTAL_NEST_DIR` sandboxes it — a test that writes a
+ * token must never be able to reach the real one.
  */
 function legacyHostFilePath(): string {
-  return join(homedir(), NEST_DIRNAME, HOST_FILE);
+  return join(nestRoot(), HOST_FILE);
 }
 
 /**

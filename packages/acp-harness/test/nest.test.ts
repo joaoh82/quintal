@@ -259,19 +259,55 @@ describe('the machine credential is never in the workspace', () => {
   // users, not from a process running as the same one, and `ls` in cwd is the
   // first thing an agent does.
 
-  function withDirs(run: (root: string, config: string) => void): void {
+  // Everything `host.ts` can reach is pointed into the temp directory: the
+  // config dir, the nest (which is where the legacy token path resolves),
+  // and HOME itself. A test that writes a token must never be able to touch
+  // the real one — an earlier version of these tests could delete it.
+  function withDirs(run: (root: string, config: string, home: string) => void): void {
     const dir = tmp();
+    const home = join(dir, 'home');
     const root = join(dir, '.quintal');
     const config = join(dir, 'config', 'quintal');
-    const previous = process.env.QUINTAL_CONFIG_DIR;
+    mkdirSync(home, { recursive: true });
+    const previous = {
+      config: process.env.QUINTAL_CONFIG_DIR,
+      nest: process.env.QUINTAL_NEST_DIR,
+      home: process.env.HOME,
+    };
     process.env.QUINTAL_CONFIG_DIR = config;
+    process.env.QUINTAL_NEST_DIR = root;
+    process.env.HOME = home;
     try {
-      run(root, config);
+      run(root, config, home);
     } finally {
-      if (previous === undefined) delete process.env.QUINTAL_CONFIG_DIR;
-      else process.env.QUINTAL_CONFIG_DIR = previous;
+      for (const [key, value] of [
+        ['QUINTAL_CONFIG_DIR', previous.config],
+        ['QUINTAL_NEST_DIR', previous.nest],
+        ['HOME', previous.home],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   }
+
+  it('never reaches a token outside the sandbox', () => {
+    withDirs((root, config, home) => {
+      // A token where the pre-migration path would be on a machine whose
+      // nest is *not* overridden. With the override in place nothing here
+      // may resolve to it, let alone unlink it.
+      const elsewhere = join(home, '.quintal', 'host.json');
+      mkdirSync(join(home, '.quintal'), { recursive: true });
+      writeFileSync(elsewhere, JSON.stringify({ token: 'qh_real', url: 'http://x' }));
+
+      ensureNest({ root });
+      writeStoredHost({ token: 'qh_test', url: 'http://office.test' });
+      readStoredHost();
+
+      assert.equal(readFileSync(elsewhere, 'utf8'), JSON.stringify({ token: 'qh_real', url: 'http://x' }));
+      assert.equal(readFileSync(join(config, 'host.json'), 'utf8').includes('qh_test'), true);
+    });
+  });
 
   it('writes the token to the config directory, not the nest', () => {
     withDirs((root, config) => {

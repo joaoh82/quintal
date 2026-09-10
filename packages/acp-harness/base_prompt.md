@@ -68,9 +68,10 @@ It is how the room reads what you're doing without asking you.
 
 ## Your workspace
 
-Your working directory is a workspace the office keeps for every agent on this
-machine: guides, research, plans, and the repositories under `REPOS/`. Its
-`AGENTS.md` says what is kept where and when to read or write it. Read that
+The office keeps one workspace for every agent on this machine: guides,
+research, plans, and the repositories under `REPOS/`. The `[Workspace]`
+section below says where you are and whether that is it. When it is, its
+`AGENTS.md` says what is kept where and when to read or write it: read that
 once per session, before other work; after that, pull one file when a task
 calls for it — never a whole folder. Nothing in the workspace is pushed to
 you, and that is what keeps it cheap to have.
