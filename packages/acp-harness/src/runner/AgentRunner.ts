@@ -893,7 +893,7 @@ export class AgentRunner {
     const ready = this.#gateway.ready;
     const instructions = ready?.instructions ?? '';
     return [
-      basePrompt(),
+      basePrompt((level, message) => this.#log(level, message)),
       '',
       `[You]`,
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,

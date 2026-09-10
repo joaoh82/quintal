@@ -7,6 +7,8 @@ import { after, describe, it } from 'node:test';
 
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner } from '../src/runner/AgentRunner.js';
+import { basePrompt } from '../src/runner/base-prompt.js';
+import { BASE_PROMPT } from '../src/runner/base-prompt.text.js';
 import type { AgentConfig } from '../src/config.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url));
@@ -106,6 +108,28 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
   }
 }
 
+describe('the base prompt', () => {
+  // The desktop app spawns a `bun build --compile` binary, and for a while
+  // every agent it launched ran on the seven-line emergency prompt: the
+  // markdown was read relative to `import.meta.url`, which inside the binary
+  // points at a virtual filesystem the file was never copied into. These pin
+  // the full prompt to both places it can come from.
+
+  it('is the full prompt, not the emergency one', () => {
+    assert.match(basePrompt(), /You are working in an office/);
+  });
+
+  it('is embedded as code, byte for byte, for the compiled sidecar', () => {
+    const markdown = readFileSync(
+      fileURLToPath(new URL('../base_prompt.md', import.meta.url)),
+      'utf8',
+    ).trim();
+
+    assert.match(BASE_PROMPT, /You are working in an office/);
+    assert.equal(BASE_PROMPT, markdown, 'base-prompt.text.ts is stale: rebuild');
+  });
+});
+
 describe('what reaches the model on the first turn', () => {
   let current: AgentRunner | null = null;
 
@@ -150,6 +174,8 @@ describe('what reaches the model on the first turn', () => {
 
     assert.match(text, /Answer in Portuguese\./);
     assert.match(text, /\[Your owner's instructions\]/);
+    // And the manners underneath them: the whole file, not the fallback.
+    assert.match(text, /You are working in an office/);
   });
 
   it('keeps the owner and the agent apart, and puts the owner first', async () => {
