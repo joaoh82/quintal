@@ -1217,14 +1217,27 @@ export class AgentRunner {
   /**
    * Write the memory without these notes, and say which went. Conditional on
    * the memory the notes were picked from: another session writing in the
-   * meantime is told about by a conflict, not overwritten.
+   * meantime is told about by a conflict — and then, as `!remember` does,
+   * the memory is read again and the same notes taken out of what is there
+   * now, so the owner is never told a note is gone while it stays.
    */
   async #dropFromCoreMemory(
     { kept, dropped }: { kept: string; dropped: string[] },
     scope: string,
     expectedHash?: string,
   ): Promise<void> {
-    await this.#gateway.memorySet('core', kept, expectedHash);
+    try {
+      await this.#gateway.memorySet('core', kept, expectedHash);
+    } catch (error: unknown) {
+      if (!isConflict(error)) throw error;
+      const current = await this.#gateway.memoryGet('core');
+      const again = dropLines(current.content, dropped);
+      if (again.dropped.length === 0) {
+        this.#speak('Somebody else changed my memory just now, and that note is already gone.', scope);
+        return;
+      }
+      await this.#gateway.memorySet('core', again.kept, current.hash);
+    }
     this.#reprimeAll();
 
     this.#log('info', `forgot: ${dropped.join(' | ')}`);
@@ -1438,16 +1451,21 @@ export class AgentRunner {
       return select(options, 'always');
     }
 
-    const callId = String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random());
+    // Tool-call ids are the runtime's, minted per process: two workers can
+    // ask with the same one, and a waiter keyed by it alone would be
+    // overwritten — the first question then waits out the whole timeout.
+    const callId = `${worker.index}:${String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random())}`;
     const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId)) ?? worker.turn;
     const scope = turn?.scope ?? this.#scopeOf();
     const owner = ready?.ownerName ?? 'Owner';
     const me = ready?.name ?? this.name;
 
     if (turn) this.#setTurnStatus(turn, `waiting for ${owner}`);
-    const named = this.#permissionWaiters.size > 0 ? ` ${toolName}` : '';
+    // The tool is always named in the offered replies: whether a second
+    // question will be open by the time the owner reads this is not known
+    // when it is asked, and a bare "yes" still answers the oldest one.
     this.#deliver(
-      `@${owner} may I run ${toolName}? Reply "@${me} yes${named}", "@${me} always${named}" (for the rest of this session), or "@${me} no${named}".`,
+      `@${owner} may I run ${toolName}? Reply "@${me} yes ${toolName}", "@${me} always ${toolName}" (for the rest of this session), or "@${me} no ${toolName}".`,
       scope,
     );
     this.#log('info', `permission requested: ${toolName}`);
@@ -1491,16 +1509,13 @@ export class AgentRunner {
 
   /**
    * Answer an outstanding permission question. Called from the chat handlers.
-   * `which` names a tool when the owner said one; otherwise the oldest
-   * question is the one being answered.
+   * `which` names a tool when the owner said one — the whole name first, then
+   * the start of one, then a fragment only if it fits exactly one question.
+   * Anything less certain, or no name at all, answers the oldest question.
    */
   #resolvePermission(decision: PermissionDecision, which: string): boolean {
     const waiters = [...this.#permissionWaiters.values()];
-    const wanted = which.trim().toLowerCase();
-    const target =
-      (wanted.length > 0
-        ? waiters.find((waiter) => waiter.toolName.toLowerCase().includes(wanted))
-        : undefined) ?? waiters[0];
+    const target = pickWaiter(waiters, which) ?? waiters[0];
     if (!target) return false;
     target.resolve(decision);
     return true;
@@ -1778,6 +1793,25 @@ export function workspaceSection(cwd: string): string {
 /** Session ids are minted per process, so the worker is part of the key. */
 function sessionKey(worker: Worker, sessionId: string): string {
   return `${worker.index}:${sessionId}`;
+}
+
+/**
+ * Which open question an answer names, or undefined for none in particular.
+ * Exported for its tests: the rule is worth pinning without a runtime.
+ */
+export function pickWaiter<T extends { toolName: string }>(
+  waiters: readonly T[],
+  which: string,
+): T | undefined {
+  const wanted = which.trim().toLowerCase();
+  if (wanted.length === 0) return undefined;
+  const names = waiters.map((waiter) => waiter.toolName.toLowerCase());
+  const exact = names.findIndex((name) => name === wanted);
+  if (exact !== -1) return waiters[exact];
+  const prefixed = names.flatMap((name, index) => (name.startsWith(wanted) ? [index] : []));
+  if (prefixed.length === 1) return waiters[prefixed[0]!];
+  const within = names.flatMap((name, index) => (name.includes(wanted) ? [index] : []));
+  return within.length === 1 ? waiters[within[0]!] : undefined;
 }
 
 function textOf(content: unknown): string {

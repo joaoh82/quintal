@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, it } from 'node:test';
 
 import type { Gateway } from '../src/gateway/client.js';
-import { AgentRunner } from '../src/runner/AgentRunner.js';
+import { AgentRunner, pickWaiter } from '../src/runner/AgentRunner.js';
+import { Pool } from '../src/runner/pool.js';
+import type { Worker } from '../src/runner/worker.js';
 import type { AgentConfig } from '../src/config.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url));
@@ -428,6 +430,50 @@ describe('answering several conversations at once', () => {
     await until(() => said.some((s) => s.channelId === ENGINEERING.id), 'the review');
   });
 
+  it('retries !forget once when another session wrote memory first, and drops the same note', async () => {
+    const writes: Array<{ slug: string; content: string; expectedHash?: string }> = [];
+    const { handlers, said } = await start(
+      { FAKE_REPLY: 'ok' },
+      { parallelism: 1, core: 'be kind\nbe terse', conflictOnce: true, writes },
+    );
+
+    aloud(handlers, '!forget be terse');
+    await until(() => writes.length === 2, 'a second attempt');
+    assert.equal(writes[0]?.expectedHash, 'h-16', `conditioned on what was read: ${JSON.stringify(writes)}`);
+    assert.equal(writes[1]?.content, 'be kind', 'read again, the note taken out of what is there now');
+    await until(() => said.length === 1, 'the confirmation');
+    assert.match(said[0]?.text ?? '', /Forgotten: "be terse"/);
+  });
+
+  it('names the tool in every open approval question, so either can be answered by name', async () => {
+    const { handlers, said } = await start(
+      { FAKE_PERMISSION: 'Bash', FAKE_DELAY_MS: '300' },
+      { parallelism: 2 },
+    );
+    const t0 = Date.now();
+    mention(handlers, ENGINEERING, '@Bob check the build', t0);
+    mention(handlers, DM, 'and the tests', t0 + 10);
+
+    const asked = () => said.filter((s) => /may I run/.test(s.text));
+    await until(() => asked().length === 2, 'both questions');
+    for (const question of asked()) {
+      assert.match(question.text, /@Bob yes Bash/, `the first question names the tool too: ${question.text}`);
+    }
+    assert.deepEqual(
+      asked().map((q) => q.channelId).sort(),
+      [ENGINEERING.id, DM.id].sort(),
+      'each asked where its turn is',
+    );
+
+    aloud(handlers, '@Bob no Bash');
+    aloud(handlers, '@Bob no');
+    await until(
+      () => said.filter((s) => s.text === 'ok').length === 2,
+      `both turns to finish: ${JSON.stringify(said.map((s) => s.text))}`,
+      15_000,
+    );
+  });
+
   it('retries !remember once when another session wrote memory first', async () => {
     const writes: Array<{ slug: string; content: string; expectedHash?: string }> = [];
     const { handlers, said } = await start(
@@ -467,5 +513,74 @@ describe('answering several conversations at once', () => {
     assert.match(texts[1] ?? '', /\[You\]/, 'the channel turn primes its own session');
     assert.match(texts[2] ?? '', /\[You\]/, 'and the lobby is primed again after the write');
     assert.match(texts[2] ?? '', /be terse/, 'with what was written');
+  });
+});
+
+describe('which approval question an answer names', () => {
+  const open = [{ toolName: 'Bash' }, { toolName: 'Bash: rm -rf build' }, { toolName: 'WebFetch' }];
+
+  it('takes the whole name, then the start of one, then a fragment only one fits', () => {
+    assert.equal(pickWaiter(open, 'bash'), open[0]);
+    assert.equal(pickWaiter(open, 'web'), open[2]);
+    assert.equal(pickWaiter(open, 'fetch'), open[2]);
+  });
+
+  it('answers the oldest question when the name fits several, or none', () => {
+    // "a" is in every name; "ba" starts two. Neither picks one.
+    assert.equal(pickWaiter(open, 'a'), undefined);
+    assert.equal(pickWaiter(open, 'ba'), undefined);
+    assert.equal(pickWaiter(open, ''), undefined);
+    assert.equal(pickWaiter(open, 'python'), undefined);
+  });
+});
+
+describe('the pool and a worker that died', () => {
+  function stub(index: number): Worker & { stopped: boolean } {
+    const worker = {
+      index,
+      dead: false,
+      turn: null,
+      running: true,
+      stopped: false,
+      get idle() {
+        return worker.turn === null && !worker.dead;
+      },
+      hasSession: () => false,
+      ready: () => Promise.resolve(),
+      stop: async () => {
+        worker.stopped = true;
+      },
+    };
+    return worker as unknown as Worker & { stopped: boolean };
+  }
+
+  it('gives a dead worker\'s slot to its replacement rather than growing without bound', () => {
+    const made: ReturnType<typeof stub>[] = [];
+    const pool = new Pool(2, (index) => {
+      const worker = stub(index);
+      made.push(worker);
+      return worker;
+    });
+    const first = pool.claim('lobby')!;
+    first.turn = {} as Worker['turn'];
+    const second = pool.claim('dm')!;
+    second.turn = {} as Worker['turn'];
+    assert.equal(pool.size, 2, 'the ceiling');
+    assert.equal(pool.claim('other'), null, 'full and busy');
+
+    // The second dies; the ceiling is two live workers, so a third is made —
+    // in the dead one's slot, with its index, and the dead one is stopped.
+    second.dead = true;
+    const third = pool.claim('dm')!;
+    assert.equal(pool.size, 2, 'no growth');
+    assert.equal(third.index, 1, "the dead worker's slot");
+    assert.equal(made[1]?.stopped, true, 'its bridge is closed');
+    assert.equal(pool.workers()[1], third);
+
+    // Every worker dead: nothing more is spawned, on purpose.
+    first.dead = true;
+    third.dead = true;
+    assert.equal(pool.claim('lobby'), null, 'a crash loop is not a pool');
+    assert.equal(pool.size, 2);
   });
 });

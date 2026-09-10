@@ -80,9 +80,20 @@ export class Pool {
     );
   }
 
+  /**
+   * A new worker — in a dead one's slot when there is one, so a runtime that
+   * flaps while the others carry on does not grow the pool without bound,
+   * and the dead worker's bridge is closed rather than left listening.
+   */
   #spawn(): Worker {
-    const worker = this.make(this.#workers.length);
-    this.#workers.push(worker);
+    const slot = this.#workers.findIndex((worker) => worker.dead);
+    const index = slot === -1 ? this.#workers.length : slot;
+    const worker = this.make(index);
+    if (slot === -1) this.#workers.push(worker);
+    else {
+      void this.#workers[slot]?.stop();
+      this.#workers[slot] = worker;
+    }
     // Started here so it is on its way before anybody awaits it; the failure,
     // if any, reaches whoever does.
     worker.ready().catch(() => {});
