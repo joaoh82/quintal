@@ -36,7 +36,15 @@ interface Handlers {
   closed?: (code: unknown) => void;
 }
 
-function readyWith(instructions: string) {
+interface Team {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  members: string[];
+}
+
+function readyWith(instructions: string, teams: Team[]) {
   return {
     agentId: 'agent-1',
     name: 'Bob',
@@ -44,12 +52,19 @@ function readyWith(instructions: string) {
     ownerName: 'Josh',
     description: '',
     instructions,
+    channels: [],
+    teams,
     limits: { walkUpRadiusTiles: 4 },
   };
 }
 
-function fakeGateway(handlers: Handlers, instructions: string, core: string): Gateway {
-  const ready = readyWith(instructions);
+function fakeGateway(
+  handlers: Handlers,
+  instructions: string,
+  core: string,
+  teams: Team[] = [],
+): Gateway {
+  const ready = readyWith(instructions, teams);
   return {
     ready,
     roster: { zone: { id: 'lobby', label: 'the lobby' } },
@@ -142,7 +157,11 @@ describe('what reaches the model on the first turn', () => {
 
   after(stopCurrent);
 
-  async function firstPrompt(instructions: string, core: string): Promise<string> {
+  async function firstPrompt(
+    instructions: string,
+    core: string,
+    teams: Team[] = [],
+  ): Promise<string> {
     await stopCurrent();
     const dir = mkdtempSync(join(tmpdir(), 'quintal-prompt-'));
     const record = join(dir, 'requests.jsonl');
@@ -152,7 +171,7 @@ describe('what reaches the model on the first turn', () => {
     const runner = new AgentRunner(
       config(dir),
       undefined,
-      fakeGateway(handlers, instructions, core),
+      fakeGateway(handlers, instructions, core, teams),
     );
     current = runner;
     await runner.start();
@@ -197,6 +216,35 @@ describe('what reaches the model on the first turn', () => {
 
     assert.doesNotMatch(text, /\[Your owner's instructions\]/);
     assert.doesNotMatch(text, /\[Core memory/);
+  });
+
+  it('tells the agent which teams it is on, between who it is and where it works', async () => {
+    const text = await firstPrompt('', '', [
+      {
+        id: 't1',
+        name: 'engineering',
+        description: 'Reviews.',
+        instructions: 'Claim work before starting.',
+        members: ['Bob', 'Codex'],
+      },
+    ]);
+
+    assert.match(text, /\[Team engineering\]/);
+    assert.match(text, /You are on the engineering team with Codex\. Reviews\./);
+    assert.match(text, /Claim work before starting\./);
+    // Heading lines, not first mentions: the base prompt talks about the
+    // `[Workspace]` section by name long before the section itself.
+    const you = text.search(/^\[You\]$/m);
+    const team = text.search(/^\[Team engineering\]$/m);
+    const workspace = text.search(/^\[Workspace\]$/m);
+    assert.ok(you !== -1 && workspace !== -1, 'both neighbours are present');
+    assert.ok(you < team && team < workspace, 'after [You], before [Workspace]');
+  });
+
+  it('says nothing about teams to an agent on none', async () => {
+    const text = await firstPrompt('', '', []);
+
+    assert.doesNotMatch(text, /\[Team /);
   });
 
   it('tells the agent when to write memory, not just that it can', async () => {

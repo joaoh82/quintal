@@ -38,6 +38,7 @@ import {
   TOOL_HINT,
   buildBanterEnvelope,
   buildEnvelope,
+  teamSection,
   selectWindow,
   type Trigger,
 } from './context.js';
@@ -473,12 +474,20 @@ export class AgentRunner {
     // than starting a turn about it.
     if (this.#answersPermission(message, ready)) return;
 
+    // A line that named a team we are on is addressed to us as surely as one
+    // that named us: the office expanded the team and says so. Its word, not
+    // ours — the harness does not know the teams, and the text does not
+    // contain our name.
+    const viaTeam = message.viaTeam !== undefined;
+
     // Other agents are context, not conversation. Two bots within earshot
     // acknowledging each other is the failure mode that ate Buzz's rooms, and
     // the only cure is refusing to start the loop.
-    if (message.fromKind === 'agent' && !isAddressed(message.text, ready.name)) return;
+    if (message.fromKind === 'agent' && !viaTeam && !isAddressed(message.text, ready.name)) {
+      return;
+    }
 
-    if (!this.#addressesMe(message, distance, ready.name)) return;
+    if (!viaTeam && !this.#addressesMe(message, distance, ready.name)) return;
 
     this.#enqueue(scope, {
       fromUserId: message.fromUserId,
@@ -487,6 +496,7 @@ export class AgentRunner {
       text: message.text,
       distance,
       sentAt: message.sentAt,
+      viaTeam: message.viaTeam,
     });
   }
 
@@ -531,7 +541,11 @@ export class AgentRunner {
     });
   }
 
-  /** A mention carries no distance: it reached us from anywhere on the map. */
+  /**
+   * A mention carries no distance: it reached us from anywhere on the map.
+   * The spread keeps `viaTeam`, so a mention of a team we are on reaches the
+   * trigger with the team on it, the same as a line said nearby.
+   */
   #onMention(message: AgentMentionEvent): void {
     this.#onChat({ ...message, distance: 0 } as AgentChatEvent, null);
   }
@@ -575,6 +589,7 @@ export class AgentRunner {
       distance: null,
       channel: message.channel,
       sentAt: message.sentAt,
+      viaTeam: message.viaTeam,
     });
   }
 
@@ -1031,6 +1046,10 @@ export class AgentRunner {
       `[You]`,
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
       `You are standing in ${this.#zoneLabel()}.`,
+      // The teams this agent is on, before the workspace: who it shares work
+      // with is part of who it is, and the shared instructions are the
+      // owner's word for the whole team, ranked with the rest of the owner's.
+      ...(ready?.teams ?? []).map((team) => teamSection(team, ready?.name ?? this.name)),
       '',
       workspaceSection(this.config.cwd),
       // Two authors, kept apart and labelled as such.
@@ -1071,6 +1090,7 @@ export class AgentRunner {
     return [
       '[You]',
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
+      ...(ready?.teams ?? []).map((team) => teamSection(team, ready?.name ?? this.name)),
       instructions.length > 0 ? `\n[Your owner's instructions]\n${instructions}` : '',
     ]
       .filter((line) => line !== '')

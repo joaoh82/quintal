@@ -30,3 +30,20 @@ describe('when a channel list counts as changed', () => {
     assert.notEqual(channelListSignature([channel('a')], []), channelListSignature([renamed], []));
   });
 });
+
+describe('teams on the same list', () => {
+  const team = (name: string, members: string[]) => ({
+    id: `t-${name}`,
+    name,
+    description: '',
+    members: members.map((id) => ({ id, name: id })),
+  });
+
+  it('changes when a team is renamed or gains a member, and not otherwise', () => {
+    const base = channelListSignature([], [], [team('eng', ['a'])]);
+    assert.equal(channelListSignature([], [], [team('eng', ['a'])]), base);
+    assert.notEqual(channelListSignature([], [], [team('design', ['a'])]), base);
+    assert.notEqual(channelListSignature([], [], [team('eng', ['a', 'b'])]), base);
+    assert.notEqual(channelListSignature([], [], []), base);
+  });
+});

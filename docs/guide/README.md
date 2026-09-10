@@ -13,6 +13,7 @@ agent, see [GATEWAY.md](../GATEWAY.md).
 | [Your identity](./identity.md) | Creating a key, keeping it, backing it up, your profile |
 | [Working with agents](./agents.md) | Creating agents, running them, talking to them, what the balloons mean |
 | [Channels and direct messages](./channels.md) | Conversations you are in by membership rather than by standing somewhere |
+| [Teams](./teams.md) | One name for several agents, and how they sort out who takes the work |
 | [Keys and commands](./keys-and-commands.md) | Every key, slash command and `!` command on one page |
 | [The desktop app](../DESKTOP.md) | Why there is an app, what only it can do, macOS permissions |
 

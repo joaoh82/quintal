@@ -18,7 +18,15 @@ export type Segment =
   /** Words, as written. */
   | { kind: 'text'; text: string }
   /** An address: `text` as written, `href` where it goes. */
-  | { kind: 'link'; text: string; href: string };
+  | { kind: 'link'; text: string; href: string }
+  /** `@team`, as written; `name` is the team's name as the office spells it. */
+  | { kind: 'team'; text: string; name: string };
+
+/**
+ * `@word` at a word boundary — the same shape `MENTION_PATTERN` reads, so a
+ * chip appears exactly where the office would have resolved a team.
+ */
+const MENTION = /(^|[^\p{L}\p{N}_-])@([\p{L}\p{N}][\p{L}\p{N}_-]*)/gu;
 
 /**
  * A scheme or a `www.` at a word boundary, then everything up to whitespace
@@ -72,8 +80,14 @@ function isAddress(text: string): boolean {
 /**
  * The line, split into text and links, in order. A line with no address
  * comes back as a single text segment; an empty line as nothing at all.
+ *
+ * With `teams` — the office's team names — an `@team` in the text becomes a
+ * segment of its own, so the transcript can show it as a chip that says who
+ * it reached. Names are matched the way the office matches them: whole
+ * word, any case. `@Marvin` stays text; only teams get chips, because a
+ * person's name reads fine as written and a team's does not say who it is.
  */
-export function segments(line: string): Segment[] {
+export function segments(line: string, teams: readonly string[] = []): Segment[] {
   const out: Segment[] = [];
   let cursor = 0;
   for (const match of line.matchAll(ADDRESS)) {
@@ -82,11 +96,29 @@ export function segments(line: string): Segment[] {
     if (start > 0 && /[a-z0-9]/i.test(line[start - 1]!)) continue;
     const text = trimEnd(match[0]);
     if (!isAddress(text)) continue;
-    if (start > cursor) out.push({ kind: 'text', text: line.slice(cursor, start) });
+    if (start > cursor) out.push(...textOrTeams(line.slice(cursor, start), teams));
     const href = /^www\./i.test(text) ? `https://${text}` : text;
     out.push({ kind: 'link', text, href });
     cursor = start + text.length;
   }
-  if (cursor < line.length) out.push({ kind: 'text', text: line.slice(cursor) });
+  if (cursor < line.length) out.push(...textOrTeams(line.slice(cursor), teams));
+  return out;
+}
+
+/** A stretch of prose, with its `@team`s picked out. */
+function textOrTeams(text: string, teams: readonly string[]): Segment[] {
+  if (teams.length === 0) return [{ kind: 'text', text }];
+  const byLower = new Map(teams.map((name) => [name.toLowerCase(), name]));
+  const out: Segment[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(MENTION)) {
+    const name = byLower.get(match[2]!.toLowerCase());
+    if (name === undefined) continue;
+    const start = match.index + match[1]!.length;
+    if (start > cursor) out.push({ kind: 'text', text: text.slice(cursor, start) });
+    out.push({ kind: 'team', text: `@${match[2]!}`, name });
+    cursor = start + 1 + match[2]!.length;
+  }
+  if (cursor < text.length) out.push({ kind: 'text', text: text.slice(cursor) });
   return out;
 }

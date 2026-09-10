@@ -102,6 +102,7 @@ export function ChatPanel({
 
       <Transcript
         messages={transcript.messages}
+        teams={conversations.teams}
         hasMore={false}
         loading={transcript.loading && transcript.messages.length === 0}
         onLoadEarlier={() => {}}
@@ -120,6 +121,7 @@ export function ChatPanel({
       <ChatInput
         roster={roster}
         joinable={joinTargets(conversations.channels, conversations.available)}
+        teams={conversations.teams}
         focused={focused}
         onSend={send}
         onFocusChange={onFocusChange}

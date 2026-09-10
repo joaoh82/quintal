@@ -35,6 +35,7 @@ function fakeGateway(handlers: Handlers, statuses: string[]): Gateway {
     description: '',
     instructions: '',
     channels: [],
+    teams: [],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {

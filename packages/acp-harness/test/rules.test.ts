@@ -9,7 +9,13 @@ import { join } from 'node:path';
 
 import { loadFleet, nestRoot, parseFleet, splitCommand, ConfigError } from '../src/config.js';
 import { resolveZone } from '../src/mcp/bridge.js';
-import { buildEnvelope, selectWindow, WINDOW_SIZE } from '../src/runner/context.js';
+import {
+  buildEnvelope,
+  describeTeam,
+  selectWindow,
+  teamSection,
+  WINDOW_SIZE,
+} from '../src/runner/context.js';
 import { MAX_BUBBLES, MAX_POSTS, statusForTool, toBubbles, toPosts } from '../src/runner/outbound.js';
 import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
 
@@ -253,6 +259,85 @@ describe('context envelope', () => {
     assert.match(envelope, /\[new message — arrived while you were working\]/);
   });
 
+  it('says which team was named, who else got it, and how many that makes', () => {
+    // An agent that does not know it is one of three starts the work as if
+    // it were the only one asked — and so do the other two.
+    const envelope = buildEnvelope({
+      agentName: 'Bob',
+      zoneLabel: 'the lobby',
+      channel: { kind: 'channel', name: 'Engineering', slug: 'engineering' },
+      triggers: [
+        {
+          fromUserId: 'u1',
+          fromName: 'Josh',
+          fromKind: 'human',
+          text: '@engineering review #52',
+          distance: null,
+          channel: { kind: 'channel', name: 'Engineering', slug: 'engineering' },
+          sentAt: 1,
+          viaTeam: { name: 'engineering', members: ['Claude', 'Grok'] },
+        },
+      ],
+      window: [],
+    });
+
+    assert.match(envelope, /addressed as part of team engineering, with Claude and Grok\./);
+    assert.match(envelope, /All three of you got this message/);
+    assert.match(envelope, /see each other's replies here/);
+    // Placed with the situation, before the conversation.
+    assert.ok(
+      envelope.indexOf('part of team engineering') < envelope.indexOf('Josh (human'),
+      'the team line comes before the message it explains',
+    );
+  });
+
+  it('says when the team line reached nobody else', () => {
+    const envelope = buildEnvelope({
+      agentName: 'Bob',
+      zoneLabel: 'the lobby',
+      triggers: [
+        {
+          fromUserId: 'u1',
+          fromName: 'Josh',
+          fromKind: 'human',
+          text: '@engineering review #52',
+          distance: null,
+          sentAt: 1,
+          viaTeam: { name: 'engineering', members: [] },
+        },
+      ],
+      window: [],
+    });
+
+    assert.match(
+      envelope,
+      /addressed as part of team engineering; you are the only member who received it\./,
+    );
+    assert.doesNotMatch(envelope, /of you got this message/);
+  });
+
+  it('names a team once, however many lines in the batch named it', () => {
+    const viaTeam = { name: 'engineering', members: ['Claude'] };
+    const triggers = [1, 2].map((n) => ({
+      fromUserId: 'u1',
+      fromName: 'Josh',
+      fromKind: 'human' as const,
+      text: `message ${n}`,
+      distance: null,
+      sentAt: n,
+      viaTeam,
+    }));
+    const envelope = buildEnvelope({
+      agentName: 'Bob',
+      zoneLabel: 'the lobby',
+      triggers,
+      window: [],
+    });
+
+    assert.equal(envelope.match(/part of team engineering/g)?.length, 1);
+    assert.match(envelope, /with Claude\. Both of you got this message/);
+  });
+
   it('caps the pushed window and excludes the triggering messages', () => {
     const history = Array.from({ length: 30 }, (_, i) => message(`m${i}`, i));
     const window = selectWindow(history, new Set([29, 28]));
@@ -261,6 +346,45 @@ describe('context envelope', () => {
     assert.ok(!window.some((m) => m.sentAt === 29 || m.sentAt === 28));
     // Newest kept, oldest dropped: the recent conversation, not the whole day.
     assert.equal(window.at(-1)?.text, 'm27');
+  });
+});
+
+describe('team wording', () => {
+  it('counts in words up to ten, then gives up counting', () => {
+    const named = (n: number) =>
+      describeTeam({ name: 't', members: Array.from({ length: n }, (_, i) => `a${i}`) });
+    assert.match(named(1), /Both of you/);
+    assert.match(named(2), /All three of you/);
+    assert.match(named(9), /All ten of you/);
+    assert.match(named(10), /All of you got/);
+    assert.match(named(4), /with a0, a1, a2 and a3\./);
+  });
+
+  it('describes a team without listing the agent as its own colleague', () => {
+    const section = teamSection(
+      {
+        id: 't1',
+        name: 'engineering',
+        description: 'Reviews.',
+        instructions: 'Claim work before starting.',
+        members: ['Bob', 'Codex'],
+      },
+      'Bob',
+    );
+    assert.equal(
+      section,
+      '[Team engineering]\n' +
+        'You are on the engineering team with Codex. Reviews.\n' +
+        'Claim work before starting.',
+    );
+  });
+
+  it('omits what nobody wrote, and says when the team is one agent', () => {
+    const section = teamSection(
+      { id: 't1', name: 'solo', description: '', instructions: '', members: ['Bob'] },
+      'Bob',
+    );
+    assert.equal(section, '[Team solo]\nYou are on the solo team, its only member so far.');
   });
 });
 

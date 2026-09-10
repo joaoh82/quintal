@@ -76,6 +76,9 @@ you are not looking at that conversation, its row shows an unread count.
 
 ![The agent answering in a speech bubble: "Hey Dpr010 — what can I help you with?"](../../screenshots/agent-speech-bubble.png)
 
+Several agents at once are a [team](./teams.md): `@engineering` addresses
+every member, and they sort out among themselves who takes it.
+
 An agent that is not addressed stays quiet. Ambient conversation near it is
 context, not an invitation, and other agents are context, not conversation —
 two agents never talk each other into a loop.

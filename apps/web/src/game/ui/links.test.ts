@@ -86,3 +86,22 @@ describe('where the links are in a line', () => {
     ]);
   });
 });
+
+describe('team chips', () => {
+  it('picks out an @team, whole word and any case, and leaves people as text', () => {
+    assert.deepEqual(segments('hey @Engineering and @Marvin, see @engineering-ops', ['engineering']), [
+      { kind: 'text', text: 'hey ' },
+      { kind: 'team', text: '@Engineering', name: 'engineering' },
+      { kind: 'text', text: ' and @Marvin, see @engineering-ops' },
+    ]);
+  });
+
+  it('keeps links and chips apart, and does nothing without teams', () => {
+    assert.deepEqual(segments('@eng https://x.io/@eng', ['eng']), [
+      { kind: 'team', text: '@eng', name: 'eng' },
+      { kind: 'text', text: ' ' },
+      { kind: 'link', text: 'https://x.io/@eng', href: 'https://x.io/@eng' },
+    ]);
+    assert.deepEqual(segments('@eng'), [{ kind: 'text', text: '@eng' }]);
+  });
+});

@@ -9,7 +9,9 @@ import {
   findAgentById,
   findChannel,
   findMembership,
+  findTeam,
   getDb,
+  isChannelMember,
   removeChannelMember,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -120,6 +122,54 @@ export async function addChannelMemberAction(
     return { ok: true };
   } catch (error: unknown) {
     return { ok: false, error: error instanceof Error ? error.message : 'Could not add them.' };
+  }
+}
+
+/**
+ * Put a whole team in a channel: each member that is not already in, one
+ * `addChannelMember` at a time, under the same per-owner rule as adding one
+ * agent by hand. Members the caller may not add are named in the answer
+ * rather than silently skipped — a team half in a channel is a mention that
+ * half lands.
+ */
+export async function addTeamToChannelAction(
+  _previous: ChannelActionState,
+  formData: FormData,
+): Promise<ChannelActionState> {
+  try {
+    const { db, workspaceId, actor } = await caller();
+    const channelId = String(formData.get('channelId') ?? '');
+    const teamId = String(formData.get('teamId') ?? '');
+    const channel = await findChannel(db, workspaceId, channelId);
+    if (!channel) return { ok: false, error: 'No such channel.' };
+    const team = await findTeam(db, workspaceId, teamId);
+    if (!team) return { ok: false, error: 'No such team.' };
+
+    const refused: string[] = [];
+    for (const member of team.members) {
+      if (await isChannelMember(db, channelId, member.id)) continue;
+      const subject = { id: member.id, kind: 'agent' as const, ownerUserId: member.ownerUserId };
+      if (!mayAddToChannel(actor, subject)) {
+        refused.push(member.name);
+        continue;
+      }
+      await addChannelMember(db, {
+        channelId,
+        memberId: member.id,
+        memberKind: 'agent',
+        addedBy: actor.userId,
+      });
+    }
+    revalidatePath('/settings/channels');
+    if (refused.length > 0) {
+      return {
+        ok: false,
+        error: `Added the rest; only an agent’s owner can add ${refused.join(', ')}.`,
+      };
+    }
+    return { ok: true };
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not add the team.' };
   }
 }
 

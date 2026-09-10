@@ -15,5 +15,6 @@ export * from './migrate.js';
 export * from './schema.js';
 export * from './avatars.js';
 export * from './settings.js';
+export * from './teams.js';
 export * from './url.js';
 export * from './workspaces.js';

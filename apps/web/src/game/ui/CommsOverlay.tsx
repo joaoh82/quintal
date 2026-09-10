@@ -283,6 +283,7 @@ export function CommsOverlay({
 
           <Transcript
             messages={activeTranscript.messages}
+            teams={conversations.teams}
             hasMore={activeTranscript.hasMore}
             loading={activeTranscript.loading}
             onLoadEarlier={() => conversations.loadEarlier(active)}
@@ -309,6 +310,7 @@ export function CommsOverlay({
           <ChatInput
             roster={roster}
             joinable={joinTargets(conversations.channels, available)}
+            teams={conversations.teams}
             focused
             autoFocus
             onSend={conversations.send}

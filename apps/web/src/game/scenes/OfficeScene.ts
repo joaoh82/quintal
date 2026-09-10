@@ -25,6 +25,7 @@ import {
   type DmOpenedPayload,
   type EarshotPayload,
   type ErrorPayload,
+  type NoticePayload,
   type GameBridge,
   type HistoryGetPayload,
   type HistoryPayload,
@@ -194,6 +195,10 @@ export class OfficeScene extends Phaser.Scene {
 
     room.onMessage(ServerMessage.Error, (error: ErrorPayload) => {
       this.#bridge.emit('notice', { code: error.code, message: error.message });
+    });
+    // Not a refusal: the line went out, and here is what it could not do.
+    room.onMessage(ServerMessage.Notice, (notice: NoticePayload) => {
+      this.#bridge.emit('notice', { code: notice.code, message: notice.message });
     });
 
     room.onMessage(ServerMessage.History, (history: HistoryPayload) => {

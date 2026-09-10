@@ -37,13 +37,16 @@ import {
   tileCentre,
   toTile,
   isAddressed,
+  channelLabel,
   mentionedNames,
   messageMaxLength,
   zoneAt,
   type AgentBanterEvent,
   type AgentChannelChatEvent,
+  type AgentTeam,
   type AgentChannelsEvent,
   type AgentChatEvent,
+  type AgentMentionEvent,
   type AgentEmotePayload,
   type AgentErrorPayload,
   type AgentLookAroundPayload,
@@ -78,6 +81,7 @@ import {
   type ChatSendPayload,
   type Direction,
   type ErrorPayload,
+  type NoticePayload,
   type HistoryGetPayload,
   type HistoryPayload,
   type InputPayload,
@@ -107,6 +111,9 @@ import {
   getAgentMemory,
   latestMessageAtByConversation,
   listAgentsForWorkspace,
+  listTeamsForWorkspace,
+  teamRef,
+  type TeamSummary,
   listPeopleForWorkspace,
   removeChannelMember,
   getDb,
@@ -143,6 +150,8 @@ import {
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
 import { channelListSignature } from './channel-list.js';
+import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
+import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import { workingSinceAfter } from './working-since.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
@@ -267,6 +276,17 @@ export class OfficeRoom extends Room<OfficeState> {
    * has opened either.
    */
   readonly #lastMessageAt = new Map<string, number>();
+  /**
+   * The office's teams, refreshed with the channels. A mention resolves
+   * against them; an agent is told which it is on when it connects.
+   */
+  #teams: readonly TeamSummary[] = [];
+  /**
+   * Per agent, per conversation: the hop of the line that last woke it, so
+   * its reply can be stamped one further and a chain of agents naming each
+   * other stops where `AGENT_MENTION_MAX_HOPS` says. See `hops.ts`.
+   */
+  readonly #wakeHops = new WakeHops();
   /** sessionId -> the channel list last sent to it, so a change is sent once. */
   readonly #channelsSent = new Map<string, string>();
   /**
@@ -627,6 +647,7 @@ export class OfficeRoom extends Room<OfficeState> {
       zoneId: zone?.id ?? null,
       zones: this.#map.zones.map((z) => ({ id: z.id, label: z.label, kind: z.kind })),
       channels: this.#channelsFor(identity.id),
+      teams: this.#teamsFor(identity.id),
       serverTime: Date.now(),
       limits: {
         chatIntervalMs: AGENT_CHAT_INTERVAL_MS,
@@ -1035,13 +1056,25 @@ export class OfficeRoom extends Room<OfficeState> {
       sentAt,
     };
 
-    const addressed = mentionedNames(text);
+    // Names resolve against the people in the room, and a team's name against
+    // its members here. The line's hop says whether naming anybody may still
+    // start a turn: a person's line always may; an agent's, only while the
+    // chain it is part of is short.
+    const audience: Addressable[] = [...this.state.players.values()].map((player) => ({
+      id: player.userId,
+      name: player.name,
+      kind: player.kind,
+    }));
+    const resolved = resolveMentions(mentionedNames(text), audience, this.#teamRosters(), speaker.userId);
+    const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, SPATIAL));
+    const wakes = mayWake(hop);
     const owed = this.#collectReplyDebt(sessionId, sentAt);
 
     for (const [listenerId, listener] of this.state.players) {
       const distance = this.#tileDistance(speaker, listener);
       const withinEarshot = distance <= radius;
-      const byName = addressed.includes(listener.name.toLowerCase());
+      const reach = resolved.reached.get(listener.userId);
+      const byName = reach !== undefined;
       // Somebody who addressed this speaker from across the room is owed the
       // answer, wherever they are standing now.
       const owedThis = owed.has(listenerId);
@@ -1057,7 +1090,10 @@ export class OfficeRoom extends Room<OfficeState> {
         // ends. A person, or its name — another agent talking nearby is
         // context, the way the harness also treats it, and a banter line
         // must not wake every idler in earshot.
-        if (speaker.kind === 'human' || byName) this.#noteActivity(listenerId, true);
+        const woken = byName && wakes;
+        if (speaker.kind === 'human' || woken) this.#noteActivity(listenerId, true);
+        if (woken) this.#wakeHops.woken(listenerId, SPATIAL, hop);
+        const via = woken && reach?.viaTeam ? { viaTeam: reach.viaTeam } : {};
         if (withinEarshot) {
           target.send(AgentServerMessage.NearbyChat, {
             from: sessionId,
@@ -1067,8 +1103,9 @@ export class OfficeRoom extends Room<OfficeState> {
             text,
             distance: round(distance),
             sentAt,
+            ...via,
           } satisfies AgentChatEvent);
-        } else if (listenerId !== sessionId) {
+        } else if (woken) {
           target.send(AgentServerMessage.Mention, {
             from: sessionId,
             fromUserId: speaker.userId,
@@ -1076,7 +1113,8 @@ export class OfficeRoom extends Room<OfficeState> {
             fromKind: speaker.kind,
             text,
             sentAt,
-          });
+            ...via,
+          } satisfies AgentMentionEvent);
         }
       } else {
         target.send(ServerMessage.Chat, humanPayload);
@@ -1084,11 +1122,19 @@ export class OfficeRoom extends Room<OfficeState> {
 
       // Addressing somebody out of earshot opens a short window for their
       // reply to come back to you.
-      if (byName && !withinEarshot && listenerId !== sessionId) {
-        this.#oweReply(listenerId, sessionId, sentAt);
-      }
-      if (byName && listenerId !== sessionId) mentioned.push(listener.userId);
+      if (byName && wakes && !withinEarshot) this.#oweReply(listenerId, sessionId, sentAt);
+      if (byName) mentioned.push(listener.userId);
     }
+
+    if (!wakes && mentioned.length > 0) {
+      const agent = this.#agents.get(sessionId);
+      if (agent) audit(agent.id, 'effect.mention_suppressed', { hop, where: zoneId, mentioned });
+    }
+    this.#sendNotice(
+      sessionId,
+      'team_members_absent',
+      absentNotice(resolved.absent, 'the office right now'),
+    );
 
     // Anyone reading this zone from elsewhere. Sent even to somebody who also
     // heard it in earshot: the two arrive on different messages and land in
@@ -1120,11 +1166,13 @@ export class OfficeRoom extends Room<OfficeState> {
   async #refreshChannels(): Promise<void> {
     try {
       const db = getDb();
-      const [channels, latest] = await Promise.all([
+      const [channels, latest, teams] = await Promise.all([
         channelMembershipForWorkspace(db, this.#workspaceId),
         latestMessageAtByConversation(db, this.#workspaceId),
+        listTeamsForWorkspace(db, this.#workspaceId),
       ]);
       this.#channels = channels;
+      this.#teams = teams;
       // A line delivered here is known before the database has it; the
       // later of the two is the truth.
       for (const [id, at] of latest) {
@@ -1198,15 +1246,45 @@ export class OfficeRoom extends Room<OfficeState> {
         }
       }
     }
-    const signature = channelListSignature(channels, available);
+    const teams = this.#teams.map(teamRef);
+    const signature = channelListSignature(channels, available, teams);
     if (this.#channelsSent.get(sessionId) === signature) return;
     this.#channelsSent.set(sessionId, signature);
 
     if (this.#agents.has(sessionId)) {
       client.send(AgentServerMessage.Channels, { channels } satisfies AgentChannelsEvent);
     } else {
-      client.send(ServerMessage.Channels, { channels, available } satisfies ChannelsPayload);
+      client.send(ServerMessage.Channels, { channels, available, teams } satisfies ChannelsPayload);
     }
+  }
+
+  /** The teams as a mention resolves against them. */
+  #teamRosters(): TeamRoster[] {
+    return this.#teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      members: team.members.map((member) => ({ id: member.id, name: member.name })),
+    }));
+  }
+
+  /** The teams one agent is on, as it is told on connect. */
+  #teamsFor(agentId: string): AgentTeam[] {
+    return this.#teams
+      .filter((team) => team.members.some((member) => member.id === agentId))
+      .map((team) => ({
+        id: team.id,
+        name: team.name,
+        description: team.description,
+        instructions: team.instructions,
+        members: team.members.map((member) => member.name),
+      }));
+  }
+
+  /** Something a person should know that is not a refusal. Agents are not told: it is not for them. */
+  #sendNotice(sessionId: string, code: NoticePayload['code'], message: string | null): void {
+    if (message === null || this.#agents.has(sessionId)) return;
+    const client = this.clients.getById(sessionId);
+    client?.send(ServerMessage.Notice, { code, message } satisfies NoticePayload);
   }
 
   #onFollowZone(client: Client, payload: FollowZonePayload): void {
@@ -1305,17 +1383,27 @@ export class OfficeRoom extends Room<OfficeState> {
 
     // Mentions resolve against the channel's members, present or not: a
     // member who is not in the room right now can still be told later that
-    // they were named, which is what the mention index is for. In a DM every
-    // line is addressed to the other party by construction — there is nobody
-    // else it could be for.
-    const addressed = mentionedNames(text);
-    const mentioned = new Set<string>();
-    for (const member of channel.members.values()) {
-      if (member.id === speaker.userId) continue;
-      if (channel.kind === 'dm' || addressed.includes(member.name.toLowerCase())) {
-        mentioned.add(member.id);
+    // they were named, which is what the mention index is for. A team's name
+    // reaches its members that are in the channel; the sender is told about
+    // the ones that are not. In a DM every line is addressed to the other
+    // party by construction — there is nobody else it could be for.
+    const audience: Addressable[] = [...channel.members.values()].map((member) => ({
+      id: member.id,
+      name: member.name,
+      kind: member.kind,
+    }));
+    const resolved = resolveMentions(mentionedNames(text), audience, this.#teamRosters(), speaker.userId);
+    if (channel.kind === 'dm') {
+      for (const member of channel.members.values()) {
+        if (member.id !== speaker.userId && !resolved.reached.has(member.id)) {
+          resolved.reached.set(member.id, {});
+        }
       }
     }
+    const mentioned = new Set(resolved.reached.keys());
+    // Whether naming anybody may start a turn — see `hops.ts`.
+    const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, channel.id));
+    const wakes = mayWake(hop);
 
     const line = {
       from: sessionId,
@@ -1336,11 +1424,17 @@ export class OfficeRoom extends Room<OfficeState> {
         // Only a line that names it is for it; the rest is the quiet an
         // agent in a channel keeps, and a busy channel must not keep every
         // member from ever being idle.
-        if (mentioned.has(listener.userId)) this.#noteActivity(listenerId, true);
+        const woken = wakes && mentioned.has(listener.userId);
+        if (woken) {
+          this.#noteActivity(listenerId, true);
+          this.#wakeHops.woken(listenerId, channel.id, hop);
+        }
+        const via = resolved.reached.get(listener.userId)?.viaTeam;
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
           ...line,
-          mentioned: mentioned.has(listener.userId),
+          mentioned: woken,
+          ...(woken && via ? { viaTeam: via } : {}),
         } satisfies AgentChannelChatEvent);
       } else {
         target.send(ServerMessage.ChannelChat, {
@@ -1353,6 +1447,25 @@ export class OfficeRoom extends Room<OfficeState> {
         } satisfies ChannelChatPayload);
       }
     }
+
+    if (!wakes && mentioned.size > 0) {
+      const agent = this.#agents.get(sessionId);
+      if (agent) {
+        audit(agent.id, 'effect.mention_suppressed', {
+          hop,
+          channel: channel.id,
+          mentioned: [...mentioned],
+        });
+      }
+    }
+    this.#sendNotice(
+      sessionId,
+      'team_members_absent',
+      absentNotice(
+        resolved.absent,
+        channel.kind === 'dm' ? 'this conversation' : channelLabel(channel),
+      ),
+    );
 
     void this.#keepIn(channel.id, {
       fromId: speaker.userId,
@@ -2562,6 +2675,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#chatLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
     this.#followed.delete(sessionId);
+    this.#wakeHops.forget(sessionId);
     const later = this.#emoteLater.get(sessionId);
     if (later) {
       clearTimeout(later.timer);
