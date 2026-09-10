@@ -73,7 +73,6 @@ export function assignedToHost(
     enabled: boolean;
     hostLabel: string | null;
     runtimeId: string | null;
-    repoSpec: string | null;
   },
   host: { workspaceId: string; ownerUserId: string },
   label: string,
@@ -81,9 +80,9 @@ export function assignedToHost(
   if (!hostMayActAs(host, agent)) return false;
   if (!agent.enabled) return false;
   if (agent.hostLabel !== label) return false;
-  // An agent with no runtime or no workspace was never set up to be launched;
-  // it is a per-agent-key agent that happens to live in the same workspace.
-  return typeof agent.runtimeId === 'string' && typeof agent.repoSpec === 'string';
+  // An agent with no runtime was never set up to be launched; it is a
+  // per-agent-key agent that happens to live in the same office.
+  return typeof agent.runtimeId === 'string';
 }
 
 export interface CreatedHostToken {
@@ -260,8 +259,6 @@ export interface FleetMember {
   agentId: string;
   name: string;
   runtimeId: string;
-  /** As written: a repo name, `*`, or an absolute path. Resolved on the host. */
-  repoSpec: string;
   /**
    * The model to ask the runtime for, by the id it advertised. Null for the
    * runtime's default. Never a command-line flag: the harness sets it over
@@ -306,7 +303,6 @@ export async function fleetForHost(
       agentId: agents.id,
       name: agents.name,
       runtimeId: agents.runtimeId,
-      repoSpec: agents.repoSpec,
       description: agents.description,
       instructions: agents.instructions,
       hostLabel: agents.hostLabel,
@@ -322,7 +318,7 @@ export async function fleetForHost(
 
   return rows
     .filter(
-      (row): row is typeof row & { runtimeId: string; repoSpec: string } =>
+      (row): row is typeof row & { runtimeId: string } =>
         assignedToHost(
           {
             workspaceId: host.workspaceId,
@@ -331,7 +327,6 @@ export async function fleetForHost(
             enabled: row.enabled,
             hostLabel: row.hostLabel,
             runtimeId: row.runtimeId,
-            repoSpec: row.repoSpec,
           },
           host,
           hostLabel,
@@ -353,7 +348,6 @@ export async function fleetForHost(
       profile: profileFingerprint(row.description, row.instructions, row.memoryEditedAt),
       pubkey: row.pubkey,
       runtimeId: row.runtimeId,
-      repoSpec: row.repoSpec,
       modelId: row.modelId,
     }));
 }

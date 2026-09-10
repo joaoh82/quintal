@@ -31,7 +31,7 @@ async function world() {
     ownerUserId: josh.id,
     name: 'buzz',
     spriteKey: 'slate',
-    launch: { runtimeId: 'claude-code', repoSpec: 'api', hostLabel: 'laptop' },
+    launch: { runtimeId: 'claude-code', hostLabel: 'laptop' },
   });
   const token = await createHostToken(db, { workspaceId: josh.workspaceId, ownerUserId: josh.id, label: 'laptop' });
   const host = (await findHostByToken(db, token.token))!;

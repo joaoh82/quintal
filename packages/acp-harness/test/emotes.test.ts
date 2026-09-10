@@ -70,7 +70,6 @@ function config(cwd: string): AgentConfig {
     harness: 'custom',
     command: [process.execPath, FAKE],
     cwd,
-    rootedAtReposDir: false,
     url: 'http://localhost:0',
     mapId: 'hq',
     workspaceId: 'ws-1',

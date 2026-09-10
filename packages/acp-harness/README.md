@@ -110,12 +110,11 @@ find. Nothing in the nest is ever pushed into a prompt; the agent reads
 `AGENTS.md` once per session and pulls a file when a task calls for it.
 
 **Working somewhere else.** A fleet file can still say `"cwd": "/path"` or
-`"repo": "api"` (a name under the repos directory; `"*"` for the directory
-itself, `--all-repos` on the CLI) to root one agent elsewhere. These are
-overrides for somebody who wrote them on purpose, and a path that does not
-exist is rejected at config load with the agent's name attached — rather than
-as a bare `ENOENT` from `spawn` after the agent is already standing in the
-office.
+`"repo": "api"` (a name under the repos directory) to root one agent
+elsewhere; the CLI has `--cwd` and `--repo`. These are overrides for somebody
+who wrote them on purpose, and a path that does not exist is rejected at
+config load with the agent's name attached — rather than as a bare `ENOENT`
+from `spawn` after the agent is already standing in the office.
 
 **Which model.** `model: "opus"` asks the runtime for a specific model, by the
 id the runtime itself advertises over ACP; leave it out for the runtime's

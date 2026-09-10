@@ -452,7 +452,6 @@ export class AgentRunner {
     this.#gateway.hostReport({
       ...host,
       workspacePath: this.config.cwd,
-      rootedAtReposDir: this.config.rootedAtReposDir,
     });
   }
 

@@ -29,7 +29,6 @@ const base: AgentConfig = {
   harness: 'custom',
   command: ['claude', 'acp'],
   cwd: '/repos/quintal',
-  rootedAtReposDir: false,
   url: 'http://localhost:3000',
   mapId: 'hq',
   workspaceId: 'ws-1',

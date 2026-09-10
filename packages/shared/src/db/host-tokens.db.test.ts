@@ -46,7 +46,7 @@ async function makeAgent(
   db: Awaited<ReturnType<typeof createTestDb>>,
   owner: { id: string; workspaceId: string },
   name: string,
-  launch?: { runtimeId: string; repoSpec: string; hostLabel: string },
+  launch?: { runtimeId: string; hostLabel: string },
 ) {
   const agent = await createAgent(db, {
     workspaceId: owner.workspaceId,
@@ -158,15 +158,14 @@ describe('the fleet a host pulls', () => {
     });
     await makeAgent(db, josh, 'here', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
 
     const host = await findHostByToken(db, created.token);
     const fleet = await fleetForHost(db, host!, 'laptop');
     assert.deepEqual(
-      fleet.map((member) => ({ name: member.name, runtimeId: member.runtimeId, repoSpec: member.repoSpec })),
-      [{ name: 'here', runtimeId: 'claude-code', repoSpec: 'api' }],
+      fleet.map((member) => ({ name: member.name, runtimeId: member.runtimeId })),
+      [{ name: 'here', runtimeId: 'claude-code' }],
     );
   });
 
@@ -179,7 +178,6 @@ describe('the fleet a host pulls', () => {
     });
     const agent = await makeAgent(db, josh, 'here', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
 
@@ -201,7 +199,6 @@ describe('the fleet a host pulls', () => {
     });
     await makeAgent(db, sam, 'sams', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
 
@@ -218,7 +215,6 @@ describe('the fleet a host pulls', () => {
     });
     await makeAgent(db, josh, 'elsewhere', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'build-box',
     });
 
@@ -235,7 +231,6 @@ describe('the fleet a host pulls', () => {
     });
     const agent = await makeAgent(db, josh, 'here', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
     await revokeAgent(db, agent.id, josh.id);
@@ -266,7 +261,6 @@ describe('the fleet a host pulls', () => {
     });
     const agent = await makeAgent(db, josh, 'toggles', {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
     const host = await findHostByToken(db, created.token);
@@ -280,11 +274,9 @@ describe('the fleet a host pulls', () => {
     // field — the bug that shipped in #14 and was found by hand.
     await setAgentLaunch(db, agent.id, {
       runtimeId: 'claude-code',
-      repoSpec: 'api',
       hostLabel: 'laptop',
     });
     const back = await fleetForHost(db, host!, 'laptop');
-    assert.equal(back[0]?.repoSpec, 'api');
   });
 });
 
@@ -395,7 +387,6 @@ describe('turning an agent off', () => {
 
     const agent = await makeAgent(db, josh, 'Bob', {
       runtimeId: 'omp',
-      repoSpec: '*',
       hostLabel: 'laptop',
     });
 
@@ -430,7 +421,7 @@ describe('turning an agent off', () => {
     const host = await findHostByToken(db, machine.token);
     assert.ok(host);
 
-    const launch = { runtimeId: 'omp', repoSpec: '*', hostLabel: 'laptop' };
+    const launch = { runtimeId: 'omp', hostLabel: 'laptop' };
     const bob = await makeAgent(db, josh, 'Bob', launch);
     await makeAgent(db, josh, 'Alice', launch);
 

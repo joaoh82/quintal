@@ -332,16 +332,11 @@ export function AgentsManager({
                 />
               </label>
 
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium">Repo</span>
-                <Input name="repoSpec" placeholder="api  ·  * for all" className="w-44" />
-              </label>
-
               <p className="text-muted-foreground w-full text-[11px]">
                 Assigned to a machine, it boots there within a few seconds — no key
-                to copy. <span className="font-mono">*</span> roots it at your whole
-                repos directory, so it can find or clone a project it hasn&rsquo;t
-                been told about.
+                to copy. It works in that machine&rsquo;s shared workspace, with your
+                repos directory under <span className="font-mono">REPOS/</span>; say
+                which project is its own in its instructions.
               </p>
             </div>
           ) : null}
@@ -469,10 +464,7 @@ function AgentRow({
 
       {/* What it can reach on disk, for the same reason its owner's name is
           here: the answer should not require reading a file on another machine. */}
-      <WorkspaceBadge
-        path={agent.workspacePath}
-        rootedAtReposDir={agent.rootedAtReposDir}
-      />
+      <WorkspaceBadge path={agent.workspacePath} />
 
       <span className="text-muted-foreground ml-auto text-xs">
         created <RelativeTime at={agent.createdAt} />
@@ -531,16 +523,6 @@ function AgentRow({
             value={model}
             onChange={setModel}
             compact
-          />
-          {/* `required` so the browser blocks an empty submit before it can
-              become a thrown server error — this form has no inline error
-              slot, and a full-page overlay is not how you say "fill this in". */}
-          <input
-            name="repoSpec"
-            defaultValue={agent.repoSpec ?? ''}
-            placeholder="api · * for all"
-            required
-            className="border-input bg-background h-7 w-36 rounded border px-2 text-xs"
           />
           <button type="submit" className="text-xs underline-offset-2 hover:underline">
             Save

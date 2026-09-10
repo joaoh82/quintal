@@ -14,9 +14,6 @@ import { noteSecretEnv } from './secrets.js';
  * not the other way round.
  */
 
-/** `repo: "*"` — root at the repos directory itself rather than one checkout. */
-export const ALL_REPOS = '*';
-
 /**
  * Harnesses we know how to spawn without being told a command.
  *
@@ -81,15 +78,6 @@ export interface AgentConfig {
    * the harness itself; `harness` is the answer then.
    */
   runtimeId?: string;
-  /**
-   * True when `cwd` is the whole repos directory rather than one checkout.
-   *
-   * Worth tracking separately from the path because it is the difference
-   * between "can edit this project" and "can edit every project I have", and
-   * that difference should be visible in the office rather than inferred by
-   * comparing two strings.
-   */
-  rootedAtReposDir: boolean;
   url: string;
   mapId: string;
   /**
@@ -148,10 +136,9 @@ interface RawFleet {
 /**
  * Where your projects live.
  *
- * `cwd` stays mandatory — an agent must never inherit whatever directory the
- * CLI happened to start in — but spelling out an absolute path per agent is
- * tedious when they all live under one root. Set `reposDir` once and each agent
- * can say `"repo": "api"` instead.
+ * Agents reach it as `REPOS/` in the nest. A fleet file that roots one agent
+ * in a single checkout on purpose can say `"repo": "api"` and have it resolved
+ * here rather than spelling out the path.
  *
  * Default follows the convention: `~/projects`, overridable per fleet or by
  * QUINTAL_REPOS_DIR.
@@ -323,17 +310,14 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     // overrides for somebody who wrote them on purpose; an agent that names
     // neither works where every agent on this machine works.
     const repo = typeof rawAgent.repo === 'string' ? rawAgent.repo.trim() : '';
-    const rootedAtReposDir = repo === ALL_REPOS;
-    const cwdRaw = rootedAtReposDir
-      ? reposDir
-      : repo.length > 0
+    const cwdRaw =
+      repo.length > 0
         ? repo
         : typeof rawAgent.cwd === 'string' && rawAgent.cwd.trim().length > 0
           ? rawAgent.cwd.trim()
           : '';
-    const cwd = rootedAtReposDir
-      ? reposDir
-      : repo.length > 0
+    const cwd =
+      repo.length > 0
         ? resolve(reposDir, expandHome(repo))
         : cwdRaw.length > 0
           ? isAbsolute(expandHome(cwdRaw))
@@ -356,7 +340,6 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
       harness: harnessName,
       command,
       cwd,
-      rootedAtReposDir,
       url,
       mapId,
       workspaceId: '',
