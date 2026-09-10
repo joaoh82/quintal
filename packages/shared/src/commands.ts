@@ -46,13 +46,13 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
     name: 'forget',
     summary: 'Take something out of the agent\u2019s core memory',
     detail:
-      'Removes every line of core memory containing the words you give — `!forget finish with a joke`. The agent says what it forgot, or that nothing matched. The whole of its memory can be read and edited under Settings → Agents.',
+      'Takes a note out of core memory. Quote it from memory — `!forget finish with a joke` — typos and all: the agent finds the note you mean, asking its model when the words alone cannot settle it. `!memory` numbers the notes, and `!forget 2` names one. The agent says what it forgot, or lists what it carries so you can pick. The whole of its memory can be read and edited under Settings → Agents.',
   },
   {
     name: 'memory',
     summary: 'Ask the agent what it carries in core memory',
     detail:
-      'The agent says its core memory out loud — where you are, or in the channel you asked in. The same notes, with the rest of its memory, are under Settings → Agents.',
+      'The agent says its core memory out loud, numbered — where you are, or in the channel you asked in. `!forget <number>` takes one out. The same notes, with the rest of its memory, are under Settings → Agents.',
   },
   {
     name: 'shutdown',

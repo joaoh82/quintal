@@ -36,6 +36,11 @@ export interface Trigger {
    * after `expiresAt` the moment has passed and nothing should be said.
    */
   banter?: { line: string | null; expiresAt: number };
+  /**
+   * Set when this is a `!forget` the words alone could not settle: the
+   * owner's words, the memory as they saw it, and where to answer them.
+   */
+  forget?: { words: string; memory: string; scope: string };
 }
 
 export interface EnvelopeInput {

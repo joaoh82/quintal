@@ -272,6 +272,18 @@ describe('speaking in an office', () => {
   it('says nothing when there is nothing to say', () => {
     assert.deepEqual(toBubbles('   '), []);
   });
+
+  it('loses nothing to a full stop inside quotes, or a bang inside a code span', () => {
+    // Both used to vanish: the sentence pattern could not see a terminator
+    // followed by anything but a space, and only what it saw was spoken.
+    assert.deepEqual(toBubbles('Forgotten: "always finish with a joke."'), [
+      'Forgotten: "always finish with a joke."',
+    ]);
+    assert.deepEqual(toBubbles('What I carry:\n1. be terse\n`!forget <number>` takes one out.'), [
+      'What I carry: 1. be terse `!forget <number>` takes one out.',
+    ]);
+    assert.deepEqual(toBubbles('He said "stop." (Really!) Then left.'), ['He said "stop." (Really!) Then left.']);
+  });
 });
 
 describe('posting in a channel', () => {
