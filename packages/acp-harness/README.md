@@ -226,6 +226,10 @@ user id, not display name):
 | --- | --- |
 | `!cancel` | Cancel the turn in flight |
 | `!rotate` | Start a fresh session for this zone |
+| `!remember <note>` | Append a line to the agent's core memory |
+| `!forget <words>` | Take a note out of core memory |
+| `!memory` | The agent says what it carries |
+| `!guide <name> <text>` | Write a procedure into the workspace: `GUIDES/<NAME>.md`, indexed in `AGENTS.md`, with a pointer in this agent's core memory. An existing guide gains the text as a dated section. |
 | `!shutdown` | The harness exits |
 
 ## Permissions

@@ -55,6 +55,12 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
       'The agent says its core memory out loud, numbered — where you are, or in the channel you asked in. `!forget <number>` takes one out. The same notes, with the rest of its memory, are under Settings → Agents.',
   },
   {
+    name: 'guide',
+    summary: 'Write a procedure into the agents\u2019 workspace',
+    detail:
+      '`!guide code-review <how to do it>` writes GUIDES/CODE_REVIEW.md in the machine\u2019s shared workspace \u2014 the file every agent there reads before that kind of work \u2014 and adds a pointer to this agent\u2019s core memory. The first word names the guide; the rest is the procedure, kept as written. A guide that already exists gains the text as a dated section rather than being replaced.',
+  },
+  {
     name: 'shutdown',
     summary: 'Bring the agent home',
     detail:

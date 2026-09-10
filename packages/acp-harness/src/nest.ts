@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  appendFileSync,
   rmdirSync,
   symlinkSync,
   unlinkSync,
@@ -46,7 +47,7 @@ export const NEST_DIRS = ['GUIDES', 'RESEARCH', 'PLANS', '.scratch'] as const;
  * The static part of an existing `AGENTS.md` is rewritten only then; between
  * bumps an owner's edits to it survive.
  */
-export const NEST_VERSION = 1;
+export const NEST_VERSION = 2;
 
 const VERSION_FILE = '.nest-version';
 const AGENTS_FILE = 'AGENTS.md';
@@ -342,6 +343,88 @@ function titleOf(path: string): string | null {
   const match = /^title:\s*(.+)$/m.exec(text.slice(3, close));
   if (!match?.[1]) return null;
   return match[1].trim().replace(/^["'](.*)["']$/, '$1');
+}
+
+// --- guides ----------------------------------------------------------------
+
+/** How long a guide's name may be, in characters, after normalising. */
+const GUIDE_NAME_MAX = 64;
+
+/**
+ * The file a guide called `name` lives in: `code-review` → `CODE_REVIEW.md`.
+ *
+ * Owners type names the way they think of them; files follow the workspace's
+ * one convention so an agent can find them by eye. Null when nothing usable
+ * is left — a name that was all punctuation, or nothing at all.
+ */
+export function guideFileName(name: string): string | null {
+  const slug = name
+    .trim()
+    .replace(/\.md$/i, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+    .slice(0, GUIDE_NAME_MAX)
+    .replace(/_+$/, '');
+  return slug.length > 0 ? `${slug}.md` : null;
+}
+
+/** `CODE_REVIEW.md` → `Code review`: the title a fresh guide is given. */
+export function guideTitle(file: string): string {
+  const words = file.replace(/\.md$/i, '').toLowerCase().split('_').filter(Boolean);
+  const first = words[0] ?? '';
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...words.slice(1)].join(' ');
+}
+
+/**
+ * Write a guide the owner dictated, or add to one that exists.
+ *
+ * Never replaces: a guide is the accumulated policy for one kind of work,
+ * and an owner adding a rule in chat is adding, not starting over. A new
+ * guide gets the workspace's front matter and a title; an existing one gets
+ * the text as a dated section at the end, so the order rules were given in
+ * is the order they are read in.
+ */
+export function writeGuide(
+  root: string,
+  name: string,
+  body: string,
+  now: Date = new Date(),
+): { file: string; path: string; created: boolean } {
+  const file = guideFileName(name);
+  if (file === null) throw new Error(`"${name}" does not make a guide name`);
+  const text = body.trim();
+  if (text.length === 0) throw new Error('a guide needs a body');
+
+  const dir = join(root, 'GUIDES');
+  mkdirSync(dir, { recursive: true });
+  ownerOnly(dir);
+  const path = join(dir, file);
+  const day = now.toISOString().slice(0, 10);
+
+  if (existsSync(path)) {
+    appendFileSync(path, `\n## Added ${day}\n\n${text}\n`);
+    return { file, path, created: false };
+  }
+
+  const title = guideTitle(file);
+  writeFileSync(
+    path,
+    [
+      '---',
+      `title: "${title.replace(/"/g, "'")}"`,
+      'tags: [owner]',
+      'status: active',
+      `created: ${day}`,
+      '---',
+      '',
+      `# ${title}`,
+      '',
+      text,
+      '',
+    ].join('\n'),
+  );
+  return { file, path, created: true };
 }
 
 // --- filesystem odds and ends ----------------------------------------------
