@@ -80,10 +80,8 @@ export interface AgentHostReportPayload {
   reposDir: string;
   /** Omitted by all but the first agent of a fleet — the answer is per machine. */
   runtimes?: { id: string; installed: boolean; path: string | null }[];
-  /** Where *this* agent is rooted. */
+  /** Where *this* agent works: the machine's nest, unless rooted elsewhere by hand. */
   workspacePath: string;
-  /** True when rooted at the whole repos directory rather than one checkout. */
-  rootedAtReposDir: boolean;
 }
 
 /**

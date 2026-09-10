@@ -13,14 +13,15 @@ import { dirname, join } from 'node:path';
 
 import { HOST_TOKEN_PREFIX, acpCommandFor, runtimeById } from '@quintal/shared';
 
-import { ALL_REPOS, ConfigError, configDir, nestRoot, type AgentConfig } from './config.js';
+import { ConfigError, configDir, nestRoot, type AgentConfig } from './config.js';
 import { hostLabel } from './runtimes.js';
 
 /**
  * The office-defined fleet: this machine asks what it should be running.
  *
- * Pull, not push. The office says *which agent, which runtime, which repo* —
- * never a command line. The command is built here, from this machine's own
+ * Pull, not push. The office says *which agent, which runtime* — never a
+ * command line, and never a path: every agent here works in this machine's
+ * nest. The command is built here, from this machine's own
  * catalogue, so a compromised office still cannot run arbitrary things on
  * somebody's laptop. It is also why the eventual desktop app needs no new
  * protocol: same interface, served locally.
@@ -146,7 +147,6 @@ interface FleetResponse {
     agentId: string;
     name: string;
     runtimeId: string;
-    repoSpec: string;
     profile: string;
     modelId?: string | null;
     /** Its registered public key, or null. The desktop reads it; the harness does not need to. */
@@ -227,7 +227,6 @@ export async function fetchFleet(
 export function toAgentConfigs(
   fleet: FleetResponse,
   host: StoredHost,
-  reposDir: string,
   mapId: string,
   /** Each agent's own key, by agent id, when this machine holds one. */
   keys: ReadonlyMap<string, string> = new Map(),
@@ -252,14 +251,9 @@ export function toAgentConfigs(
     }
 
     // Every office-defined agent works in the nest — see `nest.ts`. The
-    // office no longer gets a say in the path: it names the agent and the
-    // runtime, and this machine decides that both live in the one workspace
-    // it keeps, with the owner's repositories reachable under `REPOS/`. The
-    // repo spec is carried only as the "whole repos directory or one
-    // checkout" flag the office shows beside the agent, until that field
-    // leaves the agent card.
-    const rootedAtReposDir = member.repoSpec.trim() === ALL_REPOS;
-
+    // office has no say in the path: it names the agent and the runtime, and
+    // this machine decides that both live in the one workspace it keeps, with
+    // the owner's repositories reachable under `REPOS/`.
     agents.push({
       name: member.name,
       // Its own key when this machine holds one (credentials v2); otherwise
@@ -271,7 +265,6 @@ export function toAgentConfigs(
       runtimeId: member.runtimeId,
       command,
       cwd: nestRoot(),
-      rootedAtReposDir,
       url: host.url,
       mapId,
       workspaceId: fleet.host.workspaceId,

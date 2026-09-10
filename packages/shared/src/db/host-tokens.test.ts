@@ -19,7 +19,6 @@ const MINE = {
   enabled: true,
   hostLabel: 'laptop',
   runtimeId: 'claude-code',
-  repoSpec: 'api',
 };
 
 describe('what a machine may act as', () => {
@@ -64,7 +63,7 @@ describe('what a machine should be running', () => {
 
   it('leaves per-agent-key agents alone — no runtime means it was never office-defined', () => {
     assert.equal(assignedToHost({ ...MINE, runtimeId: null }, HOST, 'laptop'), false);
-    assert.equal(assignedToHost({ ...MINE, repoSpec: null }, HOST, 'laptop'), false);
+    assert.equal(assignedToHost({ ...MINE, runtimeId: null }, HOST, 'laptop'), false);
   });
 
   it('never runs an agent it may not act as, however it was assigned', () => {

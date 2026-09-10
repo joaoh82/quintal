@@ -1752,12 +1752,10 @@ export class OfficeRoom extends Room<OfficeState> {
 
     markSeen(session.identity.id);
     const workspacePath = String(payload?.workspacePath ?? '');
-    const rootedAtReposDir = Boolean(payload?.rootedAtReposDir);
 
     audit(session.identity.id, 'command.host_report', {
       label: payload?.label,
       workspacePath,
-      rootedAtReposDir,
       runtimes: payload?.runtimes?.length ?? 0,
     });
 
@@ -1774,7 +1772,6 @@ export class OfficeRoom extends Room<OfficeState> {
         ...(payload?.runtimes ? { runtimes: payload.runtimes } : {}),
       },
       workspacePath,
-      rootedAtReposDir,
     });
   }
 

@@ -195,9 +195,9 @@ pub fn set_repos_dir(app_dir: &Path, chosen: &Path) -> Result<(), SpawnError> {
 
 /// Where this machine keeps its repositories, matching the harness's default.
 ///
-/// The two must agree: the harness resolves a relative `repoSpec` against this,
-/// so a different answer here would send an agent to a different directory than
-/// the office believes it is working in.
+/// The two must agree: the harness links `REPOS/` in the agents' workspace to
+/// this, so a different answer here would show agents a different set of
+/// projects than the app believes they can reach.
 pub fn default_repos_dir() -> PathBuf {
     if let Some(explicit) = std::env::var_os("QUINTAL_REPOS_DIR") {
         return PathBuf::from(explicit);

@@ -66,10 +66,12 @@ export interface CreateAgentInput {
   /**
    * How a host should launch this agent, when the office defines it.
    *
-   * All three together or none: an agent with a runtime but no host has nowhere
-   * to run, and one with a host but no runtime has nothing to run.
+   * Both together or none: an agent with a runtime but no host has nowhere
+   * to run, and one with a host but no runtime has nothing to run. Where it
+   * works is not the office's to say — every agent on a machine works in that
+   * machine's nest.
    */
-  launch?: { runtimeId: string; repoSpec: string; hostLabel: string; modelId?: string | null };
+  launch?: { runtimeId: string; hostLabel: string; modelId?: string | null };
 }
 
 export interface CreatedAgent {
@@ -99,7 +101,6 @@ export async function createAgent(
     ...(input.launch
       ? {
           runtimeId: input.launch.runtimeId,
-          repoSpec: input.launch.repoSpec,
           hostLabel: input.launch.hostLabel,
           modelId: input.launch.modelId ?? null,
         }
@@ -510,15 +511,13 @@ export interface AgentListEntry {
   ownerName: string;
   /** How a host should launch it, when the office defines that. Null otherwise. */
   runtimeId: string | null;
-  repoSpec: string | null;
   hostLabel: string | null;
   /** The model its owner chose, by the runtime's own id. Null for the runtime's default. */
   modelId: string | null;
   /** Whether a host pulling its fleet should be running this. */
   enabled: boolean;
-  /** Where its harness said it is rooted. Empty until one connects. */
+  /** Where its harness said it works. Empty until one connects. */
   workspacePath: string;
-  rootedAtReposDir: boolean;
   /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
   pubkey: string | null;
   createdAt: number;
@@ -546,12 +545,10 @@ export async function listAgentsForWorkspace(
       // from the result below, because the shape is about the agent.
       ownerPubkey: users.pubkey,
       runtimeId: agents.runtimeId,
-      repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
       modelId: agents.modelId,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
-      rootedAtReposDir: agents.rootedAtReposDir,
       pubkey: agents.pubkey,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
@@ -592,12 +589,10 @@ export async function findAgentById(
       ownerPubkey: users.pubkey,
       workspaceId: agents.workspaceId,
       runtimeId: agents.runtimeId,
-      repoSpec: agents.repoSpec,
       hostLabel: agents.hostLabel,
       modelId: agents.modelId,
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
-      rootedAtReposDir: agents.rootedAtReposDir,
       pubkey: agents.pubkey,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
@@ -665,21 +660,20 @@ export async function setAgentStatus(
 }
 
 /**
- * Record where an agent is rooted, as its harness reported it.
+ * Record where an agent works, as its harness reported it.
  *
  * Kept on the agent rather than derived, because the office has no way to know
- * — and because an owner deserves to see "this one can reach every repo I have"
- * without reading a config file on another machine.
+ * — and because an owner deserves to see where a thing on another machine can
+ * read and write without opening a config file there.
  */
 export async function setAgentWorkspace(
   db: Database,
   agentId: string,
   workspacePath: string,
-  rootedAtReposDir: boolean,
 ): Promise<void> {
   await db
     .update(agents)
-    .set({ workspacePath: workspacePath.slice(0, 512), rootedAtReposDir })
+    .set({ workspacePath: workspacePath.slice(0, 512) })
     .where(eq(agents.id, agentId));
 }
 
@@ -692,7 +686,7 @@ export async function setAgentWorkspace(
  * form, not a rule about agents.
  *
  * Null unassigns by clearing the *machine only*, deliberately keeping the
- * runtime and repo. `assignedToHost` already refuses an agent with no machine,
+ * runtime. `assignedToHost` already refuses an agent with no machine,
  * so nothing runs it — and keeping the rest means flipping it back on is one
  * click rather than retyping choices the UI just threw away. "Nowhere" means
  * not assigned, not amnesia.
@@ -702,7 +696,6 @@ export async function setAgentLaunch(
   agentId: string,
   launch: {
     runtimeId: string;
-    repoSpec: string;
     hostLabel: string;
     /** Null, or absent, for the runtime's default. */
     modelId?: string | null;
@@ -714,11 +707,10 @@ export async function setAgentLaunch(
       launch
         ? {
             runtimeId: launch.runtimeId,
-            repoSpec: launch.repoSpec.slice(0, 512),
             hostLabel: launch.hostLabel,
             modelId: launch.modelId ? launch.modelId.slice(0, 128) : null,
           }
-        : // Unassigning keeps runtime and repo so re-enabling is one field, but
+        : // Unassigning keeps the runtime so re-enabling is one field, but
           // not the model: it was chosen for a machine, and the next machine
           // may not offer it.
           { hostLabel: null, modelId: null },

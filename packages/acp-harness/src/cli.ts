@@ -10,7 +10,6 @@ import {
 } from '@quintal/shared';
 
 import {
-  ALL_REPOS,
   ConfigError,
   defaultCommandFor,
   defaultReposDir,
@@ -66,8 +65,7 @@ Options
   --repos-dir <dir> where your projects live (default: ~/projects); agents
                     reach it as REPOS/ in their workspace, ~/.quintal
   --cwd <dir>       work somewhere other than the workspace (an override)
-  --repo <name>     the same, by name under --repos-dir; --all-repos for the
-                    repos directory itself
+  --repo <name>     the same, by name under --repos-dir
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
   -h, --help
@@ -148,23 +146,14 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
   const repoFlag = stringFlag(flags, 'repo');
   const cwdFlag = stringFlag(flags, 'cwd');
 
-  // `--all-repos`, not `--repo '*'`: an unquoted `*` is expanded by the shell
-  // before the CLI ever sees it, and a flag whose meaning depends on getting
-  // the quoting right through a task runner is a flag that will silently root
-  // an agent at whatever file sorted first in the current directory.
-  // `"repo": "*"` stays valid in the fleet file, where no shell is involved.
-  const rootedAtReposDir = flags['all-repos'] === true || repoFlag === ALL_REPOS;
-
   // The nest unless a flag says otherwise — the same rule as a fleet file.
-  const workspace = rootedAtReposDir
-    ? reposDir
-    : repoFlag
-      ? resolve(reposDir, expandHome(repoFlag))
-      : cwdFlag
-        ? isAbsolute(expandHome(cwdFlag))
-          ? expandHome(cwdFlag)
-          : resolve(cwd, expandHome(cwdFlag))
-        : nestRoot();
+  const workspace = repoFlag
+    ? resolve(reposDir, expandHome(repoFlag))
+    : cwdFlag
+      ? isAbsolute(expandHome(cwdFlag))
+        ? expandHome(cwdFlag)
+        : resolve(cwd, expandHome(cwdFlag))
+      : nestRoot();
 
   return {
     name: stringFlag(flags, 'name') ?? harnessName,
@@ -172,7 +161,6 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
     harness: harnessName,
     command,
     cwd: workspace,
-    rootedAtReposDir,
     url: stringFlag(flags, 'url') ?? 'http://localhost:3000',
     mapId: stringFlag(flags, 'map') ?? 'hq',
     // A single `--agent` run holds only its key, so the office is looked up
@@ -281,7 +269,7 @@ async function main(): Promise<void> {
 
       const mapId = stringFlag(flags, 'map') ?? 'hq';
       const fleet = await fetchFleet(stored, label ?? null);
-      const built = toAgentConfigs(fleet, stored, reposDir, mapId, agentKeys);
+      const built = toAgentConfigs(fleet, stored, mapId, agentKeys);
       agents = built.agents;
       only = positional[1];
       // Poll under the name the office actually used, so a later rename in the
@@ -370,13 +358,7 @@ async function main(): Promise<void> {
       void (async () => {
         try {
           const fleet = await fetchFleet(officeFleet.host, officeFleet.label);
-          const built = toAgentConfigs(
-            fleet,
-            officeFleet.host,
-            reposDir,
-            officeFleet.mapId,
-            readAgentKeyMap(),
-          );
+          const built = toAgentConfigs(fleet, officeFleet.host, officeFleet.mapId, readAgentKeyMap());
           const { added, removed } = await supervisor.reconcile(built.agents);
           for (const name of removed) process.stdout.write(`— ${name} left the fleet\n`);
           for (const name of added) process.stdout.write(`+ ${name} joined the fleet\n`);

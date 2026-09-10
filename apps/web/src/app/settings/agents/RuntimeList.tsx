@@ -79,29 +79,15 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
   );
 }
 
-/** Where an agent is rooted, as its harness reported it. */
-export function WorkspaceBadge({
-  path,
-  rootedAtReposDir,
-}: {
-  path: string;
-  rootedAtReposDir: boolean;
-}) {
+/** Where an agent works, as its harness reported it. */
+export function WorkspaceBadge({ path }: { path: string }) {
   if (!path) return null;
   return (
     <span
-      className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-        rootedAtReposDir
-          ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-          : 'bg-muted text-muted-foreground'
-      }`}
-      title={
-        rootedAtReposDir
-          ? `Rooted at your whole repos directory — this agent can read and write every project under ${path}`
-          : `Rooted at ${path}`
-      }
+      className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-[11px]"
+      title={`Works in ${path}; your repositories are under REPOS/ there`}
     >
-      {rootedAtReposDir ? `all repos · ${path}` : path}
+      {path}
     </span>
   );
 }

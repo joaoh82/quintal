@@ -142,7 +142,6 @@ export async function createAgentAction(
     // to run, and a machine with no runtime has nothing to run. Given none, the
     // agent is created exactly as before and started by hand with its key.
     const runtimeId = String(formData.get('runtimeId') ?? '').trim();
-    const repoSpec = String(formData.get('repoSpec') ?? '').trim();
     const hostLabel = String(formData.get('hostLabel') ?? '').trim();
     const wantsLaunch = runtimeId.length > 0 && hostLabel.length > 0;
 
@@ -154,9 +153,6 @@ export async function createAgentAction(
           ok: false,
           error: `${runtime.label} has no ACP mode, so nothing can drive it.`,
         };
-      }
-      if (repoSpec.length === 0) {
-        return { ok: false, error: 'Say which repo it works in, or * for all of them.' };
       }
     }
 
@@ -177,7 +173,7 @@ export async function createAgentAction(
       description: String(formData.get('description') ?? ''),
       instructions: String(formData.get('instructions') ?? ''),
       scopes: scopes.length > 0 ? scopes : DEFAULT_AGENT_SCOPES,
-      ...(wantsLaunch ? { launch: { runtimeId, repoSpec, hostLabel, modelId } } : {}),
+      ...(wantsLaunch ? { launch: { runtimeId, hostLabel, modelId } } : {}),
     });
 
     revalidatePath('/settings/agents');
@@ -421,11 +417,6 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
     throw new Error(`${runtime.label} has no ACP mode, so nothing can drive it.`);
   }
 
-  const repoSpec = String(formData.get('repoSpec') ?? '').trim();
-  if (repoSpec.length === 0) {
-    throw new Error('Say which repo it works in, or * for all of them.');
-  }
-
   const model = await modelFor(
     db,
     agent.workspaceId,
@@ -438,7 +429,7 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
   );
   if ('error' in model) throw new Error(model.error);
 
-  await setAgentLaunch(db, agentId, { runtimeId, repoSpec, hostLabel, modelId: model.modelId });
+  await setAgentLaunch(db, agentId, { runtimeId, hostLabel, modelId: model.modelId });
   revalidatePath('/settings/agents');
 }
 

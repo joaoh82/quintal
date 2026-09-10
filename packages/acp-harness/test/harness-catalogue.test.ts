@@ -69,34 +69,26 @@ describe('the harness and the office agree on what can be run', () => {
 /**
  * Where an office-defined agent works: the nest, whatever the office said.
  *
- * The repo spec used to choose a directory under the repos directory and was
+ * A repo spec used to choose a directory under the repos directory and was
  * checked for escapes. Now every agent on a machine works in the one
  * workspace the machine keeps, with the owner's repositories reachable under
  * `REPOS/`, so the office names the agent and the runtime and nothing about
- * paths. The spec survives only as the flag the office shows beside the
- * agent, until it leaves the card.
+ * paths.
  */
 describe('where an office-defined agent works', () => {
   const host = { token: 'qh_x', url: 'http://localhost:3000' };
-  const fleet = (repoSpec: string) => ({
+  const fleet = () => ({
     host: { label: 'laptop', owner: 'Josh', workspaceId: 'ws_test' },
-    agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', repoSpec, profile: 'p1' }],
+    agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', profile: 'p1' }],
   });
 
-  for (const spec of ['quintal', '*', '/etc', '../secrets', 'a/../../b', '~']) {
-    it(`is the nest when the office says "${spec}"`, () => {
-      const { agents, skipped } = toAgentConfigs(fleet(spec), host, '/repos', 'hq');
-      assert.equal(skipped.length, 0);
-      assert.equal(agents[0]?.cwd, nestRoot());
-    });
-  }
-
-  it('still says whether the office meant the whole repos directory', () => {
-    assert.equal(toAgentConfigs(fleet('*'), host, '/repos', 'hq').agents[0]?.rootedAtReposDir, true);
-    assert.equal(toAgentConfigs(fleet('api'), host, '/repos', 'hq').agents[0]?.rootedAtReposDir, false);
+  it('is the nest', () => {
+    const { agents, skipped } = toAgentConfigs(fleet(), host, 'hq');
+    assert.equal(skipped.length, 0);
+    assert.equal(agents[0]?.cwd, nestRoot());
   });
 
   it('carries the runtime id for the workspace roster', () => {
-    assert.equal(toAgentConfigs(fleet('*'), host, '/repos', 'hq').agents[0]?.runtimeId, 'omp');
+    assert.equal(toAgentConfigs(fleet(), host, 'hq').agents[0]?.runtimeId, 'omp');
   });
 });

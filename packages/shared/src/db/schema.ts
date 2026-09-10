@@ -381,17 +381,14 @@ export const agents = sqliteTable(
     /** Presence line, mirrored into room state while connected. */
     status: text('status').notNull().default(''),
     /**
-     * The directory this agent is rooted at, as its harness reported it.
+     * The directory this agent works in, as its harness reported it — the
+     * machine's nest, `~/.quintal`, unless a fleet file rooted it elsewhere.
      *
      * Shown wherever the agent is, because "what can this thing read and
      * write" is exactly the fact that should be legible — the same reason its
      * owner's name follows it around.
      */
     workspacePath: text('workspace_path').notNull().default(''),
-    /** True when rooted at the whole repos directory rather than one checkout. */
-    rootedAtReposDir: integer('rooted_at_repos_dir', { mode: 'boolean' })
-      .notNull()
-      .default(false),
 
     // --- how a host should launch this agent, when the office defines it ---
     //
@@ -400,14 +397,6 @@ export const agents = sqliteTable(
     // exactly as they did; nothing here is a migration.
     /** Runtime id from the shared catalogue — `claude-code`, `goose`, … */
     runtimeId: text('runtime_id'),
-    /**
-     * Workspace as written by the person, not as resolved.
-     *
-     * A repo name, `*` for the whole repos directory, or an absolute path. Kept
-     * unresolved because it resolves differently on different machines, and the
-     * office is not the machine.
-     */
-    repoSpec: text('repo_spec'),
     /** Which machine should run it, matching `agent_hosts.label`. */
     hostLabel: text('host_label'),
     /**

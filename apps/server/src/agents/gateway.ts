@@ -141,7 +141,6 @@ export function persistHostReport(input: {
   ownerUserId: string;
   report: unknown;
   workspacePath: string;
-  rootedAtReposDir: boolean;
 }): void {
   const db = getDb();
   void recordHost(db, {
@@ -151,12 +150,7 @@ export function persistHostReport(input: {
   }).catch((error: unknown) => {
     logger.error(`[agent] host report failed for ${input.agentId}`, error);
   });
-  void setAgentWorkspace(
-    db,
-    input.agentId,
-    input.workspacePath,
-    input.rootedAtReposDir,
-  ).catch((error: unknown) => {
+  void setAgentWorkspace(db, input.agentId, input.workspacePath).catch((error: unknown) => {
     logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
   });
 }
