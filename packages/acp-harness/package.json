@@ -16,10 +16,11 @@
     "COMPAT.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test \"test/**/*.test.ts\""
+    "embed": "node scripts/embed-base-prompt.mjs",
+    "build": "pnpm embed && tsc -p tsconfig.build.json",
+    "dev": "pnpm embed && tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "pnpm embed && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm embed && tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.3.0",
