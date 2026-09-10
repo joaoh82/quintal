@@ -8,6 +8,7 @@ import { after, describe, it } from 'node:test';
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner } from '../src/runner/AgentRunner.js';
 import { basePrompt } from '../src/runner/base-prompt.js';
+import { TOOL_HINT } from '../src/runner/context.js';
 import { BASE_PROMPT } from '../src/runner/base-prompt.text.js';
 import type { AgentConfig } from '../src/config.js';
 
@@ -205,5 +206,23 @@ describe('what reaches the model on the first turn', () => {
 
     assert.match(text, /memory_set/);
     assert.match(text, /does not persist/);
+  });
+});
+
+/**
+ * A model with a runtime's own messaging tools in reach used them to "pick
+ * up" a review — OMP's `hub send` to a name the hub had never heard of — and
+ * the owner saw nothing for twenty-five minutes. The words the prompt uses to
+ * close that door are pinned here, in both places they are said.
+ */
+describe('the one way to reach a person', () => {
+  it('is said in the base prompt', () => {
+    assert.match(basePrompt(), /`say` is the only way a person hears you/);
+    assert.match(basePrompt(), /None of them reach the office/);
+  });
+
+  it('is said again in the tool hint', () => {
+    assert.match(TOOL_HINT, /say is the only way\s+to reach a person/);
+    assert.match(TOOL_HINT, /does not reach the office/);
   });
 });
