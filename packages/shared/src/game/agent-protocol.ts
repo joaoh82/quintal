@@ -110,8 +110,25 @@ export interface AgentSetStatusPayload {
    * The channel or DM this status is about — the conversation the current
    * turn is answering — so that conversation can show you working in it.
    * Omit for spatial work or when going idle. You have to be a member.
+   *
+   * One conversation. An agent answering several at once says so with
+   * `channelIds`; this stays for what it always meant.
    */
   channelId?: string;
+  /**
+   * Every channel or DM you are answering right now, when there is more than
+   * one — an agent may run several turns at once. Each conversation listed
+   * shows you working in it. Merged with `channelId`; you have to be a
+   * member of each, and one you are not is dropped rather than refused.
+   */
+  channelIds?: string[];
+  /**
+   * Whether any of the work in flight is spatial — a walk-up or a mention
+   * answered aloud — so the zone you stand in shows it. Omitted, the office
+   * reads "no channels named" as spatial, which is what a harness that
+   * predates parallel turns means by it.
+   */
+  spatial?: boolean;
 }
 
 /** Query messages carry a requestId; the reply comes back on `agent:result`. */
@@ -146,6 +163,12 @@ export interface AgentMemoryGetPayload extends AgentRequest {
 export interface AgentMemorySetPayload extends AgentRequest {
   slug: string;
   content: string;
+  /**
+   * The `hash` a `memory_get` of this slug returned, to write only if nothing
+   * has changed it since. Omit for an unconditional write. A mismatch is
+   * refused with `conflict`; read again and merge.
+   */
+  expectedHash?: string;
 }
 
 // --- server -> agent -------------------------------------------------------
@@ -255,6 +278,12 @@ export interface AgentReadyPayload {
      */
     chatRadiusTiles: number;
     walkUpRadiusTiles: number;
+    /**
+     * How many conversations this agent may answer at once: its own setting,
+     * or the office's default. A harness sizes its pool of runtime processes
+     * by it; a client that predates it runs one turn at a time.
+     */
+    parallelism: number;
   };
 }
 
@@ -354,7 +383,9 @@ export interface AgentErrorPayload {
     | 'too_large'
     | 'unroutable'
     /** The office could not answer right now — a database it could not reach. */
-    | 'unavailable';
+    | 'unavailable'
+    /** A conditional memory write found the slug changed since it was read. */
+    | 'conflict';
   message: string;
   /** Present on rate_limited: wait this long before retrying. */
   retryAfterMs?: number;
@@ -387,12 +418,20 @@ export interface MemoryGetResult {
   updatedAt: number | null;
   bytes: number;
   limitBytes: number;
+  /**
+   * Fingerprint of `content`, to hand back as `expectedHash` on a write so it
+   * lands only if nobody else wrote in between. Present for an unwritten
+   * slug too — the hash of nothing — so "create only if absent" is sayable.
+   */
+  hash: string;
 }
 
 export interface MemorySetResult {
   slug: string;
   bytes: number;
   limitBytes: number;
+  /** Fingerprint of what was written, for a follow-up conditional write. */
+  hash: string;
 }
 
 // --- limits ----------------------------------------------------------------

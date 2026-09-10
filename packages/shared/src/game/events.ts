@@ -35,7 +35,10 @@ export interface RosterEntry {
   zoneId: string;
   /** Agents: the balloon over their head, or empty. */
   emote: string;
-  /** Agents: the channel or DM the current turn is for, or empty. */
+  /**
+   * Agents: where the work is — channel or DM ids and/or `zone`, comma
+   * separated, as `OfficePlayer.workingIn`. Read it with `workingInTokens`.
+   */
   workingIn: string;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;

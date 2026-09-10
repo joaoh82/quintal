@@ -1,3 +1,4 @@
+import { AGENT_PARALLELISM_DEFAULT, AGENT_PARALLELISM_MAX, AGENT_PARALLELISM_MIN } from './agent.js';
 import { tidyDisplayText } from './workspace.js';
 
 /**
@@ -56,6 +57,11 @@ export interface OfficeSettings {
    * agents are most of the day.
    */
   banter: BanterMode;
+  /**
+   * How many conversations an agent may answer at once, unless its own card
+   * says otherwise. See `AGENT_PARALLELISM_DEFAULT` for what the number is.
+   */
+  agentParallelism: number;
 }
 
 export const BANTER_MODES = ['off', 'rare'] as const;
@@ -80,6 +86,7 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   replyWindowSeconds: 90,
   idleLife: true,
   banter: 'off',
+  agentParallelism: AGENT_PARALLELISM_DEFAULT,
 };
 
 /** Bounds the UI enforces and the server re-enforces. */
@@ -87,6 +94,7 @@ export const SETTING_LIMITS = {
   chatRadiusTiles: { min: 2, max: 40 },
   walkUpRadiusTiles: { min: 1, max: 10 },
   replyWindowSeconds: { min: 0, max: 600 },
+  agentParallelism: { min: AGENT_PARALLELISM_MIN, max: AGENT_PARALLELISM_MAX },
 } as const;
 
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
@@ -137,6 +145,12 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
     // Anything that is not a mode we know is off: a setting that costs
     // tokens does not get to default upwards on a typo.
     banter: raw?.banter === 'rare' ? 'rare' : 'off',
+    agentParallelism: clamp(
+      raw?.agentParallelism,
+      DEFAULT_OFFICE_SETTINGS.agentParallelism,
+      SETTING_LIMITS.agentParallelism.min,
+      SETTING_LIMITS.agentParallelism.max,
+    ),
   };
 }
 

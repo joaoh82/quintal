@@ -149,6 +149,8 @@ interface FleetResponse {
     runtimeId: string;
     profile: string;
     modelId?: string | null;
+    /** How many conversations it may answer at once, resolved by the office. */
+    parallelism?: number;
     /** Its registered public key, or null. The desktop reads it; the harness does not need to. */
     pubkey?: string | null;
   }[];
@@ -274,6 +276,12 @@ export function toAgentConfigs(
       // catalogue alone.
       ...(typeof member.modelId === 'string' && member.modelId.length > 0
         ? { modelId: member.modelId }
+        : {}),
+      // Resolved by the office, so a change to either the agent's own number
+      // or the office default shows up here — and restarts the agent, which
+      // is how a pool changes size.
+      ...(typeof member.parallelism === 'number' && Number.isFinite(member.parallelism)
+        ? { parallelism: member.parallelism }
         : {}),
     });
   }

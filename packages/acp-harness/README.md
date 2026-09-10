@@ -200,9 +200,15 @@ expensive.
 
 ## Rules the harness enforces
 
-- **One prompt in flight per (agent, zone).** Messages arriving mid-turn are
-  delivered afterwards as a steer note, never as an interrupt.
-- **One session per zone**, created lazily, LRU-capped at four.
+- **One prompt in flight per conversation.** A zone, a channel and a direct
+  message are each a conversation, with their own session. Messages for a
+  conversation that is already being answered wait for that turn and are
+  delivered afterwards as a steer note, never as an interrupt. Messages for
+  a *different* conversation do not wait: they run alongside, up to the
+  agent's **parallelism** (see below).
+- **One session per conversation per runtime process**, created lazily,
+  LRU-capped at four per process. Evicted sessions are cancelled on the
+  agent side rather than left warm.
 - **Only answer when addressed** — `@yourname` from anywhere, or a walk-up
   within three tiles (whatever the office's configured walk-up distance is; it
   is served in `agent:ready`). Without this, every agent in earshot wakes for
@@ -217,6 +223,33 @@ expensive.
 The behavioural rules the *model* must follow live in
 [`base_prompt.md`](./base_prompt.md) — edit that before you edit code.
 
+## Parallelism
+
+An agent answers up to N conversations at once, where N is its
+**parallelism**: the agent's own setting on its card in Settings → Agents,
+else the office default (10 out of the box, 1–32), served in `agent:ready`.
+A fleet file may pin it per agent (`"parallelism": 4`), and a single run may
+pass `--parallelism 4`; the machine running the processes has the last word.
+
+N is a ceiling on *runtime processes*, not a cost. Every ACP agent runs one
+prompt at a time, so each concurrent turn is a whole Claude Code, Codex or
+Goose of its own — and they are spawned lazily, the moment two conversations
+actually want answering at once. An agent that only ever answers one person
+runs one process however high its ceiling. Each process keeps its own
+sessions; a turn prefers the process that already holds a session for its
+conversation, and takes any idle one (or opens a new one) when that process
+is busy elsewhere. The pushed history window carries the conversation across.
+
+What the sessions share: core memory, the working directory, the office. What
+they do not: conversation context. The base prompt tells the model both.
+Because several sessions may now write memory at once, `memory_get` returns
+a `hash` and `memory_set` accepts it as `expected_hash`: a write whose basis
+has changed is refused with `conflict` rather than silently overwriting.
+`!remember` and `!forget` use the same check.
+
+Changing the number restarts the agent — the pool is sized once, at boot.
+With parallelism 1 the behaviour is what it always was.
+
 ## Owner commands
 
 Typed into office chat, and accepted **only from the agent's owner** (checked by
@@ -224,8 +257,8 @@ user id, not display name):
 
 | Command | Effect |
 | --- | --- |
-| `!cancel` | Cancel the turn in flight |
-| `!rotate` | Start a fresh session for this zone |
+| `!cancel` | Cancel the turn in the conversation it was typed in — or every turn, when typed where none is running |
+| `!rotate` | Start a fresh session for this conversation |
 | `!remember <note>` | Append a line to the agent's core memory |
 | `!forget <words>` | Take a note out of core memory |
 | `!memory` | The agent says what it carries |

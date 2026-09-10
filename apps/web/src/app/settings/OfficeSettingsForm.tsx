@@ -205,6 +205,15 @@ export function OfficeSettingsForm({
             min={SETTING_LIMITS.replyWindowSeconds.min}
             max={SETTING_LIMITS.replyWindowSeconds.max}
           />
+          <Field
+            name="agentParallelism"
+            label="Agent parallelism"
+            unit="conversations at once"
+            help="How many conversations an agent answers at the same time — a DM while it reviews a PR in a channel. Each is a runtime process on its machine, started when needed. An agent's own card can override this. Applied when the agent next starts."
+            value={current.agentParallelism}
+            min={SETTING_LIMITS.agentParallelism.min}
+            max={SETTING_LIMITS.agentParallelism.max}
+          />
           <div className="flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="sm:w-64 sm:shrink-0">
               <label htmlFor="idleLife" className="text-sm font-medium">

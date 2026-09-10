@@ -9,6 +9,7 @@ import {
   isValidMemorySlug,
   memoryLimitFor,
   normaliseAgentName,
+  normaliseParallelism,
   parseScopes,
 } from './agent.js';
 
@@ -29,6 +30,24 @@ describe('parseScopes', () => {
   it('falls back to the defaults when the column is not an array', () => {
     assert.deepEqual(parseScopes(null), [...DEFAULT_AGENT_SCOPES]);
     assert.deepEqual(parseScopes('chat'), [...DEFAULT_AGENT_SCOPES]);
+  });
+});
+
+describe('parallelism', () => {
+  it('reads blank as "use the office default"', () => {
+    assert.equal(normaliseParallelism(null), null);
+    assert.equal(normaliseParallelism(undefined), null);
+    assert.equal(normaliseParallelism(''), null);
+    assert.equal(normaliseParallelism('   '), null);
+    assert.equal(normaliseParallelism('lots'), null);
+  });
+
+  it('clamps a number into the range a harness can use', () => {
+    assert.equal(normaliseParallelism('4'), 4);
+    assert.equal(normaliseParallelism(4.6), 5);
+    assert.equal(normaliseParallelism(0), 1);
+    assert.equal(normaliseParallelism(-3), 1);
+    assert.equal(normaliseParallelism(999), 32);
   });
 });
 

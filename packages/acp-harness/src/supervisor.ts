@@ -80,7 +80,10 @@ export function sameAgent(a: AgentConfig, b: AgentConfig): boolean {
     a.mapId === b.mapId &&
     a.command.join(' ') === b.command.join(' ') &&
     a.profile === b.profile &&
-    (a.modelId ?? '') === (b.modelId ?? '')
+    (a.modelId ?? '') === (b.modelId ?? '') &&
+    // The size of the pool of runtime processes. A live agent cannot grow or
+    // shrink it, so a changed number is a restart, like a changed model.
+    (a.parallelism ?? 0) === (b.parallelism ?? 0)
   );
 }
 

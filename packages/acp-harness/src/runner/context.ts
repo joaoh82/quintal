@@ -41,6 +41,13 @@ export interface Trigger {
    * owner's words, the memory as they saw it, and where to answer them.
    */
   forget?: { words: string; memory: string; scope: string };
+  /**
+   * How many turns this has already been handed to and lost before a prompt
+   * was sent — a session that could not be opened, a runtime that died on
+   * start. Undefined is zero. A message is retried once and then the failure
+   * is said out loud; it is never dropped in silence.
+   */
+  attempt?: number;
 }
 
 export interface EnvelopeInput {

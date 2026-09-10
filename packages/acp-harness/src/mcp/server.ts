@@ -155,7 +155,9 @@ const TOOLS = [
     name: 'memory_get',
     description:
       'Read one of your memory slugs. "core" holds your identity, standing ' +
-      'instructions and current focus; other slugs hold cold detail you filed away.',
+      'instructions and current focus; other slugs hold cold detail you filed away. ' +
+      'The result carries a "hash": pass it back as expected_hash when you rewrite ' +
+      'the slug, so a write from another session of you in between is not lost.',
     inputSchema: {
       type: 'object',
       properties: { slug: { type: 'string', default: 'core' } },
@@ -167,12 +169,20 @@ const TOOLS = [
     description:
       'Write one of your memory slugs. Keep "core" under 8KB — it is loaded on ' +
       'every session, so it costs tokens forever. Move finished work out to ' +
-      'named slugs like "mem/auth-refactor". Never store conversation transcripts.',
+      'named slugs like "mem/auth-refactor". Never store conversation transcripts. ' +
+      'You may be one of several sessions of yourself writing at once: when you ' +
+      'rewrite a slug you read with memory_get, pass its hash as expected_hash. ' +
+      'If it comes back "conflict", somebody else wrote first — read again and merge.',
     inputSchema: {
       type: 'object',
       properties: {
         slug: { type: 'string' },
         content: { type: 'string' },
+        expected_hash: {
+          type: 'string',
+          description:
+            'The hash memory_get returned for this slug. The write lands only if it still matches.',
+        },
       },
       required: ['slug', 'content'],
       additionalProperties: false,

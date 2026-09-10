@@ -5,6 +5,7 @@ import {
   AGENT_HEARTBEAT_MS,
   AGENT_MEMORY_MAX_BYTES,
   AGENT_MOVE_INTERVAL_MS,
+  AGENT_PARALLELISM_MAX,
   AGENT_REVOCATION_POLL_MS,
   AGENT_STATUS_MAX_LENGTH,
   AgentMessage,
@@ -91,10 +92,13 @@ import {
   type StatusPayload,
   type TilePoint,
   type WalkToPayload,
+  WORKING_IN_ZONE,
 } from '@quintal/shared';
 import {
+  MemoryConflictError,
   MemoryLimitError,
   MemorySlugError,
+  memoryHash,
   addChannelMember,
   channelMembershipForWorkspace,
   ensureZoneConversations,
@@ -624,6 +628,9 @@ export class OfficeRoom extends Room<OfficeState> {
         coreMemoryMaxBytes: AGENT_CORE_MEMORY_MAX_BYTES,
         chatRadiusTiles: this.#settings.chatRadiusTiles,
         walkUpRadiusTiles: this.#settings.walkUpRadiusTiles,
+        // Its own number, or the office's. Resolved here so a harness holding
+        // only its key learns it the same way a fleet-launched one does.
+        parallelism: identity.maxSessions ?? this.#settings.agentParallelism,
       },
     };
     client.send(AgentServerMessage.Ready, ready);
@@ -1636,11 +1643,34 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
-    // Where the work is. Only a conversation this agent is in — anything
-    // else is an empty "spatial", never an error: a stale channel id must
-    // not stop a status line from landing.
-    const workingIn =
-      status.length > 0 ? (this.#channelFor(player.userId, payload?.channelId)?.id ?? '') : '';
+    // Where the work is. Only conversations this agent is in — anything else
+    // is dropped, never an error: a stale channel id must not stop a status
+    // line from landing. Several at once, because an agent may be answering
+    // several; `zone` marks spatial work. A harness that names no
+    // conversation and does not say `spatial` is one that predates parallel
+    // turns, and an empty list reads as spatial for it (`workingInTokens`).
+    // Capped at the most turns an agent may run: anything past that is not
+    // a picture of its work, whatever it is.
+    const named = [
+      ...(typeof payload?.channelId === 'string' ? [payload.channelId] : []),
+      ...(Array.isArray(payload?.channelIds)
+        ? payload.channelIds.slice(0, AGENT_PARALLELISM_MAX)
+        : []),
+    ];
+    const conversations = [
+      ...new Set(
+        named
+          .map((channelId) => this.#channelFor(player.userId, channelId)?.id)
+          .filter((id): id is string => typeof id === 'string'),
+      ),
+    ];
+    const tokens =
+      status.length === 0
+        ? []
+        : payload?.spatial === true
+          ? [...conversations, WORKING_IN_ZONE]
+          : conversations;
+    const workingIn = tokens.join(',');
     if (player.workingIn !== workingIn) player.workingIn = workingIn;
 
     if (player.status !== status) {
@@ -1896,6 +1926,9 @@ export class OfficeRoom extends Room<OfficeState> {
         updatedAt: row?.updatedAt ?? null,
         bytes: Buffer.byteLength(row?.content ?? '', 'utf8'),
         limitBytes: memoryLimitFor(slug),
+        // The hash of nothing for an unwritten slug, so "write only if still
+        // absent" is a thing a harness can ask for.
+        hash: row?.hash ?? memoryHash(''),
       };
       this.#reply(client, payload?.requestId, result);
     } catch (error: unknown) {
@@ -1909,14 +1942,25 @@ export class OfficeRoom extends Room<OfficeState> {
 
     const slug = String(payload?.slug ?? '');
     const content = String(payload?.content ?? '');
+    const expectedHash =
+      typeof payload?.expectedHash === 'string' && payload.expectedHash.length > 0
+        ? payload.expectedHash
+        : undefined;
     audit(session.identity.id, 'command.memory_set', {
       slug,
       bytes: Buffer.byteLength(content, 'utf8'),
+      ...(expectedHash !== undefined ? { expectedHash } : {}),
     });
     markSeen(session.identity.id);
 
     try {
-      const written = await setAgentMemory(getDb(), session.identity.id, slug, content);
+      const written = await setAgentMemory(
+        getDb(),
+        session.identity.id,
+        slug,
+        content,
+        expectedHash,
+      );
       audit(session.identity.id, 'effect.memory_written', written);
       const result: MemorySetResult = { ...written, limitBytes: memoryLimitFor(slug) };
       this.#reply(client, payload?.requestId, result);
@@ -1930,6 +1974,9 @@ export class OfficeRoom extends Room<OfficeState> {
   #memoryError(error: unknown): AgentErrorPayload {
     if (error instanceof MemoryLimitError) {
       return { code: 'too_large', message: error.message };
+    }
+    if (error instanceof MemoryConflictError) {
+      return { code: 'conflict', message: error.message };
     }
     if (error instanceof MemorySlugError) {
       return { code: 'invalid_payload', message: error.message };

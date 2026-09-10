@@ -18,6 +18,7 @@ import {
   isHarness,
   loadFleet,
   nestRoot,
+  parseParallelism,
   splitCommand,
   type AgentConfig,
 } from './config.js';
@@ -66,6 +67,7 @@ Options
                     reach it as REPOS/ in their workspace, ~/.quintal
   --cwd <dir>       work somewhere other than the workspace (an override)
   --repo <name>     the same, by name under --repos-dir
+  --parallelism N   conversations answered at once (1–32); default: what the office says
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
   -h, --help
@@ -154,6 +156,11 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
         ? expandHome(cwdFlag)
         : resolve(cwd, expandHome(cwdFlag))
       : nestRoot();
+  const parallelismFlag = stringFlag(flags, 'parallelism');
+  const parallelism =
+    parallelismFlag === undefined
+      ? undefined
+      : parseParallelism(parallelismFlag, stringFlag(flags, 'name') ?? harnessName);
 
   return {
     name: stringFlag(flags, 'name') ?? harnessName,
@@ -169,6 +176,8 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
     // Nothing to compare: a single `--agent` run is configured here, not in an
     // office, so there is no profile that can change underneath it.
     profile: '',
+    // Left out, the office's number for this agent applies.
+    ...(parallelism !== undefined ? { parallelism } : {}),
   };
 }
 
