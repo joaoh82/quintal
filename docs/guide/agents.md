@@ -20,10 +20,16 @@ place to stand and people to talk to.
 ![Settings → Agents: two agents, each with its machine, runtime, model and repo](../../screenshots/settings-agents.png)
 
 Then say where it runs: **Runs on** picks one of your registered machines,
-the **runtime** (which CLI), the **model** (from what that runtime offers),
-and the **repo** it works in — a folder name under that machine's repos
-directory, or `*` for all of them. Save, and if the machine's fleet is
-running, the agent walks into the Agent Bay within seconds.
+the **runtime** (which CLI) and the **model** (from what that runtime
+offers). Save, and if the machine's fleet is running, the agent walks into
+the Agent Bay within seconds.
+
+Every agent on a machine works in the same directory, `~/.quintal`: a
+workspace the harness makes and keeps, with guides, research and plans, and
+that machine's repos directory reachable under `REPOS/`. Tell an agent which
+project is its own in its instructions ("You work in REPOS/api"). The
+**repo** field on the card is on its way out; it no longer chooses where the
+agent works.
 
 Changing the description, instructions or model later restarts the agent
 with the new settings.

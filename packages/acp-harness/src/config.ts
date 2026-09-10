@@ -70,11 +70,17 @@ export interface AgentConfig {
   /** Command line for the ACP agent. Required for `custom`. */
   command: string[];
   /**
-   * The agent's workspace. Mandatory, always: code context comes from here and
-   * never from Quintal, so an agent without one has no idea what it is working
-   * on — see `docs/GATEWAY.md` and the safety rails in the README.
+   * The agent's working directory: the nest (see `nest.ts`), unless a fleet
+   * file or the CLI named somewhere else on purpose. Code context comes from
+   * here and never from Quintal — see `docs/GATEWAY.md`.
    */
   cwd: string;
+  /**
+   * The catalogue id of the runtime an office-defined agent runs on, for the
+   * roster the nest's `AGENTS.md` shows. Undefined when the fleet file named
+   * the harness itself; `harness` is the answer then.
+   */
+  runtimeId?: string;
   /**
    * True when `cwd` is the whole repos directory rather than one checkout.
    *
@@ -154,6 +160,41 @@ export const DEFAULT_REPOS_DIRNAME = 'projects';
 
 export function defaultReposDir(): string {
   return process.env.QUINTAL_REPOS_DIR ?? join(homedir(), DEFAULT_REPOS_DIRNAME);
+}
+
+/**
+ * Where every agent on this machine works: the nest, `~/.quintal`.
+ *
+ * Override with `QUINTAL_NEST_DIR` — for a development build of the desktop
+ * app that must not share a workspace with the installed one, and for tests.
+ *
+ * Nothing secret lives here. It is the agents' working directory, and a
+ * credential in an agent's working directory is a credential the agent's
+ * own tools can read — see `configDir` for where the machine token goes.
+ */
+export const NEST_DIRNAME = '.quintal';
+
+export function nestRoot(): string {
+  const override = process.env.QUINTAL_NEST_DIR?.trim();
+  return override ? expandHome(override) : join(homedir(), NEST_DIRNAME);
+}
+
+/**
+ * Where this machine's own configuration lives: `host.json`, the fleet
+ * token `quintal-acp login` remembers.
+ *
+ * `~/.config/quintal` (or `$XDG_CONFIG_HOME/quintal`), deliberately not the
+ * nest. The token used to sit at `~/.quintal/host.json`, which was fine while
+ * agents worked in a repository and became a hole the moment `~/.quintal` was
+ * their working directory: `0o600` hides a file from other users, not from a
+ * process running as the same one, and `ls` in cwd is the first thing an
+ * agent does. Override with `QUINTAL_CONFIG_DIR` for tests.
+ */
+export function configDir(): string {
+  const override = process.env.QUINTAL_CONFIG_DIR?.trim();
+  if (override) return expandHome(override);
+  const xdg = process.env.XDG_CONFIG_HOME?.trim();
+  return join(xdg && isAbsolute(xdg) ? xdg : join(homedir(), '.config'), 'quintal');
 }
 
 /** Expand a leading `~` so config files can use it. */
@@ -278,26 +319,34 @@ export function parseFleet(raw: unknown, baseDir: string): FleetConfig {
     // blast radius, which is why it has to be asked for by name — an agent
     // that gets it by forgetting to set `cwd` is the failure this rail exists
     // to prevent.
+    // The nest unless this file says otherwise. `cwd` and `repo` are kept as
+    // overrides for somebody who wrote them on purpose; an agent that names
+    // neither works where every agent on this machine works.
     const repo = typeof rawAgent.repo === 'string' ? rawAgent.repo.trim() : '';
     const rootedAtReposDir = repo === ALL_REPOS;
     const cwdRaw = rootedAtReposDir
       ? reposDir
       : repo.length > 0
         ? repo
-        : requireString(rawAgent.cwd, 'cwd', name);
+        : typeof rawAgent.cwd === 'string' && rawAgent.cwd.trim().length > 0
+          ? rawAgent.cwd.trim()
+          : '';
     const cwd = rootedAtReposDir
       ? reposDir
       : repo.length > 0
         ? resolve(reposDir, expandHome(repo))
-        : isAbsolute(expandHome(cwdRaw))
-          ? expandHome(cwdRaw)
-          : resolve(baseDir, expandHome(cwdRaw));
+        : cwdRaw.length > 0
+          ? isAbsolute(expandHome(cwdRaw))
+            ? expandHome(cwdRaw)
+            : resolve(baseDir, expandHome(cwdRaw))
+          : nestRoot();
 
-    // Check it now, with the agent's name attached. Otherwise the failure is a
-    // bare ENOENT from `spawn` several seconds later, after the office
-    // connection is already open — and a relative cwd that resolved against the
-    // wrong directory looks identical to a typo.
-    assertDirectory(cwd, name, cwdRaw);
+    // Check an override now, with the agent's name attached. Otherwise the
+    // failure is a bare ENOENT from `spawn` several seconds later, after the
+    // office connection is already open — and a relative cwd that resolved
+    // against the wrong directory looks identical to a typo. The nest is not
+    // checked: the fleet makes it before anything is spawned.
+    if (cwdRaw.length > 0) assertDirectory(cwd, name, cwdRaw);
 
     const model = typeof rawAgent.model === 'string' ? rawAgent.model.trim() : '';
 

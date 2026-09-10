@@ -50,7 +50,8 @@ apps/desktop/src-tauri/binaries/
 # Raw asset packs dropped at the repo root for derivation — see apps/web/public/assets/CREDITS.md
 /assets/
 
-# base_prompt.md embedded as code, so the compiled harness carries it.
-# Written by packages/acp-harness/scripts/embed-base-prompt.mjs before every
-# build, typecheck and test of the package.
+# base_prompt.md and nest_agents.md embedded as code, so the compiled harness
+# carries them. Written by packages/acp-harness/scripts/embed-base-prompt.mjs
+# before every build, typecheck and test of the package.
 packages/acp-harness/src/runner/base-prompt.text.ts
+packages/acp-harness/src/nest-agents.text.ts

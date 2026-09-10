@@ -898,6 +898,8 @@ export class AgentRunner {
       `[You]`,
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
       `You are standing in ${this.#zoneLabel()}.`,
+      '',
+      workspaceSection(this.config.cwd),
       // Two authors, kept apart and labelled as such.
       //
       // Instructions come from the owner and are not the agent's to change;
@@ -1424,4 +1426,26 @@ function describe(error: unknown): string {
 export function mcpServerArgs(entry?: string): string[] {
   const path = entry ?? new URL('../cli.js', import.meta.url).pathname;
   return existsSync(path) ? [path, 'mcp-server'] : ['mcp-server'];
+}
+
+/**
+ * Where the agent works, in the system prompt: the one line that makes the
+ * nest's `AGENTS.md` findable.
+ *
+ * The path is always said. The rest only when the directory has an
+ * `AGENTS.md` to read — the nest, or a repository with its own — because
+ * telling an agent to read a file that is not there is a wasted tool call
+ * and a small lesson that the prompt is not to be trusted.
+ */
+export function workspaceSection(cwd: string): string {
+  const lines = ['[Workspace]', `Your working directory is ${cwd}.`];
+  if (existsSync(join(cwd, 'AGENTS.md'))) {
+    lines.push(
+      'Read AGENTS.md there once per session, before other work: it says what is kept there and when to read or write it.',
+    );
+  }
+  if (existsSync(join(cwd, 'REPOS'))) {
+    lines.push('Repositories are under REPOS/. Work in a checkout that is already there.');
+  }
+  return lines.join('\n');
 }

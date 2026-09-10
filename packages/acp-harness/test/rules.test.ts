@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadFleet, parseFleet, splitCommand, ConfigError } from '../src/config.js';
+import { loadFleet, nestRoot, parseFleet, splitCommand, ConfigError } from '../src/config.js';
 import { resolveZone } from '../src/mcp/bridge.js';
 import { buildEnvelope, selectWindow, WINDOW_SIZE } from '../src/runner/context.js';
 import { MAX_BUBBLES, MAX_POSTS, statusForTool, toBubbles, toPosts } from '../src/runner/outbound.js';
@@ -43,11 +43,20 @@ describe('fleet config', () => {
     delete process.env.TEST_AGENT_KEY;
   });
 
-  it('refuses an agent with no workspace', () => {
-    // Not a nicety: code context comes from cwd, so an agent without one is an
-    // agent working on whatever directory the CLI was launched from.
+  it('works in the nest when no workspace is named', () => {
+    // Never whatever directory the CLI was launched from: an agent that names
+    // no workspace gets the one every agent on this machine shares.
+    const fleet = parseFleet({ ...base, agents: [{ name: 'x', key: 'k', agent: 'goose' }] }, '/base');
+    assert.equal(fleet.agents[0]?.cwd, nestRoot());
+  });
+
+  it('refuses a named workspace that is not there', () => {
     assert.throws(
-      () => parseFleet({ ...base, agents: [{ name: 'x', key: 'k', agent: 'goose' }] }, '/base'),
+      () =>
+        parseFleet(
+          { ...base, agents: [{ name: 'x', key: 'k', agent: 'goose', cwd: join(repo, 'missing') }] },
+          '/base',
+        ),
       ConfigError,
     );
   });
