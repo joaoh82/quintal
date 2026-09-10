@@ -305,8 +305,11 @@ async function main(): Promise<void> {
   const officeUrl = officeFleet?.host.url ?? agents[0]?.url ?? stringFlag(flags, 'url');
   const label = officeFleet?.label ?? hostLabel();
   const inNest = agents.some((agent) => agent.cwd === nestRoot());
+  // Who is in the fleet right now, for the roster the nest shows. Replaced
+  // on every reconcile, so a `!guide` after an agent joined lists it.
+  let roster: readonly AgentConfig[] = agents;
   if (command === 'up' || (command === 'single' && inNest)) {
-    const settled = settleNest(agents, reposDir, officeUrl, label);
+    const settled = settleNest(roster, reposDir, officeUrl, label);
     // An agent about to be spawned into a workspace that could not be made
     // would start with a bare ENOENT — or, if the root is a symlink, start
     // wherever that points. Neither is a fleet worth having.
@@ -322,6 +325,10 @@ async function main(): Promise<void> {
     plain,
     reposDir,
     hostLabel: officeFleet?.label,
+    // A guide written by `!guide` shows up in the workspace's index at once.
+    onNestChanged: () => {
+      settleNest(roster, reposDir, officeUrl, label);
+    },
   });
 
   if (command === 'status') {
@@ -360,6 +367,7 @@ async function main(): Promise<void> {
           const fleet = await fetchFleet(officeFleet.host, officeFleet.label);
           const built = toAgentConfigs(fleet, officeFleet.host, officeFleet.mapId, readAgentKeyMap());
           const { added, removed } = await supervisor.reconcile(built.agents);
+          roster = built.agents;
           for (const name of removed) process.stdout.write(`— ${name} left the fleet\n`);
           for (const name of added) process.stdout.write(`+ ${name} joined the fleet\n`);
           // The roster in the workspace's AGENTS.md names who is here.

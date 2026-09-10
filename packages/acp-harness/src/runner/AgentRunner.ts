@@ -17,7 +17,8 @@ import {
 } from '@quintal/shared';
 
 import { AgentProcess } from '../acp/agent-process.js';
-import type { AgentConfig } from '../config.js';
+import { nestRoot, type AgentConfig } from '../config.js';
+import { writeGuide } from '../nest.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { credentialFor } from '../credential.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
@@ -75,6 +76,8 @@ export type RunnerState = 'starting' | 'connected' | 'working' | 'offline' | 'st
 export interface RunnerEvents {
   log: (level: 'info' | 'warn' | 'error', message: string) => void;
   state: (state: RunnerState) => void;
+  /** A guide was written into the nest; whoever keeps its index should refresh it. */
+  guide: (file: string) => void;
 }
 
 const PERMISSION_TIMEOUT_MS = 120_000;
@@ -606,6 +609,19 @@ export class AgentRunner {
         void this.#recallCoreMemory(scope);
         return true;
       }
+      case '!guide': {
+        // The first word names the guide; the rest is what goes in it.
+        const match = /^(\S+)\s+([\s\S]+)$/.exec(parsed.body);
+        if (!match?.[1] || !match[2]?.trim()) {
+          this.#speak(
+            '`!guide <name> <what to do>` — the first word names the guide, the rest is the procedure.',
+            scope,
+          );
+          return true;
+        }
+        void this.#writeGuide(match[1], match[2], scope);
+        return true;
+      }
       case '!shutdown': {
         this.#log('info', 'shutdown requested by owner');
         void this.stop().then(() => process.exit(0));
@@ -968,6 +984,49 @@ export class AgentRunner {
       this.#log('warn', `could not remember that: ${describe(error)}`);
       this.#speak('I could not write that to memory, so it will not survive a restart.', scope);
     }
+  }
+
+  /**
+   * Write a guide the owner dictated, and point core memory at it.
+   *
+   * `!remember` for procedures. A rule about how to do a kind of work is too
+   * long for core memory, which every session pays for, and too important to
+   * leave to whether the model decides to write it down: this puts it in the
+   * nest, where every agent on the machine reads it before that kind of work,
+   * and leaves one line in this agent's memory saying it is there. The
+   * pointer is written once; adding to a guide that already has one does not
+   * add a second.
+   */
+  async #writeGuide(name: string, body: string, scope: string): Promise<void> {
+    let written: ReturnType<typeof writeGuide>;
+    try {
+      written = writeGuide(nestRoot(), name, body);
+    } catch (error: unknown) {
+      this.#log('warn', `could not write guide "${name}": ${describe(error)}`);
+      this.#speak(`I could not write that guide: ${describe(error)}`, scope);
+      return;
+    }
+    this.#log('info', `${written.created ? 'wrote' : 'added to'} GUIDES/${written.file}`);
+    this.#handlers.guide?.(written.file);
+
+    const pointer = `GUIDES/${written.file}`;
+    let existing = '';
+    try {
+      existing = (await this.#gateway.memoryGet('core')).content;
+    } catch {
+      // Treated as absent: the worst case is a second pointer, which
+      // `!forget` can take out.
+    }
+    if (!existing.includes(pointer)) {
+      await this.#writeCoreMemory(`${name}: ${pointer} in my workspace`, scope);
+    }
+
+    this.#speak(
+      written.created
+        ? `Wrote ${pointer} and noted it in my core memory.`
+        : `Added that to ${pointer}.`,
+      scope,
+    );
   }
 
   /**

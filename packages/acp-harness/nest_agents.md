@@ -28,6 +28,8 @@ belongs to you and your owner.
 
 - A guide is owner policy. Write one when your owner tells you how to do
   something from now on: the same trigger as remembering. Never invent one.
+  Your owner can also dictate one in chat with `!guide <name> <text>`; it
+  lands here the same way.
 - A research note is a finding you would otherwise have to re-derive. Not a
   diary, not a transcript, not anything the channel already has.
 - A plan is for work that outlives this session. A plan for one turn is a todo

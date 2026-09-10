@@ -36,6 +36,12 @@ export interface SupervisorOptions {
    * there is no registration to report under, so the hostname is all there is.
    */
   hostLabel?: string;
+  /**
+   * Called when a runner changed the nest — a guide written by `!guide` —
+   * so whoever keeps its `AGENTS.md` index can bring it up to date now
+   * rather than at the next fleet start.
+   */
+  onNestChanged?: () => void;
 }
 
 interface Entry {
@@ -92,6 +98,7 @@ export class Supervisor {
     const runner = new AgentRunner(config, this.options.logDir);
     const colour = COLOURS[index % COLOURS.length] ?? 36;
     runner.on('log', (level, message) => this.#write(config.name, colour, level, message));
+    runner.on('guide', () => this.options.onNestChanged?.());
     this.#entries.set(config.name, { runner, colour, config });
   }
 
