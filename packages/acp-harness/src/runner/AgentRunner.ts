@@ -779,6 +779,7 @@ export class AgentRunner {
         memoryGeneration: this.#memoryGeneration,
         idleTimer: null,
         idled: false,
+        awaitingOwner: 0,
       };
       // Claimed in the same tick: nothing else can take this worker now.
       worker.turn = turn;
@@ -1402,8 +1403,26 @@ export class AgentRunner {
   #touch(turn: Turn): void {
     if (turn.idled || turn.cancelled || !this.#turns.has(turn.id)) return;
     if (turn.idleTimer) clearTimeout(turn.idleTimer);
+    turn.idleTimer = null;
+    // Waiting on the owner is not the runtime being silent. The question has
+    // its own clock; this one starts again when it is answered.
+    if (turn.awaitingOwner > 0) return;
     turn.idleTimer = setTimeout(() => this.#stalled(turn), turnIdleMs());
     turn.idleTimer.unref?.();
+  }
+
+  /**
+   * A tool-approval question was put to the owner: hold the idle clock until
+   * it is answered. Returns the matching release, which restarts it.
+   */
+  #holdIdle(turn: Turn): () => void {
+    turn.awaitingOwner += 1;
+    if (turn.idleTimer) clearTimeout(turn.idleTimer);
+    turn.idleTimer = null;
+    return () => {
+      turn.awaitingOwner = Math.max(0, turn.awaitingOwner - 1);
+      this.#touch(turn);
+    };
   }
 
   /**
@@ -1419,16 +1438,13 @@ export class AgentRunner {
    */
   #stalled(turn: Turn): void {
     turn.idleTimer = null;
-    if (turn.idled || turn.cancelled || !this.#turns.has(turn.id)) return;
+    if (turn.idled || turn.cancelled || turn.awaitingOwner > 0 || !this.#turns.has(turn.id)) return;
     turn.idled = true;
-    const minutes = Math.max(1, Math.round(turnIdleMs() / 60_000));
-    this.#log(
-      'warn',
-      `no word from the runtime for ${minutes} minute${minutes === 1 ? '' : 's'} — stopping the turn in "${turn.scope}"`,
-    );
+    const span = describeSpan(turnIdleMs());
+    this.#log('warn', `no word from the runtime for ${span} — stopping the turn in "${turn.scope}"`);
     if (!isBanterScope(turn.scope) && !isForgetScope(turn.scope)) {
       this.#speak(
-        `My model has said nothing for ${minutes} minute${minutes === 1 ? '' : 's'}, so I have stopped that turn. Ask again and I will start over.`,
+        `My model has said nothing for ${span}, so I have stopped that turn. Ask again and I will start over.`,
         turn.scope,
       );
     }
@@ -1526,6 +1542,9 @@ export class AgentRunner {
     const me = ready?.name ?? this.name;
 
     if (turn) this.#setTurnStatus(turn, `waiting for ${owner}`);
+    // The idle clock is the runtime's; the wait that follows is the owner's.
+    // Held until the answer, or the question's own timeout.
+    const release = turn ? this.#holdIdle(turn) : () => {};
     // The tool is always named in the offered replies: whether a second
     // question will be open by the time the owner reads this is not known
     // when it is asked, and a bare "yes" still answers the oldest one.
@@ -1535,22 +1554,27 @@ export class AgentRunner {
     );
     this.#log('info', `permission requested: ${toolName}`);
 
-    const decision = await new Promise<PermissionDecision>((resolve) => {
-      const timer = setTimeout(() => {
-        this.#permissionWaiters.delete(callId);
-        this.#log('warn', `permission for ${toolName} timed out — denying`);
-        resolve('deny');
-      }, PERMISSION_TIMEOUT_MS);
-
-      this.#permissionWaiters.set(callId, {
-        toolName,
-        resolve: (answer) => {
-          clearTimeout(timer);
+    let decision: PermissionDecision;
+    try {
+      decision = await new Promise<PermissionDecision>((resolve) => {
+        const timer = setTimeout(() => {
           this.#permissionWaiters.delete(callId);
-          resolve(answer);
-        },
+          this.#log('warn', `permission for ${toolName} timed out — denying`);
+          resolve('deny');
+        }, PERMISSION_TIMEOUT_MS);
+
+        this.#permissionWaiters.set(callId, {
+          toolName,
+          resolve: (answer) => {
+            clearTimeout(timer);
+            this.#permissionWaiters.delete(callId);
+            resolve(answer);
+          },
+        });
       });
-    });
+    } finally {
+      release();
+    }
 
     this.#audit('permission', { tool: toolName, decision });
     return select(options, decision);
@@ -1809,6 +1833,23 @@ export class AgentRunner {
 
 /** What the owner said, or what silence means. */
 type PermissionDecision = 'once' | 'always' | 'deny';
+
+/**
+ * A span of time, said the way a person would: "5 minutes", "30 seconds",
+ * "500 ms". The stall notice quotes the allowance, and an allowance set
+ * short for a test must not be reported as a minute.
+ */
+export function describeSpan(ms: number): string {
+  if (ms >= 60_000) {
+    const minutes = Math.round(ms / 60_000);
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  }
+  if (ms >= 1_000) {
+    const seconds = Math.round(ms / 1_000);
+    return `${seconds} second${seconds === 1 ? '' : 's'}`;
+  }
+  return `${Math.round(ms)} ms`;
+}
 
 /**
  * Pick the runtime's option that matches the decision. `always` falls back
