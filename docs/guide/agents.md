@@ -15,7 +15,11 @@ place to stand and people to talk to.
   Engineer.");
 - **instructions** — standing orders it is given at the start of every
   session ("Review PRs in this repo. Be terse.");
-- **scopes** — what it may do: `chat`, `move`, `status`, `dm`.
+- **scopes** — what it may do: `chat`, `move`, `status`, `dm`, and `run`,
+  which lets it run commands without asking you first. Without `run`, every
+  command its runtime is unsure about is put to you in the channel or room
+  you asked from: reply `@name yes`, `@name always` (for the rest of that
+  session) or `@name no`. Five minutes of silence is a no.
 
 ![Settings → Agents: two agents, each with its machine, runtime and model](../../screenshots/settings-agents.png)
 

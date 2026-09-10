@@ -20,11 +20,17 @@ import { tidyDisplayText } from './workspace.js';
  * — a private conversation with its owner — as distinct from `chat`, which is
  * speaking in shared places. Without it, the only way to talk to an agent is
  * where everybody can read it.
+ *
+ * `run` is whether its harness may answer the runtime's own "may I run this
+ * tool?" question on the owner's behalf. Without it, every command the
+ * runtime is unsure about is put to the owner where the conversation is, and
+ * silence denies. Enforced by the harness, not the office: the office never
+ * sees the question, only the audit line that answers it.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm'] as const;
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'run'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'run'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
