@@ -14,8 +14,8 @@ already is; this is a bridge, and that is the whole point.
 ## Quick start
 
 ```bash
-# one agent, by repo name under your repos directory
-npx quintal-acp --key nsec1… --agent claude-code --repo api
+# one agent, working in the shared workspace (~/.quintal, repos under REPOS/)
+npx quintal-acp --key nsec1… --agent claude-code
 
 # or by explicit path
 npx quintal-acp --key nsec1… --agent claude-code --cwd ~/work/api
@@ -81,30 +81,41 @@ your PATH and a hosted Quintal never will, so this only travels one way.
 Detection is a `which` lookup: we never execute your agent CLI to find out
 whether it exists.
 
-### Where your repos live
+### Where agents work
 
-Every agent needs a workspace, and typing `~/projects/…` for each one gets old
-fast. So there is a **repos directory** — `~/projects` by default, overridable
-with `--repos-dir`, the `QUINTAL_REPOS_DIR` environment variable, or
-`"reposDir"` in the fleet file. Anywhere a path is wanted you can give a bare
-name instead and it resolves under it:
+Every agent on this machine works in the same directory: the **nest**,
+`~/.quintal` (override with `QUINTAL_NEST_DIR`). `quintal-acp up` makes it if
+it is missing and keeps its `AGENTS.md` current — the section between the
+managed markers names the office, this machine and the agents assigned to it,
+and lists the guides; the text above the markers is the workspace's own rules,
+rewritten only when the template changes; anything you add below the end
+marker is yours. Inside are `GUIDES/`, `RESEARCH/`, `PLANS/`, `.scratch/`, and
+`REPOS/`.
 
-```json
-{ "reposDir": "~/code", "agents": [{ "name": "reviewer", "repo": "api" }] }
-```
+`REPOS/` is a link to your **repos directory** — `~/projects` by default,
+overridable with `--repos-dir`, the `QUINTAL_REPOS_DIR` environment variable,
+or `"reposDir"` in the fleet file — so agents work in the checkouts you already
+have. Leave it unset and `REPOS/` is a real directory agents clone into.
 
-A workspace that does not exist is rejected at config load, with the agent's
-name and both the path you wrote and the path it resolved to — rather than a
-bare `ENOENT` from `spawn` after the agent is already standing in the office.
+Nothing secret lives in the nest. The machine token `quintal-acp login`
+remembers goes to `~/.config/quintal/host.json` (or under `$XDG_CONFIG_HOME`),
+and a token found at the old `~/.quintal/host.json` is moved there the first
+time anything runs: a credential in an agent's working directory is a
+credential its own `ls` finds, and file modes only hide it from *other* users.
 
-**One repo, or all of them.** `repo: "api"` roots an agent in one checkout —
-the right default, and a tight blast radius. `repo: "*"` (or `--all-repos` on
-the CLI) roots it at the repos directory itself, so it can find a project it
-hasn't been told about, or clone one you don't have yet. That is the shape the
-"review this PR" workflow needs, and it is a genuinely wider blast radius,
-which is why it must be asked for by name — an agent that gets it by *forgetting*
-`cwd` is exactly the accident the rail exists to prevent. Either way the office
-shows what each agent can reach, next to its name.
+One workspace rather than one per agent, on purpose: what makes agents differ
+is what the office already gives each of them (an owner's instructions, a core
+memory), and a guide one agent writes is exactly what the next one should
+find. Nothing in the nest is ever pushed into a prompt; the agent reads
+`AGENTS.md` once per session and pulls a file when a task calls for it.
+
+**Working somewhere else.** A fleet file can still say `"cwd": "/path"` or
+`"repo": "api"` (a name under the repos directory; `"*"` for the directory
+itself, `--all-repos` on the CLI) to root one agent elsewhere. These are
+overrides for somebody who wrote them on purpose, and a path that does not
+exist is rejected at config load with the agent's name attached — rather than
+as a bare `ENOENT` from `spawn` after the agent is already standing in the
+office.
 
 **Which model.** `model: "opus"` asks the runtime for a specific model, by the
 id the runtime itself advertises over ACP; leave it out for the runtime's
@@ -115,11 +126,6 @@ offer refuses to run and says so in its status, rather than quietly running on
 another. `quintal-acp` reports what each installed runtime offers to the
 office a few seconds after the fleet boots, and the settings page's picker
 draws from that list and nothing else.
-
-On the CLI it is `--all-repos` rather than `--repo '*'`: an unquoted `*` is
-expanded by your shell before the CLI ever sees it, and a flag whose meaning
-depends on quoting surviving a task runner will one day silently root an agent
-at whatever file sorted first.
 
 **From inside this repo**, before it's published, use the root script — nothing
 in the workspace depends on this package, so pnpm never links its bin:
@@ -206,8 +212,8 @@ expensive.
 - **Never answer another agent** unless it `@`-named you.
 - **At most three speech bubbles** per response, then "…(continued — ask me for
   more)". The office is not a terminal.
-- **A workspace is mandatory** — `--repo` or `--cwd`. Code context always comes
-  from the working directory, never from Quintal.
+- **Code context comes from the working directory**, never from Quintal. That
+  is the nest unless a fleet file or flag named somewhere else on purpose.
 
 The behavioural rules the *model* must follow live in
 [`base_prompt.md`](./base_prompt.md) — edit that before you edit code.

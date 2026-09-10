@@ -48,7 +48,7 @@ const LOG_LINES: usize = 500;
 /// Env vars the harness reads its machine credential and office from.
 ///
 /// Named by the harness rather than by us: `readStoredHost` prefers these over
-/// `~/.quintal/host.json`, which is what lets the app run a harness that never
+/// `~/.config/quintal/host.json`, which is what lets the app run a harness that never
 /// had a `login` step and never writes a token to disk.
 const TOKEN_ENV: &str = "QUINTAL_HOST_TOKEN";
 const URL_ENV: &str = "QUINTAL_URL";

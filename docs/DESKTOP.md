@@ -289,9 +289,11 @@ The machine credential is passed to the harness in its environment at spawn:
 never on the command line, where any process could read it out of `ps`, and
 never in a file, which would outlive the process that needed it.
 
-Agents work under your **repos directory** — `~/projects` unless you choose
-another with "Change repos folder". An agent assigned a workspace outside that
-directory is skipped rather than started.
+Agents work in the **nest**, `~/.quintal`: one workspace shared by every agent
+on this machine, with guides, research and plans, and your repositories
+reachable under `REPOS/`. That link points at your **repos directory** —
+`~/projects` unless you choose another with "Change repos folder". The harness
+makes the nest and keeps its `AGENTS.md` current when the fleet starts.
 
 ## Leaving
 

@@ -12,6 +12,7 @@
   "files": [
     "dist",
     "base_prompt.md",
+    "nest_agents.md",
     "README.md",
     "COMPAT.md"
   ],

@@ -1,10 +1,19 @@
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { HOST_TOKEN_PREFIX, acpCommandFor, runtimeById } from '@quintal/shared';
 
-import { ALL_REPOS, ConfigError, expandHome, type AgentConfig } from './config.js';
+import { ALL_REPOS, ConfigError, configDir, nestRoot, type AgentConfig } from './config.js';
 import { hostLabel } from './runtimes.js';
 
 /**
@@ -39,8 +48,57 @@ export interface StoredHost {
   reposDir?: string;
 }
 
-function hostFilePath(): string {
-  return join(homedir(), '.quintal', 'host.json');
+const HOST_FILE = 'host.json';
+
+export function hostFilePath(): string {
+  return join(configDir(), HOST_FILE);
+}
+
+/**
+ * Where `login` used to put the token, before the nest became every agent's
+ * working directory: inside it. Resolved through `nestRoot()` rather than
+ * spelled out, so `QUINTAL_NEST_DIR` sandboxes it — a test that writes a
+ * token must never be able to reach the real one.
+ */
+function legacyHostFilePath(): string {
+  return join(nestRoot(), HOST_FILE);
+}
+
+/**
+ * Move a token out of the agents' workspace, if one is still there.
+ *
+ * Runs before every read of the stored host and every time the nest is
+ * settled, so a machine that logged in before the workspace existed is fixed
+ * the first time anything runs — not the first time somebody notices an agent
+ * quoting the token. Returns where the file went, or null when there was
+ * nothing to move. Never throws: a move that fails leaves both files where
+ * they are and the caller says so.
+ */
+export function evictLegacyHostFile(
+  from: string = legacyHostFilePath(),
+  to: string = hostFilePath(),
+): string | null {
+  if (from === to || !existsSync(from)) return null;
+  try {
+    mkdirSync(dirname(to), { recursive: true });
+    if (existsSync(to)) {
+      // Something newer already lives at the new path; the old copy is
+      // just a leak to close.
+      unlinkSync(from);
+      return to;
+    }
+    try {
+      renameSync(from, to);
+    } catch {
+      // Across filesystems `rename` cannot; copy, then remove the original.
+      copyFileSync(from, to);
+      unlinkSync(from);
+    }
+    chmodSync(to, 0o600);
+    return to;
+  } catch {
+    return null;
+  }
 }
 
 export function readStoredHost(): StoredHost | null {
@@ -53,6 +111,7 @@ export function readStoredHost(): StoredHost | null {
     };
   }
 
+  evictLegacyHostFile();
   const path = hostFilePath();
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as StoredHost;
@@ -72,6 +131,9 @@ export function readStoredHost(): StoredHost | null {
 export function writeStoredHost(host: StoredHost): string {
   const path = hostFilePath();
   mkdirSync(dirname(path), { recursive: true });
+  // A fresh login supersedes whatever the old location held.
+  const legacy = legacyHostFilePath();
+  if (legacy !== path && existsSync(legacy)) unlinkSync(legacy);
   writeFileSync(path, `${JSON.stringify(host, null, 2)}\n`);
   // A credential for the whole fleet has no business being world-readable.
   chmodSync(path, 0o600);
@@ -189,26 +251,14 @@ export function toAgentConfigs(
       continue;
     }
 
+    // Every office-defined agent works in the nest — see `nest.ts`. The
+    // office no longer gets a say in the path: it names the agent and the
+    // runtime, and this machine decides that both live in the one workspace
+    // it keeps, with the owner's repositories reachable under `REPOS/`. The
+    // repo spec is carried only as the "whole repos directory or one
+    // checkout" flag the office shows beside the agent, until that field
+    // leaves the agent card.
     const rootedAtReposDir = member.repoSpec.trim() === ALL_REPOS;
-    const cwd = rootedAtReposDir
-      ? reposDir
-      : resolve(reposDir, expandHome(member.repoSpec));
-
-    // The office says which repo; it does not get to say "anywhere".
-    //
-    // `repoSpec` is the one thing here that is not a catalogue id, and both
-    // `~` and a leading `/` walk straight out of the repos directory — as does
-    // `../../..`. It is the owner's own configuration, so this is not a
-    // privilege boundary so much as a blast radius: an agent is rooted where
-    // its owner said, and "where its owner said" should stay inside the
-    // directory they nominated for exactly this.
-    if (!isInside(reposDir, cwd)) {
-      skipped.push({
-        name: member.name,
-        why: `workspace "${member.repoSpec}" is outside ${reposDir}`,
-      });
-      continue;
-    }
 
     agents.push({
       name: member.name,
@@ -218,8 +268,9 @@ export function toAgentConfigs(
       hostToken: host.token,
       agentId: member.agentId,
       harness: 'custom',
+      runtimeId: member.runtimeId,
       command,
-      cwd,
+      cwd: nestRoot(),
       rootedAtReposDir,
       url: host.url,
       mapId,
@@ -250,16 +301,3 @@ export function labelFor(host: StoredHost): string | null {
 
 /** This machine's OS name, for the host report only. */
 export { hostLabel };
-
-/**
- * Is `candidate` the directory `root`, or somewhere beneath it?
- *
- * Compared after `resolve`, so `..` segments are already collapsed — a textual
- * check on the spec would miss `a/../../b`. The separator matters: without it
- * `/repos-elsewhere` counts as inside `/repos`.
- */
-function isInside(root: string, candidate: string): boolean {
-  const from = resolve(root);
-  const to = resolve(candidate);
-  return to === from || to.startsWith(from.endsWith(sep) ? from : from + sep);
-}

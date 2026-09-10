@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { isAbsolute, resolve } from 'node:path';
 
-import { generateSecretKey, getPublicKeyHex, npubEncode, nsecEncode } from '@quintal/shared';
+import {
+  generateSecretKey,
+  getPublicKeyHex,
+  npubEncode,
+  nsecEncode,
+  runtimeById,
+} from '@quintal/shared';
 
 import {
   ALL_REPOS,
@@ -12,6 +18,7 @@ import {
   findFleetFile,
   isHarness,
   loadFleet,
+  nestRoot,
   splitCommand,
   type AgentConfig,
 } from './config.js';
@@ -24,6 +31,8 @@ import {
   writeStoredHost,
 } from './host.js';
 import { readAgentKeyMap } from './credential.js';
+import { ensureNest } from './nest.js';
+import { hostLabel } from './runtimes.js';
 import { runMcpServer } from './mcp/server.js';
 import { redactSecrets } from './secrets.js';
 import { Supervisor } from './supervisor.js';
@@ -44,7 +53,7 @@ const USAGE = `quintal-acp — bridge ACP agents into a Quintal office
   quintal-acp up [name]        boot the fleet — from quintal.fleet.json if there
                                is one, otherwise whatever the office assigns
   quintal-acp status           show the fleet's connection and status lines
-  quintal-acp --key <KEY> --agent <harness> --cwd <dir> [--url <url>]
+  quintal-acp --key <KEY> --agent <harness> [--url <url>]
                                run a single agent without a config file
   quintal-acp keygen           make a keypair for an agent: nsec on stdout,
                                npub on stderr — register the npub on its card
@@ -54,9 +63,11 @@ Options
   --url <url>       office URL (default: http://localhost:3000)
   --map <mapId>     map to join (default: hq)
   --cmd "<command>" explicit ACP command; required for --agent custom
-  --repo <name>     workspace by name, resolved under --repos-dir
-  --all-repos       root at the repos directory itself, not one checkout
-  --repos-dir <dir> where your projects live (default: ~/projects)
+  --repos-dir <dir> where your projects live (default: ~/projects); agents
+                    reach it as REPOS/ in their workspace, ~/.quintal
+  --cwd <dir>       work somewhere other than the workspace (an override)
+  --repo <name>     the same, by name under --repos-dir; --all-repos for the
+                    repos directory itself
   --log-dir <dir>   write every prompt and response to <dir>/<agent>.jsonl
   --plain           no colour in logs
   -h, --help
@@ -144,19 +155,16 @@ function singleAgentFrom(flags: Flags, cwd: string): AgentConfig {
   // `"repo": "*"` stays valid in the fleet file, where no shell is involved.
   const rootedAtReposDir = flags['all-repos'] === true || repoFlag === ALL_REPOS;
 
-  if (!cwdFlag && !repoFlag && !rootedAtReposDir) {
-    throw new ConfigError(
-      '--cwd, --repo or --all-repos is required: an agent needs an explicit workspace, and code context always comes from there',
-    );
-  }
-
+  // The nest unless a flag says otherwise — the same rule as a fleet file.
   const workspace = rootedAtReposDir
     ? reposDir
     : repoFlag
       ? resolve(reposDir, expandHome(repoFlag))
-      : isAbsolute(expandHome(cwdFlag ?? ''))
-        ? expandHome(cwdFlag ?? '')
-        : resolve(cwd, expandHome(cwdFlag ?? ''));
+      : cwdFlag
+        ? isAbsolute(expandHome(cwdFlag))
+          ? expandHome(cwdFlag)
+          : resolve(cwd, expandHome(cwdFlag))
+        : nestRoot();
 
   return {
     name: stringFlag(flags, 'name') ?? harnessName,
@@ -303,6 +311,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  // The workspace every agent runs in, made or brought up to date before any
+  // of them is spawned into it. `status` only reads config, so it makes
+  // nothing; a single agent rooted elsewhere by a flag needs nothing made.
+  const officeUrl = officeFleet?.host.url ?? agents[0]?.url ?? stringFlag(flags, 'url');
+  const label = officeFleet?.label ?? hostLabel();
+  const inNest = agents.some((agent) => agent.cwd === nestRoot());
+  if (command === 'up' || (command === 'single' && inNest)) {
+    const settled = settleNest(agents, reposDir, officeUrl, label);
+    // An agent about to be spawned into a workspace that could not be made
+    // would start with a bare ENOENT — or, if the root is a symlink, start
+    // wherever that points. Neither is a fleet worth having.
+    if (!settled && inNest) {
+      throw new ConfigError("the agents' workspace could not be made; nothing was started");
+    }
+  }
+
   // Report under the name the office registered, not the one the network is
   // currently using for this machine.
   const supervisor = new Supervisor(agents, {
@@ -356,6 +380,10 @@ async function main(): Promise<void> {
           const { added, removed } = await supervisor.reconcile(built.agents);
           for (const name of removed) process.stdout.write(`— ${name} left the fleet\n`);
           for (const name of added) process.stdout.write(`+ ${name} joined the fleet\n`);
+          // The roster in the workspace's AGENTS.md names who is here.
+          if (added.length > 0 || removed.length > 0) {
+            settleNest(built.agents, reposDir, officeFleet.host.url, officeFleet.label);
+          }
         } catch {
           // A blip should not take the fleet down; the next tick tries again.
         }
@@ -382,6 +410,40 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 
   watchForOrphaning(shutdown);
+}
+
+/**
+ * Make sure the nest is there and says who is in it.
+ *
+ * Returns whether it is. Things that could not be done as asked — a REPOS
+ * directory that would not give way, a token moved out of the workspace — are
+ * printed by name and are not failures. A workspace that could not be made at
+ * all is, and the caller decides whether anything can start without it.
+ */
+function settleNest(
+  agents: readonly AgentConfig[],
+  reposDir: string,
+  officeUrl: string | undefined,
+  label: string,
+): boolean {
+  try {
+    const nest = ensureNest({
+      reposDir,
+      ...(officeUrl ? { office: { url: officeUrl, hostLabel: label } } : {}),
+      agents: agents.map((agent) => ({
+        name: agent.name,
+        runtime: runtimeById(agent.runtimeId ?? agent.harness)?.label ?? agent.runtimeId ?? agent.harness,
+      })),
+    });
+    if (nest.created) process.stdout.write(`workspace: made ${nest.root}\n`);
+    for (const warning of nest.warnings) process.stderr.write(`workspace: ${warning}\n`);
+    return true;
+  } catch (error: unknown) {
+    process.stderr.write(
+      `workspace: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return false;
+  }
 }
 
 /**

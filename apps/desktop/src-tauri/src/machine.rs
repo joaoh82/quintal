@@ -167,7 +167,7 @@ pub fn remember(
 /// Drop the token, so the next launch registers again.
 ///
 /// Used when the office rejects it — the desktop equivalent of the stale
-/// `~/.quintal/host.json` the CLI walks into.
+/// `~/.config/quintal/host.json` the CLI walks into.
 pub fn forget_for(store: &SecretStore, server: &str) -> Result<(), IdentityError> {
     let mut blob = store.load()?;
     let Some(existing) = blob.slots.get(crate::identity::IDENTITY_SLOT).cloned() else {

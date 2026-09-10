@@ -9,6 +9,7 @@ import {
   KNOWN_HARNESSES,
   defaultCommandFor,
   isHarness,
+  nestRoot,
 } from '../src/config.js';
 
 /**
@@ -66,45 +67,36 @@ describe('the harness and the office agree on what can be run', () => {
 });
 
 /**
- * An agent works where its owner said, and its owner said "under here".
+ * Where an office-defined agent works: the nest, whatever the office said.
  *
- * `repoSpec` is the only office-controlled value in a fleet that is not a
- * catalogue id, and both `~` and a leading `/` walk straight out of the repos
- * directory. Not a privilege boundary — it is the owner's own config — but the
- * blast radius of a typo or a compromised office should stop at the directory
- * they nominated.
+ * The repo spec used to choose a directory under the repos directory and was
+ * checked for escapes. Now every agent on a machine works in the one
+ * workspace the machine keeps, with the owner's repositories reachable under
+ * `REPOS/`, so the office names the agent and the runtime and nothing about
+ * paths. The spec survives only as the flag the office shows beside the
+ * agent, until it leaves the card.
  */
-describe('where an agent is allowed to work', () => {
+describe('where an office-defined agent works', () => {
   const host = { token: 'qh_x', url: 'http://localhost:3000' };
   const fleet = (repoSpec: string) => ({
     host: { label: 'laptop', owner: 'Josh', workspaceId: 'ws_test' },
     agents: [{ agentId: 'a1', name: 'Bob', runtimeId: 'omp', repoSpec, profile: 'p1' }],
   });
 
-  it('accepts a repo under the repos directory', () => {
-    const { agents, skipped } = toAgentConfigs(fleet('quintal'), host, '/repos', 'hq');
-    assert.equal(skipped.length, 0);
-    assert.equal(agents[0]?.cwd, '/repos/quintal');
-  });
-
-  it('accepts the whole repos directory', () => {
-    const { agents } = toAgentConfigs(fleet('*'), host, '/repos', 'hq');
-    assert.equal(agents[0]?.cwd, '/repos');
-    assert.equal(agents[0]?.rootedAtReposDir, true);
-  });
-
-  for (const escape of ['/etc', '../secrets', 'a/../../b', '~']) {
-    it(`refuses "${escape}", which leaves the repos directory`, () => {
-      const { agents, skipped } = toAgentConfigs(fleet(escape), host, '/repos', 'hq');
-      assert.equal(agents.length, 0, `${escape} must not become a workspace`);
-      assert.equal(skipped.length, 1);
-      assert.match(skipped[0]!.why, /outside/);
+  for (const spec of ['quintal', '*', '/etc', '../secrets', 'a/../../b', '~']) {
+    it(`is the nest when the office says "${spec}"`, () => {
+      const { agents, skipped } = toAgentConfigs(fleet(spec), host, '/repos', 'hq');
+      assert.equal(skipped.length, 0);
+      assert.equal(agents[0]?.cwd, nestRoot());
     });
   }
 
-  it('does not mistake a sibling directory for a child', () => {
-    const { agents, skipped } = toAgentConfigs(fleet('../repos-elsewhere'), host, '/repos', 'hq');
-    assert.equal(agents.length, 0, '/repos-elsewhere only shares a prefix');
-    assert.equal(skipped.length, 1);
+  it('still says whether the office meant the whole repos directory', () => {
+    assert.equal(toAgentConfigs(fleet('*'), host, '/repos', 'hq').agents[0]?.rootedAtReposDir, true);
+    assert.equal(toAgentConfigs(fleet('api'), host, '/repos', 'hq').agents[0]?.rootedAtReposDir, false);
+  });
+
+  it('carries the runtime id for the workspace roster', () => {
+    assert.equal(toAgentConfigs(fleet('*'), host, '/repos', 'hq').agents[0]?.runtimeId, 'omp');
   });
 });
