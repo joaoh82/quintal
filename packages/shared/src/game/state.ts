@@ -73,6 +73,15 @@ export class OfficePlayer extends Schema {
    */
   workingIn = '';
   /**
+   * For agents: when the work in `workingIn` began, ms since epoch on the
+   * office's clock; 0 while there is none. Stamped when an agent goes from
+   * idle to working and held until it is idle again, so a channel can show
+   * how long its agent has been at it. The office's clock and not the
+   * harness's, so every client reads the same number and no client has to
+   * guess at anybody's clock offset.
+   */
+  workingSince = 0;
+  /**
    * For agents: the office is moving it, not the agent. Wandering its zone,
    * dozing, stopping beside a colleague — the small life of somebody with
    * nothing to do. Set so a client can tell that from work: an idle walk is
@@ -122,6 +131,7 @@ defineTypes(OfficePlayer, {
   emote: 'string',
   emoteUntil: 'number',
   workingIn: 'string',
+  workingSince: 'number',
   idle: 'boolean',
   isGuest: 'boolean',
   description: 'string',

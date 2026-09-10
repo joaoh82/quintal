@@ -105,6 +105,7 @@ import {
   findAgentById,
   findMembership,
   getAgentMemory,
+  latestMessageAtByConversation,
   listAgentsForWorkspace,
   listPeopleForWorkspace,
   removeChannelMember,
@@ -142,6 +143,7 @@ import {
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
 import { channelListSignature } from './channel-list.js';
+import { workingSinceAfter } from './working-since.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -258,6 +260,13 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   #channels: ReadonlyMap<string, ChannelRef & { members: ReadonlyMap<string, ChannelMember> }> =
     new Map();
+  /**
+   * conversation id -> when the newest line in it was said. Read with the
+   * channels and kept current from every line delivered here, so a client
+   * that arrives can tell a channel with news from one without before it
+   * has opened either.
+   */
+  readonly #lastMessageAt = new Map<string, number>();
   /** sessionId -> the channel list last sent to it, so a change is sent once. */
   readonly #channelsSent = new Map<string, string>();
   /**
@@ -1110,7 +1119,17 @@ export class OfficeRoom extends Room<OfficeState> {
 
   async #refreshChannels(): Promise<void> {
     try {
-      this.#channels = await channelMembershipForWorkspace(getDb(), this.#workspaceId);
+      const db = getDb();
+      const [channels, latest] = await Promise.all([
+        channelMembershipForWorkspace(db, this.#workspaceId),
+        latestMessageAtByConversation(db, this.#workspaceId),
+      ]);
+      this.#channels = channels;
+      // A line delivered here is known before the database has it; the
+      // later of the two is the truth.
+      for (const [id, at] of latest) {
+        if ((this.#lastMessageAt.get(id) ?? 0) < at) this.#lastMessageAt.set(id, at);
+      }
     } catch (error: unknown) {
       logger.error('[office] could not read channels', error);
       return;
@@ -1137,14 +1156,16 @@ export class OfficeRoom extends Room<OfficeState> {
     channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
     viewerId: string,
   ): ChannelRef {
+    const lastMessageAt = this.#lastMessageAt.get(channel.id);
+    const heard = lastMessageAt === undefined ? {} : { lastMessageAt };
     if (channel.kind !== 'dm') {
-      return { id: channel.id, kind: channel.kind, name: channel.name, slug: channel.slug };
+      return { id: channel.id, kind: channel.kind, name: channel.name, slug: channel.slug, ...heard };
     }
     let other = 'somebody';
     for (const member of channel.members.values()) {
       if (member.id !== viewerId) other = member.name;
     }
-    return { id: channel.id, kind: 'dm', name: other, slug: '' };
+    return { id: channel.id, kind: 'dm', name: other, slug: '', ...heard };
   }
 
   /** A channel this member is in, by id — or null, which covers "no such channel" too. */
@@ -1280,6 +1301,7 @@ export class OfficeRoom extends Room<OfficeState> {
     text: string,
   ): void {
     const sentAt = Date.now();
+    this.#lastMessageAt.set(channel.id, sentAt);
 
     // Mentions resolve against the channel's members, present or not: a
     // member who is not in the room right now can still be told later that
@@ -1671,7 +1693,12 @@ export class OfficeRoom extends Room<OfficeState> {
           ? [...conversations, WORKING_IN_ZONE]
           : conversations;
     const workingIn = tokens.join(',');
+    // The clock beside it: started when idle turns to working, held while
+    // the work goes on, dropped at idle. A crashed harness cannot leave it
+    // running — its player leaves the room with it.
+    const workingSince = workingSinceAfter(player, workingIn, Date.now());
     if (player.workingIn !== workingIn) player.workingIn = workingIn;
+    if (player.workingSince !== workingSince) player.workingSince = workingSince;
 
     if (player.status !== status) {
       player.status = status;

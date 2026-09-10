@@ -79,7 +79,7 @@ export default function OfficeGame() {
   const [overlayKey, setOverlayKey] = useState('`');
   const [voice, setVoice] = useState<VoiceUiState | null>(null);
 
-  const conversations = useConversations(sessionRef);
+  const conversations = useConversations(sessionRef, { overlayOpen });
 
   // The key is a device preference; read it once the page has a window.
   useEffect(() => setOverlayKey(getOverlayKey()), []);

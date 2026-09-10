@@ -203,6 +203,28 @@ export async function recentMessages(
   return pageOf(rows, limit);
 }
 
+/**
+ * When the newest line in each conversation of an office was said.
+ *
+ * One row per conversation that has any, ms since epoch. What a client that
+ * was away needs to tell a channel with news from one without, before it has
+ * asked for either transcript; the room sends it with the channel list.
+ */
+export async function latestMessageAtByConversation(
+  db: Database,
+  workspaceId: string,
+): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      conversationId: messages.conversationId,
+      sentAt: sql<number>`max(${messages.sentAt})`,
+    })
+    .from(messages)
+    .where(eq(messages.workspaceId, workspaceId))
+    .groupBy(messages.conversationId);
+  return new Map(rows.map((row) => [row.conversationId, Number(row.sentAt)]));
+}
+
 export interface NearbyQuery extends MessageQuery {
   mapId: string;
   /** Where the listener stands, in map pixels. */
