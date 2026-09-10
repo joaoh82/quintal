@@ -1,7 +1,9 @@
 'use client';
 
 import type { ChatBroadcastPayload } from '@quintal/shared';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
+
+import { segments } from './links';
 
 /**
  * A clock time for today, the date as well for anything older. History means
@@ -12,6 +14,33 @@ export function timeOf(sentAt: number): string {
   const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (when.toDateString() === new Date().toDateString()) return time;
   return `${when.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+}
+
+/**
+ * One line of chat, with its addresses live. Text stays text — the line is
+ * whatever was typed, never markup — and each `http(s)://` or `www.` in it
+ * becomes an anchor that opens away from the office: a new tab on the web,
+ * the system browser in the desktop app, which sends every off-origin
+ * `_blank` there. The click stays in the anchor so nothing behind the
+ * transcript (the overlay's close-on-backdrop, the map) takes it as its own.
+ */
+function MessageText({ text }: { text: string }) {
+  return segments(text).map((segment, index) =>
+    segment.kind === 'link' ? (
+      <a
+        key={index}
+        href={segment.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        className="break-all text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200 hover:decoration-sky-200"
+      >
+        {segment.text}
+      </a>
+    ) : (
+      <Fragment key={index}>{segment.text}</Fragment>
+    ),
+  );
 }
 
 interface TranscriptProps {
@@ -107,7 +136,9 @@ export function Transcript({
               {message.fromName}
             </span>
             <span className="text-white/45">: </span>
-            <span className="whitespace-pre-wrap break-words text-white/90">{message.text}</span>
+            <span className="whitespace-pre-wrap break-words text-white/90">
+              <MessageText text={message.text} />
+            </span>
           </p>
         ))
       )}
