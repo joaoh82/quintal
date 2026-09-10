@@ -41,12 +41,12 @@ acts.
 | `!cancel` | Stop the turn in flight |
 | `!rotate` | Start a fresh session for this zone or channel — the agent forgets the conversation so far, not its memory |
 | `!remember <note>` | Write something into the agent's core memory, so it survives restarts |
-| `!forget <words>` | Take every core-memory line containing those words back out. The agent says what it forgot, or that nothing matched |
-| `!memory` | The agent says what it carries in core memory, where you asked |
+| `!forget <words>` | Take a core-memory note back out. Quote it from memory, typos and all — the agent finds the one you mean, and asks its model when the words alone cannot settle it. `!forget 2` names one by its number from `!memory`. It says what it forgot, or lists its notes so you can pick |
+| `!memory` | The agent says what it carries in core memory, numbered, where you asked |
 | `!shutdown` | Bring the agent home: it leaves the office and its process stops |
 
 Example: `!remember @marvin always reply in Portuguese`. Changed your mind:
-`!forget @marvin reply in Portuguese`.
+`!forget @marvin the portuguese thing` — or `!memory`, then `!forget @marvin 2`.
 
 To see the whole of an agent's memory rather than hear it, open **Settings →
 Agents** and expand *Memory* on its card. Core memory is a text box — one note

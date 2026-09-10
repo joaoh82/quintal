@@ -27,9 +27,16 @@ export const CONTINUED_SUFFIX = '…(continued — ask me for more)';
 export function splitSentences(text: string): string[] {
   const normalised = text.replace(/\s+/g, ' ').trim();
   if (normalised.length === 0) return [];
-  return normalised.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [
-    normalised,
-  ];
+  // A cut is a terminator, any closing quote or bracket, then a space. Text
+  // is only ever divided, never matched-and-kept: the previous version
+  // collected `[^.!?]+[.!?]+\s` matches, and a full stop followed by a
+  // closing quote — `He said "stop."` — or a `!` inside a code span was a
+  // sentence the pattern could not see, so everything up to it was dropped
+  // on the way to the bubble.
+  return normalised
+    .split(/(?<=[.!?]["')\]»]*)\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
 }
 
 /**

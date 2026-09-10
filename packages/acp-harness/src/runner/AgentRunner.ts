@@ -21,6 +21,16 @@ import type { AgentConfig } from '../config.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { credentialFor } from '../credential.js';
 import { startBridge, type BridgeHandle } from '../mcp/bridge.js';
+import {
+  buildForgetPrompt,
+  dropLines,
+  dropNumbered,
+  findForget,
+  memoryLines,
+  numbered,
+  parseForgetAnswer,
+  parseLineNumbers,
+} from './forget.js';
 import { pickModel } from '../models.js';
 import { basePrompt } from './base-prompt.js';
 import { LOBBY_SCOPE, SessionStore } from './sessions.js';
@@ -36,6 +46,12 @@ const CHANNEL_SCOPE = 'channel:';
  * next real question arrives, and must not cost the zone its window.
  */
 const BANTER_SCOPE = 'banter:';
+/**
+ * Scope prefix for a `!forget` the words alone could not settle. Like banter:
+ * one turn, no tools, thrown away — the model is asked which numbered note
+ * the owner meant, and nothing it says is spoken as its own.
+ */
+const FORGET_SCOPE = 'forget:';
 import {
   MAX_BATCH,
   TOOL_HINT,
@@ -79,24 +95,7 @@ const SEND_INTERVAL_MS = AGENT_CHAT_INTERVAL_MS + 100;
  */
 const WALK_UP_RADIUS_FALLBACK_TILES = 3;
 
-/**
- * Which lines of a memory contain these words. Pure, so the rule can be
- * tested without an agent: a case-insensitive substring match on the whole
- * phrase, whitespace collapsed, so "finish  with a joke" still finds "always
- * finish with a joke".
- */
-export function forgetLines(memory: string, words: string): { kept: string; dropped: string[] } {
-  const needle = words.trim().replace(/\s+/g, ' ').toLowerCase();
-  const lines = memory.split('\n');
-  const dropped: string[] = [];
-  const kept: string[] = [];
-  for (const line of lines) {
-    const haystack = line.replace(/\s+/g, ' ').toLowerCase();
-    if (needle.length > 0 && haystack.includes(needle)) dropped.push(line.trim());
-    else kept.push(line);
-  }
-  return { kept: kept.join('\n').trim(), dropped };
-}
+export { forgetLines } from './forget.js';
 
 export class AgentRunner {
   readonly name: string;
@@ -680,6 +679,11 @@ export class AgentRunner {
       this.#log('info', 'banter skipped: the moment passed');
       return;
     }
+    const forget = scope.startsWith(FORGET_SCOPE) ? triggers[0]?.forget : undefined;
+    if (forget) {
+      await this.#askWhichToForget(scope, forget);
+      return;
+    }
 
     this.#setState('working');
     this.#setStatus('thinking');
@@ -804,7 +808,7 @@ export class AgentRunner {
     // to a colleague, and a model with `say` and `move_to` in reach while
     // being asked for a joke is a model that can wander off or mention
     // somebody mid-joke. Cheaper, too — no MCP subprocess, no handshake.
-    const tools = scope.startsWith(BANTER_SCOPE)
+    const tools = scope.startsWith(BANTER_SCOPE) || scope.startsWith(FORGET_SCOPE)
       ? []
       : [
           {
@@ -977,34 +981,123 @@ export class AgentRunner {
   async #forgetCoreMemory(words: string, scope: string): Promise<void> {
     try {
       const existing = (await this.#gateway.memoryGet('core')).content;
-      const { kept, dropped } = forgetLines(existing, words);
-      if (dropped.length === 0) {
-        this.#speak(`Nothing in my core memory says "${words}".`, scope);
+      const count = memoryLines(existing).length;
+      if (count === 0) {
+        this.#speak('My core memory is empty; there is nothing to forget.', scope);
         return;
       }
 
-      await this.#gateway.memorySet('core', kept);
-      for (const scope of this.#sessions.scopes()) this.#unprimed.add(scope);
+      // By number, from the list `!memory` showed.
+      const numbers = parseLineNumbers(words);
+      if (numbers) {
+        const picked = dropNumbered(existing, numbers);
+        if (picked.dropped.length === 0) {
+          this.#speak(`I have ${count} ${count === 1 ? 'note' : 'notes'}; \`!memory\` lists them.`, scope);
+          return;
+        }
+        await this.#dropFromCoreMemory(picked, scope);
+        return;
+      }
 
-      this.#log('info', `forgot: ${dropped.join(' | ')}`);
-      this.#speak(
-        dropped.length === 1
-          ? `Forgotten: "${dropped[0]}"`
-          : `Forgotten ${dropped.length} notes: ${dropped.map((line) => `"${line}"`).join(', ')}`,
-        scope,
-      );
+      // By the words: exactly, then forgivingly.
+      const found = findForget(existing, words);
+      if (found.kind === 'exact' || found.kind === 'forgiving') {
+        await this.#dropFromCoreMemory(found, scope);
+        return;
+      }
+
+      // Neither settled it — a paraphrase, or two notes that could be meant.
+      // Put to the model, in its own one-turn session, in the turn queue so it
+      // never runs beside a real turn.
+      const owner = this.#gateway.ready?.ownerUserId ?? '';
+      this.#enqueue(`${FORGET_SCOPE}${Date.now()}`, {
+        fromUserId: owner,
+        fromName: this.#gateway.ready?.ownerName ?? 'owner',
+        fromKind: 'human',
+        text: words,
+        distance: null,
+        sentAt: Date.now(),
+        forget: { words, memory: existing, scope },
+      });
     } catch (error: unknown) {
       this.#log('warn', `could not forget that: ${describe(error)}`);
       this.#speak('I could not change my memory, so that is still in there.', scope);
     }
   }
 
+  /** Write the memory without these notes, and say which went. */
+  async #dropFromCoreMemory({ kept, dropped }: { kept: string; dropped: string[] }, scope: string): Promise<void> {
+    await this.#gateway.memorySet('core', kept);
+    for (const scope of this.#sessions.scopes()) this.#unprimed.add(scope);
+
+    this.#log('info', `forgot: ${dropped.join(' | ')}`);
+    this.#speak(
+      dropped.length === 1
+        ? `Forgotten: "${dropped[0]}"`
+        : `Forgotten ${dropped.length} notes: ${dropped.map((line) => `"${line}"`).join(', ')}`,
+      scope,
+    );
+  }
+
+  /**
+   * The model decides which note the owner meant.
+   *
+   * One turn in a session with no tools, dropped afterwards — the way a
+   * banter turn is — because a model asked to pick a number should not be
+   * able to say anything, move, or rewrite its memory on the way. Its answer
+   * is numbers, read against the notes it was shown; the drop is by the text
+   * of those notes, so a memory that changed meanwhile loses nothing else.
+   */
+  async #askWhichToForget(scope: string, forget: { words: string; memory: string; scope: string }): Promise<void> {
+    const proc = this.#process;
+    if (!proc) return;
+    this.#setState('working');
+    this.#setStatus('thinking');
+
+    const session = await this.#sessionFor(scope);
+    this.#currentAcpSession = session;
+    const shown = memoryLines(forget.memory);
+    const text = buildForgetPrompt(forget.memory, forget.words);
+
+    this.#responseBuffer = '';
+    this.#audit('prompt', { scope, session, envelope: text, priming: false });
+    let answer = '';
+    try {
+      const response = await proc.prompt({ sessionId: session, prompt: [{ type: 'text', text }] });
+      answer = this.#responseBuffer;
+      this.#audit('response', { scope, session, stopReason: response.stopReason, text: answer });
+    } finally {
+      // One question, one session.
+      this.#sessions.drop(scope, 'rotate');
+      this.#unprimed.delete(scope);
+      this.#history.delete(scope);
+    }
+
+    const picked = parseForgetAnswer(answer, shown.length).map((n) => shown[n - 1]!);
+    try {
+      const current = (await this.#gateway.memoryGet('core')).content;
+      const result = picked.length > 0 ? dropLines(current, picked) : { kept: current, dropped: [] };
+      if (result.dropped.length === 0) {
+        this.#speak(
+          `Nothing in my core memory says "${forget.words}". What I carry:\n${numbered(current)}\n\`!forget <number>\` takes one out.`,
+          forget.scope,
+        );
+        return;
+      }
+      await this.#dropFromCoreMemory(result, forget.scope);
+    } catch (error: unknown) {
+      this.#log('warn', `could not forget that: ${describe(error)}`);
+      this.#speak('I could not change my memory, so that is still in there.', forget.scope);
+    }
+  }
+
   /** Say what core memory holds, where the owner asked. */
   async #recallCoreMemory(scope: string): Promise<void> {
     try {
-      const core = (await this.#gateway.memoryGet('core')).content.trim();
+      const core = (await this.#gateway.memoryGet('core')).content;
+      // Numbered, so `!forget 2` can name one without quoting it.
       this.#speak(
-        core.length > 0 ? `What I carry:\n${core}` : 'My core memory is empty.',
+        memoryLines(core).length > 0 ? `What I carry:\n${numbered(core)}` : 'My core memory is empty.',
         scope,
       );
     } catch (error: unknown) {
