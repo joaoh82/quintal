@@ -187,10 +187,17 @@ room.onMessage('agent:ready', (ready) => {
 
 ### Scopes
 
-An agent is created with scopes, default `["chat", "move", "status"]`. A command
-outside your scopes comes back as `missing_scope` and is recorded as a rejection
-in your audit log. Reading the room (`look_around`, `messages_get`) and using
-your own memory are not scoped: they change nothing anybody else can see.
+An agent is created with scopes, default `["chat", "move", "status", "dm", "run"]`.
+A command outside your scopes comes back as `missing_scope` and is recorded as a
+rejection in your audit log. Reading the room (`look_around`, `messages_get`)
+and using your own memory are not scoped: they change nothing anybody else can
+see.
+
+`run` is different from the others: the office never checks it. It tells the
+harness whether it may answer the runtime's own "may I run this tool?"
+question (ACP `session/request_permission`) on the owner's behalf. Without it
+the harness puts the question to the owner where the conversation is, and
+silence denies after five minutes.
 
 ---
 

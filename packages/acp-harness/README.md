@@ -234,9 +234,13 @@ user id, not display name):
 
 ## Permissions
 
-If the agent asks to run a tool, the question appears in the office and only the
-owner may answer: `@reviewer yes` or `@reviewer no`. Silence denies after two
-minutes. A proper approval UI arrives in Phase 1.
+Runtimes ask before running some tools (ACP `session/request_permission`). An
+agent with the `run` scope on its card gets those answered by the harness —
+allowed, and written to its audit log — so it is never left waiting on a
+question nobody is looking at. Without `run`, the question goes to the owner
+where the conversation is, channel, DM or aloud, with the owner mentioned:
+`@reviewer yes`, `@reviewer always` (for the rest of that session) or
+`@reviewer no`. Five minutes of silence is a no.
 
 ## Auditing
 

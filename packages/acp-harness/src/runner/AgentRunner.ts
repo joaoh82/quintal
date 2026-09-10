@@ -80,7 +80,12 @@ export interface RunnerEvents {
   guide: (file: string) => void;
 }
 
-const PERMISSION_TIMEOUT_MS = 120_000;
+/**
+ * How long an owner has to answer a tool-approval question before silence
+ * denies it. Five minutes: the question now goes where the owner is, so this
+ * is the time to read and type, not the time to notice.
+ */
+const PERMISSION_TIMEOUT_MS = 300_000;
 
 /**
  * Gap between two lines we send. The office allows an agent one every
@@ -163,7 +168,7 @@ export class AgentRunner {
   /** Streamed text for the turn in flight, assembled before it's spoken. */
   #responseBuffer = '';
   /** Resolvers for permission questions asked in chat, keyed by tool call id. */
-  readonly #permissionWaiters = new Map<string, (allow: boolean) => void>();
+  readonly #permissionWaiters = new Map<string, (decision: PermissionDecision) => void>();
 
   readonly #handlers: Partial<RunnerEvents> = {};
 
@@ -392,13 +397,7 @@ export class AgentRunner {
 
     // "@me yes" / "@me no" answers an outstanding permission question rather
     // than starting a turn about it.
-    if (
-      message.fromUserId === ready.ownerUserId &&
-      isAddressed(message.text, ready.name) &&
-      this.answerPermission(stripMention(message.text, ready.name))
-    ) {
-      return;
-    }
+    if (this.#answersPermission(message, ready)) return;
 
     // Other agents are context, not conversation. Two bots within earshot
     // acknowledging each other is the failure mode that ate Buzz's rooms, and
@@ -490,6 +489,8 @@ export class AgentRunner {
     if (!ready) return;
     if (message.fromUserId === ready.agentId) return;
     if (this.#handleOwnerCommand(asChat, scope)) return;
+    // The question was asked here, so the answer arrives here.
+    if (this.#answersPermission(asChat, ready)) return;
     if (!message.mentioned) return;
 
     this.#enqueue(scope, {
@@ -1222,11 +1223,20 @@ export class AgentRunner {
   }
 
   /**
-   * Tool approval, asked in the office.
+   * The runtime's own "may I run this?" question.
    *
-   * Visible to the owner only — a permission prompt is not a conversation the
-   * room should have to watch. A proper UI arrives in Phase 1; until then the
-   * reply convention is "@name yes" / "@name no", and silence denies.
+   * With the `run` scope the harness answers it: the owner said, on the card,
+   * that this agent runs commands without asking, and every such answer is
+   * logged. That is the Buzz-shaped default, where an agent is never blocked
+   * on a question nobody is looking at.
+   *
+   * Without it the question goes to the owner *where the conversation is* —
+   * the channel or DM the turn came from, or aloud when it was a walk-up —
+   * with the owner mentioned so it reaches them wherever they are. It used to
+   * be said aloud beside the agent no matter where the turn was, which meant
+   * an owner reading a channel never saw it, and the two-minute silence that
+   * followed read to the model as "declined twice by the user". Silence still
+   * denies, after five minutes now that the question is in front of somebody.
    */
   async #onPermissionRequest(
     params: schema.RequestPermissionRequest,
@@ -1237,47 +1247,65 @@ export class AgentRunner {
         (params.toolCall as { name?: string }).name ??
         'a tool',
     );
-    const callId = String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random());
+    const options = params.options as Array<{ optionId: string; kind?: string }>;
 
-    this.#setStatus(`waiting for ${ready?.ownerName ?? 'owner'}`);
-    this.#gateway.say(
-      `${ready?.ownerName ?? 'Owner'}: may I run ${toolName}? Reply "@${ready?.name ?? this.name} yes" or "no".`,
+    if (ready?.scopes?.includes('run')) {
+      this.#log('info', `permission for ${toolName}: allowed by the run scope`);
+      this.#audit('permission', { tool: toolName, decision: 'allowed by the run scope' });
+      return select(options, 'always');
+    }
+
+    const callId = String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random());
+    const scope = this.#currentScope ?? this.#scopeOf();
+    const owner = ready?.ownerName ?? 'Owner';
+    const me = ready?.name ?? this.name;
+
+    this.#setStatus(`waiting for ${owner}`);
+    this.#deliver(
+      `@${owner} may I run ${toolName}? Reply "@${me} yes", "@${me} always" (for the rest of this session), or "@${me} no".`,
+      scope,
     );
     this.#log('info', `permission requested: ${toolName}`);
 
-    const allowed = await new Promise<boolean>((resolve) => {
+    const decision = await new Promise<PermissionDecision>((resolve) => {
       const timer = setTimeout(() => {
         this.#permissionWaiters.delete(callId);
         this.#log('warn', `permission for ${toolName} timed out — denying`);
-        resolve(false);
+        resolve('deny');
       }, PERMISSION_TIMEOUT_MS);
 
-      this.#permissionWaiters.set(callId, (allow) => {
+      this.#permissionWaiters.set(callId, (answer) => {
         clearTimeout(timer);
         this.#permissionWaiters.delete(callId);
-        resolve(allow);
+        resolve(answer);
       });
     });
 
-    const options = params.options as Array<{ optionId: string; kind?: string }>;
-    const wanted = allowed ? 'allow_once' : 'reject_once';
-    const option =
-      options.find((candidate) => candidate.kind === wanted) ??
-      options.find((candidate) => candidate.kind?.startsWith(allowed ? 'allow' : 'reject')) ??
-      options[0];
-
-    if (!option) return { outcome: { outcome: 'cancelled' } } as schema.RequestPermissionResponse;
-
-    return {
-      outcome: { outcome: 'selected', optionId: option.optionId },
-    } as unknown as schema.RequestPermissionResponse;
+    this.#audit('permission', { tool: toolName, decision });
+    return select(options, decision);
   }
 
-  /** Answer an outstanding permission question. Called from the chat handler. */
-  #resolvePermission(allow: boolean): boolean {
+  /**
+   * Whether this message is the owner answering an outstanding tool-approval
+   * question, and if so, the answer applied. The same rule wherever it was
+   * asked: from the owner, addressed to this agent, and one of the words the
+   * question offered.
+   */
+  #answersPermission(
+    message: Pick<AgentChatEvent, 'fromUserId' | 'text'>,
+    ready: { ownerUserId: string; name: string },
+  ): boolean {
+    if (this.#permissionWaiters.size === 0) return false;
+    if (message.fromUserId !== ready.ownerUserId) return false;
+    if (!isAddressed(message.text, ready.name)) return false;
+    return this.answerPermission(stripMention(message.text, ready.name));
+  }
+
+  /** Answer an outstanding permission question. Called from the chat handlers. */
+  #resolvePermission(decision: PermissionDecision): boolean {
     const [first] = [...this.#permissionWaiters.values()];
     if (!first) return false;
-    first(allow);
+    first(decision);
     return true;
   }
 
@@ -1423,7 +1451,7 @@ export class AgentRunner {
   }
 
   /** Local audit of everything the agent was told and everything it said. */
-  #audit(kind: 'prompt' | 'response' | 'say', payload: Record<string, unknown>): void {
+  #audit(kind: 'prompt' | 'response' | 'say' | 'permission', payload: Record<string, unknown>): void {
     if (!this.logDir) return;
     try {
       mkdirSync(this.logDir, { recursive: true });
@@ -1436,13 +1464,44 @@ export class AgentRunner {
     }
   }
 
-  /** Exposed for the chat handler: "@agent yes/no" answers a permission ask. */
+  /** Exposed for the chat handlers: "@agent yes/always/no" answers a permission ask. */
   answerPermission(text: string): boolean {
     const normalised = text.trim().toLowerCase();
-    if (/^(yes|y|allow|ok)\b/.test(normalised)) return this.#resolvePermission(true);
-    if (/^(no|n|deny|stop)\b/.test(normalised)) return this.#resolvePermission(false);
+    if (/^(always)\b/.test(normalised)) return this.#resolvePermission('always');
+    if (/^(yes|y|allow|ok)\b/.test(normalised)) return this.#resolvePermission('once');
+    if (/^(no|n|deny|stop)\b/.test(normalised)) return this.#resolvePermission('deny');
     return false;
   }
+}
+
+/** What the owner said, or what silence means. */
+type PermissionDecision = 'once' | 'always' | 'deny';
+
+/**
+ * Pick the runtime's option that matches the decision. `always` falls back
+ * to `once` when the runtime offers no standing approval; a denial takes any
+ * reject option; a runtime that offers nothing usable gets a cancel, which
+ * every ACP agent must accept.
+ */
+function select(
+  options: Array<{ optionId: string; kind?: string }>,
+  decision: PermissionDecision,
+): schema.RequestPermissionResponse {
+  const wanted =
+    decision === 'deny'
+      ? ['reject_once', 'reject_always']
+      : decision === 'always'
+        ? ['allow_always', 'allow_once']
+        : ['allow_once', 'allow_always'];
+  const prefix = decision === 'deny' ? 'reject' : 'allow';
+  const option =
+    wanted.map((kind) => options.find((candidate) => candidate.kind === kind)).find(Boolean) ??
+    options.find((candidate) => candidate.kind?.startsWith(prefix));
+
+  if (!option) return { outcome: { outcome: 'cancelled' } } as schema.RequestPermissionResponse;
+  return {
+    outcome: { outcome: 'selected', optionId: option.optionId },
+  } as unknown as schema.RequestPermissionResponse;
 }
 
 function textOf(content: unknown): string {
