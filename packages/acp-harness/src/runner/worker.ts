@@ -56,6 +56,14 @@ export interface Turn {
    * how the runner knows to prime it again.
    */
   memoryGeneration: number;
+  /**
+   * Fires when the runtime has said nothing for too long — no chunk, no
+   * tool call, no thought. Reset on every sign of life; see
+   * `AgentRunner.#touch`.
+   */
+  idleTimer: ReturnType<typeof setTimeout> | null;
+  /** The idle timer fired: this turn was stopped for silence, and said so. */
+  idled: boolean;
 }
 
 /** The runtime did not offer the model the owner chose. */
