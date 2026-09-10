@@ -9,10 +9,20 @@ import {
 } from '@quintal/shared';
 import { useEffect, useMemo } from 'react';
 
-import { NEARBY, channelKey, parseKey, zoneKey, type Conversations } from '../useConversations';
+import { activeWorkFor } from '../presence';
+import {
+  NEARBY,
+  channelKey,
+  parseKey,
+  zoneKey,
+  type ConversationKey,
+  type Conversations,
+} from '../useConversations';
 import { ChatInput } from './ChatInput';
 import { joinTargets } from './join';
+import { UnreadPill, WorkBadge } from './RowBadges';
 import { Transcript } from './Transcript';
+import { useNow } from './useNow';
 import { WorkingLine } from './WorkingLine';
 
 interface CommsOverlayProps {
@@ -43,8 +53,21 @@ export function CommsOverlay({
   onClose,
   onLeaveChannel,
 }: CommsOverlayProps) {
-  const { zones, myZone, channels, available, active, activeTranscript, activeChannel } =
-    conversations;
+  const {
+    zones,
+    myZone,
+    channels,
+    available,
+    active,
+    activeTranscript,
+    activeChannel,
+    unread,
+  } = conversations;
+
+  // The clocks on the rows tick only while there is one to tick.
+  const anyWork = roster.some((entry) => entry.kind === 'agent' && entry.workingSince > 0);
+  const now = useNow(1000, anyWork);
+  const workIn = (key: ConversationKey) => activeWorkFor(roster, key, myZone);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -97,9 +120,13 @@ export function CommsOverlay({
       ? `You can read ${activeZone.label} from here. Walk there to talk.`
       : undefined;
 
-  const rowClass = (selected: boolean): string =>
+  const rowClass = (selected: boolean, waiting = false): string =>
     `flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-xs ${
-      selected ? 'bg-white/12 text-white' : 'text-white/65 hover:bg-white/6 hover:text-white'
+      selected
+        ? 'bg-white/12 text-white'
+        : waiting
+          ? 'font-semibold text-white/90 hover:bg-white/6 hover:text-white'
+          : 'text-white/65 hover:bg-white/6 hover:text-white'
     }`;
 
   return (
@@ -119,20 +146,25 @@ export function CommsOverlay({
             <button
               type="button"
               onClick={() => conversations.select(NEARBY)}
-              className={rowClass(active === NEARBY)}
+              className={rowClass(active === NEARBY, unread[NEARBY] !== undefined)}
             >
               <span>nearby</span>
-              <span className="ml-auto font-mono text-[10px] text-white/35">earshot</span>
+              <span className="ml-auto flex items-baseline gap-1.5">
+                <WorkBadge work={workIn(NEARBY)} now={now} />
+                <UnreadPill unread={unread[NEARBY]} />
+                <span className="font-mono text-[10px] text-white/35">earshot</span>
+              </span>
             </button>
             {zoneRows.map((zone) => {
               const count = occupants.get(zone.id)?.length ?? 0;
-              const selected = active === zoneKey(zone.id);
+              const key = zoneKey(zone.id);
+              const selected = active === key;
               return (
                 <button
                   key={zone.id}
                   type="button"
-                  onClick={() => conversations.select(zoneKey(zone.id))}
-                  className={rowClass(selected)}
+                  onClick={() => conversations.select(key)}
+                  className={rowClass(selected, unread[key] !== undefined)}
                 >
                   <span className={zone.id === myZone ? 'text-emerald-300' : ''}>
                     {zone.label}
@@ -140,8 +172,12 @@ export function CommsOverlay({
                   {zone.id === myZone ? (
                     <span className="font-mono text-[9px] text-emerald-300/70">you</span>
                   ) : null}
-                  <span className="ml-auto font-mono text-[10px] text-white/35">
-                    {count > 0 ? count : ''}
+                  <span className="ml-auto flex items-baseline gap-1.5">
+                    <WorkBadge work={workIn(key)} now={now} />
+                    <UnreadPill unread={unread[key]} />
+                    <span className="font-mono text-[10px] text-white/35">
+                      {count > 0 ? count : ''}
+                    </span>
                   </span>
                 </button>
               );
@@ -157,16 +193,23 @@ export function CommsOverlay({
             ) : null}
             {channels
               .filter((channel) => channel.kind === 'channel')
-              .map((channel) => (
-                <button
-                  key={channel.id}
-                  type="button"
-                  onClick={() => conversations.select(channelKey(channel.id))}
-                  className={rowClass(active === channelKey(channel.id))}
-                >
-                  <span className="font-mono">{channelLabel(channel)}</span>
-                </button>
-              ))}
+              .map((channel) => {
+                const key = channelKey(channel.id);
+                return (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    onClick={() => conversations.select(key)}
+                    className={rowClass(active === key, unread[key] !== undefined)}
+                  >
+                    <span className="font-mono">{channelLabel(channel)}</span>
+                    <span className="ml-auto flex items-baseline gap-1.5">
+                      <WorkBadge work={workIn(key)} now={now} />
+                      <UnreadPill unread={unread[key]} />
+                    </span>
+                  </button>
+                );
+              })}
             {available.map((channel) => (
               <button
                 key={channel.id}
@@ -189,16 +232,23 @@ export function CommsOverlay({
             ) : null}
             {channels
               .filter((channel) => channel.kind === 'dm')
-              .map((channel) => (
-                <button
-                  key={channel.id}
-                  type="button"
-                  onClick={() => conversations.select(channelKey(channel.id))}
-                  className={rowClass(active === channelKey(channel.id))}
-                >
-                  <span className="italic">{channel.name}</span>
-                </button>
-              ))}
+              .map((channel) => {
+                const key = channelKey(channel.id);
+                return (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    onClick={() => conversations.select(key)}
+                    className={rowClass(active === key, unread[key] !== undefined)}
+                  >
+                    <span className="italic">{channel.name}</span>
+                    <span className="ml-auto flex items-baseline gap-1.5">
+                      <WorkBadge work={workIn(key)} now={now} />
+                      <UnreadPill unread={unread[key]} />
+                    </span>
+                  </button>
+                );
+              })}
           </Section>
 
           <p className="mt-auto px-3 pt-3 font-mono text-[10px] leading-relaxed text-white/30">

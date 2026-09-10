@@ -67,9 +67,12 @@ Two ways to get an agent's attention:
 ![An agent addressed with @Arthur: a thinking balloon over its head, "thinking" on its nameplate, and the chat box showing who is answering](../../screenshots/agent-thinking.png)
 
 While it works you can see it: a balloon over its head, a status line under
-its name (`reading auth.ts`, `running pnpm test`, `waiting for Josh`), and a
-working line in the conversation it is answering. Then it answers where it
-was asked — a speech bubble out loud, a post in the channel, a line in the DM.
+its name (`reading auth.ts`, `running pnpm test`, `waiting for Josh`), a
+working line in the conversation it is answering, and a clock on that
+conversation's row in the chat box and the panel, so you can look away and
+still know how long it has been at it. Then it answers where it was asked —
+a speech bubble out loud, a post in the channel, a line in the DM — and, if
+you are not looking at that conversation, its row shows an unread count.
 
 ![The agent answering in a speech bubble: "Hey Dpr010 — what can I help you with?"](../../screenshots/agent-speech-bubble.png)
 

@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { RosterEntry } from '@quintal/shared';
 
-import { workingHere } from './presence.js';
+import { activeWorkFor, workingHere } from './presence.js';
 
 /**
  * A transcript shows the agents working in it, and only those. The wrong
@@ -30,6 +30,7 @@ function agent(over: Partial<RosterEntry>): RosterEntry {
     zoneId: 'agent-bay',
     emote: '',
     workingIn: '',
+    workingSince: 0,
     ...over,
   };
 }
@@ -84,5 +85,32 @@ describe('who is working here', () => {
   it('counts a balloon alone as worth showing', () => {
     const roster = [agent({ name: 'Marvin', emote: 'laugh', workingIn: 'ch-1' })];
     assert.equal(workingHere(roster, 'channel:ch-1', 'lobby')[0]?.emote, 'laugh');
+  });
+});
+
+describe('how long they have been at it', () => {
+  it('anchors a channel on the agent that started first', () => {
+    const roster = [
+      agent({ name: 'Arthur', status: 'thinking', workingIn: 'ch-1', workingSince: 5_000 }),
+      agent({ name: 'Marvin', status: 'reading', workingIn: 'ch-1', workingSince: 2_000 }),
+    ];
+    const work = activeWorkFor(roster, 'channel:ch-1', 'lobby');
+    assert.equal(work?.anchorAt, 2_000, 'a second agent joining does not reset the clock');
+    assert.deepEqual(work?.agents, ['Arthur', 'Marvin']);
+  });
+
+  it('ignores agents working elsewhere', () => {
+    const roster = [
+      agent({ name: 'Arthur', status: 'thinking', workingIn: 'ch-2', workingSince: 5_000 }),
+      agent({ name: 'Marvin', status: 'thinking', zoneId: 'agent-bay', workingSince: 6_000 }),
+    ];
+    assert.equal(activeWorkFor(roster, 'channel:ch-1', 'lobby'), null);
+    assert.equal(activeWorkFor(roster, 'zone:agent-bay', 'lobby')?.anchorAt, 6_000);
+    assert.equal(activeWorkFor(roster, 'nearby', 'agent-bay')?.anchorAt, 6_000);
+  });
+
+  it('shows nothing for an agent with no clock', () => {
+    const roster = [agent({ name: 'Marvin', emote: 'laugh', workingIn: 'ch-1', workingSince: 0 })];
+    assert.equal(activeWorkFor(roster, 'channel:ch-1', 'lobby'), null, 'a balloon is not work');
   });
 });

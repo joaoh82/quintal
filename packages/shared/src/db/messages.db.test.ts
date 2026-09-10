@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { FLOOR_ZONE_ID } from '../conversation.js';
 import {
   ensureZoneConversations,
+  latestMessageAtByConversation,
   mentionsOf,
   recentMessages,
   recentMessagesNear,
@@ -216,5 +217,28 @@ describe('what was said to me', () => {
 
     const mine = await mentionsOf(db, 'agent-marvin', { workspaceId: owner.workspaceId });
     assert.equal(mine.messages.length, 1);
+  });
+});
+
+describe('when each conversation last heard something', () => {
+  it('names the newest line per conversation, and only for this office', async () => {
+    const db = await createTestDb();
+    const ana = await office(db, 'Ana');
+    const bo = await office(db, 'Bo');
+    const lobby = ana.zones.get('lobby');
+    const focus = ana.zones.get('focus');
+    const boLobby = bo.zones.get('lobby');
+    assert.ok(lobby && focus && boLobby);
+
+    await recordMessage(db, said(lobby, ana.owner, 'first', 1_000));
+    await recordMessage(db, said(lobby, ana.owner, 'latest', 3_000));
+    await recordMessage(db, said(lobby, ana.owner, 'older', 2_000));
+    await recordMessage(db, said(boLobby, bo.owner, 'elsewhere', 9_000));
+
+    const latest = await latestMessageAtByConversation(db, ana.owner.workspaceId);
+
+    assert.equal(latest.get(lobby), 3_000, 'the newest by time said, not by order written');
+    assert.equal(latest.has(focus), false, 'a silent conversation has no entry');
+    assert.equal(latest.has(boLobby), false, "another office's words are not this one's");
   });
 });

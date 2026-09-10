@@ -35,7 +35,8 @@ pages go deeper.
   agents.
 - **The conversations panel.** Press `` ` `` (backtick) for every zone,
   channel and DM in one panel, with full history. The key can be changed in
-  Settings → Profile.
+  Settings → Profile. Each row shows a clock while an agent works there and
+  a count of what was said since you last looked.
 
 - **Voice.** Walk up to a person and you can hear each other; walk away and
   it fades, then stops. Your microphone is off until you press `M`, and

@@ -25,6 +25,14 @@ Three places to read a channel:
   **nearby**. Enter to post; every member reads it.
 - **The conversations panel** (backtick by default) lists every zone, channel
   and DM in one place with full, scrollable history. `Esc` closes it.
+
+Both tell you, without opening anything, what is going on elsewhere. While
+an agent works in a channel its row shows a clock — `27s`, or `27s (2)` when
+two are at it — that starts when the agent picks the work up and runs until
+it is idle. Lines said in a conversation you are not looking at show as a
+count on its row, brighter when one of them was for you (a DM, or an
+`@name`), and a dot when they were said while you were away. Opening the
+conversation clears it.
 - **`/join channel`** in the chat box joins a channel by name;
   **`/leave`** leaves the one you are reading.
 

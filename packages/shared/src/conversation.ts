@@ -42,6 +42,13 @@ export interface ChannelRef {
   name: string;
   /** A channel's identifier: `engineering`, rendered `#engineering`. Empty for a DM. */
   slug: string;
+  /**
+   * When the newest line in it was said, ms since epoch, on a `channels`
+   * list. Absent when nothing has been said, or where it does not matter.
+   * Enough for a client that was away to tell a channel with news from one
+   * without; the lines themselves come with history.
+   */
+  lastMessageAt?: number;
 }
 
 /** How to print one in a tab or a prompt: `#engineering`, or the other person. */

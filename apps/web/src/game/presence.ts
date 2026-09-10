@@ -1,6 +1,6 @@
 import { WORKING_IN_ZONE, workingInTokens, type RosterEntry } from '@quintal/shared';
 
-import { parseKey, type ConversationKey } from './useConversations';
+import { parseKey, type ConversationKey } from './conversationKey';
 
 /**
  * Which agents are working *in the conversation you are looking at*.
@@ -30,17 +30,54 @@ export function workingHere(
   active: ConversationKey,
   myZone: string,
 ): Working[] {
-  const { channelId, zoneId } = parseKey(active);
+  return agentsIn(roster, active, myZone)
+    .filter((entry) => entry.status.length > 0 || entry.emote.length > 0)
+    .map((entry) => ({ name: entry.name, status: entry.status, emote: entry.emote }));
+}
+
+/**
+ * The clock on a conversation's row: how long agents have been working in
+ * it, and which ones.
+ *
+ * `anchorAt` is the earliest start among them, so a second agent joining
+ * does not reset a timer somebody has been watching. Only agents with a
+ * clock count — a balloon alone is not work — and the answer is null when
+ * nobody is working here, so a row can show nothing rather than `0s`.
+ */
+export interface ActiveWork {
+  /** ms since epoch, on the office's clock. */
+  anchorAt: number;
+  agents: string[];
+}
+
+export function activeWorkFor(
+  roster: readonly RosterEntry[],
+  key: ConversationKey,
+  myZone: string,
+): ActiveWork | null {
+  const working = agentsIn(roster, key, myZone).filter((entry) => entry.workingSince > 0);
+  if (working.length === 0) return null;
+  return {
+    anchorAt: Math.min(...working.map((entry) => entry.workingSince)),
+    agents: working.map((entry) => entry.name),
+  };
+}
+
+/** Agents whose work is in this conversation, whatever else is true of them. */
+function agentsIn(
+  roster: readonly RosterEntry[],
+  key: ConversationKey,
+  myZone: string,
+): RosterEntry[] {
+  const { channelId, zoneId } = parseKey(key);
   const here = zoneId ?? myZone;
 
   return roster
     .filter((entry) => entry.kind === 'agent')
-    .filter((entry) => entry.status.length > 0 || entry.emote.length > 0)
     .filter((entry) => {
       const where = workingInTokens(entry.workingIn);
       return channelId
         ? where.includes(channelId)
         : where.includes(WORKING_IN_ZONE) && entry.zoneId === here;
-    })
-    .map((entry) => ({ name: entry.name, status: entry.status, emote: entry.emote }));
+    });
 }

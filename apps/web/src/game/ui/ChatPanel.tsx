@@ -2,10 +2,13 @@
 
 import { channelLabel, messageMaxLength, type RosterEntry } from '@quintal/shared';
 
+import { activeWorkFor } from '../presence';
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
 import { joinTargets } from './join';
+import { UnreadPill, WorkBadge } from './RowBadges';
 import { Transcript } from './Transcript';
+import { useNow } from './useNow';
 import { WorkingLine } from './WorkingLine';
 
 interface ChatPanelProps {
@@ -36,7 +39,11 @@ export function ChatPanel({
   overlayKey,
   onOpenOverlay,
 }: ChatPanelProps) {
-  const { channels, active, select, send, transcripts } = conversations;
+  const { channels, active, select, send, transcripts, unread, myZone } = conversations;
+
+  // The clocks on the tabs tick only while there is one to tick.
+  const anyWork = roster.some((entry) => entry.kind === 'agent' && entry.workingSince > 0);
+  const now = useNow(1000, anyWork);
 
   // The box only ever shows nearby or a channel. A zone opened in the overlay
   // leaves the box on nearby, where it was.
@@ -57,23 +64,30 @@ export function ChatPanel({
           aria-selected={activeChannel === null}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => select(NEARBY)}
-          className={`rounded px-1.5 py-0.5 ${activeChannel === null ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'}`}
+          className={`flex items-baseline gap-1.5 rounded px-1.5 py-0.5 ${tabClass(activeChannel === null, unread[NEARBY] !== undefined)}`}
         >
           nearby
+          <WorkBadge work={activeWorkFor(roster, NEARBY, myZone)} now={now} />
+          <UnreadPill unread={unread[NEARBY]} />
         </button>
-        {channels.map((channel) => (
-          <button
-            key={channel.id}
-            type="button"
-            role="tab"
-            aria-selected={activeChannel?.id === channel.id}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => select(channelKey(channel.id))}
-            className={`rounded px-1.5 py-0.5 whitespace-nowrap ${activeChannel?.id === channel.id ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white/80'} ${channel.kind === 'dm' ? 'italic' : ''}`}
-          >
-            {channelLabel(channel)}
-          </button>
-        ))}
+        {channels.map((channel) => {
+          const key = channelKey(channel.id);
+          return (
+            <button
+              key={channel.id}
+              type="button"
+              role="tab"
+              aria-selected={activeChannel?.id === channel.id}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => select(key)}
+              className={`flex items-baseline gap-1.5 rounded px-1.5 py-0.5 whitespace-nowrap ${tabClass(activeChannel?.id === channel.id, unread[key] !== undefined)} ${channel.kind === 'dm' ? 'italic' : ''}`}
+            >
+              {channelLabel(channel)}
+              <WorkBadge work={activeWorkFor(roster, key, myZone)} now={now} />
+              <UnreadPill unread={unread[key]} />
+            </button>
+          );
+        })}
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
@@ -123,4 +137,10 @@ export function ChatPanel({
       />
     </div>
   );
+}
+
+/** A tab reads brighter while something waits in it, and brightest when it is the one open. */
+function tabClass(selected: boolean, waiting: boolean): string {
+  if (selected) return 'bg-white/15 text-white';
+  return waiting ? 'font-semibold text-white/85 hover:text-white' : 'text-white/50 hover:text-white/80';
 }

@@ -40,6 +40,8 @@ export interface RosterEntry {
    * separated, as `OfficePlayer.workingIn`. Read it with `workingInTokens`.
    */
   workingIn: string;
+  /** Agents: when that work began, ms since epoch on the office's clock; 0 when idle. */
+  workingSince: number;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;
   /** Humans: the profile line they wrote. Empty when unset. */

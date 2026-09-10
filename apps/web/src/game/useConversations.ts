@@ -6,12 +6,24 @@ import {
   type ChatBroadcastPayload,
   type MapZone,
 } from '@quintal/shared';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { gameBridge } from './bridge';
+import { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
 import { resolveJoin } from './ui/join';
 import { parseSlashCommand } from './ui/slash';
+import {
+  EMPTY_READ_STATE,
+  caughtUp,
+  heard,
+  loadLastRead,
+  read,
+  saveLastRead,
+  type Listener,
+  type ReadState,
+  type Unread,
+} from './unread';
 
 /**
  * Every conversation this client can read, and which one it is looking at.
@@ -22,21 +34,11 @@ import { parseSlashCommand } from './ui/slash';
  * and history loaded for a channel in the overlay is already there when the
  * corner box switches to it.
  *
- * Keys are strings so a Record can hold them: `nearby`, `zone:<id>`,
- * `channel:<id>` (DMs are channels here; the distinction is the ref's kind).
+ * Keys are strings so a Record can hold them — see `conversationKey.ts`,
+ * re-exported here so the chromes have one import.
  */
 
-export type ConversationKey = string;
-
-export const NEARBY: ConversationKey = 'nearby';
-export const zoneKey = (zoneId: string): ConversationKey => `zone:${zoneId}`;
-export const channelKey = (channelId: string): ConversationKey => `channel:${channelId}`;
-
-export function parseKey(key: ConversationKey): { zoneId?: string; channelId?: string } {
-  if (key.startsWith('zone:')) return { zoneId: key.slice(5) };
-  if (key.startsWith('channel:')) return { channelId: key.slice(8) };
-  return {};
-}
+export { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey };
 
 export interface Transcript {
   messages: ChatBroadcastPayload[];
@@ -102,9 +104,26 @@ export interface Conversations {
   joinChannel: (slug: string) => void;
   /** Something the person should be told — a refused command, mostly. */
   notice: string;
+  /**
+   * What is waiting in conversations not in view: lines since you last
+   * looked, and whether one was for you. No entry means nothing is.
+   */
+  unread: Record<ConversationKey, Unread>;
 }
 
-export function useConversations(sessionRef: RefObject<OfficeSession | null>): Conversations {
+export interface ConversationsView {
+  /**
+   * Whether the full panel is up. It decides which conversation is in view —
+   * the panel's when open, the corner box's when not — and a line landing
+   * in the one in view is read, not news.
+   */
+  overlayOpen: boolean;
+}
+
+export function useConversations(
+  sessionRef: RefObject<OfficeSession | null>,
+  view: ConversationsView,
+): Conversations {
   const [transcripts, setTranscripts] = useState<Record<ConversationKey, Transcript>>({
     [NEARBY]: { ...EMPTY, loading: true },
   });
@@ -114,7 +133,14 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
   const [myZone, setMyZone] = useState<string>(FLOOR_ZONE_ID);
   const [active, setActive] = useState<ConversationKey>(NEARBY);
   const [notice, setNotice] = useState('');
+  const [readState, setReadState] = useState<ReadState>(EMPTY_READ_STATE);
   const activeRef = useRef(active);
+  /** Who I am, from the roster, so my own lines are never news to me. */
+  const selfRef = useRef<{ sessionId: string | null; name: string }>({ sessionId: null, name: '' });
+  const channelsRef = useRef(channels);
+  const transcriptsRef = useRef(transcripts);
+  /** Storage has been read; only then is it written, or a reload would wipe it. */
+  const rememberedRef = useRef(false);
   /**
    * A channel `/join` asked for that we were not in yet. The office answers
    * a join with a fresh `channels` list rather than a receipt, so the switch
@@ -122,6 +148,65 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
    */
   const pendingJoinRef = useRef<string | null>(null);
   activeRef.current = active;
+  channelsRef.current = channels;
+  transcriptsRef.current = transcripts;
+
+  // What is in view. The corner box only ever shows nearby or a channel; a
+  // zone opened in the panel is in view only while the panel is.
+  const visible = useMemo<ConversationKey[]>(() => {
+    if (view.overlayOpen) return [active];
+    const { channelId } = parseKey(active);
+    return [channelId ? active : NEARBY];
+  }, [active, view.overlayOpen]);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
+  const listenerFor = useCallback((key: ConversationKey): Listener => {
+    const { channelId } = parseKey(key);
+    return {
+      selfSessionId: selfRef.current.sessionId,
+      myName: selfRef.current.name,
+      visible: visibleRef.current,
+      isDm: channelsRef.current.some((channel) => channel.id === channelId && channel.kind === 'dm'),
+    };
+  }, []);
+
+  /** A line has landed: read if in view, news otherwise. */
+  const note = useCallback(
+    (key: ConversationKey, line: ChatBroadcastPayload) => {
+      setReadState((state) => heard(state, key, line, listenerFor(key), Date.now()));
+    },
+    [listenerFor],
+  );
+
+  // When you last looked, from the last visit. Read after mount rather than
+  // in the initial state: the server renders this page too, with no storage
+  // to read, and the first paint has to agree with it.
+  useEffect(() => {
+    const remembered = loadLastRead(window.localStorage);
+    rememberedRef.current = true;
+    setReadState((state) => ({
+      ...state,
+      lastReadAt: { ...remembered, ...state.lastReadAt },
+    }));
+  }, []);
+
+  // Looking at a conversation reads it — as of now, or as of its newest line
+  // if the line's clock is ahead of ours, so it stays read after a reload.
+  useEffect(() => {
+    setReadState((state) => {
+      let next = state;
+      for (const key of visible) {
+        const newest = transcriptsRef.current[key]?.messages.at(-1)?.sentAt ?? 0;
+        next = read(next, key, Math.max(Date.now(), newest));
+      }
+      return next;
+    });
+  }, [visible]);
+
+  useEffect(() => {
+    if (rememberedRef.current) saveLastRead(window.localStorage, readState.lastReadAt);
+  }, [readState.lastReadAt]);
 
   const patch = useCallback((key: ConversationKey, fn: (current: Transcript) => Transcript) => {
     setTranscripts((prev) => ({ ...prev, [key]: fn(prev[key] ?? EMPTY) }));
@@ -141,11 +226,22 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
     const off = [
       gameBridge.on('ready', ({ zones: mapZones }) => setZones(mapZones)),
       gameBridge.on('zone', ({ zone }) => setMyZone(zone?.id ?? FLOOR_ZONE_ID)),
-      gameBridge.on('chat', (line) => patch(NEARBY, (t) => append(t, line))),
-      gameBridge.on('zoneChat', (line) => patch(zoneKey(line.zoneId), (t) => append(t, line))),
-      gameBridge.on('channelChat', (line) =>
-        patch(channelKey(line.channel.id), (t) => append(t, line)),
-      ),
+      gameBridge.on('roster', ({ players, selfSessionId }) => {
+        const self = players.find((player) => player.isSelf);
+        selfRef.current = { sessionId: selfSessionId, name: self?.name ?? '' };
+      }),
+      gameBridge.on('chat', (line) => {
+        patch(NEARBY, (t) => append(t, line));
+        note(NEARBY, line);
+      }),
+      gameBridge.on('zoneChat', (line) => {
+        patch(zoneKey(line.zoneId), (t) => append(t, line));
+        note(zoneKey(line.zoneId), line);
+      }),
+      gameBridge.on('channelChat', (line) => {
+        patch(channelKey(line.channel.id), (t) => append(t, line));
+        note(channelKey(line.channel.id), line);
+      }),
       gameBridge.on('history', ({ zoneId, channelId, messages, hasMore }) => {
         const key = channelId ? channelKey(channelId) : zoneId ? zoneKey(zoneId) : NEARBY;
         patch(key, (t) => prepend(t, messages, hasMore));
@@ -153,6 +249,8 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
       gameBridge.on('channels', ({ channels: mine, available: open }) => {
         setChannels(mine);
         setAvailable(open);
+        // Anything said in them since you last looked is waiting.
+        setReadState((state) => caughtUp(state, mine, visibleRef.current));
         // The channel `/join` just asked for: it is ours now, so go there.
         const wanted = pendingJoinRef.current;
         const arrived = wanted
@@ -177,7 +275,7 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
     return () => {
       for (const unsubscribe of off) unsubscribe();
     };
-  }, [patch]);
+  }, [patch, note]);
 
   useEffect(() => {
     if (!notice) return;
@@ -305,5 +403,6 @@ export function useConversations(sessionRef: RefObject<OfficeSession | null>): C
     openDm,
     joinChannel,
     notice,
+    unread: readState.unread,
   };
 }
