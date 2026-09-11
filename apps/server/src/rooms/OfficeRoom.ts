@@ -38,7 +38,7 @@ import {
   toTile,
   isAddressed,
   channelLabel,
-  mentionedNames,
+  addressedNames,
   messageMaxLength,
   zoneAt,
   type AgentBanterEvent,
@@ -1065,7 +1065,12 @@ export class OfficeRoom extends Room<OfficeState> {
       name: player.name,
       kind: player.kind,
     }));
-    const resolved = resolveMentions(mentionedNames(text), audience, this.#teamRosters(), speaker.userId);
+    const teams = this.#teamRosters();
+    const named = addressedNames(text, [
+      ...audience.map((member) => member.name),
+      ...teams.map((team) => team.name),
+    ]);
+    const resolved = resolveMentions(named, audience, teams, speaker.userId);
     const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, SPATIAL));
     const wakes = mayWake(hop, this.#settings.mentionMaxHops);
     const owed = this.#collectReplyDebt(sessionId, sentAt);
@@ -1402,7 +1407,12 @@ export class OfficeRoom extends Room<OfficeState> {
       name: member.name,
       kind: member.kind,
     }));
-    const resolved = resolveMentions(mentionedNames(text), audience, this.#teamRosters(), speaker.userId);
+    const teams = this.#teamRosters();
+    const named = addressedNames(text, [
+      ...audience.map((member) => member.name),
+      ...teams.map((team) => team.name),
+    ]);
+    const resolved = resolveMentions(named, audience, teams, speaker.userId);
     if (channel.kind === 'dm') {
       for (const member of channel.members.values()) {
         if (member.id !== speaker.userId && !resolved.reached.has(member.id)) {

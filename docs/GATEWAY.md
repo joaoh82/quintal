@@ -229,7 +229,10 @@ would expect — "the reviewer said no" woke the reviewer, and an agent called
 `Ana` had to be defended against "banana". The sigil makes intent explicit, and
 gives the client something unambiguous to autocomplete against. Matching is
 case-insensitive, and `@` only counts at a word boundary, so `josh@quintal.sh`
-does not summon anybody called `quintal`.
+does not summon anybody called `quintal`. The name is matched whole, whatever
+it holds: somebody who has not named themselves is `npub1rww4uhaw…nlarug`,
+ellipsis and all, and `@npub1rww4uhaw…nlarug` reaches them; where two names
+share a start, the longer one that fits wins.
 
 A reply to an `@mention` finds the person who asked even if they are out of
 earshot, for `replyWindowSeconds` after the question (default 90, `0` disables

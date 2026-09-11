@@ -203,16 +203,63 @@ export function mentionedNames(text: string): string[] {
   return found;
 }
 
+/** A character that may sit inside a mention token; anything else ends one. */
+const NAME_CHAR = /[\p{L}\p{N}_-]/u;
+
+/**
+ * The names, among these candidates, that the text addresses.
+ *
+ * Matched against the names themselves rather than by cutting `@word`
+ * tokens out of the text and comparing: a name is whatever somebody is
+ * called, and that is not always identifier-shaped. The person who has not
+ * named themselves is `npub1rww4uhaw…nlarug`, with an ellipsis in it; a
+ * person who has may be "Josh Silva". Cutting at the first odd character
+ * read the first as `@npub1rww4uhaw` and the second as `@Josh`, and neither
+ * reached anybody.
+ *
+ * So: at each `@` that starts a word, the longest candidate that follows it
+ * whole, any case, and ends at a boundary — the end of the text, or a
+ * character that could not continue a name. Longest first, so `@Josh Silva`
+ * reaches Josh Silva and not Josh when both are here. Returns the
+ * candidates as given, in the order the text reached them, once each.
+ */
+export function addressedNames(text: string, candidates: readonly string[]): string[] {
+  const lowered = text.toLowerCase();
+  const wanted = [...new Set(candidates)]
+    .map((name) => ({ name, key: name.trim().toLowerCase() }))
+    .filter((entry) => entry.key.length > 0)
+    .sort((a, b) => b.key.length - a.key.length);
+  if (wanted.length === 0) return [];
+
+  const found: string[] = [];
+  for (let at = lowered.indexOf('@'); at !== -1; at = lowered.indexOf('@', at + 1)) {
+    const before = at > 0 ? lowered[at - 1]! : '';
+    if (before !== '' && NAME_CHAR.test(before)) continue;
+    const rest = lowered.slice(at + 1);
+    const hit = wanted.find((entry) => {
+      if (!rest.startsWith(entry.key)) return false;
+      const after = rest[entry.key.length];
+      return after === undefined || !NAME_CHAR.test(after);
+    });
+    if (hit && !found.includes(hit.name)) found.push(hit.name);
+  }
+  return found;
+}
+
 /** Was this person addressed by name? */
 export function isAddressed(text: string, name: string): boolean {
-  const wanted = name.trim().toLowerCase();
-  if (wanted.length === 0) return false;
-  return mentionedNames(text).includes(wanted);
+  return addressedNames(text, [name]).length > 0;
 }
 
 /**
- * The partial `@word` the caret sits in, for autocomplete. Null when the caret
+ * The partial `@name` the caret sits in, for autocomplete. Null when the caret
  * isn't inside one — so typing an email address doesn't open a people picker.
+ *
+ * The query runs from the `@` to the caret, whatever it holds: a name may
+ * carry a space or an ellipsis, and a picker that shut on the first odd
+ * character could never complete `npub1rww4uhaw…nlarug`. It shuts instead
+ * when nothing matches, which is what a finished mention followed by more
+ * words looks like. A line break ends it: nobody's name spans two lines.
  */
 export function mentionQueryAt(text: string, caret: number): { query: string; start: number } | null {
   const before = text.slice(0, caret);
@@ -224,7 +271,7 @@ export function mentionQueryAt(text: string, caret: number): { query: string; st
   if (preceding !== undefined && /[\p{L}\p{N}]/u.test(preceding)) return null;
 
   const query = before.slice(at + 1);
-  if (/[^\p{L}\p{N}_-]/u.test(query)) return null;
+  if (query.includes('\n')) return null;
 
   return { query: query.toLowerCase(), start: at };
 }
