@@ -281,7 +281,11 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
  */
 export async function signIn(
   identity: Identity,
-  options: { inviteToken?: string } = {},
+  options: {
+    inviteToken?: string;
+    /** With a guest link: what to call the person walking in. Ignored otherwise. */
+    name?: string;
+  } = {},
 ): Promise<void> {
   const { nonce, origin } = await postJson<ChallengeResponse>(
     '/api/auth/challenge',
@@ -307,5 +311,6 @@ export async function signIn(
     sig,
     payload,
     ...(options.inviteToken ? { inviteToken: options.inviteToken } : {}),
+    ...(options.inviteToken && options.name ? { name: options.name } : {}),
   });
 }

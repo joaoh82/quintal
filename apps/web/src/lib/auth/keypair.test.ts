@@ -82,6 +82,7 @@ interface VerifyInput {
   sig: string;
   payload: string;
   inviteToken?: string;
+  name?: string;
 }
 
 async function verify(
@@ -445,8 +446,9 @@ describe('guest links', () => {
   async function joinAsGuest(
     auth: ReturnType<typeof buildAuth>,
     token: string,
+    options: { name?: string; as?: ReturnType<typeof keypair> } = {},
   ) {
-    const { secretKey, pubkey } = keypair();
+    const { secretKey, pubkey } = options.as ?? keypair();
     const nonce = await challenge(auth, pubkey);
     const payload = buildAuthPayload({
       origin: ORIGIN,
@@ -460,9 +462,59 @@ describe('guest links', () => {
         sig: signAuthPayload(secretKey, payload),
         payload,
         inviteToken: token,
+        ...(options.name !== undefined ? { name: options.name } : {}),
       })) as { token: string; isGuest: boolean },
     };
   }
+
+  const nameOf = async (db: Awaited<ReturnType<typeof setup>>['db'], pubkey: string) =>
+    (await db.select().from(users).where(eq(users.pubkey, pubkey)))[0]?.name;
+
+  it('calls a guest what they asked to be called, on the way in', async () => {
+    const { db, auth, host } = await withHost();
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+      maxUses: 10,
+    });
+
+    const named = await joinAsGuest(auth, token, { name: '  Ana Silva  ' });
+    assert.equal(await nameOf(db, named.pubkey), 'Ana Silva', 'trimmed, as a profile name is');
+
+    const blank = await joinAsGuest(auth, token, { name: '   ' });
+    assert.equal(await nameOf(db, blank.pubkey), '', 'blank means unnamed, shown as the key');
+
+    const long = await joinAsGuest(auth, token, { name: 'x'.repeat(200) });
+    assert.ok((await nameOf(db, long.pubkey))!.length < 200, 'capped like any display name');
+  });
+
+  it('never renames a key the office already knows, and ignores a name without a link', async () => {
+    const { db, auth, host } = await withHost();
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+      maxUses: 10,
+    });
+
+    // The same key, back through the link with a different name: the row
+    // keeps the name it arrived with — the rule the profile page enforces.
+    const key = keypair();
+    await joinAsGuest(auth, token, { name: 'First', as: key });
+    await joinAsGuest(auth, token, { name: 'Second', as: key });
+    assert.equal(await nameOf(db, key.pubkey), 'First');
+
+    // An ordinary sign-in that sends a name anyway: not a guest, not honoured.
+    const member = keypair();
+    const nonce = await challenge(auth, member.pubkey);
+    const payload = buildAuthPayload({ origin: ORIGIN, nonce, timestamp: nowSeconds() });
+    await verify(auth, {
+      pubkey: member.pubkey,
+      sig: signAuthPayload(member.secretKey, payload),
+      payload,
+      name: 'Sneaky',
+    });
+    assert.equal(await nameOf(db, member.pubkey), '');
+  });
 
   it('lets a guest in and marks the session', async () => {
     const { db, auth, host } = await withHost();

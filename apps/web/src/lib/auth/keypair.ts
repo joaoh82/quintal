@@ -11,6 +11,7 @@ import {
   isSignatureHex,
   parseAuthPayload,
   verifyAuthSignature,
+  normaliseDisplayName,
 } from '@quintal/shared';
 import {
   ensurePersonalWorkspace,
@@ -55,6 +56,12 @@ const verifyBody = z.object({
   payload: z.string(),
   /** Present when arriving through a guest link. */
   inviteToken: z.string().optional(),
+  /**
+   * With a guest link: what to call the person walking in. A guest keeps the
+   * name they arrived with, so arrival is the one moment they choose it.
+   * Ignored without a token, and for a key the office already knows.
+   */
+  name: z.string().max(200).optional(),
 });
 
 /** Compare two hex strings without leaking where they first differ. */
@@ -194,7 +201,7 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
         '/verify',
         { method: 'POST', body: verifyBody, requireHeaders: true },
         async (ctx) => {
-          const { pubkey, sig, payload, inviteToken } = ctx.body;
+          const { pubkey, sig, payload, inviteToken, name: askedName } = ctx.body;
 
           const invalid = (message: string) =>
             new APIError('UNAUTHORIZED', { message });
@@ -262,7 +269,13 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             // would freeze one rendering into the row forever: it survives
             // every later improvement to how keys are shown, and it makes
             // "has this person picked a name?" unanswerable.
-            const name = '';
+            //
+            // Except a guest, who was asked on the way in. A guest cannot
+            // rename later — a forwarded link arriving as "Josh" is an
+            // attack, not a preference — so the one name they get is the one
+            // they give here, and the Guest badge says the rest.
+            const name =
+              inviteToken !== undefined ? (normaliseDisplayName(askedName) ?? '') : '';
             // The first account on an instance is the person standing it up,
             // and somebody has to be able to name the place. After that, admin
             // is granted deliberately — see `pnpm admin` — or not at all.
