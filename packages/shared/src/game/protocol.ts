@@ -1,4 +1,5 @@
 import type { ChannelRef } from '../conversation.js';
+import type { TeamRef } from '../team.js';
 import type { Direction, PlayerKind } from '../player.js';
 
 /**
@@ -69,6 +70,12 @@ export const ServerMessage = {
   ZoneChat: 'zone_chat',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
+  /**
+   * Something you should know that is not a refusal: your line went out, and
+   * here is what it could not do — a team you named has members who are not
+   * in this channel, say.
+   */
+  Notice: 'notice',
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -146,6 +153,13 @@ export interface ChannelsPayload {
   channels: ChannelRef[];
   /** Channels in the office this client could join. Never DMs. */
   available: ChannelRef[];
+  /**
+   * The office's teams, for the `@` picker and for explaining an `@team`
+   * chip. Carried here rather than on a message of their own because they
+   * change on the same cadence and the client asks for this list at the one
+   * moment it is ready to hear it.
+   */
+  teams?: TeamRef[];
 }
 
 export interface DmOpenPayload {
@@ -178,6 +192,12 @@ export interface DmOpenedPayload {
 
 export interface ErrorPayload {
   code: 'rate_limited' | 'invalid_move' | 'invalid_message' | 'unauthorised';
+  message: string;
+}
+
+export interface NoticePayload {
+  /** `team_members_absent`: a team you named has members outside this conversation. */
+  code: 'team_members_absent';
   message: string;
 }
 

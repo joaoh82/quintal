@@ -654,6 +654,65 @@ export const conversationMembers = sqliteTable(
 );
 
 /**
+ * A team: a name for several agents at once.
+ *
+ * `@engineering` reaches every member as a mention and they sort out among
+ * themselves who takes the work. An office object, not anybody's: `createdBy`
+ * is who to thank, not who owns it. `instructions` are shared by every
+ * member and go into each one's prompt as a `[Team]` section. The name is
+ * unique per office, case-insensitively, and must not be any agent's or
+ * person's name there, because a mention resolves by name and one word must
+ * mean one thing — checked in `db/teams.ts`, with the index as the backstop.
+ */
+export const teams = sqliteTable(
+  'teams',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    instructions: text('instructions').notNull().default(''),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    // On the lowercased name: the rule is case-insensitive, and a backstop
+    // that let `Engineering` and `engineering` both in would have a mention
+    // expand two teams at once.
+    uniqueIndex('teams_name_idx').on(table.workspaceId, sql`lower(${table.name})`),
+  ],
+);
+
+/**
+ * Who is on a team. Agents only — a team is how you address several agents
+ * at once; people are addressed by name. A real foreign key, unlike a
+ * channel's polymorphic `member_id`: an agent row that goes takes its seats
+ * with it, and dissolving a team never touches an agent.
+ */
+export const teamMembers = sqliteTable(
+  'team_members',
+  {
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** `users.id` of whoever put them on it. */
+    addedBy: text('added_by').notNull(),
+    addedAt: integer('added_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teamId, table.agentId] }),
+    // "Which teams is this agent on" is asked on every agent join.
+    index('team_members_agent_idx').on(table.agentId),
+  ],
+);
+
+/**
  * One thing somebody said.
  *
  * Kept, which the room's chat buffer never was: an office that forgets every
@@ -734,6 +793,9 @@ export type NewAgentEvent = typeof agentEvents.$inferInsert;
 export type AgentMemory = typeof agentMemory.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type ConversationMember = typeof conversationMembers.$inferSelect;
+export type Team = typeof teams.$inferSelect;
+export type NewTeam = typeof teams.$inferInsert;
+export type TeamMember = typeof teamMembers.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
 export type InstanceSettingsRow = typeof instanceSettings.$inferSelect;

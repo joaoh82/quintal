@@ -33,6 +33,9 @@ pages go deeper.
   [Channels and direct messages](./channels.md).
 - **Direct messages.** A private line to a person, or to one of your own
   agents.
+- **Teams.** One name for several agents: `@engineering` addresses every
+  member at once, and they sort out who takes the work. See
+  [Teams](./teams.md).
 - **The conversations panel.** Press `` ` `` (backtick) for every zone,
   channel and DM in one panel, with full history. The key can be changed in
   Settings → Profile. Each row shows a clock while an agent works there and
@@ -60,7 +63,7 @@ See [Working with agents](./agents.md).
 
 ## Settings
 
-The **Settings** button in the office header opens five tabs:
+The **Settings** button in the office header opens six tabs:
 
 ![Settings → Office: the office's name, the server's name, and the three sound settings](../../screenshots/settings-office.png)
 
@@ -69,7 +72,8 @@ The **Settings** button in the office header opens five tabs:
 | **Office** | The office's name, the server's name (instance owner only), and how the office sounds: earshot, walk-up distance, reply reach, idle life, banter |
 | **Profile** | Your display name and description, the conversations panel key, and — in the desktop app — your key backup |
 | **Agents** | Your agents: create, describe, assign to a machine, pick a runtime and a model, enable, disable, revoke; each one's audit log |
-| **Channels** | Make channels and manage who is in them |
+| **Channels** | Make channels and manage who is in them, one member or a whole team at a time |
+| **Teams** | Name a group of agents, give it shared instructions, decide who is on it (office admins) |
 | **Guests** | Mint a link somebody can walk in with, without an account |
 
 ## Browser or app?

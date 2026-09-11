@@ -1,4 +1,4 @@
-import type { ChannelRef } from '@quintal/shared';
+import type { ChannelRef, TeamRef } from '@quintal/shared';
 
 /**
  * A fingerprint of what one person sees of channels: the ones they are in,
@@ -13,8 +13,14 @@ import type { ChannelRef } from '@quintal/shared';
 export function channelListSignature(
   channels: readonly ChannelRef[],
   available: readonly ChannelRef[],
+  teams: readonly TeamRef[] = [],
 ): string {
   const part = (list: readonly ChannelRef[]) =>
     list.map((channel) => `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}`).join(',');
-  return `${part(channels)}|${part(available)}`;
+  // Teams ride on the same message: a renamed team, or a new member, is a
+  // change the picker has to hear about.
+  const teamPart = teams
+    .map((team) => `${team.id}:${team.name}:${team.members.map((member) => member.id).join('+')}`)
+    .join(',');
+  return `${part(channels)}|${part(available)}|${teamPart}`;
 }

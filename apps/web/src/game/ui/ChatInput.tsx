@@ -9,6 +9,8 @@ import {
   mentionQueryAt,
   parseAgentCommand,
   type RosterEntry,
+  teamPickerSubtitle,
+  type TeamRef,
 } from '@quintal/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -31,13 +33,17 @@ type PickerItem =
       status?: string | undefined;
     }
   | { kind: 'command'; key: string; name: string; summary: string }
-  | { kind: 'slash'; key: string; text: string; summary: string };
+  | { kind: 'slash'; key: string; text: string; summary: string }
+  /** A team: one name for several agents. `summary` is `team · 3 agents`. */
+  | { kind: 'team'; key: string; name: string; summary: string; members: string };
 
 export interface ChatInputProps {
   /** Everyone in the room, for @ autocomplete. */
   roster: RosterEntry[];
   /** Every channel `/join` could take you to, yours first. See `joinTargets`. */
   joinable: JoinTarget[];
+  /** The office's teams, offered under `@` beside the people. */
+  teams?: TeamRef[];
   /** True while the input owns the keyboard. */
   focused: boolean;
   onSend: (text: string) => void;
@@ -65,6 +71,7 @@ export interface ChatInputProps {
 export function ChatInput({
   roster,
   joinable,
+  teams,
   focused,
   onSend,
   onFocusChange,
@@ -130,13 +137,23 @@ export function ChatInput({
       );
     }
     if (!mention) return [];
-    return roster
+    // Teams first: one word that reaches several agents is the thing worth
+    // finding fastest. Then agents, then the people near you.
+    const named: PickerItem[] = (teams ?? [])
+      .filter((team) => team.name.toLowerCase().startsWith(mention.query))
+      .map((team) => ({
+        kind: 'team',
+        key: `team:${team.id}`,
+        name: team.name,
+        summary: teamPickerSubtitle(team),
+        members: team.members.map((member) => member.name).join(', '),
+      }));
+    const people: PickerItem[] = roster
       .filter((entry) => !entry.isSelf)
       .filter((entry) => entry.name.toLowerCase().startsWith(mention.query))
       // Agents first: they are the ones you address by name most often, and the
       // humans near you are usually the ones you just walk up to.
       .sort((a, b) => Number(b.kind === 'agent') - Number(a.kind === 'agent'))
-      .slice(0, 6)
       .map((entry) => ({
         kind: 'person',
         key: entry.sessionId,
@@ -145,7 +162,8 @@ export function ChatInput({
         ownerName: entry.ownerName ?? undefined,
         status: entry.status ?? undefined,
       }));
-  }, [slash, command, mention, roster, joinable]);
+    return [...named, ...people].slice(0, 6);
+  }, [slash, command, mention, roster, joinable, teams]);
 
   const open = candidates.length > 0;
 
@@ -241,6 +259,15 @@ export function ChatInput({
                 ) : entry.kind === 'slash' ? (
                   <>
                     <span className="font-mono text-white/85">{entry.text.trim()}</span>
+                    <span className="ml-auto truncate text-[10px] text-white/40">
+                      {entry.summary}
+                    </span>
+                  </>
+                ) : entry.kind === 'team' ? (
+                  <>
+                    <span className="text-amber-200" title={entry.members}>
+                      @{entry.name}
+                    </span>
                     <span className="ml-auto truncate text-[10px] text-white/40">
                       {entry.summary}
                     </span>

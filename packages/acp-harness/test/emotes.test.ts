@@ -34,6 +34,7 @@ function fakeGateway(handlers: Handlers, emotes: Array<[string, number | undefin
     description: '',
     instructions: '',
     channels: [],
+    teams: [],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {

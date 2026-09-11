@@ -262,6 +262,11 @@ export interface AgentReadyPayload {
    * — membership is changed from the settings page, not by the agent.
    */
   channels: ChannelRef[];
+  /**
+   * The teams this agent is on. Membership is changed from the settings
+   * page; a change lands on the next connect, the way `instructions` does.
+   */
+  teams: AgentTeam[];
   serverTime: number;
   limits: {
     chatIntervalMs: number;
@@ -307,6 +312,11 @@ export interface AgentChatEvent {
   /** Straight-line distance in tiles, at the moment it was said. */
   distance: number;
   sentAt: number;
+  /**
+   * Set when a team this agent is on was named. Addressed, then, as surely
+   * as by name — the office's word, so the harness need not know the teams.
+   */
+  viaTeam?: AgentViaTeam;
 }
 
 /**
@@ -327,6 +337,33 @@ export interface AgentChannelChatEvent {
   text: string;
   sentAt: number;
   mentioned: boolean;
+  /** Set when `mentioned` is true because a team this agent is on was named. */
+  viaTeam?: AgentViaTeam;
+}
+
+/**
+ * How a line reached an agent that was addressed as one of a team.
+ *
+ * The office expanded `@name` to the team's members; every one it reached
+ * got the same line with this on it, so each knows it is one of several
+ * and who the others are — the condition for sorting out among themselves
+ * who takes the work rather than all three starting it.
+ */
+export interface AgentViaTeam {
+  name: string;
+  /** The other members the line reached, by name. Not this agent. */
+  members: string[];
+}
+
+/** A team this agent is on, as it is told on connect. */
+export interface AgentTeam {
+  id: string;
+  name: string;
+  description: string;
+  /** Shared by every member; becomes a `[Team]` section in the prompt. */
+  instructions: string;
+  /** Every member by name, this agent included. */
+  members: string[];
 }
 
 export interface AgentChannelsEvent {
@@ -341,6 +378,8 @@ export interface AgentMentionEvent {
   fromKind: PlayerKind;
   text: string;
   sentAt: number;
+  /** Set when the name said was a team's, and this agent is on it. */
+  viaTeam?: AgentViaTeam;
 }
 
 export interface AgentOccupant {

@@ -5,6 +5,7 @@ import {
   type ChannelRef,
   type ChatBroadcastPayload,
   type MapZone,
+  type TeamRef,
 } from '@quintal/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
@@ -88,6 +89,8 @@ export interface Conversations {
   channels: ChannelRef[];
   /** Channels we could join. */
   available: ChannelRef[];
+  /** The office's teams: names that reach several agents at once. */
+  teams: TeamRef[];
   /** Every zone on the map, once the map has loaded. */
   zones: MapZone[];
   /** The zone we stand in. */
@@ -129,6 +132,7 @@ export function useConversations(
   });
   const [channels, setChannels] = useState<ChannelRef[]>([]);
   const [available, setAvailable] = useState<ChannelRef[]>([]);
+  const [teams, setTeams] = useState<TeamRef[]>([]);
   const [zones, setZones] = useState<MapZone[]>([]);
   const [myZone, setMyZone] = useState<string>(FLOOR_ZONE_ID);
   const [active, setActive] = useState<ConversationKey>(NEARBY);
@@ -246,9 +250,10 @@ export function useConversations(
         const key = channelId ? channelKey(channelId) : zoneId ? zoneKey(zoneId) : NEARBY;
         patch(key, (t) => prepend(t, messages, hasMore));
       }),
-      gameBridge.on('channels', ({ channels: mine, available: open }) => {
+      gameBridge.on('channels', ({ channels: mine, available: open, teams: named }) => {
         setChannels(mine);
         setAvailable(open);
+        setTeams(named ?? []);
         // Anything said in them since you last looked is waiting.
         setReadState((state) => caughtUp(state, mine, visibleRef.current));
         // The channel `/join` just asked for: it is ours now, so go there.
@@ -392,6 +397,7 @@ export function useConversations(
     transcripts,
     channels,
     available,
+    teams,
     zones,
     myZone,
     active,

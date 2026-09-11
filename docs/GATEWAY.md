@@ -207,10 +207,10 @@ silence denies after five minutes.
 
 | Message | When |
 | --- | --- |
-| `agent:ready` | Once, immediately after joining. Your identity, position, scopes, **every zone on the map**, and the exact limits in force — including `limits.parallelism`, how many conversations this agent may answer at once (its own setting, or the office's default). A harness that runs one turn at a time may ignore it. |
+| `agent:ready` | Once, immediately after joining. Your identity, position, scopes, **every zone on the map**, the `teams` you are on (name, description, shared `instructions`, members), and the exact limits in force — including `limits.parallelism`, how many conversations this agent may answer at once (its own setting, or the office's default). A harness that runs one turn at a time may ignore it. |
 | `agent:nearby_chat` | Somebody within earshot spoke. Carries `distance`. Earshot is instance-configurable at `/settings`; `agent:ready` tells you the value in force. |
-| `agent:mention` | Somebody wrote `@you`, from **anywhere** on the map. No distance. |
-| `agent:channel_chat` | Somebody posted in a channel you are a member of. Carries the channel and `mentioned` — the office's word on whether the line named you. Every line is delivered; a well-behaved agent answers only the ones that name it. |
+| `agent:mention` | Somebody wrote `@you` — or `@team`, for a team you are on — from **anywhere** on the map. No distance. Carries `viaTeam` when it was the team. |
+| `agent:channel_chat` | Somebody posted in a channel you are a member of. Carries the channel and `mentioned` — the office's word on whether the line named you, by name or by a team you are on (`viaTeam` says which team and who else it reached). Every line is delivered; a well-behaved agent answers only the ones that name it. |
 | `agent:channels` | The channels you are in. Sent when that changes; `agent:ready` carries the initial list. Membership is decided at `/settings/channels`, not by you. |
 | `agent:roster` | On join, and whenever the room changes. Who is around, and which zone you are in. |
 | `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
@@ -235,6 +235,24 @@ A reply to an `@mention` finds the person who asked even if they are out of
 earshot, for `replyWindowSeconds` after the question (default 90, `0` disables
 it). Otherwise asking an agent across the room is a question you never hear the
 answer to.
+
+**Teams.** `@engineering` names every agent on the team at once. The office
+expands it: each member it can reach gets the line as a mention with
+`viaTeam: { name, members }` — the team, and the *other* members the line
+reached — so each knows it is one of several and who to sort it out with.
+The text is not rewritten. In a channel only members of the channel are
+reached; the sender is told who was not. You are told which teams you are on
+in `agent:ready`, with the team's shared `instructions`; `quintal-acp` puts
+those in a `[Team]` section of the prompt and tells the model, in
+`[Context]`, when a line came through a team.
+
+**Mentions between agents are capped.** A person's line is hop 0; an agent
+woken by it posts at hop 1, and so on. Past `AGENT_MENTION_MAX_HOPS` (four)
+an agent's line is delivered and shown like any other but sets `mentioned` on
+nobody and sends no `agent:mention` — the loop stops at the office, whatever
+the harness does — and the speaker's log gets `effect.mention_suppressed`.
+The office counts hops itself, per agent and per conversation, from the line
+that last woke you there; you send nothing extra.
 
 ---
 

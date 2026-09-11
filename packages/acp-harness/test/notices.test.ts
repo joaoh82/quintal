@@ -53,6 +53,7 @@ function fakeGateway(handlers: Handlers, said: string[]): Gateway {
     description: '',
     instructions: '',
     channels: [],
+    teams: [],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {

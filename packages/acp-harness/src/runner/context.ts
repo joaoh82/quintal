@@ -1,4 +1,10 @@
-import { channelLabel, type AgentChatEvent, type ChannelRef } from '@quintal/shared';
+import {
+  channelLabel,
+  type AgentChatEvent,
+  type AgentTeam,
+  type AgentViaTeam,
+  type ChannelRef,
+} from '@quintal/shared';
 
 /**
  * What an agent is told, per turn — and, more importantly, what it is not.
@@ -30,6 +36,13 @@ export interface Trigger {
   /** The channel or DM this was posted in, when it was not said aloud. */
   channel?: Pick<ChannelRef, 'kind' | 'name' | 'slug'>;
   sentAt: number;
+  /**
+   * Set when the line named a team this agent is on rather than the agent
+   * itself. The other members got the same line, and the prompt says so —
+   * an agent that does not know it is one of several starts the work as if
+   * it were the only one asked.
+   */
+  viaTeam?: AgentViaTeam;
   /**
    * Set when this is not a message at all but the office's invitation to
    * banter: `line` is what the partner said (null when we go first), and
@@ -82,6 +95,64 @@ function describeSender(trigger: Trigger): string {
   return `${trigger.fromName} (${kind}, ${where})`;
 }
 
+/** "A", "A and B", "A, B and C". */
+function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+const COUNT_WORDS = ['', '', 'both', 'all three', 'all four', 'all five', 'all six',
+  'all seven', 'all eight', 'all nine', 'all ten'];
+
+/**
+ * The one line that tells an agent it was addressed as one of a team.
+ *
+ * It names the others and says the count out loud, because that is what the
+ * agent needs in order to claim a share rather than the whole: "with Claude
+ * and Grok" is a prompt to divide the work, where the bare message reads as
+ * a job for one. When nobody else received it, the line says that instead —
+ * an agent told it is on a team, and given no names, would wait for
+ * teammates who are not coming.
+ */
+export function describeTeam(viaTeam: AgentViaTeam): string {
+  if (viaTeam.members.length === 0) {
+    return (
+      `You were addressed as part of team ${viaTeam.name}; ` +
+      'you are the only member who received it.'
+    );
+  }
+  const count = COUNT_WORDS[viaTeam.members.length + 1] ?? 'all';
+  const who = `${count[0]?.toUpperCase() ?? ''}${count.slice(1)}`;
+  return (
+    `You were addressed as part of team ${viaTeam.name}, with ${listNames(viaTeam.members)}. ` +
+    `${who} of you got this message and will see each other's replies here.`
+  );
+}
+
+/**
+ * A team's standing section of the system prompt.
+ *
+ * Membership is said with the others' names, not the agent's own: the point
+ * of the section is to tell the agent who it shares work with, and a list
+ * that includes itself reads as a roster rather than a set of colleagues.
+ */
+export function teamSection(team: AgentTeam, myName: string): string {
+  const others = team.members.filter((member) => member !== myName);
+  const description = team.description.trim();
+  const instructions = team.instructions.trim();
+  const membership =
+    others.length > 0
+      ? `You are on the ${team.name} team with ${listNames(others)}.`
+      : `You are on the ${team.name} team, its only member so far.`;
+  return [
+    `[Team ${team.name}]`,
+    description.length > 0 ? `${membership} ${description}` : membership,
+    instructions,
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+}
+
 /**
  * Build the `[Context]` envelope.
  *
@@ -108,6 +179,18 @@ export function buildEnvelope(input: EnvelopeInput): string {
     );
   } else {
     lines.push(`You are ${input.agentName}, in ${input.zoneLabel}.`);
+  }
+
+  // One line per team named, however many triggers named it: a batch of
+  // three lines to the same team is still one team the agent is answering as.
+  const teamsNamed = new Map<string, AgentViaTeam>();
+  for (const trigger of input.triggers) {
+    if (trigger.viaTeam !== undefined && !teamsNamed.has(trigger.viaTeam.name)) {
+      teamsNamed.set(trigger.viaTeam.name, trigger.viaTeam);
+    }
+  }
+  for (const viaTeam of teamsNamed.values()) {
+    lines.push(describeTeam(viaTeam));
   }
 
   if (input.window.length > 0) {

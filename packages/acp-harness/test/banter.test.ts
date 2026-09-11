@@ -40,6 +40,7 @@ function fakeGateway(handlers: Handlers, said: Said): Gateway {
     instructions: '',
     scopes: ['chat'],
     channels: [],
+    teams: [],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {

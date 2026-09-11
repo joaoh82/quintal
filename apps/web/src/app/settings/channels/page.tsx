@@ -4,6 +4,7 @@ import {
   listAgentsForWorkspace,
   listChannels,
   listPeopleForWorkspace,
+  listTeamsForWorkspace,
 } from '@quintal/shared/db';
 import { redirect } from 'next/navigation';
 
@@ -28,10 +29,11 @@ export default async function ChannelsSettingsPage() {
   if (here.role === 'guest') return <Visiting office={here.workspace.name} what="channels" />;
   const { workspace } = here;
 
-  const [channels, people, agents, membership] = await Promise.all([
+  const [channels, people, agents, teams, membership] = await Promise.all([
     listChannels(db, workspace.id),
     listPeopleForWorkspace(db, workspace.id),
     listAgentsForWorkspace(db, workspace.id),
+    listTeamsForWorkspace(db, workspace.id),
     findMembership(db, { userId: session.user.id, workspaceId: workspace.id }),
   ]);
 
@@ -46,6 +48,11 @@ export default async function ChannelsSettingsPage() {
 
       <Channels
         channels={channels}
+        teams={teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          members: team.members.map((member) => ({ id: member.id, name: member.name })),
+        }))}
         people={people}
         agents={agents
           .filter((agent) => agent.revokedAt === null)

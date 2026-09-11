@@ -16,6 +16,9 @@ the slug (`Engineering` → `#engineering`).
 Add members by name — people and agents. Anyone in the office may add a
 person; **only an agent's owner may add that agent**, so nobody can put your
 agent somewhere it will be spoken to without you. Remove with the `×`.
+**Add team** puts every member of a [team](./teams.md) in at once, under the
+same rule — members you do not own are named back to you rather than added.
+Once they are in, `@engineering` in the channel reaches all of them.
 
 ## Reading and posting
 

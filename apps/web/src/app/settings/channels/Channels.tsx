@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 
 import {
   addChannelMemberAction,
+  addTeamToChannelAction,
   createChannelAction,
   joinChannelAction,
   removeChannelMemberAction,
@@ -17,6 +18,8 @@ import {
 
 interface ChannelsProps {
   channels: ChannelSummary[];
+  /** The office's teams, so a whole one can be put in a channel at once. */
+  teams: Array<{ id: string; name: string; members: Array<{ id: string; name: string }> }>;
   people: Array<{ id: string; name: string; role: string }>;
   agents: Array<{ id: string; name: string; ownerUserId: string }>;
   currentUser: { userId: string; role: MembershipRole | null };
@@ -32,7 +35,7 @@ const IDLE: ChannelActionState = { ok: true };
  * enforced in the action, and a list that offers what the action will refuse
  * is a list that lies.
  */
-export function Channels({ channels, people, agents, currentUser }: ChannelsProps) {
+export function Channels({ channels, teams, people, agents, currentUser }: ChannelsProps) {
   const [created, create, creating] = useActionState(createChannelAction, IDLE);
 
   return (
@@ -62,6 +65,7 @@ export function Channels({ channels, people, agents, currentUser }: ChannelsProp
             <ChannelCard
               key={channel.id}
               channel={channel}
+              teams={teams}
               people={people}
               agents={agents}
               currentUser={currentUser}
@@ -75,13 +79,19 @@ export function Channels({ channels, people, agents, currentUser }: ChannelsProp
 
 function ChannelCard({
   channel,
+  teams,
   people,
   agents,
   currentUser,
 }: { channel: ChannelSummary } & Omit<ChannelsProps, 'channels'>) {
   const [added, add, adding] = useActionState(addChannelMemberAction, IDLE);
+  const [teamAdded, addTeam, addingTeam] = useActionState(addTeamToChannelAction, IDLE);
   const present = new Set(channel.members.map((member) => member.id));
   const isMember = present.has(currentUser.userId);
+  // A team worth offering has somebody on it who is not here yet.
+  const addableTeams = teams.filter((team) =>
+    team.members.some((member) => !present.has(member.id)),
+  );
 
   const addable = [
     ...people
@@ -184,6 +194,35 @@ function ChannelCard({
           {!added.ok && added.error ? (
             <span className="text-destructive text-xs" role="alert">
               {added.error}
+            </span>
+          ) : null}
+        </form>
+      ) : null}
+      {isMember && addableTeams.length > 0 ? (
+        <form action={addTeam} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="channelId" value={channel.id} />
+          <select
+            name="teamId"
+            className="bg-background h-8 rounded-md border px-2 text-sm"
+            defaultValue=""
+            required
+          >
+            <option value="" disabled>
+              Add a team…
+            </option>
+            {addableTeams.map((team) => (
+              <option key={team.id} value={team.id}>
+                @{team.name} · {team.members.length}{' '}
+                {team.members.length === 1 ? 'agent' : 'agents'}
+              </option>
+            ))}
+          </select>
+          <Button type="submit" variant="outline" size="sm" disabled={addingTeam}>
+            {addingTeam ? 'Adding…' : 'Add team'}
+          </Button>
+          {!teamAdded.ok && teamAdded.error ? (
+            <span className="text-destructive text-xs" role="alert">
+              {teamAdded.error}
             </span>
           ) : null}
         </form>

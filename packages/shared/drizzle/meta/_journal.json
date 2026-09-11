@@ -183,6 +183,13 @@
       "when": 1789051660644,
       "tag": "0025_agents_may_answer_in_parallel",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1789115265509,
+      "tag": "0026_agents_form_teams",
+      "breakpoints": true
     }
   ]
 }

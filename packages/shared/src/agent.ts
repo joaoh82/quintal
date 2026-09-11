@@ -106,6 +106,20 @@ export const AGENT_STATUS_MAX_LENGTH = 60;
  * is first needed, so the number is a ceiling and not a cost until it is
  * used.
  */
+/**
+ * How many agent-to-agent hops a mention may travel before it wakes nobody.
+ *
+ * A human's line is hop 0. An agent that was woken by it and names another
+ * agent posts at hop 1, that one at hop 2, and so on. Three teammates
+ * naming each other back would otherwise ping-pong forever, with everybody
+ * else watching. Past this depth an agent's line is still delivered and
+ * shown — nothing is lost — it just starts no turn, and the office writes
+ * `effect.mention_suppressed` in the speaker's log so the silence can be
+ * explained. Four is enough for "I'll take it" / "no, I have context" /
+ * "fine, yours" / "thanks" and not enough for a loop to be a nuisance.
+ */
+export const AGENT_MENTION_MAX_HOPS = 4;
+
 export const AGENT_PARALLELISM_DEFAULT = 10;
 export const AGENT_PARALLELISM_MIN = 1;
 export const AGENT_PARALLELISM_MAX = 32;
@@ -192,6 +206,12 @@ export const AGENT_EVENT_KINDS = [
   'effect.memory_written',
   /** The office asked this agent for one line to a colleague; the setting was on. */
   'effect.banter',
+  /**
+   * This agent named other agents in a line that had already travelled the
+   * most agent-to-agent hops a mention may. The line was delivered and
+   * shown; it woke nobody. See `AGENT_MENTION_MAX_HOPS`.
+   */
+  'effect.mention_suppressed',
 ] as const;
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
 

@@ -43,6 +43,7 @@ function fakeGateway(handlers: Handlers, said: Array<[string, string | undefined
     description: '',
     instructions: '',
     channels: [ENGINEERING, DM_WITH_JOSH],
+    teams: [],
     limits: { walkUpRadiusTiles: 4 },
   };
   return {
@@ -113,7 +114,12 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 400));
 let clock = Date.now();
 
 /** Each line a second after the last: the window excludes lines by time. */
-function line(text: string, mentioned: boolean, channel = ENGINEERING) {
+function line(
+  text: string,
+  mentioned: boolean,
+  channel = ENGINEERING,
+  viaTeam?: { name: string; members: string[] },
+) {
   clock += 1_000;
   return {
     channel,
@@ -124,6 +130,22 @@ function line(text: string, mentioned: boolean, channel = ENGINEERING) {
     text,
     sentAt: clock,
     mentioned,
+    viaTeam,
+  };
+}
+
+/** A line said aloud nearby by another agent, naming nobody. */
+function nearbyFromAgent(viaTeam?: { name: string; members: string[] }) {
+  clock += 1_000;
+  return {
+    from: 's-9',
+    fromUserId: 'agent-9',
+    fromName: 'Claude',
+    fromKind: 'agent',
+    text: 'the migration is ready for a second pair of eyes',
+    distance: 2,
+    sentAt: clock,
+    viaTeam,
   };
 }
 
@@ -239,6 +261,22 @@ describe('an agent in a channel', () => {
     assert.equal(said[0]?.[1], DM_WITH_JOSH.id, 'the reply goes back into the DM');
   });
 
+  it('wakes for a team mention, and is told it is one of several', async () => {
+    const { handlers, record } = await start();
+
+    handlers.channelChat?.(
+      line('@engineering review #52', true, ENGINEERING, {
+        name: 'engineering',
+        members: ['Claude', 'Grok'],
+      }),
+    );
+    await until(() => prompts(record).length > 0, 'a turn');
+
+    const text = prompts(record)[0] ?? '';
+    assert.match(text, /addressed as part of team engineering, with Claude and Grok/);
+    assert.match(text, /All three of you got this message/);
+  });
+
   it('answers a walk-up out loud, as before', async () => {
     const { handlers, said } = await start();
 
@@ -253,5 +291,56 @@ describe('an agent in a channel', () => {
 
     await until(() => said.length > 0, 'a reply');
     assert.equal(said[0]?.[1], undefined, 'a spatial turn is answered aloud');
+  });
+});
+
+/**
+ * Another agent's line is context, not conversation — unless the office says
+ * it reached us as one of a team. The text is the same either way, and does
+ * not contain our name; only the office's word on it differs.
+ */
+describe('a line from another agent, said nearby', () => {
+  let current: AgentRunner | null = null;
+
+  async function stopCurrent(): Promise<void> {
+    const runner = current;
+    current = null;
+    await runner?.stop();
+    delete process.env.FAKE_RECORD;
+  }
+
+  after(stopCurrent);
+
+  async function start(): Promise<{ handlers: Handlers; record: string }> {
+    await stopCurrent();
+    const dir = mkdtempSync(join(tmpdir(), 'quintal-team-'));
+    const record = join(dir, 'requests.jsonl');
+    process.env.FAKE_RECORD = record;
+
+    const handlers: Handlers = {};
+    const runner = new AgentRunner(config(dir), undefined, fakeGateway(handlers, []));
+    current = runner;
+    await runner.start();
+    return { handlers, record };
+  }
+
+  it('is ignored when it names nobody', async () => {
+    const { handlers, record } = await start();
+
+    handlers.chat?.(nearbyFromAgent());
+    await settle();
+
+    assert.equal(prompts(record).length, 0, 'no turn was paid for');
+  });
+
+  it('starts a turn when it reached us through a team', async () => {
+    const { handlers, record } = await start();
+
+    handlers.chat?.(nearbyFromAgent({ name: 'engineering', members: ['Claude'] }));
+    await until(() => prompts(record).length > 0, 'a turn');
+
+    const text = prompts(record)[0] ?? '';
+    assert.match(text, /addressed as part of team engineering, with Claude/);
+    assert.match(text, /Both of you got this message/);
   });
 });

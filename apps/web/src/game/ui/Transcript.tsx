@@ -1,6 +1,6 @@
 'use client';
 
-import type { ChatBroadcastPayload } from '@quintal/shared';
+import type { ChatBroadcastPayload, TeamRef } from '@quintal/shared';
 import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 
 import { segments } from './links';
@@ -24,9 +24,20 @@ export function timeOf(sentAt: number): string {
  * `_blank` there. The click stays in the anchor so nothing behind the
  * transcript (the overlay's close-on-backdrop, the map) takes it as its own.
  */
-function MessageText({ text }: { text: string }) {
-  return segments(text).map((segment, index) =>
-    segment.kind === 'link' ? (
+function MessageText({ text, teams }: { text: string; teams: readonly TeamRef[] }) {
+  return segments(
+    text,
+    teams.map((team) => team.name),
+  ).map((segment, index) =>
+    segment.kind === 'team' ? (
+      <span
+        key={index}
+        className="rounded bg-amber-200/15 px-1 text-amber-200"
+        title={describeTeam(segment.name, teams)}
+      >
+        {segment.text}
+      </span>
+    ) : segment.kind === 'link' ? (
       <a
         key={index}
         href={segment.href}
@@ -43,8 +54,20 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
+/** "engineering: Claude, Codex and Grok" — the tooltip on a team chip. */
+function describeTeam(name: string, teams: readonly TeamRef[]): string {
+  const team = teams.find((candidate) => candidate.name === name);
+  const names = team?.members.map((member) => member.name) ?? [];
+  if (names.length === 0) return `${name}: a team with nobody on it`;
+  const list =
+    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${name}: ${list}`;
+}
+
 interface TranscriptProps {
   messages: ChatBroadcastPayload[];
+  /** The office's teams, so an `@team` in a line can say who it reached. */
+  teams?: readonly TeamRef[];
   hasMore: boolean;
   loading: boolean;
   /** Called when the reader reaches the top and there is more. */
@@ -65,6 +88,7 @@ interface TranscriptProps {
  */
 export function Transcript({
   messages,
+  teams,
   hasMore,
   loading,
   onLoadEarlier,
@@ -137,7 +161,7 @@ export function Transcript({
             </span>
             <span className="text-white/45">: </span>
             <span className="whitespace-pre-wrap break-words text-white/90">
-              <MessageText text={message.text} />
+              <MessageText text={message.text} teams={teams ?? []} />
             </span>
           </p>
         ))
