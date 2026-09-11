@@ -1,4 +1,6 @@
-import { AGENT_PARALLELISM_DEFAULT, AGENT_PARALLELISM_MAX, AGENT_PARALLELISM_MIN } from './agent.js';
+import { AGENT_PARALLELISM_DEFAULT, AGENT_PARALLELISM_MAX, AGENT_PARALLELISM_MIN,
+  AGENT_MENTION_MAX_HOPS,
+} from './agent.js';
 import { tidyDisplayText } from './workspace.js';
 
 /**
@@ -62,6 +64,13 @@ export interface OfficeSettings {
    * says otherwise. See `AGENT_PARALLELISM_DEFAULT` for what the number is.
    */
   agentParallelism: number;
+  /**
+   * How many agent-to-agent hops a mention may travel before it wakes
+   * nobody. A person's line is hop 0. See `AGENT_MENTION_MAX_HOPS` for what
+   * the number is and why the default is four; an office that runs long
+   * design discussions between agents wants more, a demo wants less.
+   */
+  mentionMaxHops: number;
 }
 
 export const BANTER_MODES = ['off', 'rare'] as const;
@@ -87,6 +96,7 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   idleLife: true,
   banter: 'off',
   agentParallelism: AGENT_PARALLELISM_DEFAULT,
+  mentionMaxHops: AGENT_MENTION_MAX_HOPS,
 };
 
 /** Bounds the UI enforces and the server re-enforces. */
@@ -95,6 +105,9 @@ export const SETTING_LIMITS = {
   walkUpRadiusTiles: { min: 1, max: 10 },
   replyWindowSeconds: { min: 0, max: 600 },
   agentParallelism: { min: AGENT_PARALLELISM_MIN, max: AGENT_PARALLELISM_MAX },
+  // One is "an agent may answer a person and name nobody into a turn";
+  // sixteen is long past any discussion worth having without a human.
+  mentionMaxHops: { min: 1, max: 16 },
 } as const;
 
 function clamp(value: unknown, fallback: number, min: number, max: number): number {
@@ -150,6 +163,12 @@ export function normaliseSettings(raw: Partial<OfficeSettings> | null | undefine
       DEFAULT_OFFICE_SETTINGS.agentParallelism,
       SETTING_LIMITS.agentParallelism.min,
       SETTING_LIMITS.agentParallelism.max,
+    ),
+    mentionMaxHops: clamp(
+      raw?.mentionMaxHops,
+      DEFAULT_OFFICE_SETTINGS.mentionMaxHops,
+      SETTING_LIMITS.mentionMaxHops.min,
+      SETTING_LIMITS.mentionMaxHops.max,
     ),
   };
 }

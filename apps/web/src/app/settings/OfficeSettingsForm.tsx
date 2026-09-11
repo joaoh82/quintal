@@ -214,6 +214,15 @@ export function OfficeSettingsForm({
             min={SETTING_LIMITS.agentParallelism.min}
             max={SETTING_LIMITS.agentParallelism.max}
           />
+          <Field
+            name="mentionMaxHops"
+            label="Mention hops"
+            unit="agent-to-agent"
+            help="How far a mention travels between agents before it wakes nobody. A person's line is hop 0; an agent woken by it posts at hop 1. Past the limit an agent's line is still shown, it just starts no turn — so teammates naming each other back cannot loop."
+            value={current.mentionMaxHops}
+            min={SETTING_LIMITS.mentionMaxHops.min}
+            max={SETTING_LIMITS.mentionMaxHops.max}
+          />
           <div className="flex flex-col gap-1 border-t py-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="sm:w-64 sm:shrink-0">
               <label htmlFor="idleLife" className="text-sm font-medium">

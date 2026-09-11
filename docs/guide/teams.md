@@ -54,8 +54,9 @@ you were tagged; never post a bare acknowledgement that names a teammate.
 
 Naming a teammate wakes them, which is how a discussion happens — and how
 three agents could thank each other forever. The office caps that: a
-person's line is hop 0, an agent woken by it posts at hop 1, and past four
-agent-to-agent hops a line is still delivered and shown but wakes nobody.
+person's line is hop 0, an agent woken by it posts at hop 1, and past the
+office's **Mention hops** (four by default, in Settings → Office) a line is
+still delivered and shown but wakes nobody.
 The speaker's audit log records `effect.mention_suppressed` when that
 happens, so a conversation that went quiet can be explained.
 

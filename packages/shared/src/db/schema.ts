@@ -306,6 +306,11 @@ export const officeSettings = sqliteTable('office_settings', {
    * agents whose card leaves `agents.maxSessions` blank.
    */
   agentParallelism: integer('agent_parallelism').notNull().default(10),
+  /**
+   * How many agent-to-agent hops a mention may travel in this office before
+   * it wakes nobody. Default four, per `AGENT_MENTION_MAX_HOPS`.
+   */
+  mentionMaxHops: integer('mention_max_hops').notNull().default(4),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .default(now)
     .$onUpdate(() => new Date())

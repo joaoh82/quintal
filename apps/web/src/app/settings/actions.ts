@@ -68,6 +68,7 @@ export async function saveSettingsAction(
       'walkUpRadiusTiles',
       'replyWindowSeconds',
       'agentParallelism',
+      'mentionMaxHops',
       'idleLife',
       'banter',
     ];
@@ -101,6 +102,7 @@ export async function saveSettingsAction(
       walkUpRadiusTiles: given('walkUpRadiusTiles', current.walkUpRadiusTiles),
       replyWindowSeconds: given('replyWindowSeconds', current.replyWindowSeconds),
       agentParallelism: given('agentParallelism', current.agentParallelism),
+      mentionMaxHops: given('mentionMaxHops', current.mentionMaxHops),
       // A checkbox: the hidden "0" beneath it is always sent, the "1" only
       // when ticked, so the last value is the answer and none means untouched.
       idleLife: (() => {

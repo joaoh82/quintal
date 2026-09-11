@@ -70,6 +70,7 @@ export async function getOfficeSettings(
     idleLife: row.idleLife,
     banter: row.banter as OfficeSettings['banter'],
     agentParallelism: row.agentParallelism,
+    mentionMaxHops: row.mentionMaxHops,
   });
 }
 

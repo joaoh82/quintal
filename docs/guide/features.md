@@ -69,7 +69,7 @@ The **Settings** button in the office header opens six tabs:
 
 | Tab | What is there |
 | --- | --- |
-| **Office** | The office's name, the server's name (instance owner only), and how the office sounds: earshot, walk-up distance, reply reach, idle life, banter |
+| **Office** | The office's name, the server's name (instance owner only), and how the office sounds: earshot, walk-up distance, reply reach, agent parallelism, mention hops, idle life, banter |
 | **Profile** | Your display name and description, the conversations panel key, and — in the desktop app — your key backup |
 | **Agents** | Your agents: create, describe, assign to a machine, pick a runtime and a model, enable, disable, revoke; each one's audit log |
 | **Channels** | Make channels and manage who is in them, one member or a whole team at a time |

@@ -23,6 +23,7 @@ export function hopOf(speakerKind: PlayerKind, wokenAtHop: number | undefined): 
   return (wokenAtHop ?? 0) + 1;
 }
 
+/** Whether a line at this hop may still name anybody into a turn. `max` is the office's setting. */
 export function mayWake(hop: number, max = AGENT_MENTION_MAX_HOPS): boolean {
   return hop <= max;
 }
