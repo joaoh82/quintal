@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "87cede09-373a-4a3a-9c32-9db8f67cf7f8",
+  "id": "4687fd97-ca7f-4bf0-b80f-af9d3b748b97",
   "prevId": "fe80f07e-085f-4cb7-85fc-7a103d447d09",
   "tables": {
     "accounts": {
@@ -1713,7 +1713,7 @@
           "name": "teams_name_idx",
           "columns": [
             "workspace_id",
-            "name"
+            "lower(\"name\")"
           ],
           "isUnique": true
         }
@@ -1946,6 +1946,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "teams_name_idx": {
+        "columns": {
+          "lower(\"name\")": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

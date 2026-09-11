@@ -139,7 +139,7 @@ export async function removeTeamMemberAction(formData: FormData): Promise<void> 
   const agentId = String(formData.get('agentId') ?? '');
   if (!(await findTeam(db, workspaceId, teamId))) return;
 
-  await removeTeamMember(db, { teamId, agentId });
+  await removeTeamMember(db, { workspaceId, teamId, agentId });
   revalidatePath('/settings/teams');
 }
 

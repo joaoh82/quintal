@@ -15,6 +15,7 @@ import {
   teamsForAgent,
   updateTeam,
 } from './teams.js';
+import { teams } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
 
 /**
@@ -166,8 +167,54 @@ describe('who is on a team', () => {
     await addTeamMember(db, { workspaceId: owner.workspaceId, teamId: t2.id, agentId: a.id, addedBy: owner.id });
     assert.deepEqual((await teamsForAgent(db, a.id)).map((t) => t.name).sort(), ['t1', 't2']);
 
-    await removeTeamMember(db, { teamId: t1.id, agentId: a.id });
+    await removeTeamMember(db, { workspaceId: owner.workspaceId, teamId: t1.id, agentId: a.id });
     assert.deepEqual((await teamsForAgent(db, a.id)).map((t) => t.name), ['t2']);
+  });
+
+  it('refuses a revoked agent a seat, and a team that is not this office\'s', async () => {
+    const { db, owner, agent } = await office('Ana');
+    const bo = await createTestUser(db, 'Bo');
+    const gone = await agent('Gone');
+    await revokeAgent(db, gone.id, owner.id);
+    const team = await createTeam(db, { workspaceId: owner.workspaceId, name: 't', createdBy: owner.id });
+
+    await assert.rejects(
+      addTeamMember(db, { workspaceId: owner.workspaceId, teamId: team.id, agentId: gone.id, addedBy: owner.id }),
+      /revoked/,
+    );
+    await assert.rejects(
+      setTeamMembers(db, { workspaceId: owner.workspaceId, teamId: team.id, agentIds: [gone.id], addedBy: owner.id }),
+      /live agent/,
+    );
+    // Bo's office cannot reach into Ana's team by id.
+    const theirs = await createAgent(db, { workspaceId: bo.workspaceId, ownerUserId: bo.id, name: 'Theirs', spriteKey: 'slate' });
+    await assert.rejects(
+      addTeamMember(db, { workspaceId: bo.workspaceId, teamId: team.id, agentId: theirs.id, addedBy: bo.id }),
+      /No such team/,
+    );
+    await assert.rejects(
+      removeTeamMember(db, { workspaceId: bo.workspaceId, teamId: team.id, agentId: theirs.id }),
+      /No such team/,
+    );
+    assert.deepEqual((await findTeam(db, owner.workspaceId, team.id))?.members, []);
+  });
+
+  it('will not hold two teams whose names differ only in case, even past the pre-check', async () => {
+    const { db, owner } = await office('Ana');
+    await createTeam(db, { workspaceId: owner.workspaceId, name: 'engineering', createdBy: owner.id });
+    // Straight at the table, the way a racing second create would land.
+    await assert.rejects(
+      db.insert(teams).values({
+        id: 'race',
+        workspaceId: owner.workspaceId,
+        name: 'Engineering',
+        createdBy: owner.id,
+      }),
+      (error: unknown) => {
+        const cause = (error as { cause?: { message?: string } }).cause;
+        return /UNIQUE/i.test(cause?.message ?? String(error));
+      },
+    );
   });
 
   it('drops a revoked agent from the roll without touching its row', async () => {

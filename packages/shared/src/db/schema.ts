@@ -678,7 +678,12 @@ export const teams = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },
-  (table) => [uniqueIndex('teams_name_idx').on(table.workspaceId, table.name)],
+  (table) => [
+    // On the lowercased name: the rule is case-insensitive, and a backstop
+    // that let `Engineering` and `engineering` both in would have a mention
+    // expand two teams at once.
+    uniqueIndex('teams_name_idx').on(table.workspaceId, sql`lower(${table.name})`),
+  ],
 );
 
 /**

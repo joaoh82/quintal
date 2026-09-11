@@ -184,24 +184,55 @@ export async function deleteTeam(db: Database, workspaceId: string, teamId: stri
 }
 
 /**
+ * The team, if it is this office's. Every write to a team's seats goes
+ * through here, so a team id from another office is refused by the helper
+ * and not only by whichever page happened to call it.
+ */
+async function assertTeamHere(db: Database, workspaceId: string, teamId: string): Promise<void> {
+  const rows = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.workspaceId, workspaceId)))
+    .limit(1);
+  if (!rows[0]) throw new Error('No such team here.');
+}
+
+/** Agents of this office that are still live: the only ones that may take a seat. */
+async function liveAgentsHere(
+  db: Database,
+  workspaceId: string,
+  agentIds: readonly string[],
+): Promise<Set<string>> {
+  if (agentIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.workspaceId, workspaceId),
+        isNull(agents.revokedAt),
+        inArray(agents.id, [...agentIds]),
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}
+
+/**
  * Make the team's members exactly these agents.
  *
- * Every id must be an agent of the same office; anything else is refused
- * whole, so a stale picker cannot half-apply. Seats that stay keep their
+ * Every id must be a live agent of the same office; anything else is
+ * refused whole, so a stale picker cannot half-apply — a revoked agent
+ * would take a seat and never show in it. Seats that stay keep their
  * `addedBy`; new ones are credited to whoever set the list.
  */
 export async function setTeamMembers(
   db: Database,
   input: { workspaceId: string; teamId: string; agentIds: readonly string[]; addedBy: string },
 ): Promise<void> {
+  await assertTeamHere(db, input.workspaceId, input.teamId);
   const wanted = [...new Set(input.agentIds)];
-  if (wanted.length > 0) {
-    const known = await db
-      .select({ id: agents.id })
-      .from(agents)
-      .where(and(eq(agents.workspaceId, input.workspaceId), inArray(agents.id, wanted)));
-    if (known.length !== wanted.length) throw new Error('Not every one of those is an agent here.');
-  }
+  const live = await liveAgentsHere(db, input.workspaceId, wanted);
+  if (live.size !== wanted.length) throw new Error('Not every one of those is a live agent here.');
 
   const current = await db
     .select({ agentId: teamMembers.agentId })
@@ -229,12 +260,9 @@ export async function addTeamMember(
   db: Database,
   input: { workspaceId: string; teamId: string; agentId: string; addedBy: string },
 ): Promise<void> {
-  const agent = await db
-    .select({ id: agents.id })
-    .from(agents)
-    .where(and(eq(agents.id, input.agentId), eq(agents.workspaceId, input.workspaceId)))
-    .limit(1);
-  if (!agent[0]) throw new Error('No such agent here.');
+  await assertTeamHere(db, input.workspaceId, input.teamId);
+  const live = await liveAgentsHere(db, input.workspaceId, [input.agentId]);
+  if (!live.has(input.agentId)) throw new Error('No such agent here, or it has been revoked.');
   await db
     .insert(teamMembers)
     .values({ teamId: input.teamId, agentId: input.agentId, addedBy: input.addedBy })
@@ -244,8 +272,9 @@ export async function addTeamMember(
 
 export async function removeTeamMember(
   db: Database,
-  input: { teamId: string; agentId: string },
+  input: { workspaceId: string; teamId: string; agentId: string },
 ): Promise<void> {
+  await assertTeamHere(db, input.workspaceId, input.teamId);
   await db
     .delete(teamMembers)
     .where(and(eq(teamMembers.teamId, input.teamId), eq(teamMembers.agentId, input.agentId)));

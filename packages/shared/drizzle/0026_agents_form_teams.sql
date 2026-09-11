@@ -22,4 +22,4 @@ CREATE TABLE `teams` (
 	FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `teams_name_idx` ON `teams` (`workspace_id`,`name`);
+CREATE UNIQUE INDEX `teams_name_idx` ON `teams` (`workspace_id`,lower("name"));
