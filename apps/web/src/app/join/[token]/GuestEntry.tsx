@@ -3,7 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { DISPLAY_NAME_MAX_LENGTH } from '@quintal/shared';
+
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { createIdentity, signIn } from '@/lib/keys';
 
 /**
@@ -13,9 +16,14 @@ import { createIdentity, signIn } from '@/lib/keys';
  * to localStorage, and on the server only as the `pubkey` of the row that has
  * to exist for a guest to be a person in the room. Close the tab and the key
  * is gone; that is the intended lifetime of a visit.
+ *
+ * The name is asked for here because it cannot be changed later: a guest
+ * keeps the name they arrived with. Left blank, they are shown as their key,
+ * which nobody can type — so the question is worth the one line it costs.
  */
 export function GuestEntry({ token }: { token: string }) {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -23,7 +31,7 @@ export function GuestEntry({ token }: { token: string }) {
     setBusy(true);
     setError('');
     try {
-      await signIn(createIdentity(), { inviteToken: token });
+      await signIn(createIdentity(), { inviteToken: token, name: name.trim() });
       router.push('/office');
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not join.');
@@ -32,8 +40,30 @@ export function GuestEntry({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      <Button className="w-full" onClick={onEnter} disabled={busy}>
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onEnter();
+      }}
+    >
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium">What should people call you?</span>
+        <Input
+          name="name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Leave blank to be shown as your key"
+          maxLength={DISPLAY_NAME_MAX_LENGTH}
+          autoComplete="nickname"
+          autoFocus
+          disabled={busy}
+        />
+        <span className="text-muted-foreground mt-1 block text-xs">
+          It stays for the visit — guests cannot rename themselves later.
+        </span>
+      </label>
+      <Button type="submit" className="w-full" disabled={busy}>
         {busy ? 'Joining…' : 'Join as a guest'}
       </Button>
       <p className="text-muted-foreground text-xs">
@@ -45,6 +75,6 @@ export function GuestEntry({ token }: { token: string }) {
           {error}
         </p>
       ) : null}
-    </div>
+    </form>
   );
 }

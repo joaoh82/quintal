@@ -40,11 +40,13 @@ until the session ends.
 ## Walking in as a guest
 
 Somebody can hand you a **guest link** (they make it in Settings → Guests).
-Opening it puts you in their office as a visitor with a key minted for the
-visit — it lives in that tab and nowhere else, and you can trade it for a
-real identity later. A guest can walk, talk and read, but not change how the
-office works. Links can expire, allow a set number of uses, and be revoked by
-whoever made them.
+Opening it asks what people should call you, then puts you in their office as
+a visitor with a key minted for the visit — it lives in that tab and nowhere
+else, and you can trade it for a real identity later. The name is for the
+visit: a guest cannot rename themselves afterwards, and the Guest badge stays
+whatever the name says. Leave it blank and you are shown as your key. A guest
+can walk, talk and read, but not change how the office works. Links can
+expire, allow a set number of uses, and be revoked by whoever made them.
 
 ## Which office am I in?
 
