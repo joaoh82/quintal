@@ -67,14 +67,21 @@ async function signIn() {
 
 /**
  * A 200 is necessary but not sufficient: Next can answer 200 while showing its
- * own error screen, so the body is checked for the shapes that means.
+ * own error screen, so the body is checked for the shapes that means. With
+ * `mustContain`, the page also has to be the page: a route that answered 200
+ * with the wrong page — the landing page where the office should be — is a
+ * page the status alone cannot tell apart.
  */
-async function page(path, cookie, label = path) {
+async function page(path, cookie, label = path, mustContain = null) {
   const response = await fetch(`${base}${path}`, {
     headers: cookie ? { cookie } : {},
     redirect: 'manual',
   });
   const body = response.status < 400 ? await response.text() : '';
+  if (mustContain !== null && response.status === 200 && !body.includes(mustContain)) {
+    check(false, label, `missing ${mustContain}`);
+    return;
+  }
   const brokenMarkers = [
     'A &quot;use server&quot; file',
     'A "use server" file',
@@ -90,6 +97,23 @@ async function page(path, cookie, label = path) {
   );
 }
 
+/**
+ * A page that must send this visitor somewhere else. The root is the landing
+ * page for a stranger and a door to the office for somebody signed in; a
+ * signed-in visitor shown the landing page is told to sign in when they
+ * already have.
+ */
+async function redirects(path, cookie, to, label = `${path} → ${to}`) {
+  const response = await fetch(`${base}${path}`, {
+    headers: cookie ? { cookie } : {},
+    redirect: 'manual',
+  });
+  const location = response.headers.get('location') ?? '';
+  const sentThere =
+    response.status >= 300 && response.status < 400 && new URL(location, base).pathname === to;
+  check(sentThere, label, sentThere ? '' : `HTTP ${response.status} ${location}`);
+}
+
 console.log(`smoke: ${base}`);
 
 console.log('\npublic pages');
@@ -101,8 +125,11 @@ await page(`/join/v2.${'A'.repeat(43)}`, null, '/join/[token] (unknown token)');
 console.log('\nsigned in');
 const cookie = await signIn();
 check(true, 'keypair sign-in');
+await redirects('/', cookie, '/office');
+// The game itself mounts in the browser, so the server's HTML carries the
+// office's header and not the canvas; the header is what says it is the office.
+await page('/office', cookie, '/office', 'Enter to chat');
 for (const path of [
-  '/office',
   '/settings',
   '/settings/profile',
   '/settings/agents',
