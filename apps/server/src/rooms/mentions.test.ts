@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { addressedNames } from '@quintal/shared';
+
 import { absentNotice, resolveMentions } from './mentions.js';
 
 /**
@@ -74,5 +76,15 @@ describe('the notice for who was out of reach', () => {
       absentNotice([{ team: 'engineering', names: ['Codex', 'Grok'] }], 'the office right now'),
       '@engineering: Codex and Grok are not in the office right now.',
     );
+  });
+});
+
+describe('a person called by their key', () => {
+  it('is reached by name, ellipsis and all, through the same resolver', () => {
+    const stranger = { id: 'u-2', name: 'npub1rww4uhaw…nlarug', kind: 'human' as const };
+    const audience = [josh, stranger, claude];
+    const named = addressedNames('@npub1rww4uhaw…nlarug can you look?', audience.map((m) => m.name));
+    const { reached } = resolveMentions(named, audience, [], josh.id);
+    assert.deepEqual([...reached.keys()], [stranger.id]);
   });
 });

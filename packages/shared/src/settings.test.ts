@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   DEFAULT_OFFICE_SETTINGS,
+  addressedNames,
   applyMention,
   isAddressed,
   mentionQueryAt,
@@ -89,6 +90,29 @@ describe('addressing', () => {
   it('collects every distinct name addressed', () => {
     assert.deepEqual(mentionedNames('@a and @b and @a again'), ['a', 'b']);
   });
+
+  it('reaches a person called by their truncated key, ellipsis and all', () => {
+    const me = 'npub1rww4uhaw…nlarug';
+    assert.equal(isAddressed('hey @npub1rww4uhaw…nlarug look', me), true);
+    assert.equal(isAddressed('hey @NPUB1RWW4UHAW…NLARUG', me), true, 'any case');
+    assert.equal(isAddressed('hey @npub1rww4uhaw', me), false, 'the whole name, not a prefix');
+    assert.equal(isAddressed('hey @npub1rww4uhaw…nlarugs', me), false, 'and not one letter more');
+  });
+
+  it('reaches a name with a space in it, and the longest name that fits', () => {
+    const names = ['Josh', 'Josh Silva', 'Ana'];
+    assert.deepEqual(addressedNames('@Josh Silva, can you look? @Ana too', names), ['Josh Silva', 'Ana']);
+    assert.deepEqual(addressedNames('@Josh can you look?', names), ['Josh']);
+    assert.deepEqual(addressedNames('@Josh Silvas is somebody else', names), ['Josh']);
+  });
+
+  it('is still an @ at a word boundary, and nothing else', () => {
+    assert.deepEqual(addressedNames('josh@quintal.sh', ['quintal', 'quintal.sh']), []);
+    assert.deepEqual(addressedNames('email @ana now', ['ana']), ['ana']);
+    assert.deepEqual(addressedNames('@ana@ana', ['ana']), ['ana'], 'once, and the second is inside a word');
+    assert.deepEqual(addressedNames('nobody here', ['ana']), []);
+    assert.deepEqual(addressedNames('@ana', ['', '  ']), [], 'a blank name matches nothing');
+  });
 });
 
 describe('mention autocomplete', () => {
@@ -105,8 +129,13 @@ describe('mention autocomplete', () => {
     assert.equal(mentionQueryAt('josh@quintal', 12), null);
   });
 
-  it('closes once the mention is finished', () => {
-    assert.equal(mentionQueryAt('@reviewer hello', 15), null);
+  it('keeps the whole partial, spaces and ellipses included, and ends at a line break', () => {
+    // A finished mention followed by words stays a query; the picker closes
+    // because nobody's name starts with it, not because of the space.
+    assert.deepEqual(mentionQueryAt('@reviewer hello', 15), { query: 'reviewer hello', start: 0 });
+    assert.deepEqual(mentionQueryAt('@npub1rww4uhaw…nl', 17), { query: 'npub1rww4uhaw…nl', start: 0 });
+    assert.deepEqual(mentionQueryAt('@josh si', 8), { query: 'josh si', start: 0 });
+    assert.equal(mentionQueryAt('@reviewer\nhello', 15), null);
   });
 
   it('inserts the full name and leaves the caret after it', () => {
