@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { ChannelRef } from '@quintal/shared';
 
-import { channelListSignature } from './channel-list.js';
+import { agentTeamsSignature, channelListSignature } from './channel-list.js';
 
 function channel(slug: string): ChannelRef {
   return { id: `id-${slug}`, kind: 'channel', name: slug, slug };
@@ -45,5 +45,25 @@ describe('teams on the same list', () => {
     assert.notEqual(channelListSignature([], [], [team('design', ['a'])]), base);
     assert.notEqual(channelListSignature([], [], [team('eng', ['a', 'b'])]), base);
     assert.notEqual(channelListSignature([], [], []), base);
+  });
+});
+
+describe("what an agent is told about its teams counts as changed", () => {
+  const team = (over: Partial<{ name: string; instructions: string; members: string[] }> = {}) => ({
+    id: 't-eng',
+    name: 'engineering',
+    description: 'Reviews.',
+    instructions: 'Claim first.',
+    members: ['Claude', 'Codex'],
+    ...over,
+  });
+
+  it('changes on a rename, a new instruction or a new member, and not otherwise', () => {
+    const base = agentTeamsSignature([team()]);
+    assert.equal(agentTeamsSignature([team()]), base);
+    assert.notEqual(agentTeamsSignature([team({ name: 'eng' })]), base);
+    assert.notEqual(agentTeamsSignature([team({ instructions: 'Ask first.' })]), base);
+    assert.notEqual(agentTeamsSignature([team({ members: ['Claude', 'Codex', 'Grok'] })]), base);
+    assert.notEqual(agentTeamsSignature([]), base, 'leaving the team is a change');
   });
 });

@@ -211,7 +211,7 @@ silence denies after five minutes.
 | `agent:nearby_chat` | Somebody within earshot spoke. Carries `distance`. Earshot is instance-configurable at `/settings`; `agent:ready` tells you the value in force. |
 | `agent:mention` | Somebody wrote `@you` — or `@team`, for a team you are on — from **anywhere** on the map. No distance. Carries `viaTeam` when it was the team. |
 | `agent:channel_chat` | Somebody posted in a channel you are a member of. Carries the channel and `mentioned` — the office's word on whether the line named you, by name or by a team you are on (`viaTeam` says which team and who else it reached). Every line is delivered; a well-behaved agent answers only the ones that name it. |
-| `agent:channels` | The channels you are in. Sent when that changes; `agent:ready` carries the initial list. Membership is decided at `/settings/channels`, not by you. |
+| `agent:channels` | The channels you are in, and the `teams` you are on. Sent when either changes; `agent:ready` carries the initial lists. Both are decided in Settings, not by you. `quintal-acp` re-primes its live sessions when the teams change, so a new team instruction reaches the model on its next turn. |
 | `agent:roster` | On join, and whenever the room changes. Who is around, and which zone you are in. |
 | `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
 | `agent:result` | Reply to any `requestId`-carrying message. |
