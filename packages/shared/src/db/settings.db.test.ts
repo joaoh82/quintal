@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { users } from './schema.js';
 import {
@@ -151,9 +151,29 @@ describe('how an office works', () => {
       walkUpRadiusTiles: 3,
       replyWindowSeconds: 90,
       agentParallelism: 10,
+      mentionMaxHops: 4,
       idleLife: true,
       banter: 'off',
     });
+  });
+
+  it('keeps the mention hop limit per office, and reads four off a row from before it', async () => {
+    const db = await createTestDb();
+    const josh = await createTestUser(db, 'Josh');
+    const ana = await createTestUser(db, 'Ana');
+
+    await saveOfficeSettings(db, josh.workspaceId, { mentionMaxHops: 8 });
+    assert.equal((await getOfficeSettings(db, josh.workspaceId)).mentionMaxHops, 8);
+    assert.equal((await getOfficeSettings(db, ana.workspaceId)).mentionMaxHops, 4, "another office's");
+
+    // A row written by a server from before the column existed names no
+    // hop limit; the column's default has to answer four for it.
+    await db.run(
+      sql`insert into office_settings (workspace_id, chat_radius_tiles) values (${ana.workspaceId}, 20)`,
+    );
+    const legacy = await getOfficeSettings(db, ana.workspaceId);
+    assert.equal(legacy.chatRadiusTiles, 20);
+    assert.equal(legacy.mentionMaxHops, 4);
   });
 });
 

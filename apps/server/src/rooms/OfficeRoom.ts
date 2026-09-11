@@ -1067,7 +1067,7 @@ export class OfficeRoom extends Room<OfficeState> {
     }));
     const resolved = resolveMentions(mentionedNames(text), audience, this.#teamRosters(), speaker.userId);
     const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, SPATIAL));
-    const wakes = mayWake(hop);
+    const wakes = mayWake(hop, this.#settings.mentionMaxHops);
     const owed = this.#collectReplyDebt(sessionId, sentAt);
 
     for (const [listenerId, listener] of this.state.players) {
@@ -1403,7 +1403,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const mentioned = new Set(resolved.reached.keys());
     // Whether naming anybody may start a turn — see `hops.ts`.
     const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, channel.id));
-    const wakes = mayWake(hop);
+    const wakes = mayWake(hop, this.#settings.mentionMaxHops);
 
     const line = {
       from: sessionId,

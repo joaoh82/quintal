@@ -38,6 +38,16 @@ describe('normaliseSettings', () => {
     assert.equal(normaliseSettings({ agentParallelism: 4 }).agentParallelism, 4);
   });
 
+  it('keeps mention hops between one and sixteen, four by default', () => {
+    // A row from before the column existed, and a form that sent nothing.
+    assert.equal(normaliseSettings(null).mentionMaxHops, 4);
+    assert.equal(normaliseSettings({}).mentionMaxHops, 4);
+    // Zero would mean a person's line wakes nobody; it is not a setting.
+    assert.equal(normaliseSettings({ mentionMaxHops: 0 }).mentionMaxHops, 1);
+    assert.equal(normaliseSettings({ mentionMaxHops: 99 }).mentionMaxHops, 16);
+    assert.equal(normaliseSettings({ mentionMaxHops: 8 }).mentionMaxHops, 8);
+  });
+
   it('leaves idle life on unless an office turned it off', () => {
     assert.equal(normaliseSettings(null).idleLife, true);
     assert.equal(normaliseSettings({}).idleLife, true);

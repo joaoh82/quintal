@@ -190,6 +190,13 @@
       "when": 1789115265509,
       "tag": "0026_agents_form_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1789116737551,
+      "tag": "0027_offices_choose_how_far_a_mention_travels",
+      "breakpoints": true
     }
   ]
 }

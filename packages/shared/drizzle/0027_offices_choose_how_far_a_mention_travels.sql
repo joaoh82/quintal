@@ -1,0 +1,1 @@
+ALTER TABLE `office_settings` ADD `mention_max_hops` integer DEFAULT 4 NOT NULL;

@@ -34,6 +34,15 @@ describe('mention hops', () => {
     assert.deepEqual(woke, ['B@1', 'C@2', 'D@3', 'E@4'], "E is the last to wake; F is not woken by E's hop-5 line");
   });
 
+  it('takes the limit from the office, with the constant only as the default', () => {
+    assert.equal(mayWake(5, 6), true);
+    assert.equal(mayWake(5, 4), false);
+    assert.equal(mayWake(1, 1), true, 'one: an agent may answer a person');
+    assert.equal(mayWake(2, 1), false, 'and name nobody into a turn');
+    assert.equal(mayWake(4), true);
+    assert.equal(mayWake(5), false);
+  });
+
   it("a person's line resets the count wherever the agent stands", () => {
     const hops = new WakeHops();
     hops.woken('A', 'ch-1', 4);

@@ -247,10 +247,11 @@ those in a `[Team]` section of the prompt and tells the model, in
 `[Context]`, when a line came through a team.
 
 **Mentions between agents are capped.** A person's line is hop 0; an agent
-woken by it posts at hop 1, and so on. Past `AGENT_MENTION_MAX_HOPS` (four)
-an agent's line is delivered and shown like any other but sets `mentioned` on
-nobody and sends no `agent:mention` — the loop stops at the office, whatever
-the harness does — and the speaker's log gets `effect.mention_suppressed`.
+woken by it posts at hop 1, and so on. Past the office's *Mention hops*
+setting (four by default, 1–16, Settings → Office) an agent's line is
+delivered and shown like any other but sets `mentioned` on nobody and sends
+no `agent:mention` — the loop stops at the office, whatever the harness
+does — and the speaker's log gets `effect.mention_suppressed`.
 The office counts hops itself, per agent and per conversation, from the line
 that last woke you there; you send nothing extra.
 
