@@ -16,6 +16,8 @@ import {
   type AgentChatEvent,
   type AgentMentionEvent,
   type ChannelRef,
+  type AgentTeam,
+  type AgentChannelsEvent,
 } from '@quintal/shared';
 
 import { nestRoot, type AgentConfig } from '../config.js';
@@ -39,6 +41,7 @@ import {
   buildBanterEnvelope,
   buildEnvelope,
   teamSection,
+  teamsKey,
   selectWindow,
   type Trigger,
 } from './context.js';
@@ -140,6 +143,12 @@ export class AgentRunner {
   readonly #history = new Map<string, AgentChatEvent[]>();
   /** channel id -> what it is, from every channel line seen, for naming a scope. */
   readonly #channelRefs = new Map<string, ChannelRef>();
+  /**
+   * The teams this agent is on, as the office last said — `ready` at first,
+   * then every `channels` event that carries them. Null until the office
+   * has spoken past `ready`, so the prompt reads `ready.teams` until then.
+   */
+  #teams: AgentTeam[] | null = null;
   /**
    * Set when the runtime did not offer the model the owner chose. A standing
    * state, not a moment: it holds the nameplate against the idle reset every
@@ -323,6 +332,7 @@ export class AgentRunner {
     this.#gateway.on('mention', (message) => this.#onMention(message));
     this.#gateway.on('channelChat', (message) => this.#onChannelChat(message));
     this.#gateway.on('banter', (event) => this.#onBanter(event));
+    this.#gateway.on('channels', (event) => this.#onChannels(event));
     this.#gateway.on('error', (error) => {
       this.#log('warn', `office refused something: [${error.code}] ${error.message}`);
       if (error.message.toLowerCase().includes('revoked')) void this.stop();
@@ -1049,7 +1059,7 @@ export class AgentRunner {
       // The teams this agent is on, before the workspace: who it shares work
       // with is part of who it is, and the shared instructions are the
       // owner's word for the whole team, ranked with the rest of the owner's.
-      ...(ready?.teams ?? []).map((team) => teamSection(team, ready?.name ?? this.name)),
+      ...this.#currentTeams().map((team) => teamSection(team, ready?.name ?? this.name)),
       '',
       workspaceSection(this.config.cwd),
       // Two authors, kept apart and labelled as such.
@@ -1090,11 +1100,35 @@ export class AgentRunner {
     return [
       '[You]',
       `You are "${ready?.name ?? this.name}", an agent in ${ready?.ownerName ?? 'someone'}'s Quintal office.`,
-      ...(ready?.teams ?? []).map((team) => teamSection(team, ready?.name ?? this.name)),
+      ...this.#currentTeams().map((team) => teamSection(team, ready?.name ?? this.name)),
       instructions.length > 0 ? `\n[Your owner's instructions]\n${instructions}` : '',
     ]
       .filter((line) => line !== '')
       .join('\n');
+  }
+
+  /** The teams as the office last said them. */
+  #currentTeams(): AgentTeam[] {
+    return this.#teams ?? this.#gateway.ready?.teams ?? [];
+  }
+
+  /**
+   * The office's word on our channels and, since teams, our teams.
+   *
+   * A team joined, left, renamed or re-instructed is a change to the system
+   * prompt, and the system prompt is sent once per session — so every live
+   * session is marked to be told again, the way a memory edit is. An event
+   * that changed nothing about the teams re-primes nobody: priming costs a
+   * turn's worth of tokens, and the channel list changes far more often.
+   */
+  #onChannels(event: AgentChannelsEvent): void {
+    if (event.teams === undefined) return;
+    const before = teamsKey(this.#currentTeams());
+    const after = teamsKey(event.teams);
+    this.#teams = event.teams;
+    if (before === after) return;
+    this.#reprimeAll();
+    this.#log('info', `teams: ${event.teams.map((team) => team.name).join(', ') || 'none'}`);
   }
 
   /**

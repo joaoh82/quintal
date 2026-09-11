@@ -368,6 +368,13 @@ export interface AgentTeam {
 
 export interface AgentChannelsEvent {
   channels: ChannelRef[];
+  /**
+   * The teams this agent is on, as of now. Sent with the channels because
+   * both change from the settings page and both are things a running
+   * session should not have to reconnect to learn. Absent from an office
+   * that predates teams; `agent:ready` carries the initial list either way.
+   */
+  teams?: AgentTeam[];
 }
 
 /** A mention carries no distance: it reaches the agent from anywhere. */

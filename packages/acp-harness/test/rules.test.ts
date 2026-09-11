@@ -15,6 +15,7 @@ import {
   selectWindow,
   teamSection,
   WINDOW_SIZE,
+  teamsKey,
 } from '../src/runner/context.js';
 import { MAX_BUBBLES, MAX_POSTS, statusForTool, toBubbles, toPosts } from '../src/runner/outbound.js';
 import { LOBBY_SCOPE, SessionStore } from '../src/runner/sessions.js';
@@ -514,5 +515,22 @@ describe('walking somewhere', () => {
 
   it('refuses an empty request rather than picking one', () => {
     assert.throws(() => resolveZone(ZONES, '   '), /needs a zone/);
+  });
+});
+
+describe('when the teams count as changed', () => {
+  const team = (instructions: string, members = ['Bob', 'Codex']) => ({
+    id: 't1',
+    name: 'engineering',
+    description: '',
+    instructions,
+    members,
+  });
+
+  it('reads the same for the same teams and differently for a changed instruction or roll', () => {
+    assert.equal(teamsKey([team('Claim first.')]), teamsKey([team('Claim first.')]));
+    assert.notEqual(teamsKey([team('Claim first.')]), teamsKey([team('Ask first.')]));
+    assert.notEqual(teamsKey([team('x')]), teamsKey([team('x', ['Bob'])]));
+    assert.equal(teamsKey([]), '');
   });
 });

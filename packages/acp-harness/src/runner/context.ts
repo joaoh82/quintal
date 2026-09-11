@@ -136,6 +136,20 @@ export function describeTeam(viaTeam: AgentViaTeam): string {
  * of the section is to tell the agent who it shares work with, and a list
  * that includes itself reads as a roster rather than a set of colleagues.
  */
+/**
+ * Everything the prompt is built from about the teams, in one string, so a
+ * `channels` event that changed nothing about them re-primes nobody. Order
+ * matters — the office sends them in a fixed order, and so does this.
+ */
+export function teamsKey(teams: readonly AgentTeam[]): string {
+  return teams
+    .map(
+      (team) =>
+        `${team.id}:${team.name}:${team.description}:${team.instructions}:${team.members.join('+')}`,
+    )
+    .join(',');
+}
+
 export function teamSection(team: AgentTeam, myName: string): string {
   const others = team.members.filter((member) => member !== myName);
   const description = team.description.trim();

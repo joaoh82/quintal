@@ -31,6 +31,7 @@ const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.
 interface Handlers {
   ready?: (payload: unknown) => void;
   chat?: (message: unknown) => void;
+  channels?: (event: unknown) => void;
   mention?: (message: unknown) => void;
   error?: (error: unknown) => void;
   closed?: (code: unknown) => void;
@@ -187,6 +188,54 @@ describe('what reaches the model on the first turn', () => {
     await until(() => prompts(record).length > 0, 'the first turn');
     return prompts(record)[0] ?? '';
   }
+
+  it('tells live sessions about a team change, and only a change', async () => {
+    await stopCurrent();
+    const dir = mkdtempSync(join(tmpdir(), 'quintal-prompt-'));
+    const record = join(dir, 'requests.jsonl');
+    process.env.FAKE_RECORD = record;
+    const handlers: Handlers = {};
+    const runner = new AgentRunner(config(dir), undefined, fakeGateway(handlers, '', ''));
+    current = runner;
+    await runner.start();
+    const say = (text: string) =>
+      handlers.chat?.({
+        text,
+        fromUserId: 'user-1',
+        fromName: 'Josh',
+        fromKind: 'human',
+        sentAt: Date.now(),
+        distance: 1,
+      });
+
+    say('Bob, hello');
+    await until(() => prompts(record).length >= 1, 'the first turn');
+    assert.doesNotMatch(prompts(record)[0] ?? '', /\[Team /, 'on no team yet');
+
+    // Settings → Teams put Bob on engineering; the office says so on the
+    // channels event. The session is live, so it has to be told again.
+    const engineering = {
+      id: 't1',
+      name: 'engineering',
+      description: 'Reviews.',
+      instructions: 'Claim work before starting.',
+      members: ['Bob', 'Codex'],
+    };
+    handlers.channels?.({ channels: [], teams: [engineering] });
+    say('Bob, again');
+    await until(() => prompts(record).length >= 2, 'the second turn');
+    const second = prompts(record)[1] ?? '';
+    assert.match(second, /\[You\]/, 're-primed: the system prompt was sent again');
+    assert.match(second, /\[Team engineering\]/);
+    assert.match(second, /Claim work before starting\./);
+
+    // The same teams again — a channel change, say — is not a reason to
+    // pay for another priming turn.
+    handlers.channels?.({ channels: [], teams: [engineering] });
+    say('Bob, once more');
+    await until(() => prompts(record).length >= 3, 'the third turn');
+    assert.doesNotMatch(prompts(record)[2] ?? '', /\[You\]/, 'nothing changed: not re-primed');
+  });
 
   it("carries the owner's instructions", async () => {
     const text = await firstPrompt('Answer in Portuguese.', '');

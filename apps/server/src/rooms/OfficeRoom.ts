@@ -149,7 +149,7 @@ import {
   type AgentSession,
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
-import { channelListSignature } from './channel-list.js';
+import { agentTeamsSignature, channelListSignature } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import { workingSinceAfter } from './working-since.js';
@@ -1246,13 +1246,23 @@ export class OfficeRoom extends Room<OfficeState> {
         }
       }
     }
+    // An agent is told its own teams, as it is on connect — a change to one
+    // is a change to its prompt, and it should not have to reconnect to
+    // hear it. A person is told every team, for the picker.
+    const isAgent = this.#agents.has(sessionId);
     const teams = this.#teams.map(teamRef);
-    const signature = channelListSignature(channels, available, teams);
+    const agentTeams = isAgent ? this.#teamsFor(player.userId) : [];
+    const signature = isAgent
+      ? `${channelListSignature(channels, [])}|${agentTeamsSignature(agentTeams)}`
+      : channelListSignature(channels, available, teams);
     if (this.#channelsSent.get(sessionId) === signature) return;
     this.#channelsSent.set(sessionId, signature);
 
-    if (this.#agents.has(sessionId)) {
-      client.send(AgentServerMessage.Channels, { channels } satisfies AgentChannelsEvent);
+    if (isAgent) {
+      client.send(AgentServerMessage.Channels, {
+        channels,
+        teams: agentTeams,
+      } satisfies AgentChannelsEvent);
     } else {
       client.send(ServerMessage.Channels, { channels, available, teams } satisfies ChannelsPayload);
     }

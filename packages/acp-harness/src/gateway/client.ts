@@ -21,6 +21,7 @@ import {
   type MemoryGetResult,
   type MemorySetResult,
   type MessagesGetResult,
+  type AgentTeam,
 } from '@quintal/shared';
 import { buildAuthPayload, signAuthPayload } from '@quintal/shared';
 import { Client, type Room } from 'colyseus.js';
@@ -83,6 +84,8 @@ export class GatewayClient {
   #ready: AgentReadyPayload | null = null;
   #roster: AgentRosterEvent | null = null;
   #channels: ChannelRef[] | null = null;
+  /** The office's last word on our teams, once it has said one past `ready`. */
+  #teams: AgentTeam[] | null = null;
 
   readonly #fetch: typeof fetch;
   readonly #join: (endpoint: string, options: Record<string, unknown>) => Promise<Room>;
@@ -248,6 +251,8 @@ export class GatewayClient {
     );
     room.onMessage(AgentServerMessage.Channels, (event: AgentChannelsEvent) => {
       this.#channels = event.channels;
+      // An office from before teams sends none; what `ready` said still holds.
+      if (event.teams !== undefined) this.#teams = event.teams;
       this.#handlers.channels?.(event);
     });
     room.onMessage(AgentServerMessage.Roster, (roster: AgentRosterEvent) => {
@@ -301,6 +306,11 @@ export class GatewayClient {
   /** The channels this agent is in, as of the office's last word on it. */
   channels(): ChannelRef[] {
     return this.#channels ?? this.#ready?.channels ?? [];
+  }
+
+  /** The teams this agent is on, as of the office's last word on it. */
+  teams(): AgentTeam[] {
+    return this.#teams ?? this.#ready?.teams ?? [];
   }
 
   moveToZone(zoneId: string): void {
