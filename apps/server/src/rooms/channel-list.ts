@@ -16,7 +16,19 @@ export function channelListSignature(
   teams: readonly TeamRef[] = [],
 ): string {
   const part = (list: readonly ChannelRef[]) =>
-    list.map((channel) => `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}`).join(',');
+    list
+      .map(
+        (channel) =>
+          // The read cursor is in the fingerprint and `lastMessageAt` is not,
+          // and the difference is who learns things another way. A new line
+          // arrives as `channel_chat` on every session that can see it, so a
+          // list resent for it would say nothing new. A read has no such
+          // broadcast: without this, marking a channel read on the laptop
+          // would leave the desktop showing its dot until something else
+          // changed — which is the bug this whole cursor exists to fix.
+          `${channel.id}:${channel.kind}:${channel.slug}:${channel.name}:${channel.lastReadAt ?? ''}`,
+      )
+      .join(',');
   // Teams ride on the same message: a renamed team, or a new member, is a
   // change the picker has to hear about.
   const teamPart = teams

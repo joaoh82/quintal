@@ -29,6 +29,32 @@ describe('when a channel list counts as changed', () => {
     const renamed = { ...channel('a'), name: 'A team' };
     assert.notEqual(channelListSignature([channel('a')], []), channelListSignature([renamed], []));
   });
+
+  /**
+   * A read on one machine has to reach the others, and the list is the only
+   * thing that carries it. Nothing broadcasts a cursor the way a line
+   * broadcasts itself, so if the fingerprint ignored it the desktop would
+   * keep its dot until something unrelated changed.
+   */
+  it('notices that the same person has read further', () => {
+    const read = { ...channel('a'), lastReadAt: 5_000 };
+    const later = { ...channel('a'), lastReadAt: 9_000 };
+
+    assert.notEqual(channelListSignature([channel('a')], []), channelListSignature([read], []));
+    assert.notEqual(channelListSignature([read], []), channelListSignature([later], []));
+    assert.equal(channelListSignature([read], []), channelListSignature([{ ...read }], []));
+  });
+
+  /**
+   * And the opposite, for the thing every session already hears about: a new
+   * line arrives as `channel_chat` on its own, so resending the whole list
+   * for it would be noise — and a list that arrives constantly is one clients
+   * learn to ignore.
+   */
+  it('says nothing about a new line, which arrives on its own', () => {
+    const spoke = { ...channel('a'), lastMessageAt: 9_000 };
+    assert.equal(channelListSignature([channel('a')], []), channelListSignature([spoke], []));
+  });
 });
 
 describe('teams on the same list', () => {

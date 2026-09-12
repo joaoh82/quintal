@@ -59,6 +59,13 @@ const KEEP = 500;
 const identity = (m: ChatBroadcastPayload): string => `${m.sentAt} ${m.fromName} ${m.text}`;
 
 /**
+ * How often read cursors go to the office. Long enough that reading a busy
+ * channel is one message rather than one per line; short enough that picking
+ * up your other machine finds it already true.
+ */
+const READ_REPORT_INTERVAL_MS = 3_000;
+
+/**
  * What was said before we were listening goes in front of what we have heard
  * since. A line can be in both — said after we joined, before the page came
  * back — and a message read from history carries a different `from` than
@@ -145,6 +152,10 @@ export function useConversations(
   const transcriptsRef = useRef(transcripts);
   /** Storage has been read; only then is it written, or a reload would wipe it. */
   const rememberedRef = useRef(false);
+  /** Cursors the office has been told, and ones waiting for the next flush. */
+  const reportedReadRef = useRef<Record<ConversationKey, number>>({});
+  const pendingReadRef = useRef<Record<ConversationKey, number>>({});
+  const readTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * A channel `/join` asked for that we were not in yet. The office answers
    * a join with a fresh `channels` list rather than a receipt, so the switch
@@ -211,6 +222,57 @@ export function useConversations(
   useEffect(() => {
     if (rememberedRef.current) saveLastRead(window.localStorage, readState.lastReadAt);
   }, [readState.lastReadAt]);
+
+  /**
+   * Tell the office where we have read to, so the same person's other screens
+   * agree.
+   *
+   * Coalesced. Reading a busy channel moves the cursor on every line that
+   * lands while you are looking at it, and a message per line would be a
+   * message per line for a fact that is only ever read when somebody
+   * connects. One report per conversation per few seconds says the same
+   * thing.
+   *
+   * Only channels and DMs: a zone is not a place you catch up on, and the
+   * office has nothing to keep for nearby.
+   */
+  const flushReads = useCallback(() => {
+    readTimerRef.current = null;
+    const session = sessionRef.current;
+    const pending = pendingReadRef.current;
+    pendingReadRef.current = {};
+    if (!session) return;
+    for (const [key, at] of Object.entries(pending)) {
+      const { channelId } = parseKey(key);
+      if (!channelId) continue;
+      session.markRead(channelId, at);
+      reportedReadRef.current[key] = at;
+    }
+  }, [sessionRef]);
+
+  useEffect(() => {
+    let queued = false;
+    for (const [key, at] of Object.entries(readState.lastReadAt)) {
+      if (!parseKey(key).channelId) continue;
+      if (at <= (reportedReadRef.current[key] ?? 0)) continue;
+      if (at <= (pendingReadRef.current[key] ?? 0)) continue;
+      pendingReadRef.current[key] = at;
+      queued = true;
+    }
+    if (queued && readTimerRef.current === null) {
+      readTimerRef.current = setTimeout(flushReads, READ_REPORT_INTERVAL_MS);
+    }
+  }, [readState.lastReadAt, flushReads]);
+
+  // The timer, not the reports: a pending one is dropped when the office goes
+  // away, and looking again reports again. The cursor is behind by one visit
+  // at worst, and `localStorage` still has it for this browser meanwhile.
+  useEffect(
+    () => () => {
+      if (readTimerRef.current !== null) clearTimeout(readTimerRef.current);
+    },
+    [],
+  );
 
   const patch = useCallback((key: ConversationKey, fn: (current: Transcript) => Transcript) => {
     setTranscripts((prev) => ({ ...prev, [key]: fn(prev[key] ?? EMPTY) }));

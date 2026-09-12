@@ -12,6 +12,7 @@ export * from './hosts.js';
 export * from './invites.js';
 export * from './messages.js';
 export * from './migrate.js';
+export * from './reads.js';
 export * from './schema.js';
 export * from './avatars.js';
 export * from './settings.js';

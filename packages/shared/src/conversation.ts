@@ -49,6 +49,16 @@ export interface ChannelRef {
    * without; the lines themselves come with history.
    */
   lastMessageAt?: number;
+  /**
+   * When this client's own member last looked at it, ms since epoch. Absent
+   * when they never have, or where it does not matter.
+   *
+   * The counterpart to `lastMessageAt`: the two together are what a client
+   * that has just connected needs to decide whether a row has something
+   * waiting, without having to have been here before. Per viewer, so the
+   * same channel carries a different one for each person told about it.
+   */
+  lastReadAt?: number;
 }
 
 /** How to print one in a tab or a prompt: `#engineering`, or the other person. */

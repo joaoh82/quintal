@@ -69,6 +69,7 @@ import {
   type ChannelJoinPayload,
   type EarshotPayload,
   type ChannelLeavePayload,
+  type ReadPayload,
   type ChannelRef,
   type ChannelSubject,
   type ChannelsPayload,
@@ -110,6 +111,8 @@ import {
   findMembership,
   getAgentMemory,
   latestMessageAtByConversation,
+  markRead,
+  readCursorsForMember,
   listAgentsForWorkspace,
   listTeamsForWorkspace,
   teamRef,
@@ -277,6 +280,15 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   readonly #lastMessageAt = new Map<string, number>();
   /**
+   * member id -> conversation id -> when they last looked.
+   *
+   * Keyed by member rather than by session, because the whole point of
+   * keeping this in the office is that a person's two devices are one
+   * reader: the laptop marking a channel read is the phone's news too.
+   * Loaded when they arrive and dropped when their last session goes.
+   */
+  readonly #readCursors = new Map<string, Map<string, number>>();
+  /**
    * The office's teams, refreshed with the channels. A mention resolves
    * against them; an agent is told which it is on when it connects.
    */
@@ -398,6 +410,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.ChannelJoin, (client, payload: ChannelJoinPayload) =>
       void this.#onChannelJoin(client, payload),
+    );
+    this.onMessage(ClientMessage.Read, (client, payload: ReadPayload) =>
+      this.#onRead(client, payload),
     );
     this.onMessage(ClientMessage.ChannelLeave, (client, payload: ChannelLeavePayload) =>
       void this.#onChannelLeave(client, payload),
@@ -586,8 +601,53 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.#sims.set(client.sessionId, { intent: { x: 0, y: 0 }, path: [], away: false });
 
+    // Where they had got to, so their first channel list is the truth rather
+    // than this browser's guess. Not awaited — `onJoin` is what puts them in
+    // the room, and a slow read of their cursors must not hold that up. The
+    // list is sent again when it lands.
+    void this.#loadReadCursors(auth.userId, client.sessionId);
+
     logger.info(`[office] ${auth.name} (${client.sessionId}) joined ${this.roomId}`);
     this.#broadcastRosterToAgents();
+  }
+
+  /**
+   * Read where somebody is in each of their conversations, once per arrival.
+   *
+   * A second session for the same person reuses what is already loaded: it is
+   * the same set of cursors, and re-reading it would only invite the two
+   * sessions to disagree for as long as the query takes.
+   */
+  async #loadReadCursors(memberId: string, sessionId: string): Promise<void> {
+    if (this.#readCursors.has(memberId)) {
+      this.#sendChannels(sessionId);
+      return;
+    }
+    try {
+      const cursors = await readCursorsForMember(getDb(), this.#workspaceId, memberId);
+      // Their last session may have gone while this was in flight; then
+      // nobody is waiting for it and holding it would be a small leak.
+      if (!this.#hasSessionFor(memberId)) return;
+      const known = this.#readCursors.get(memberId);
+      if (known) {
+        // A `read` landed first. It is newer than anything on disk.
+        for (const [id, at] of cursors) if ((known.get(id) ?? 0) < at) known.set(id, at);
+      } else {
+        this.#readCursors.set(memberId, cursors);
+      }
+    } catch (error: unknown) {
+      logger.error('[office] could not read where somebody had got to', error);
+      return;
+    }
+    this.#sendChannels(sessionId);
+  }
+
+  /** Is anybody still connected as this member? */
+  #hasSessionFor(memberId: string): boolean {
+    for (const player of this.state.players.values()) {
+      if (player.userId === memberId) return true;
+    }
+    return false;
   }
 
   #joinAsAgent(client: Client, identity: AgentIdentity, credential: AgentCredentialKind): void {
@@ -1210,7 +1270,13 @@ export class OfficeRoom extends Room<OfficeState> {
     viewerId: string,
   ): ChannelRef {
     const lastMessageAt = this.#lastMessageAt.get(channel.id);
-    const heard = lastMessageAt === undefined ? {} : { lastMessageAt };
+    const lastReadAt = this.#readCursors.get(viewerId)?.get(channel.id);
+    const heard = {
+      ...(lastMessageAt === undefined ? {} : { lastMessageAt }),
+      // Per viewer: the same channel is caught up for one member and has
+      // three unread lines for the next.
+      ...(lastReadAt === undefined ? {} : { lastReadAt }),
+    };
     if (channel.kind !== 'dm') {
       return { id: channel.id, kind: channel.kind, name: channel.name, slug: channel.slug, ...heard };
     }
@@ -1372,6 +1438,53 @@ export class OfficeRoom extends Room<OfficeState> {
       await this.#refreshChannels();
     } catch (error: unknown) {
       logger.error('[office] could not leave a channel', error);
+    }
+  }
+
+  /**
+   * Somebody has looked at a conversation.
+   *
+   * Kept so their other devices agree: the cursor is a fact about the
+   * person, not about the browser that reported it. Agents are ignored —
+   * they are told everything as it happens and have nothing to catch up on.
+   *
+   * The time is the office's, never the client's, unless the client asks for
+   * an *earlier* one. A browser with a fast clock that could mark itself
+   * caught up on lines nobody has said yet would hide them for good.
+   */
+  async #onRead(client: Client, payload: ReadPayload): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.#agents.has(client.sessionId)) return;
+    const channel = this.#channelFor(player.userId, payload?.channelId);
+    if (!channel) return;
+
+    const now = Date.now();
+    const asked = typeof payload?.at === 'number' && Number.isFinite(payload.at) ? payload.at : now;
+    const at = Math.min(asked, now);
+    if (at <= 0) return;
+
+    // Held before the write returns, so a `channels` built in between already
+    // says the new thing; the write is the durable copy of what is true here.
+    const cursors = this.#readCursors.get(player.userId) ?? new Map<string, number>();
+    if ((cursors.get(channel.id) ?? 0) >= at) return;
+    cursors.set(channel.id, at);
+    this.#readCursors.set(player.userId, cursors);
+
+    // Their other sessions, and this one: the list each of them is holding
+    // now disagrees with the office about what is unread.
+    for (const [sessionId, other] of this.state.players.entries()) {
+      if (other.userId === player.userId) this.#sendChannels(sessionId);
+    }
+
+    try {
+      await markRead(getDb(), {
+        workspaceId: this.#workspaceId,
+        conversationId: channel.id,
+        memberId: player.userId,
+        at,
+      });
+    } catch (error: unknown) {
+      logger.error('[office] could not keep where somebody had got to', error);
     }
   }
 
@@ -2681,6 +2794,8 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   #removePlayer(sessionId: string): void {
+    // Read before the player goes: the cursors are keyed by who they were.
+    const leaving = this.state.players.get(sessionId)?.userId;
     voiceRelay.sessionLeft(this.roomId, sessionId);
     const ended = this.#earshot.remove(sessionId);
     if (ended.length > 0) voiceRelay.updatePeers(this.roomId, ended);
@@ -2694,6 +2809,11 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#credentials.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
+    // Their cursors stay while any session of theirs does — two tabs are one
+    // reader — and go with the last one. The database keeps the durable copy.
+    if (leaving !== undefined && !this.#hasSessionFor(leaving)) {
+      this.#readCursors.delete(leaving);
+    }
     this.#followed.delete(sessionId);
     this.#wakeHops.forget(sessionId);
     const later = this.#emoteLater.get(sessionId);
