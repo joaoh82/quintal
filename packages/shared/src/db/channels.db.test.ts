@@ -150,7 +150,7 @@ describe('a direct message', () => {
   it('is nowhere a channel is listed, but the room knows it', async () => {
     const db = await createTestDb();
     const ana = await createTestUser(db, 'Ana');
-    const bo = await createTestUser(db, 'Bo', ana.workspaceId);
+    const bo = await createTestUser(db, 'Bo', { workspaceId: ana.workspaceId });
     const { id } = await openDm(db, {
       workspaceId: ana.workspaceId,
       openerId: ana.id,

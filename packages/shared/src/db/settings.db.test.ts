@@ -227,12 +227,17 @@ describe('who may change instance-wide settings', () => {
     assert.equal(await hasInstanceAdmin(db), false, 'and then nobody is in charge');
   });
 
-  it('lists everybody who has it', async () => {
+  it('lists everybody who has it, oldest account first', async () => {
     const db = await createTestDb();
-    const first = await createTestUser(db, 'Josh');
-    const second = await createTestUser(db, 'Sam');
-    await setInstanceAdmin(db, first.id, true);
-    await setInstanceAdmin(db, second.id, true);
+    // Made in the opposite order to the one expected back, and pinned a day
+    // apart. Both halves matter: without the pin the two rows share a
+    // millisecond about one run in eight and the tie falls to a random id,
+    // and without the inversion the query could drop its `order by` entirely
+    // and still pass on insertion order.
+    const newer = await createTestUser(db, 'Sam', { createdAt: new Date('2026-02-02T00:00:00Z') });
+    const older = await createTestUser(db, 'Josh', { createdAt: new Date('2026-02-01T00:00:00Z') });
+    await setInstanceAdmin(db, newer.id, true);
+    await setInstanceAdmin(db, older.id, true);
 
     const admins = await listInstanceAdmins(db);
     assert.deepEqual(

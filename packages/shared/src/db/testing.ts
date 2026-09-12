@@ -34,6 +34,24 @@ export async function createTestDb(): Promise<Database> {
   return db;
 }
 
+export interface TestUserOptions {
+  /** Join an existing office instead of getting a personal one. */
+  workspaceId?: string;
+  /**
+   * Pin when this account was made.
+   *
+   * `created_at` defaults to the millisecond of the insert, and two users made
+   * back to back land in the same one about one time in eight. Queries that
+   * order by it break the tie on `id`, which here is eight random bytes — so a
+   * test asserting "oldest first" over two same-millisecond rows is asserting a
+   * coin flip. It came up in `settings.db.test.ts`, which failed about one run
+   * in twenty.
+   *
+   * Pass distinct times and the order is the one the test says it is.
+   */
+  createdAt?: Date;
+}
+
 export interface TestUser {
   id: string;
   name: string;
@@ -57,13 +75,14 @@ export interface TestUser {
 export async function createTestUser(
   db: Database,
   name: string,
-  workspaceId?: string,
+  options: TestUserOptions = {},
 ): Promise<TestUser> {
+  const { workspaceId, createdAt } = options;
   const id = randomBytes(8).toString('hex');
   const secretKey = generateSecretKey();
   const pubkey = getPublicKeyHex(secretKey);
 
-  await db.insert(users).values({ id, name, pubkey });
+  await db.insert(users).values({ id, name, pubkey, ...(createdAt ? { createdAt } : {}) });
 
   if (workspaceId) return { id, name, pubkey, secretKey, workspaceId };
 

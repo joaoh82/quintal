@@ -40,7 +40,7 @@ async function setup() {
   const josh = await createTestUser(db, 'Josh');
   // A teammate *in the same workspace* — the case that matters. A stranger in
   // another workspace is refused by an easier check.
-  const sam = await createTestUser(db, 'Sam', josh.workspaceId);
+  const sam = await createTestUser(db, 'Sam', { workspaceId: josh.workspaceId });
   return { db, josh, sam };
 }
 
