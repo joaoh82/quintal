@@ -650,6 +650,20 @@ export const conversationMembers = sqliteTable(
     /** `users.id` of whoever added them — themselves, when they joined. */
     addedBy: text('added_by').notNull(),
     addedAt: integer('added_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    /**
+     * When this member last looked at this conversation. Null: never.
+     *
+     * Here rather than in a table of its own because this row already is the
+     * pair it would be keyed by, and it already goes away with the
+     * conversation. Leaving a channel therefore forgets where you were in it,
+     * which is right: rejoining one and finding its recent traffic marked new
+     * is what a person would expect.
+     *
+     * The cursor is the office's answer, not the browser's. `localStorage`
+     * knew this per browser, so a second machine showed a dot on every
+     * channel that had ever spoken.
+     */
+    lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
   },
   (table) => [
     primaryKey({ columns: [table.conversationId, table.memberId] }),

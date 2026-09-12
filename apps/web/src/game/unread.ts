@@ -25,6 +25,15 @@ export interface Unread {
   count: number;
   /** One of them named you, or the conversation is a DM. */
   mentioned: boolean;
+  /**
+   * When the newest of them was said.
+   *
+   * Kept so that "you read this on your other machine" can be answered
+   * exactly: a cursor from the office that reaches this far clears the row,
+   * and one that falls short of it leaves what arrived since. Without it the
+   * two cases are indistinguishable and one of them has to be got wrong.
+   */
+  newestAt: number;
 }
 
 export interface ReadState {
@@ -59,7 +68,7 @@ export function heard(
     // Read as it lands — and noted as such, so it is not news after a reload.
     return read(state, key, Math.max(now, line.sentAt));
   }
-  const current = state.unread[key] ?? { count: 0, mentioned: false };
+  const current = state.unread[key] ?? { count: 0, mentioned: false, newestAt: 0 };
   return {
     ...state,
     unread: {
@@ -67,6 +76,7 @@ export function heard(
       [key]: {
         count: current.count + 1,
         mentioned: current.mentioned || listener.isDm || isAddressed(line.text, listener.myName),
+        newestAt: Math.max(current.newestAt, line.sentAt),
       },
     },
   };
@@ -81,10 +91,19 @@ export function read(state: ReadState, key: ConversationKey, now: number): ReadS
 }
 
 /**
- * The channel list has arrived, with when each last heard something. A
- * channel that spoke after you last looked — or that you never looked at —
+ * The channel list has arrived: when each last heard something, and how far
+ * this member has read it.
+ *
+ * Two jobs, in order. First the office's cursor is folded in, because it
+ * knows things this browser does not — where you got to on your other
+ * machine, and where you got to here before you cleared the site data. It is
+ * taken as the later of the two, never as the truth outright: a line read
+ * here a moment ago has not reached the office yet, and must not come back
+ * as unread on the next list.
+ *
+ * Then a channel that spoke after that point — or that you never looked at —
  * has something waiting; how much, the list does not say, so it is a dot.
- * Never overrides a count already being kept, and never marks what is in view.
+ * Never marks what is in view.
  */
 export function caughtUp(
   state: ReadState,
@@ -94,12 +113,29 @@ export function caughtUp(
   let next = state;
   for (const channel of channels) {
     const key = channelKey(channel.id);
+
+    // Where the office says this member has read to.
+    const server = channel.lastReadAt ?? 0;
+    if (server > (next.lastReadAt[key] ?? 0)) {
+      next = { ...next, lastReadAt: { ...next.lastReadAt, [key]: server } };
+      // Read elsewhere: anything being counted here that is older than the
+      // cursor has been seen, on some other screen, by the same person.
+      const waiting = next.unread[key];
+      if (waiting !== undefined && waiting.newestAt <= server) {
+        const { [key]: _seen, ...rest } = next.unread;
+        next = { ...next, unread: rest };
+      }
+    }
+
     const at = channel.lastMessageAt ?? 0;
     if (at === 0 || visible.includes(key) || next.unread[key] !== undefined) continue;
     if (at <= (next.lastReadAt[key] ?? 0)) continue;
     next = {
       ...next,
-      unread: { ...next.unread, [key]: { count: 0, mentioned: channel.kind === 'dm' } },
+      unread: {
+        ...next.unread,
+        [key]: { count: 0, mentioned: channel.kind === 'dm', newestAt: at },
+      },
     };
   }
   return next;

@@ -42,6 +42,11 @@ export interface OfficeSession {
   /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
   joinChannel(slug: string): void;
   leaveChannel(channelId: string): void;
+  /**
+   * Note that a conversation is read, as of `at`. Kept by the office so the
+   * same person's other devices show the same unread.
+   */
+  markRead(channelId: string, at: number): void;
   /** The microphone switch. Off by default; M in the office. */
   toggleMute(): void;
   /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
@@ -310,6 +315,9 @@ export async function createGame(
     },
     leaveChannel(channelId) {
       scene()?.leaveChannel(channelId);
+    },
+    markRead(channelId, at) {
+      scene()?.markRead(channelId, at);
     },
     toggleMute() {
       voice?.toggleMute();

@@ -16,6 +16,7 @@ import {
   type ChannelChatSendPayload,
   type ChannelJoinPayload,
   type ChannelLeavePayload,
+  type ReadPayload,
   type ChannelsPayload,
   type FollowZonePayload,
   type ZoneChatPayload,
@@ -496,6 +497,14 @@ export class OfficeScene extends Phaser.Scene {
 
   leaveChannel(channelId: string): void {
     this.#room.send(ClientMessage.ChannelLeave, { channelId } satisfies ChannelLeavePayload);
+  }
+
+  /**
+   * Tell the office this conversation is read, so the same person's other
+   * screens agree. Nothing comes back: the next `channels` carries it.
+   */
+  markRead(channelId: string, at: number): void {
+    this.#room.send(ClientMessage.Read, { channelId, at } satisfies ReadPayload);
   }
 
   // --- presentation --------------------------------------------------------

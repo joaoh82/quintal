@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_members` ADD `last_read_at` integer;

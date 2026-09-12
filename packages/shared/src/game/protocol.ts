@@ -37,6 +37,14 @@ export const ClientMessage = {
   ChannelJoin: 'channel_join',
   /** Leave a channel. Answered with `channels`. */
   ChannelLeave: 'channel_leave',
+  /**
+   * I have looked at this conversation, up to now. Not answered; the office
+   * keeps it so your other devices agree with this one.
+   *
+   * Channels and DMs only. A zone is not a place you catch up on, and nearby
+   * is wherever you happen to be standing.
+   */
+  Read: 'read',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -181,6 +189,17 @@ export interface ChannelLeavePayload {
   channelId: string;
 }
 
+export interface ReadPayload {
+  channelId: string;
+  /**
+   * How far they have read, ms since epoch. Optional: the office uses its own
+   * clock when it is missing, and never trusts a time in the future, so a
+   * client with a fast clock cannot mark itself caught up on lines it has not
+   * been sent.
+   */
+  at?: number;
+}
+
 /** A line said in the zone you follow. Same shape as spatial chat plus where. */
 export interface ZoneChatPayload extends ChatBroadcastPayload {
   zoneId: string;
@@ -226,6 +245,18 @@ export const CHAT_RADIUS_TILES = 12;
 /** Rate limit: this many messages per window, per player. */
 export const CHAT_RATE_LIMIT = 10;
 export const CHAT_RATE_WINDOW_MS = 10_000;
+
+/**
+ * Rate limit for read cursors, per session.
+ *
+ * Looser than chat because it is not speech: a client reports one cursor per
+ * conversation every few seconds, so somebody moving through a dozen
+ * channels is a legitimate burst. Bounded all the same — each report is an
+ * UPDATE and a channel list pushed to every session that person has open,
+ * and nothing else stops a client sending one per millisecond.
+ */
+export const READ_RATE_LIMIT = 40;
+export const READ_RATE_WINDOW_MS = 10_000;
 
 /** Longest spoken message accepted. Longer ones are rejected, not truncated. */
 export const CHAT_MAX_LENGTH = 280;

@@ -32,7 +32,7 @@ describe('what is waiting in a conversation', () => {
   it('counts a line said where you are not looking', () => {
     let state = heard(EMPTY_READ_STATE, 'channel:ch-1', line(), me, 2_000);
     state = heard(state, 'channel:ch-1', line({ sentAt: 1_500 }), me, 2_500);
-    assert.deepEqual(state.unread['channel:ch-1'], { count: 2, mentioned: false });
+    assert.deepEqual(state.unread['channel:ch-1'], { count: 2, mentioned: false, newestAt: 1_500 });
   });
 
   it('never counts your own words', () => {
@@ -58,7 +58,7 @@ describe('what is waiting in a conversation', () => {
   it('keeps the mention once one line has made it', () => {
     let state = heard(EMPTY_READ_STATE, 'channel:ch-1', line({ text: '@Josh?' }), me, 2_000);
     state = heard(state, 'channel:ch-1', line({ text: 'and more' }), me, 3_000);
-    assert.deepEqual(state.unread['channel:ch-1'], { count: 2, mentioned: true });
+    assert.deepEqual(state.unread['channel:ch-1'], { count: 2, mentioned: true, newestAt: 1_000 });
   });
 
   it('clears when you look, and remembers when', () => {
@@ -87,21 +87,94 @@ describe('what was said while you were away', () => {
       ['nearby'],
     );
     assert.equal(next.unread['channel:old'], undefined, 'read since it last spoke');
-    assert.deepEqual(next.unread['channel:new'], { count: 0, mentioned: false });
-    assert.deepEqual(next.unread['channel:never'], { count: 0, mentioned: false });
+    assert.deepEqual(next.unread['channel:new'], { count: 0, mentioned: false, newestAt: 6_000 });
+    assert.deepEqual(next.unread['channel:never'], { count: 0, mentioned: false, newestAt: 1_000 });
     assert.equal(next.unread['channel:silent'], undefined, 'nothing was ever said');
   });
 
   it('leaves the conversation in view, and a count already being kept, alone', () => {
-    const state: ReadState = { lastReadAt: {}, unread: { 'channel:busy': { count: 3, mentioned: true } } };
+    const state: ReadState = {
+      lastReadAt: {},
+      unread: { 'channel:busy': { count: 3, mentioned: true, newestAt: 9_000 } },
+    };
     const next = caughtUp(state, [channel('busy', 9_000), channel('open', 9_000)], ['channel:open']);
-    assert.deepEqual(next.unread['channel:busy'], { count: 3, mentioned: true });
+    assert.deepEqual(next.unread['channel:busy'], { count: 3, mentioned: true, newestAt: 9_000 });
     assert.equal(next.unread['channel:open'], undefined);
   });
 
   it('treats a DM you have not read as for you', () => {
     const next = caughtUp(EMPTY_READ_STATE, [channel('dm-1', 9_000, 'dm')], []);
-    assert.deepEqual(next.unread['channel:dm-1'], { count: 0, mentioned: true });
+    assert.deepEqual(next.unread['channel:dm-1'], { count: 0, mentioned: true, newestAt: 9_000 });
+  });
+});
+
+/**
+ * The office knows where you got to; this browser only knows where *it* got
+ * to. The whole point of the cursor is the machine that has never been here.
+ */
+describe('where the office says you had got to', () => {
+  const seen = (id: string, lastMessageAt: number, lastReadAt?: number): ChannelRef => ({
+    id,
+    kind: 'channel',
+    name: id,
+    slug: id,
+    lastMessageAt,
+    ...(lastReadAt === undefined ? {} : { lastReadAt }),
+  });
+
+  it('starts a machine that has never been here from the truth, not from nothing', () => {
+    const next = caughtUp(
+      EMPTY_READ_STATE,
+      [seen('read', 5_000, 6_000), seen('unread', 5_000, 4_000), seen('never', 5_000)],
+      [],
+    );
+
+    assert.equal(next.unread['channel:read'], undefined, 'read on the other machine');
+    assert.deepEqual(next.unread['channel:unread'], {
+      count: 0,
+      mentioned: false,
+      newestAt: 5_000,
+    });
+    assert.deepEqual(next.unread['channel:never'], { count: 0, mentioned: false, newestAt: 5_000 });
+    assert.equal(next.lastReadAt['channel:read'], 6_000, 'and it is kept, not just acted on');
+  });
+
+  it('clears a dot this machine was showing once the other machine read past it', () => {
+    const state: ReadState = {
+      lastReadAt: {},
+      unread: { 'channel:ch': { count: 2, mentioned: true, newestAt: 5_000 } },
+    };
+
+    const next = caughtUp(state, [seen('ch', 5_000, 6_000)], []);
+    assert.equal(next.unread['channel:ch'], undefined, 'the same person read it, elsewhere');
+  });
+
+  it('keeps what arrived after the other machine looked', () => {
+    const state: ReadState = {
+      lastReadAt: {},
+      unread: { 'channel:ch': { count: 2, mentioned: true, newestAt: 8_000 } },
+    };
+
+    const next = caughtUp(state, [seen('ch', 8_000, 6_000)], []);
+    assert.deepEqual(
+      next.unread['channel:ch'],
+      { count: 2, mentioned: true, newestAt: 8_000 },
+      'a cursor that falls short of the newest line clears nothing',
+    );
+  });
+
+  /**
+   * A line read here a second ago has not reached the office yet. Taking its
+   * older cursor as the truth outright would bring the row back as unread on
+   * the very next list — a dot that reappears on its own is worse than one
+   * that lingers.
+   */
+  it('never drags this machine backwards to an older cursor', () => {
+    const state: ReadState = { lastReadAt: { 'channel:ch': 9_000 }, unread: {} };
+
+    const next = caughtUp(state, [seen('ch', 8_000, 3_000)], []);
+    assert.equal(next.lastReadAt['channel:ch'], 9_000);
+    assert.equal(next.unread['channel:ch'], undefined, 'and nothing comes back as waiting');
   });
 });
 
