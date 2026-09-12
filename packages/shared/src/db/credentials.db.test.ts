@@ -64,7 +64,7 @@ describe('registering an agent key', () => {
   it("refuses an attestation not signed by the agent's owner, whoever is asking", async () => {
     const db = await createTestDb();
     const josh = await createTestUser(db, 'Josh');
-    const admin = await createTestUser(db, 'Admin', josh.workspaceId);
+    const admin = await createTestUser(db, 'Admin', { workspaceId: josh.workspaceId });
     await db.insert(memberships).values({
       id: 'm-admin',
       workspaceId: josh.workspaceId,

@@ -84,7 +84,7 @@ describe('registering a key for an agent', () => {
 
   it("refuses a teammate's machine, even inside the same office", async () => {
     const w = await world();
-    const teammate = await createTestUser(w.db, 'Sam', w.josh.workspaceId);
+    const teammate = await createTestUser(w.db, 'Sam', { workspaceId: w.josh.workspaceId });
     await w.db.insert(memberships).values({
       id: 'm-sam',
       workspaceId: w.josh.workspaceId,
@@ -102,7 +102,7 @@ describe('registering a key for an agent', () => {
 
   it('lets an admin call, but not vouch: the signature must still be the owner’s', async () => {
     const w = await world();
-    const admin = await createTestUser(w.db, 'Admin', w.josh.workspaceId);
+    const admin = await createTestUser(w.db, 'Admin', { workspaceId: w.josh.workspaceId });
     await w.db.insert(memberships).values({
       id: 'm-admin',
       workspaceId: w.josh.workspaceId,

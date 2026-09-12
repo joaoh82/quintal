@@ -19,7 +19,7 @@ import { createTestDb, createTestUser } from './testing.js';
 async function setup() {
   const db = await createTestDb();
   const josh = await createTestUser(db, 'Josh');
-  const sam = await createTestUser(db, 'Sam', josh.workspaceId);
+  const sam = await createTestUser(db, 'Sam', { workspaceId: josh.workspaceId });
   return { db, josh, sam };
 }
 
