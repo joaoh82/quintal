@@ -71,7 +71,52 @@ async function signIn() {
  * `mustContain`, the page also has to be the page: a route that answered 200
  * with the wrong page — the landing page where the office should be — is a
  * page the status alone cannot tell apart.
+ *
+ * `mustContain` is not optional decoration on a page with a client component.
+ * When React cannot resolve one — the "Could not find the module … in the
+ * React Client Manifest" failure, QUIN-9 — the route can still answer 200 and
+ * stream HTML with that component simply absent. Measured, not assumed: with
+ * one entry removed from `/settings/agents`'s client reference manifest, the
+ * page came back 200 with 15KB of markup and no agents UI in it, and this
+ * script called it ok. A status code cannot see that. A string only that
+ * component renders can.
  */
+/**
+ * What the build actually put in a route's client reference manifest.
+ *
+ * Printed only when a page fails, and only to say which half of QUIN-9 this
+ * is. The error React throws is the same whether the build wrote an
+ * incomplete manifest or the server read the wrong one, and telling those
+ * apart after the fact cost an afternoon of log archaeology. The manifest is
+ * right there on disk next to the server that just served the page: read it.
+ *
+ * Best effort in every direction — no `.next`, a different layout, an
+ * unparseable file — because a diagnostic that throws while explaining a
+ * failure has made the failure harder to read, not easier.
+ */
+async function manifestReport(path) {
+  try {
+    const { readFileSync } = await import('node:fs');
+    const file = new URL(
+      `../apps/web/.next/server/app${path}/page_client-reference-manifest.js`,
+      import.meta.url,
+    );
+    const source = readFileSync(file, 'utf8');
+    const context = { __RSC_MANIFEST: {} };
+    const { runInNewContext } = await import('node:vm');
+    runInNewContext(source, context);
+    const manifest = context.__RSC_MANIFEST[`${path}/page`];
+    if (!manifest) return `manifest on disk has no entry for ${path}/page`;
+    const modules = Object.keys(manifest.clientModules);
+    const own = modules.filter((key) => key.includes(`/app${path}/`));
+    return `manifest on disk: ${modules.length} client modules, ${own.length} from this route — ${
+      own.map((key) => key.split('/').pop()).join(', ') || 'none'
+    }`;
+  } catch (error) {
+    return `manifest on disk: could not be read (${error.code ?? error.message})`;
+  }
+}
+
 async function page(path, cookie, label = path, mustContain = null) {
   const response = await fetch(`${base}${path}`, {
     headers: cookie ? { cookie } : {},
@@ -79,7 +124,8 @@ async function page(path, cookie, label = path, mustContain = null) {
   });
   const body = response.status < 400 ? await response.text() : '';
   if (mustContain !== null && response.status === 200 && !body.includes(mustContain)) {
-    check(false, label, `missing ${mustContain}`);
+    check(false, label, `200 but no "${mustContain}" in it`);
+    console.log(`       ${await manifestReport(path)}`);
     return;
   }
   const brokenMarkers = [
@@ -90,11 +136,12 @@ async function page(path, cookie, label = path, mustContain = null) {
     'Application error: a server-side exception',
   ];
   const marker = brokenMarkers.find((m) => body.includes(m));
-  check(
-    response.status === 200 && !marker,
-    label,
-    response.status !== 200 ? `HTTP ${response.status}` : (marker ?? ''),
-  );
+  const ok = response.status === 200 && !marker;
+  check(ok, label, response.status !== 200 ? `HTTP ${response.status}` : (marker ?? ''));
+  // A 5xx on a page with a client component is the other face of the same
+  // failure — QUIN-9 was reported as a 500 and reproduces as a silent 200 —
+  // so say what the build put in the manifest either way.
+  if (!ok && mustContain !== null) console.log(`       ${await manifestReport(path)}`);
 }
 
 /**
@@ -129,13 +176,18 @@ await redirects('/', cookie, '/office');
 // The game itself mounts in the browser, so the server's HTML carries the
 // office's header and not the canvas; the header is what says it is the office.
 await page('/office', cookie, '/office', 'Enter to chat');
-for (const path of [
-  '/settings',
-  '/settings/profile',
-  '/settings/agents',
-  '/settings/guests',
+// Each of these renders a client component, and each marker is a string only
+// that component puts on the page. A page that answered 200 without its own
+// component in it is the shape QUIN-9 took, and the only thing that catches it.
+for (const [path, marker] of [
+  ['/settings', 'Save'],
+  ['/settings/profile', 'Display name'],
+  ['/settings/agents', 'Create agent'],
+  ['/settings/guests', 'Links you have made'],
+  ['/settings/channels', 'New channel'],
+  ['/settings/teams', 'New team'],
 ]) {
-  await page(path, cookie);
+  await page(path, cookie, path, marker);
 }
 
 console.log('');
