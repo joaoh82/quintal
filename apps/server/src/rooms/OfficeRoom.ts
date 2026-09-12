@@ -22,6 +22,8 @@ import {
   isEmote,
   OfficePlayer,
   OfficeState,
+  READ_RATE_LIMIT,
+  READ_RATE_WINDOW_MS,
   RECONNECTION_SECONDS,
   ServerMessage,
   TICK_MS,
@@ -256,6 +258,12 @@ export class OfficeRoom extends Room<OfficeState> {
   #map!: OfficeMap;
   readonly #sims = new Map<string, PlayerSim>();
   readonly #chatLimiter = new ChatRateLimiter();
+  /**
+   * The same limiter, for read cursors. Its own window rather than chat's:
+   * a read is not speech, and a person catching up across a dozen channels
+   * must not find their next sentence refused for it.
+   */
+  readonly #readLimiter = new ChatRateLimiter(READ_RATE_LIMIT, READ_RATE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -1435,6 +1443,10 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!channel || channel.kind !== 'channel') return;
     try {
       await removeChannelMember(getDb(), channel.id, player.userId);
+      // The cursor went with the membership row. Forgetting it here too
+      // keeps this room from answering for a channel it no longer has one
+      // for — rejoining without reconnecting would otherwise look caught up.
+      this.#readCursors.get(player.userId)?.delete(channel.id);
       await this.#refreshChannels();
     } catch (error: unknown) {
       logger.error('[office] could not leave a channel', error);
@@ -1463,8 +1475,34 @@ export class OfficeRoom extends Room<OfficeState> {
     const at = Math.min(asked, now);
     if (at <= 0) return;
 
-    // Held before the write returns, so a `channels` built in between already
-    // says the new thing; the write is the durable copy of what is true here.
+    // Nothing new to say. Checked before the limiter so a client repeating
+    // itself is not spending its allowance on a no-op.
+    if ((this.#readCursors.get(player.userId)?.get(channel.id) ?? 0) >= at) return;
+    // Dropped in silence, not refused: a read is not something a person did
+    // on purpose, so there is nothing to tell them about. Their cursor is
+    // simply a little behind until the next report.
+    if (!this.#readLimiter.tryConsume(client.sessionId, now)) return;
+
+    // The database first, and only then what this room believes. The other
+    // order leaves the room ahead of the disk when a write fails: every
+    // session would be told the channel was read, and the next reconnect
+    // would quietly take it back.
+    let moved = false;
+    try {
+      moved = await markRead(getDb(), {
+        workspaceId: this.#workspaceId,
+        conversationId: channel.id,
+        memberId: player.userId,
+        at,
+      });
+    } catch (error: unknown) {
+      logger.error('[office] could not keep where somebody had got to', error);
+      return;
+    }
+    if (!moved) return;
+
+    // Re-checked after the await: another report of theirs may have landed
+    // and got further while this one was in the database.
     const cursors = this.#readCursors.get(player.userId) ?? new Map<string, number>();
     if ((cursors.get(channel.id) ?? 0) >= at) return;
     cursors.set(channel.id, at);
@@ -1474,17 +1512,6 @@ export class OfficeRoom extends Room<OfficeState> {
     // now disagrees with the office about what is unread.
     for (const [sessionId, other] of this.state.players.entries()) {
       if (other.userId === player.userId) this.#sendChannels(sessionId);
-    }
-
-    try {
-      await markRead(getDb(), {
-        workspaceId: this.#workspaceId,
-        conversationId: channel.id,
-        memberId: player.userId,
-        at,
-      });
-    } catch (error: unknown) {
-      logger.error('[office] could not keep where somebody had got to', error);
     }
   }
 
@@ -2808,6 +2835,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#agents.delete(sessionId);
     this.#credentials.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
+    this.#readLimiter.forget(sessionId);
     this.#channelsSent.delete(sessionId);
     // Their cursors stay while any session of theirs does — two tabs are one
     // reader — and go with the last one. The database keeps the durable copy.

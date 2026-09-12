@@ -246,6 +246,18 @@ export const CHAT_RADIUS_TILES = 12;
 export const CHAT_RATE_LIMIT = 10;
 export const CHAT_RATE_WINDOW_MS = 10_000;
 
+/**
+ * Rate limit for read cursors, per session.
+ *
+ * Looser than chat because it is not speech: a client reports one cursor per
+ * conversation every few seconds, so somebody moving through a dozen
+ * channels is a legitimate burst. Bounded all the same — each report is an
+ * UPDATE and a channel list pushed to every session that person has open,
+ * and nothing else stops a client sending one per millisecond.
+ */
+export const READ_RATE_LIMIT = 40;
+export const READ_RATE_WINDOW_MS = 10_000;
+
 /** Longest spoken message accepted. Longer ones are rejected, not truncated. */
 export const CHAT_MAX_LENGTH = 280;
 

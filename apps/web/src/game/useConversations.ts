@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { gameBridge } from './bridge';
 import { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
+import { ReadReports } from './readReports';
 import { resolveJoin } from './ui/join';
 import { parseSlashCommand } from './ui/slash';
 import {
@@ -152,10 +153,11 @@ export function useConversations(
   const transcriptsRef = useRef(transcripts);
   /** Storage has been read; only then is it written, or a reload would wipe it. */
   const rememberedRef = useRef(false);
-  /** Cursors the office has been told, and ones waiting for the next flush. */
-  const reportedReadRef = useRef<Record<ConversationKey, number>>({});
-  const pendingReadRef = useRef<Record<ConversationKey, number>>({});
+  /** What the office still has to be told about where we have read to. */
+  const readReportsRef = useRef(new ReadReports());
   const readTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** So a flush with nowhere to send can re-arm itself. */
+  const flushReadsRef = useRef<() => void>(() => {});
   /**
    * A channel `/join` asked for that we were not in yet. The office answers
    * a join with a fresh `channels` list rather than a receipt, so the switch
@@ -238,35 +240,24 @@ export function useConversations(
    */
   const flushReads = useCallback(() => {
     readTimerRef.current = null;
-    const session = sessionRef.current;
-    const pending = pendingReadRef.current;
-    pendingReadRef.current = {};
-    if (!session) return;
-    for (const [key, at] of Object.entries(pending)) {
-      const { channelId } = parseKey(key);
-      if (!channelId) continue;
-      session.markRead(channelId, at);
-      reportedReadRef.current[key] = at;
+    // Still waiting means there was no office to tell — a reconnect gap,
+    // which is exactly when the other machine is showing the wrong thing.
+    // Come back for it rather than forgetting it.
+    if (readReportsRef.current.flush(sessionRef.current)) {
+      readTimerRef.current = setTimeout(() => flushReadsRef.current(), READ_REPORT_INTERVAL_MS);
     }
   }, [sessionRef]);
+  flushReadsRef.current = flushReads;
 
   useEffect(() => {
-    let queued = false;
-    for (const [key, at] of Object.entries(readState.lastReadAt)) {
-      if (!parseKey(key).channelId) continue;
-      if (at <= (reportedReadRef.current[key] ?? 0)) continue;
-      if (at <= (pendingReadRef.current[key] ?? 0)) continue;
-      pendingReadRef.current[key] = at;
-      queued = true;
-    }
-    if (queued && readTimerRef.current === null) {
-      readTimerRef.current = setTimeout(flushReads, READ_REPORT_INTERVAL_MS);
+    if (readReportsRef.current.queue(readState.lastReadAt) && readTimerRef.current === null) {
+      readTimerRef.current = setTimeout(() => flushReadsRef.current(), READ_REPORT_INTERVAL_MS);
     }
   }, [readState.lastReadAt, flushReads]);
 
-  // The timer, not the reports: a pending one is dropped when the office goes
-  // away, and looking again reports again. The cursor is behind by one visit
-  // at worst, and `localStorage` still has it for this browser meanwhile.
+  // The timer only. A report still waiting when the page goes is lost —
+  // `localStorage` has it for this browser, and looking again reports it
+  // again, so the office is a visit behind at worst.
   useEffect(
     () => () => {
       if (readTimerRef.current !== null) clearTimeout(readTimerRef.current);
