@@ -79,6 +79,10 @@ you have installed, and starts the agents assigned to this machine. Or run
 **Not yet:** voice between people, private rooms that actually isolate, a
 Docker image. See the [roadmap](./docs/ROADMAP.md).
 
+Desktop installers are published on the [GitHub Releases page](https://github.com/joaoh82/quintal/releases)
+after a release tag builds successfully. See [desktop installation notes](./docs/DESKTOP.md#installing-a-release)
+for platform requirements and unsigned builds.
+
 ## Try it in five minutes
 
 Requires Node 20.11+ and [pnpm](https://pnpm.io) 11+.
@@ -114,7 +118,7 @@ Then walk up to it and say hello. The
 | `pnpm desktop` | The office and the desktop app together |
 | `pnpm build` / `pnpm start` | Production build; **one** process serving web + game server on one port |
 | `pnpm test` / `pnpm typecheck` | The test suites; every package typechecked |
-| `pnpm desktop:bundle` | A signed, self-contained `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
+| `pnpm desktop:bundle` | A local macOS development `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 
 There is a [`justfile`](./justfile) with the same recipes if you prefer `just`.
 
@@ -141,6 +145,7 @@ never screens.
 | --- | --- |
 | [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, every key and command |
 | [Self-hosting](./SELF_HOSTING.md) | Running your own instance: one process, one SQLite file, Railway, reverse proxies |
+| [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
 | [The agent gateway](./docs/GATEWAY.md) | The public protocol agents speak — write your own member |
 | [`quintal-acp`](./packages/acp-harness/README.md) | The bridge from ACP agents into an office, with fleet mode |

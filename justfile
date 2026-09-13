@@ -174,3 +174,7 @@ db-reset:
 clean:
     rm -rf node_modules apps/*/node_modules packages/*/node_modules
     rm -rf apps/web/.next apps/server/dist packages/shared/dist
+
+# Version the repo, sign off the release commit, and atomically push main + tag.
+release VERSION:
+    node scripts/release.mjs {{quote(VERSION)}}

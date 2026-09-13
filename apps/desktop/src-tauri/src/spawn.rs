@@ -277,7 +277,13 @@ pub fn harness_path() -> Result<PathBuf, SpawnError> {
 /// to be running from — see `start_with` for why that matters.
 fn harness_beside(exe_dir: Option<&Path>) -> Result<PathBuf, SpawnError> {
     if let Some(found) = exe_dir
-        .map(|dir| dir.join("quintal-acp"))
+        .map(|dir| {
+            dir.join(if cfg!(windows) {
+                "quintal-acp.exe"
+            } else {
+                "quintal-acp"
+            })
+        })
         .filter(|path| path.is_file())
     {
         return Ok(found);
@@ -538,7 +544,19 @@ fn interrupt(child: &Child) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
+mod windows_tests {
+    #[test]
+    fn the_windows_harness_beside_the_executable_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        let beside = dir.path().join("quintal-acp.exe");
+        std::fs::write(&beside, b"bundled executable").unwrap();
+        assert_eq!(super::harness_beside(Some(dir.path())).unwrap(), beside);
+    }
+}
+
+// These process fixtures use /bin/sh and Unix signals.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::io::Write;
