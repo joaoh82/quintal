@@ -55,3 +55,9 @@ apps/desktop/src-tauri/binaries/
 # before every build, typecheck and test of the package.
 packages/acp-harness/src/runner/base-prompt.text.ts
 packages/acp-harness/src/nest-agents.text.ts
+
+# `tauri icon` writes mobile icon sets alongside the desktop ones. There is no
+# mobile target, so they are noise rather than build inputs — unlike the rest
+# of apps/desktop/src-tauri/icons/, which is generated *and* committed.
+apps/desktop/src-tauri/icons/android/
+apps/desktop/src-tauri/icons/ios/

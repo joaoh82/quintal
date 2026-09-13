@@ -6,6 +6,8 @@
 
 The transparent PNG is the original generated asset. The website uses its alpha as a CSS mask to render a crisp, single-color mark in both themes. A copy is used as the site icon. The wordmark pairs it with DM Sans at weight 650.
 
+The same mark is the source of the desktop app icon, the menu-bar icon and the office favicon. Those are generated, not drawn again — see `apps/desktop/README.md` for the recipe and the one command that regenerates them.
+
 - Moss: #3d5736
 - Light paper: #f7f8f2
 - Dark-theme mark: #b3cd9b

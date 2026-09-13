@@ -8,16 +8,24 @@ on:
     paths:
       - 'apps/desktop/**'
       - 'apps/web/src/lib/host.ts'
+      # The office favicons are generated from the same master as the app icon
+      # and checked by the same script, so they belong to this workflow.
+      - 'apps/web/src/app/icon.png'
+      - 'apps/web/src/app/apple-icon.png'
       - 'packages/shared/src/identity.ts'
       - 'scripts/desktop-ipc-check.mjs'
+      - 'scripts/check-icons.mjs'
       - '.github/workflows/desktop.yml'
   push:
     branches: [main]
     paths:
       - 'apps/desktop/**'
       - 'apps/web/src/lib/host.ts'
+      - 'apps/web/src/app/icon.png'
+      - 'apps/web/src/app/apple-icon.png'
       - 'packages/shared/src/identity.ts'
       - 'scripts/desktop-ipc-check.mjs'
+      - 'scripts/check-icons.mjs'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +36,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The icon set is generated and committed, so nothing downstream notices a
+      # file that has been hand-resized: `cargo build` reads whatever is there
+      # and the bundle ships it. Dependency-free on purpose — it runs on the
+      # runner's own node, before pnpm or a toolchain exists, so a stray 64x64
+      # `128x128.png` costs seconds rather than a full desktop build.
+      - name: Icons
+        run: node scripts/check-icons.mjs
 
       # Tauri links against the system webview even for a test build.
       - name: System dependencies

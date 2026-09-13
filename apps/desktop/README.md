@@ -26,6 +26,53 @@ pnpm desktop             # the app, in another terminal
 | `QUINTAL_SECRETS_BACKEND` | `file` to skip the OS keychain — for CI and for a dev box you would rather not prompt. Detected automatically otherwise. |
 | `QUINTAL_PRIVATE_KEY` | Sign with this key (hex or `nsec`) instead of the stored one. Used in memory, never written down. |
 
+## The icons
+
+Everything in `src-tauri/icons/` is **generated**, and committed because
+`cargo build` reads it rather than making it. Do not hand-edit or hand-resize a
+file there — change the master and regenerate:
+
+```bash
+pnpm --filter @quintal/desktop exec tauri icon src-tauri/icons/source/app-icon.png
+node scripts/check-icons.mjs
+```
+
+That rewrites the five files `tauri.conf.json` lists, the Windows `Square*Logo`
+set, and the Linux `icon.png`. It also offers to write `icons/android/` and
+`icons/ios/`; there is no mobile target, so those are deleted rather than
+committed.
+
+`icons/source/app-icon.png` is the master: the brand mark from
+`apps/website/public/brand/quintal-mark.png`, trimmed to its own ink and centred
+at 80% (a 10% margin on each side) on a full-bleed paper `#f7f8f2` rounded
+square, 1024×1024. The corner radius is Apple's icon-grid proportion,
+185.4/824 of the width — **macOS does not mask an app icon**, so the rounded
+square has to be drawn in, and Windows and Linux want the same tile full-bleed.
+
+The tray is separate, because the menu bar wants something else entirely:
+
+| File | What it is |
+| --- | --- |
+| `tray.png`, `tray@2x.png` | the mark's alpha as black on transparent, 22px and 44px. macOS tints a *template* icon itself, so the app tile would land there as a dark blob. |
+| `tray-color.png` | the tile at 44px, for Windows and Linux, where `icon_as_template` does nothing and a black mark would vanish into a dark taskbar. |
+
+`tray.rs` picks between them with `cfg(target_os)` and bakes the choice in with
+`tauri::include_image!`, so a missing file is a compile error rather than an
+empty menu bar. The 44px asset is the one macOS is handed: `tray-icon` pins the
+NSImage to 18 *points* and has no @2x representation logic, so 44 physical
+pixels is what stays sharp on a Retina display.
+
+The office favicon (`apps/web/src/app/icon.png`) is the mark downscaled to 64px
+— the same thing `apps/website/src/app/icon.png` is, so the tab and the site
+agree. `apple-icon.png` beside it is the tile at 180px, because iOS composites a
+home-screen icon onto an opaque background of its choosing and a transparent one
+comes out black.
+
+`scripts/check-icons.mjs` reads each file's PNG header and asserts the size its
+name promises. It runs first in `.github/workflows/desktop.yml`, before any
+toolchain is installed, because the failure it catches is silent everywhere
+else: a soft icon still builds, still bundles and still ships.
+
 ## Where your key lives
 
 One keychain entry (`quintal-desktop` / `secrets`) holding a JSON map: the
