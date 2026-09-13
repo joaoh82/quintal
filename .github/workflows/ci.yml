@@ -89,6 +89,14 @@ jobs:
 
       - run: pnpm build
 
+      # A client component the server renders has to be in the client
+      # reference manifest the build just wrote. QUIN-9 was one that wasn't:
+      # React threw while rendering, and the page came back 200 with a hole in
+      # it. The manifest is a file on disk the moment the build ends, so the
+      # cheapest place to notice is here, not in a smoke test minutes later.
+      - name: Check every client boundary made it into the manifest
+        run: node scripts/check-client-manifest.mjs
+
       - name: Build the marketing website
         run: pnpm --filter @quintal/website build
 
