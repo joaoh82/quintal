@@ -12,12 +12,35 @@
 //! the moment an agent is enabled or disabled — a number that silently drifts
 //! is worse than no number.
 
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{include_image, AppHandle, Manager, Wry};
 
 use crate::commands::HostState;
 use crate::spawn::FleetState;
+
+/// The tray's own artwork, baked in at compile time.
+///
+/// Not `default_window_icon()`, which is the full-colour app tile. macOS reads
+/// a *template* icon as an alpha mask and tints it to match the menu bar, so
+/// the tile would arrive there as a solid dark blob with the mark's courtyard
+/// punched out of it. What the menu bar wants is the mark's alpha and nothing
+/// else, which is exactly what `tray@2x.png` is.
+///
+/// The 44px asset rather than the 22px one beside it because `tray-icon` sets
+/// the NSImage to 18 *points* and has no @2x representation logic: whatever it
+/// is handed is what gets scaled, so 44 physical pixels is what stays sharp on
+/// a Retina menu bar. `tray.png` is the 1x master, kept next to it.
+#[cfg(target_os = "macos")]
+const TRAY_ICON: Image<'static> = include_image!("icons/tray@2x.png");
+
+/// Everywhere else, the icon is drawn exactly as given — `icon_as_template` is
+/// a macOS-only affordance — and a black-on-transparent mark disappears into
+/// the dark taskbar Windows 11 ships by default. So those platforms get the
+/// tile, which brings its own paper background and reads against either.
+#[cfg(not(target_os = "macos"))]
+const TRAY_ICON: Image<'static> = include_image!("icons/tray-color.png");
 
 /// Menu item ids. Matched on the way back in, so they live in one place.
 const OPEN: &str = "open";
@@ -29,9 +52,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let menu = menu_for(app, &FleetState::Stopped)?;
 
     TrayIconBuilder::with_id("quintal")
-        .icon(app.default_window_icon().cloned().ok_or_else(|| {
-            tauri::Error::AssetNotFound("no default window icon to use in the tray".into())
-        })?)
+        .icon(TRAY_ICON)
+        // macOS only. Elsewhere `TRAY_ICON` is already the coloured tile and
+        // this call does nothing.
         .icon_as_template(true)
         .tooltip(tooltip(&FleetState::Stopped))
         .menu(&menu)
