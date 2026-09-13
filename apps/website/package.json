@@ -9,11 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "15.5.23",
+    "next": "15.5.25",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "lucide-react": "^1.29.0",
-    "@next/mdx": "15.5.23",
+    "@next/mdx": "15.5.25",
     "@mdx-js/loader": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "@fontsource-variable/dm-sans": "^5.2.8"
