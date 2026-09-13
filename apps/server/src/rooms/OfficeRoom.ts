@@ -154,7 +154,7 @@ import {
   type AgentSession,
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
-import { agentTeamsSignature, channelListSignature } from './channel-list.js';
+import { SentChannelLists, agentTeamsSignature, channelListSignature } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import { workingSinceAfter } from './working-since.js';
@@ -307,8 +307,11 @@ export class OfficeRoom extends Room<OfficeState> {
    * other stops where `AGENT_MENTION_MAX_HOPS` says. See `hops.ts`.
    */
   readonly #wakeHops = new WakeHops();
-  /** sessionId -> the channel list last sent to it, so a change is sent once. */
-  readonly #channelsSent = new Map<string, string>();
+  /**
+   * The channel list last sent to each session, so a change is sent once —
+   * and a request is answered whatever was sent before it. See `channel-list.ts`.
+   */
+  readonly #channelsSent = new SentChannelLists();
   /**
    * sessionId -> the zone they are reading live from elsewhere. One per
    * person: a transcript you have open, not a wiretap on the office.
@@ -404,7 +407,13 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.ChannelChat, (client, payload: ChannelChatSendPayload) =>
       this.#onChannelChat(client, payload),
     );
-    this.onMessage(ClientMessage.ChannelsGet, (client) => this.#sendChannels(client.sessionId));
+    this.onMessage(ClientMessage.ChannelsGet, (client) => {
+      // Asked, so answered: a list pushed before the browser was listening —
+      // the one that follows a join — was dropped on the floor, and the
+      // answer must not be skipped for matching it.
+      this.#channelsSent.asked(client.sessionId);
+      this.#sendChannels(client.sessionId);
+    });
     // For the voice client's own arithmetic — how loud somebody is by
     // distance, whether a second person is close enough to open a socket
     // for. Asked for, not pushed at join: a message sent before the scene
@@ -1334,8 +1343,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const signature = isAgent
       ? `${channelListSignature(channels, [])}|${agentTeamsSignature(agentTeams)}`
       : channelListSignature(channels, available, teams);
-    if (this.#channelsSent.get(sessionId) === signature) return;
-    this.#channelsSent.set(sessionId, signature);
+    if (!this.#channelsSent.offer(sessionId, signature)) return;
 
     if (isAgent) {
       client.send(AgentServerMessage.Channels, {
@@ -2836,7 +2844,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#credentials.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
     this.#readLimiter.forget(sessionId);
-    this.#channelsSent.delete(sessionId);
+    this.#channelsSent.forget(sessionId);
     // Their cursors stay while any session of theirs does — two tabs are one
     // reader — and go with the last one. The database keeps the durable copy.
     if (leaving !== undefined && !this.#hasSessionFor(leaving)) {

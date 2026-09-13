@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { ChannelRef } from '@quintal/shared';
 
-import { agentTeamsSignature, channelListSignature } from './channel-list.js';
+import { SentChannelLists, agentTeamsSignature, channelListSignature } from './channel-list.js';
 
 function channel(slug: string): ChannelRef {
   return { id: `id-${slug}`, kind: 'channel', name: slug, slug };
@@ -91,5 +91,37 @@ describe("what an agent is told about its teams counts as changed", () => {
     assert.notEqual(agentTeamsSignature([team({ instructions: 'Ask first.' })]), base);
     assert.notEqual(agentTeamsSignature([team({ members: ['Claude', 'Codex', 'Grok'] })]), base);
     assert.notEqual(agentTeamsSignature([]), base, 'leaving the team is a change');
+  });
+});
+
+describe('what has already been sent to a session', () => {
+  it('sends a list once, and again only when it changes', () => {
+    const sent = new SentChannelLists();
+    assert.equal(sent.offer('s1', 'a|b|'), true);
+    assert.equal(sent.offer('s1', 'a|b|'), false, 'the same list is not news');
+    assert.equal(sent.offer('s1', 'a,c|b|'), true);
+    assert.equal(sent.offer('s2', 'a,c|b|'), true, 'another session has heard nothing yet');
+  });
+
+  /**
+   * The bug. The room pushed the list right after a join, before the browser
+   * had a handler for it, so the push was dropped. The browser then asked and
+   * got nothing back — same fingerprint, "already sent" — and showed no
+   * channels and no DMs until something unrelated changed the list.
+   */
+  it('answers a request even with the list it pushed a moment before', () => {
+    const sent = new SentChannelLists();
+    assert.equal(sent.offer('s1', 'a|b|'), true, 'the push nobody was listening for');
+
+    sent.asked('s1');
+    assert.equal(sent.offer('s1', 'a|b|'), true, 'the answer to the request');
+    assert.equal(sent.offer('s1', 'a|b|'), false, 'and the next unchanged refresh stays quiet');
+  });
+
+  it('forgets a session that has gone', () => {
+    const sent = new SentChannelLists();
+    sent.offer('s1', 'a|b|');
+    sent.forget('s1');
+    assert.equal(sent.offer('s1', 'a|b|'), true);
   });
 });
