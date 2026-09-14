@@ -79,10 +79,21 @@ run('bun', ['build', '--compile', '--minify', `--target=${targets[triple]}`, ent
   stdio: 'inherit',
 });
 
-// Prove it starts with nothing on PATH. The whole point is a binary that needs
-// no runtime installed, and that is exactly the assumption a bundle breaks.
+// Prove it starts with only OS directories on PATH, without Node or Bun.
+// Windows environment names are case-insensitive: remove any inherited Path
+// spelling before setting PATH so Node cannot pass the original search path.
+const proofEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PATH'),
+);
+if (process.platform === 'win32') {
+  const systemRoot = process.env.SystemRoot;
+  if (!systemRoot) throw new Error('SystemRoot is required for the Windows sidecar proof');
+  proofEnv.PATH = `${join(systemRoot, 'System32')};${systemRoot}`;
+} else {
+  proofEnv.PATH = '/usr/bin:/bin';
+}
 const proof = run(outFile, ['--help'], {
-  env: { ...process.env, PATH: process.platform === 'win32' ? process.env.SystemRoot : '/usr/bin:/bin' },
+  env: proofEnv,
 });
 if (!proof.includes('quintal-acp')) {
   console.error('The compiled harness did not answer --help. Not shipping it.');

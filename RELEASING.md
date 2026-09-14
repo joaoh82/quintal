@@ -35,7 +35,10 @@ can push; it does not bypass repository rules.
 `.github/workflows/release.yml` validates the exact tag's checked-in version
 against every package manifest, Tauri config, Cargo manifest and Cargo lock.
 A mismatch fails setup before any platform jobs run. Builds all check out the
-same resolved commit:
+same resolved commit.
+
+Release Actions are pinned to commit SHAs, with their upstream tag noted beside
+each pin. Update those pins deliberately when upgrading build tooling.
 
 | Platform | Runner / target | Installer |
 | --- | --- | --- |
