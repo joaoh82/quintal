@@ -29,8 +29,12 @@ writeFileSync('stage/signing.txt', `${signing}\n`);
 if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `## ${platform}\n**${signing}**\n`);
 // On Windows, pnpm is a .cmd shim. All interpolated arguments below are fixed
 // workflow matrix values, never tag or dispatch input.
+// A failed AppImage bundle reports `failed to run linuxdeploy` and nothing
+// else: Tauri keeps the tool's own stderr unless the CLI is verbose. Opt in
+// per job rather than always, so release logs stay readable.
+const verbose = env.QUINTAL_TAURI_VERBOSE === '1' ? ['--verbose'] : [];
 execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
-  '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', '--ci', '--target', target,
+  '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
   '--bundles', bundles, '--config', 'src-tauri/tauri.bundle.conf.json',
   '--config', 'src-tauri/tauri.release.conf.json', '--', '--locked',
 ], { env, stdio: 'inherit', shell: process.platform === 'win32' });
