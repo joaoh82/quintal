@@ -33,11 +33,31 @@ if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `## ${platf
 // else: Tauri keeps the tool's own stderr unless the CLI is verbose. Opt in
 // per job rather than always, so release logs stay readable.
 const verbose = env.QUINTAL_TAURI_VERBOSE === '1' ? ['--verbose'] : [];
-execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
-  '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
-  '--bundles', bundles, '--config', 'src-tauri/tauri.bundle.conf.json',
-  '--config', 'src-tauri/tauri.release.conf.json', '--', '--locked',
-], { env, stdio: 'inherit', shell: process.platform === 'win32' });
+
+// `sidecar` decides whether externalBin is applied to this bundle.
+function build(bundleArg, sidecar) {
+  execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
+    '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
+    '--bundles', bundleArg,
+    ...(sidecar ? ['--config', 'src-tauri/tauri.bundle.conf.json'] : []),
+    '--config', 'src-tauri/tauri.release.conf.json', '--', '--locked',
+  ], { env, stdio: 'inherit', shell: process.platform === 'win32' });
+}
+
+// linuxdeploy resolves dependencies for every ELF it finds in the AppDir. On
+// the Bun-compiled harness its `ldd` call exits 1, which linuxdeploy raises as
+// an uncaught std::runtime_error — it aborts, and the bundle dies reporting
+// only `failed to run linuxdeploy`. So the AppImage is bundled *without*
+// externalBin and fix-appimage.sh installs the harness into usr/bin during the
+// repack it already performs. Nothing else needs this: the deb bundler does not
+// use linuxdeploy and keeps the sidecar the ordinary way.
+//
+// The AppImage goes first so the deb left in `bundle/deb` at the end is always
+// the sidecar-carrying one, whatever Tauri does with its intermediate copy.
+const requested = bundles.split(',');
+const withoutAppimage = requested.filter((name) => name !== 'appimage');
+if (requested.includes('appimage')) build('appimage', false);
+if (withoutAppimage.length) build(withoutAppimage.join(','), true);
 
 if (process.platform === 'darwin') {
   // A DMG-only build removes its intermediate .app. Verify the actual download.
