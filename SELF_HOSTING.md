@@ -1,17 +1,64 @@
 # Self-hosting Quintal
 
-> **Stub.** Quintal isn't ready to host for real yet — there's no office to walk
-> around in. This file exists so the shape is clear, and will grow as the pieces
-> land. Containers arrive in a later step; today you run it with Node.
-
 Quintal is deliberately boring to operate: **one Node process, one port, one
-SQLite file.** No Redis, no queue, no separate web tier.
+SQLite file.** No Redis, no queue, no separate web tier. The Docker image is
+that process in a container, with the SQLite file and the avatar store on one
+named volume.
+
+## Docker
+
+The office is one container and one volume. With only Docker installed:
+
+```bash
+curl -O https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
+docker compose up
+```
+
+Or from a checkout, a prod-like local run (`just up` wraps this; `just dev`
+keeps HMR):
+
+```bash
+docker compose up --build
+```
+
+The office is at <http://localhost:3000>. Point the desktop app at that origin.
+Data lives in the `quintal-data` volume — the SQLite file, uploaded avatars,
+and the generated auth secret. Restarts keep it.
+
+**Sign-in origin.** `BETTER_AUTH_URL` must be the origin people actually type.
+Compose defaults it to `http://localhost:${QUINTAL_PORT:-3000}`. If you publish
+the office at a real hostname, set `BETTER_AUTH_URL=https://office.example.com`
+in `.env` or the environment — a moved host port with an unchanged origin
+refuses every sign-in. See [Sign-in](#sign-in).
+
+**A different port.** `QUINTAL_PORT=8080 docker compose up` maps 8080 on the
+host to 3000 in the container and updates the origin to match. Keep 3000 unless
+you have to move it: the desktop app's server picker and every doc assume
+`http://localhost:3000`.
+
+**Backups.** The volume is the whole instance:
+
+```bash
+docker compose cp quintal:/data ./backup
+# or, with the named volume directly:
+docker run --rm -v quintal-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/quintal-data.tgz /data
+```
+
+**Reverse proxy.** The container listens on 3000 inside the compose network;
+the [nginx block](#behind-a-reverse-proxy) is unchanged. TLS on a public
+hostname is a reverse-proxy concern, not something the image does.
+
+**Agents stay on the machine.** The harness runs next to the repos — in the
+desktop app — never in this image.
 
 ## Requirements
 
 - Node 20.11+
 - pnpm 11+
 - A writable directory for the database
+
+Skip these if you are using [Docker](#docker).
 
 ## Running it
 
@@ -259,6 +306,5 @@ Migrations apply themselves on the next boot.
 
 ## Still to come
 
-- Docker image and compose file
 - Proximity voice between people (the relay runs inside the one process)
 - Agent gateway setup (connecting your fleet)

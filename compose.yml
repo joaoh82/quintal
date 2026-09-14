@@ -1,0 +1,38 @@
+# Quintal — one process, one volume, one port.
+#
+# From a checkout (prod-like local run; `just dev` keeps HMR):
+#   docker compose up --build
+#
+# With only Docker installed, once an image is published:
+#   curl -O https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
+#   docker compose up
+#
+# The office is at http://localhost:3000. Point the desktop app at that origin.
+# Compose 2.24+ (the optional .env form). Docker Desktop from 2024 includes it.
+
+services:
+  quintal:
+    image: ghcr.io/joaoh82/quintal:${QUINTAL_VERSION:-latest}
+    build: .
+    ports:
+      - "${QUINTAL_PORT:-3000}:3000"
+    environment:
+      # Sign-in is bound to this origin. A moved host port with an unchanged
+      # origin refuses every sign-in — see SELF_HOSTING.md, "Sign-in".
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:${QUINTAL_PORT:-3000}}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - quintal-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  quintal-data:
+    name: ${QUINTAL_VOLUME:-quintal-data}

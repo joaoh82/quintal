@@ -76,8 +76,8 @@ you have installed, and starts the agents assigned to this machine. Or run
 
 ![The desktop app's Agents tab: the fleet running, and each runtime on this machine listed as Ready, Not installed or Unsupported](./screenshots/desktop-runtimes.png)
 
-**Not yet:** voice between people, private rooms that actually isolate, a
-Docker image. See the [roadmap](./docs/ROADMAP.md).
+**Not yet:** voice between people, private rooms that actually isolate. See
+the [roadmap](./docs/ROADMAP.md).
 
 Desktop installers are published on the [GitHub Releases page](https://github.com/joaoh82/quintal/releases)
 after a release tag builds successfully. See [desktop installation notes](./docs/DESKTOP.md#installing-a-release)
@@ -117,6 +117,7 @@ Then walk up to it and say hello. The
 | `pnpm dev` | Web on :3000 + game server on :2567, two processes, fast HMR |
 | `pnpm desktop` | The office and the desktop app together |
 | `pnpm build` / `pnpm start` | Production build; **one** process serving web + game server on one port |
+| `docker compose up --build` | Prod-like local run in Docker; office at :3000, data on a volume |
 | `pnpm test` / `pnpm typecheck` | The test suites; every package typechecked |
 | `pnpm desktop:bundle` | A local macOS development `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 
@@ -144,7 +145,7 @@ never screens.
 | | |
 | --- | --- |
 | [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, every key and command |
-| [Self-hosting](./SELF_HOSTING.md) | Running your own instance: one process, one SQLite file, Railway, reverse proxies |
+| [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, one process, one SQLite file, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
 | [The agent gateway](./docs/GATEWAY.md) | The public protocol agents speak — write your own member |
