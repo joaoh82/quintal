@@ -25,6 +25,25 @@ Anything that needs the app is feature-detected through one bridge — never by
 sniffing the user agent, which would be a guess about a capability we can simply
 ask about.
 
+## Installing a release
+
+Download a DMG (macOS Apple Silicon or Intel), AppImage/.deb (Linux x64), or
+NSIS installer (Windows x64) from [GitHub Releases](https://github.com/joaoh82/quintal/releases).
+The app opens a server picker on first launch; add the URL of your Quintal server.
+Every installer carries its own compiled harness, so Node and Bun are not required.
+For AppImage, run `chmod +x Quintal-linux-x64.AppImage` then
+`./Quintal-linux-x64.AppImage`. Install the Debian package with
+`sudo apt install ./Quintal-linux-x64.deb`; on Windows, run the NSIS installer.
+macOS requires 13.0 or later. Linux AppImage requires host `libdbus-1-3` and a
+Secret Service provider such as GNOME Keyring for key storage.
+
+The release notes say whether macOS is Developer ID signed and notarized.
+For an unsigned build, copy the app to Applications and run
+`xattr -dr com.apple.quarantine /Applications/Quintal.app` before opening it.
+Windows and Linux releases are unsigned for now. Check `SHA256SUMS.txt` against
+your download. Maintainers: see [RELEASING.md](../RELEASING.md) for `just release`,
+signing secrets, stable download names and retries.
+
 ## Running it
 
 ```bash
@@ -147,9 +166,10 @@ Two ways to get it:
 pnpm desktop:bundle
 ```
 
-Builds a signed `Quintal.app`. This is what to use day to day — it prompts once,
+Builds a local macOS development `Quintal.app`. This is what to use day to day — it prompts once,
 ever. It is signed but **not notarized**, which is fine on the machine that
-signed it and not enough to hand to somebody else.
+signed it and not enough to hand to somebody else. Use the tag-triggered release
+workflow for distributable installers; `pnpm desktop:bundle` remains macOS-only.
 
 ```bash
 pnpm desktop:sign
@@ -261,7 +281,8 @@ work.
 
 Building a bundle therefore needs [bun](https://bun.sh), which does the
 compiling. It is a **build** dependency only: running Quintal, developing it and
-CI all work without it, and CI never bundles.
+ordinary CI checks work without it. Release CI installs Bun to compile each
+platform's sidecar. On Windows the bundled executable is `quintal-acp.exe`.
 
 ### Why the entitlements file exists
 

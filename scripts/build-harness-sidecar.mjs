@@ -15,8 +15,8 @@
  *
  * Uses `bun build --compile`, which embeds a runtime, so the result needs
  * nothing installed. That makes bun a *build* dependency for producing a
- * bundle; it is not needed to run the app, to develop against it, or in CI,
- * which never bundles.
+ * bundle; it is not needed to run the app, to develop against it, or in CI
+ * checks that do not bundle.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
@@ -53,24 +53,47 @@ try {
 } catch {
   console.error(
     'bun is needed to compile the harness into the bundle: https://bun.sh\n' +
-      'It is a build dependency only — running Quintal, developing it, and CI do not need it.',
+      'It is a build dependency only — running Quintal, developing it, and non-bundling CI do not need it.',
   );
   process.exit(1);
 }
 
-const triple = targetTriple();
-const outFile = join(outDir, `quintal-acp-${triple}`);
+const host = targetTriple();
+const triple = process.argv[2] ?? host;
+const targets = {
+  'aarch64-apple-darwin': 'bun-darwin-arm64',
+  'x86_64-apple-darwin': 'bun-darwin-x64-baseline',
+  'x86_64-unknown-linux-gnu': 'bun-linux-x64-baseline',
+  'x86_64-pc-windows-msvc': 'bun-windows-x64-baseline',
+};
+if (!targets[triple]) throw new Error(`Unsupported sidecar target: ${triple}`);
+// The sole cross-build is Intel macOS on Apple Silicon; Rosetta runs its proof.
+if (triple !== host && !(host === 'aarch64-apple-darwin' && triple === 'x86_64-apple-darwin')) {
+  throw new Error(`Cannot execute the ${triple} sidecar proof on ${host}`);
+}
+const outFile = join(outDir, `quintal-acp-${triple}${triple.includes('windows') ? '.exe' : ''}`);
 mkdirSync(outDir, { recursive: true });
 
 console.log(`Compiling the harness for ${triple}`);
-run('bun', ['build', '--compile', '--minify', '--target=bun', entry, '--outfile', outFile], {
+run('bun', ['build', '--compile', '--minify', `--target=${targets[triple]}`, entry, '--outfile', outFile], {
   stdio: 'inherit',
 });
 
-// Prove it starts with nothing on PATH. The whole point is a binary that needs
-// no runtime installed, and that is exactly the assumption a bundle breaks.
+// Prove it starts with only OS directories on PATH, without Node or Bun.
+// Windows environment names are case-insensitive: remove any inherited Path
+// spelling before setting PATH so Node cannot pass the original search path.
+const proofEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PATH'),
+);
+if (process.platform === 'win32') {
+  const systemRoot = process.env.SystemRoot;
+  if (!systemRoot) throw new Error('SystemRoot is required for the Windows sidecar proof');
+  proofEnv.PATH = `${join(systemRoot, 'System32')};${systemRoot}`;
+} else {
+  proofEnv.PATH = '/usr/bin:/bin';
+}
 const proof = run(outFile, ['--help'], {
-  env: { PATH: '/usr/bin:/bin', HOME: process.env.HOME ?? '' },
+  env: proofEnv,
 });
 if (!proof.includes('quintal-acp')) {
   console.error('The compiled harness did not answer --help. Not shipping it.');
