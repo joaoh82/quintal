@@ -12,6 +12,8 @@ install:
 # Run web (:3000) and game server (:2567) as separate processes, with HMR.
 # Sweeps up a previous run first: leftover file watchers are what turns a
 # healthy dev server into one that 404s every route (see `stop`).
+#
+# For a prod-like local run (one process, persistent volume), `just up`.
 dev: stop
     pnpm dev
 
@@ -87,6 +89,18 @@ build:
 # Run the production build: one process, web + game server, one port.
 start:
     pnpm start
+
+# Prod-like local run: one container, persistent volume, office at :3000.
+# `just dev` keeps HMR; this is what a self-hoster ships. `pnpm desktop:attach`
+# already points the app at localhost:3000, so it works against the container.
+up:
+    docker compose up --build -d
+
+down:
+    docker compose down
+
+logs:
+    docker compose logs -f --tail=200
 
 # Typecheck every package.
 typecheck:

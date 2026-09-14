@@ -51,7 +51,9 @@ cp .env.example .env
 pnpm dev
 ```
 
-Web on <http://localhost:3000>, game server on :2567. Sign in by creating an
+Web on <http://localhost:3000>, game server on :2567. For a prod-like local
+run (one process, persistent volume, no Node on the host), `just up` or
+`docker compose up --build`. Sign in by creating an
 identity on the login page — it is a keypair the browser generates, so there is
 nothing to configure first. `pnpm db:seed` mints one for you and prints the
 `nsec` once if you'd rather start from a seeded workspace.

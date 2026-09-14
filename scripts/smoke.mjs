@@ -12,9 +12,19 @@
  * during render answers 500, and that is the whole test.
  *
  *   node scripts/smoke.mjs [baseUrl]
+ *   node scripts/smoke.mjs [baseUrl] --save-identity /tmp/identity.json
+ *   node scripts/smoke.mjs [baseUrl] --identity /tmp/identity.json
  *
- * Needs a server already running (`pnpm start` or `pnpm dev`).
+ * `--save-identity` writes the session cookie after sign-in. `--identity`
+ * reuses that cookie instead of minting a new key — the compose smoke uses
+ * this after `docker compose restart` to prove the auth secret and the
+ * database both live on the volume. A rotated secret invalidates the cookie
+ * and this path fails.
+ *
+ * Needs a server already running (`pnpm start`, `pnpm dev`, or compose).
  */
+import { readFileSync, writeFileSync } from 'node:fs';
+
 import {
   buildAuthPayload,
   generateSecretKey,
@@ -22,7 +32,28 @@ import {
   signAuthPayload,
 } from '@quintal/shared';
 
-const base = (process.argv[2] ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
+function parseArgs(argv) {
+  let base = 'http://127.0.0.1:3000';
+  let saveIdentity = null;
+  let identity = null;
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--save-identity') {
+      saveIdentity = argv[++i];
+      if (!saveIdentity) throw new Error('--save-identity needs a path');
+    } else if (arg === '--identity') {
+      identity = argv[++i];
+      if (!identity) throw new Error('--identity needs a path');
+    } else if (arg.startsWith('http://') || arg.startsWith('https://')) {
+      base = arg;
+    } else {
+      throw new Error(`unknown argument: ${arg}`);
+    }
+  }
+  return { base: base.replace(/\/$/, ''), saveIdentity, identity };
+}
+
+const { base, saveIdentity, identity } = parseArgs(process.argv);
 
 const failures = [];
 function check(ok, label, detail = '') {
@@ -170,8 +201,19 @@ await page('/login', null);
 await page(`/join/v2.${'A'.repeat(43)}`, null, '/join/[token] (unknown token)');
 
 console.log('\nsigned in');
-const cookie = await signIn();
-check(true, 'keypair sign-in');
+let cookie;
+if (identity) {
+  const saved = JSON.parse(readFileSync(identity, 'utf8'));
+  cookie = saved.cookie;
+  if (!cookie) throw new Error(`${identity} has no cookie`);
+  check(true, 'keypair sign-in (restored session)');
+} else {
+  cookie = await signIn();
+  check(true, 'keypair sign-in');
+  if (saveIdentity) {
+    writeFileSync(saveIdentity, JSON.stringify({ cookie }, null, 2));
+  }
+}
 await redirects('/', cookie, '/office');
 // The game itself mounts in the browser, so the server's HTML carries the
 // office's header and not the canvas; the header is what says it is the office.

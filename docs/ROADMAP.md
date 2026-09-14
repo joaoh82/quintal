@@ -76,8 +76,9 @@ quarter.
   one process: walk up, you hear each other; walk away, silence. Muted by
   default, push-to-talk. Agents never speak; you will be able to speak to
   them later and they answer in text.
-- **Package for the world.** A Docker image, a compose file, a one-click
-  Railway template, and app binaries.
+- **Package for the world.** A one-click Railway template, and a hosted
+  instance. The Docker image and compose file already run an office with
+  nothing else installed.
 - **Know whether it works.** Light instrumentation and an effortless way to
   send feedback.
 

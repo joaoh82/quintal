@@ -15,12 +15,14 @@ runs `cargo update -w` to update the Cargo lock. Cargo failure restores the file
 It creates a DCO-signed-off `release: v0.1.0` commit and annotated `v0.1.0` tag,
 then pushes both atomically. Git credentials must permit updating `main` and tags.
 Versions must differ from the current version to produce a release commit.
+The same `v*` tag publishes the office image via `.github/workflows/docker.yml`
+(`:{version}`, `:{major}.{minor}`, `:latest` for stable tags), so the image
+and the app agree.
 
 `node scripts/set-version.mjs 0.1.0` performs only the manifest update, useful on
 a feature branch for a prerelease rehearsal. All packages share one version,
 including the server version reported by `/health`. The `v` prefix belongs to
-tags only. Docker publishing is a separate workflow/task; this release ships the
-desktop client. Review any dependency changes caused by Cargo before retrying a
+tags only. Review any dependency changes caused by Cargo before retrying a
 failed release operation.
 
 If the atomic push fails, neither remote ref was updated. The local release
@@ -32,7 +34,9 @@ can push; it does not bypass repository rules.
 
 ## What the tag builds
 
-`.github/workflows/release.yml` validates the exact tag's checked-in version
+`.github/workflows/docker.yml` publishes `ghcr.io/joaoh82/quintal` for the same
+tag (`:0.1.0`, `:0.1`, `:latest` for a stable release; `:main` and `:sha-<7>`
+on every push to main). `.github/workflows/release.yml` validates the exact tag's checked-in version
 against every package manifest, Tauri config, Cargo manifest and Cargo lock.
 A mismatch fails setup before any platform jobs run. Builds all check out the
 same resolved commit.
