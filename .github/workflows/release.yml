@@ -83,7 +83,19 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # Every x64 target compiles against Bun's baseline build. When the host's
+      # own Bun is a different build, `bun build --compile` fetches the baseline
+      # runtime and unpacks it — and on Windows that extraction fails outright
+      # ("Failed to extract executable"), reproducibly. Installing the baseline
+      # build as the host Bun means the target it is asked for is the one it is
+      # already running, so there is nothing to fetch. macOS and Linux unpack
+      # theirs without complaint, so they resolve the version the usual way.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: runner.os == 'Windows'
+        with:
+          bun-download-url: https://github.com/oven-sh/bun/releases/download/bun-v1.3.13/bun-windows-x64-baseline.zip
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: runner.os != 'Windows'
         with:
           bun-version: '1.3.13'
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
@@ -119,13 +131,13 @@ jobs:
           APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         run: node scripts/build-desktop-release.mjs '${{ matrix.target }}' '${{ matrix.bundles }}' '${{ matrix.platform }}'
-      - name: Keep AppImage libdbus on the host
+      - name: Keep AppImage libdbus on the host and install the harness
         if: runner.os == 'Linux'
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c
           chmod +x "$RUNNER_TEMP/appimagetool"
-          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool"
+          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu
       - name: Stage installers from the shared asset contract
         run: node scripts/release-assets.mjs stage '${{ matrix.platform }}' 'apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle' stage
       - name: AppImage first-launch smoke

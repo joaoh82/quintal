@@ -31,10 +31,17 @@ export QUINTAL_SECRETS_BACKEND=file QUINTAL_NO_LOGIN_PATH=1
 export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
 "$appimage" --appimage-extract-and-run > "$evidence/app.log" 2>&1 &
 app_pid=$!
+# Tesseract wants dark text on a light ground. The picker is the other way
+# round — near-white on near-black — and reading it directly returns noise: the
+# first run of this check rendered a perfect window and OCR'd its title as
+# "DOT". Invert and upscale a copy to read, and keep the untouched screenshot as
+# the evidence a human looks at.
+magick=$(command -v magick || command -v convert)
 for _ in $(seq 1 45); do
   kill -0 "$app_pid"
   import -window root "$evidence/server-picker.png"
-  tesseract "$evidence/server-picker.png" "$evidence/server-picker" 2>/dev/null
+  "$magick" "$evidence/server-picker.png" -colorspace Gray -negate -resize 200% "$scratch/ocr.png"
+  tesseract "$scratch/ocr.png" "$evidence/server-picker" 2>/dev/null
   if grep -qi 'Which server' "$evidence/server-picker.txt"; then
     echo 'PASS: packaged AppImage rendered Which server?; bundled sidecar answered --help'
     exit 0

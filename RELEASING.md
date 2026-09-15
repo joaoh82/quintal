@@ -56,10 +56,22 @@ an explicit Bun target and Rosetta to run its `--help` proof on Apple Silicon.
 All Intel/x64 builds use Bun's baseline target, including under Rosetta. The app needs no installed
 Node or Bun. macOS requires 13.0 or later because of the embedded Bun runtime.
 
+Compiling for a target Bun is not itself running makes it fetch that runtime and
+unpack it, and on Windows the unpacking fails outright. So the Windows job
+installs the baseline build *as* its Bun, through `bun-download-url`, and asks it
+for the target it is already running. Keep that URL's version in step with
+`bun-version` on the other platforms.
+
 The build applies `tauri.bundle.conf.json` for the sidecar and
 `tauri.release.conf.json` for release settings, on top of the base Tauri config.
 Keep the latter a delta: never duplicate `bundle.externalBin` there, because
-JSON merge-patch replaces arrays. Keep `entitlements.plist`: native Tauri signing
+JSON merge-patch replaces arrays. The AppImage is the exception: it is bundled
+*without* `tauri.bundle.conf.json`, so linuxdeploy never sees the harness. Given
+one, it runs `ldd` over it, and the non-zero exit reaches linuxdeploy as an
+uncaught exception that aborts the whole bundle. `fix-appimage.sh` installs the
+harness during its repack instead, and the first-launch smoke proves it is there.
+The AppImage is built before the deb so the deb left behind is always the one
+carrying its sidecar the ordinary way. Keep `entitlements.plist`: native Tauri signing
 must apply its JIT entitlements to the Bun sidecar. Each macOS job mounts the
 finished DMG, verifies its app signature and sidecar JIT entitlement, runs the
 packaged sidecar, and checks the stapled ticket when notarization is enabled.
@@ -104,7 +116,8 @@ xattr -dr com.apple.quarantine /Applications/Quintal.app
 
 The Linux AppImage requires **host libdbus** (`libdbus-1-3` on Debian/Ubuntu);
 the release removes its bundled copy and repacks with a checksum-pinned
-appimagetool, preserving the original AppImage runtime. The keyring backend also needs a Secret Service
+appimagetool, preserving the original AppImage runtime and installing the
+harness into `usr/bin`. The keyring backend also needs a Secret Service
 provider, such as GNOME Keyring. A .deb installation resolves its declared system
 dependencies through apt. Linux portability beyond the release runner still
 needs testing on the distributions you intend to support.
