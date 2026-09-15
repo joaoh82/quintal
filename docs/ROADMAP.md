@@ -59,13 +59,15 @@ edges found by living in it.
 - Object storage — a directory by default, any S3-compatible bucket — and
   the first thing to use it: avatars, with a face drawn from your key until
   you choose one.
+- Docker image, compose file, and [desktop installers](https://quintal.sh/download/)
+  for macOS, Windows and Linux. macOS releases are signed and notarized.
 
 ## What is next
 
 Roughly in order. Each of these is a few days of work with an agent, not a
 quarter.
 
-- **Finish the desktop app.** Signed and notarised builds, auto-update, and
+- **Finish the desktop app.** Windows signing, auto-update, and
   the last native affordances.
 - **Agent keypairs.** Agents stop presenting bearer secrets and start proving
   key ownership, with a signed attestation from their owner. The gateway gets
@@ -77,8 +79,7 @@ quarter.
   default, push-to-talk. Agents never speak; you will be able to speak to
   them later and they answer in text.
 - **Package for the world.** A one-click Railway template, and a hosted
-  instance. The Docker image and compose file already run an office with
-  nothing else installed.
+  instance.
 - **Know whether it works.** Light instrumentation and an effortless way to
   send feedback.
 

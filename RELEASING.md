@@ -188,3 +188,18 @@ prompt; it does not verify a user's desktop Secret Service. Credential-backed
 notarization, real downloaded-file quarantine behavior, all clean-VM installs,
 and website stable links need their respective environments. Keep any missing
 verification explicit in the PR.
+
+## Public download links
+
+The website’s [/download](https://quintal.sh/download/) page imports
+`scripts/release-assets.json` and links to stable filenames under
+`releases/latest/download/`. When changing that contract, update the page’s
+explicit installer selections too. CI runs `node scripts/check-release-links.mjs`
+to catch unknown links in the website, README and docs, and installers missing
+from the download page.
+
+After publishing the first release, and whenever download routing changes, run
+**Check published downloads** from GitHub Actions (`check-downloads.yml`). It
+follows every installer URL with `curl -fsSLI`, requires a 302 redirect and a
+final 200 response, and prints the response headers as evidence. It checks the
+current latest release without downloading or executing installers.

@@ -27,26 +27,50 @@ ask about.
 
 ## Installing a release
 
-Download a DMG (macOS Apple Silicon or Intel), AppImage/.deb (Linux x64), or
-NSIS installer (Windows x64) from [GitHub Releases](https://github.com/joaoh82/quintal/releases).
-The app opens a server picker on first launch; add the URL of your Quintal server.
-Every installer carries its own compiled harness, so Node and Bun are not required.
-For AppImage, run `chmod +x Quintal-linux-x64.AppImage` then
-`./Quintal-linux-x64.AppImage`. Install the Debian package with
-`sudo apt install ./Quintal-linux-x64.deb`; on Windows, run the NSIS installer.
-macOS requires 13.0 or later. Linux AppImage requires host `libdbus-1-3` and a
-Secret Service provider such as GNOME Keyring for key storage.
+[Download Quintal](https://quintal.sh/download/) for your operating system.
+First [start a server with Docker](../SELF_HOSTING.md#docker), then launch the app
+and add `http://localhost:3000` in the server picker. If you changed `QUINTAL_PORT`,
+use that port instead. Every installer carries its own compiled harness, so Node
+and Bun are not required.
 
-macOS builds are Developer ID signed and notarized from v0.1.2 on, so they
-open with no extra step. Earlier releases are not: for one of those, copy the
-app to Applications and run
+### macOS
+
+Requires macOS 13.0 or later. Choose Apple Silicon or Intel, open the DMG, and
+drag Quintal into Applications before launching it.
+
+macOS builds are Developer ID signed and notarized from v0.1.2 on. Gatekeeper
+needs no quarantine-removal command for these releases. Earlier releases are
+not notarized: for one of those, copy the app to Applications and run
 `xattr -dr com.apple.quarantine /Applications/Quintal.app` before opening it.
-Each release's notes state which it is. Windows and Linux releases are unsigned
-for now. Check `SHA256SUMS.txt` against your download. Maintainers: see
-[RELEASING.md](../RELEASING.md) for `just release`, signing secrets, stable
-download names and retries.
+Each release's notes state which it is.
 
-## Running it
+### Windows
+
+Run the x64 NSIS installer. Windows builds are unsigned, so SmartScreen may show
+“Windows protected your PC”. Check `SHA256SUMS.txt` from the release against your
+download, then choose **More info → Run anyway** if offered.
+
+### Linux
+
+Choose the x64 AppImage or Debian package. Both need a Secret Service provider
+such as GNOME Keyring for key storage; AppImage also requires host `libdbus-1-3`.
+
+```bash
+chmod +x Quintal-linux-x64.AppImage
+./Quintal-linux-x64.AppImage
+```
+
+Or install the Debian package:
+
+```bash
+sudo apt install ./Quintal-linux-x64.deb
+```
+
+Linux releases are unsigned. Check `SHA256SUMS.txt` against your download.
+Maintainers: see [RELEASING.md](../RELEASING.md) for `just release`, signing
+secrets, stable download names and retries.
+
+## Running from source
 
 ```bash
 pnpm desktop
@@ -72,7 +96,7 @@ Your **identity is one key**, used everywhere. Each server knows you as its
 own user; isolation comes from the server, not from carrying separate keys.
 
 On first launch there is no server, and the app shows a picker rather than
-guessing. Add one by URL — `http://localhost:3000` while developing, or
+guessing. Add one by URL — `http://localhost:3000` for a local Docker office or while developing, or
 wherever yours is deployed. "Add or switch server…" in Settings, and "Switch
 server…" in the menu bar, come back to it later.
 
@@ -124,9 +148,9 @@ The app is a client. It loads an office from a server over HTTP — by default
 show. It will say so and keep looking, then go straight in the moment the server
 appears, so starting the app first is a fine order to do things in.
 
-`pnpm desktop` starts both, which is why it is the command in the README. The
-bundled `Quintal.app` starts only itself, so a server has to be running
-somewhere it can reach — `pnpm dev` locally, or a deployment.
+The installed app starts only itself. Run the server with
+[Docker Compose](../SELF_HOSTING.md#docker), or connect to an existing deployment.
+For source development, `pnpm desktop` starts both the server and app.
 
 Add it in the picker. The app grants IPC to the active server's origin and no
 other, so changing it is a deliberate act rather than something a page can do to

@@ -97,6 +97,9 @@ jobs:
       - name: Check every client boundary made it into the manifest
         run: node scripts/check-client-manifest.mjs
 
+      - name: Check public release links
+        run: node scripts/check-release-links.mjs
+
       - name: Build the marketing website
         run: pnpm --filter @quintal/website build
 

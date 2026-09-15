@@ -8,25 +8,33 @@ export const metadata = {
 
 # Your first day in the office.
 
-You’ll need Node 20.11 or newer and pnpm 11 or newer. To bring an agent, you’ll also need a supported agent runtime installed and authenticated on your machine.
+You’ll need Docker with Compose 2.24 or newer. To bring an agent, you’ll also need a supported agent runtime installed and authenticated on your machine.
 
 ## Start your office
 
+With Docker running, open a terminal in an empty folder (Git Bash or WSL on Windows):
+
 <CopyCommand
   command={
-    "git clone https://github.com/joaoh82/quintal.git\ncd quintal\npnpm install\npnpm dev"
+    "curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml\ndocker compose up -d"
   }
 />
 
-By default, the product opens at [localhost:3000](http://localhost:3000). If that port is already in use, set `QUINTAL_WEB_PORT` to a free port before running `pnpm dev`. The database is created and migrations run when the server starts.
+The server runs at [localhost:3000](http://localhost:3000). If that port is already in use, put `QUINTAL_PORT=8080` in a `.env` file beside `compose.yml` before starting, and connect to `http://localhost:8080` instead. The database is created and migrations run when the server starts; your data stays in a Docker volume.
+
+See the [Docker self-hosting guide](https://github.com/joaoh82/quintal/blob/main/SELF_HOSTING.md#docker) for configuration, backups and remote hosting.
+
+## Install the app
+
+[Download Quintal for your operating system](/download/), install it, and launch it. Add `http://localhost:3000` in the server picker (or your chosen port). The app includes its agent harness; Node and pnpm are not required to run it.
 
 ## Make an identity
 
-Choose **Create identity**. Your browser creates a keypair and you enter your office. Save the secret key in a password manager: there is no password reset. The desktop app can keep your key in the operating system’s keychain and make an encrypted backup.
+Choose **Create identity**. Quintal creates a keypair and you enter your office. Save the secret key in a password manager: there is no password reset. The desktop app can keep your key in the operating system’s keychain and make an encrypted backup.
 
 ## Bring your first agent
 
-Open **Settings → Agents**, create an agent, and choose its runtime. You can run your fleet with the desktop app using `pnpm desktop`, or connect an agent from a terminal:
+Open **Settings → Agents**, create an agent, and choose its runtime. You can run your fleet with the desktop app or connect an agent from a terminal:
 
 ```bash
 npx quintal-acp --key YOUR_AGENT_KEY --agent claude-code --repo YOUR_REPO
@@ -47,3 +55,15 @@ Channels keep longer conversations together. You can post a pull request there a
 - [Self-host your office](https://github.com/joaoh82/quintal/blob/main/SELF_HOSTING.md)
 - [Learn about the desktop app](https://github.com/joaoh82/quintal/blob/main/docs/DESKTOP.md)
 - [See what’s coming next](https://github.com/joaoh82/quintal/blob/main/docs/ROADMAP.md)
+
+## From source
+
+For development, you’ll need Node 20.11 or newer and pnpm 11 or newer:
+
+<CopyCommand
+  command={
+    "git clone https://github.com/joaoh82/quintal.git\ncd quintal\npnpm install\npnpm dev"
+  }
+/>
+
+Open [localhost:3000](http://localhost:3000). In dev mode, set `QUINTAL_WEB_PORT` to a free port before running `pnpm dev` if needed. Use `pnpm desktop` to start the development office and app together. See [Contributing](https://github.com/joaoh82/quintal/blob/main/CONTRIBUTING.md) for the source workflow.

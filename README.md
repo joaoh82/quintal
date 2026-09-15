@@ -1,5 +1,7 @@
 <img src="./apps/website/public/brand/quintal-logo-horizontal.png" alt="Quintal: the pixel-shaped q icon alongside the quintal wordmark" width="360" height="120" />
 
+[Download Quintal](https://quintal.sh/download/) · [Getting started](https://quintal.sh/docs/getting-started/)
+
 # Quintal
 
 **A spatial office where your AI agents are visible teammates.**
@@ -79,13 +81,50 @@ you have installed, and starts the agents assigned to this machine. Or run
 **Not yet:** voice between people, private rooms that actually isolate. See
 the [roadmap](./docs/ROADMAP.md).
 
-Desktop installers are published on the [GitHub Releases page](https://github.com/joaoh82/quintal/releases)
-after a release tag builds successfully. See [desktop installation notes](./docs/DESKTOP.md#installing-a-release)
-for platform requirements and unsigned builds.
+[Download the desktop app](https://quintal.sh/download/) for macOS, Windows or Linux.
+The server image is available at `ghcr.io/joaoh82/quintal`; the
+[compose file](./compose.yml) runs it with Docker alone. See the
+[installation notes](./docs/DESKTOP.md#installing-a-release) for platform requirements.
 
 ## Try it in five minutes
 
-Requires Node 20.11+ and [pnpm](https://pnpm.io) 11+.
+1. **Start the server.** Install Docker with Compose 2.24 or newer, start Docker,
+   and run these commands in an empty folder (Git Bash or WSL on Windows):
+
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
+   docker compose up -d
+   ```
+
+   If port 3000 is taken, put `QUINTAL_PORT=8080` in a `.env` file beside
+   `compose.yml` before starting, and use that port in the app. Data lives in a
+   Docker volume; migrations run on boot. See [Self-hosting](./SELF_HOSTING.md#docker)
+   for configuration and backups.
+
+2. **[Download and install Quintal](https://quintal.sh/download/).** Launch the app
+   and add `http://localhost:3000` in the server picker (or your chosen port).
+   The app includes its harness; no Node or pnpm needed.
+
+   ![Quintal’s first-launch server picker, where you add your office URL](./screenshots/release-smoke/macos-arm64-server-picker.png)
+
+3. **Create your identity.** Choose **Create identity**, save your secret key in a
+   password manager — there is no reset — and enter your office. The app can
+   keep the key in your operating system’s keychain and make an encrypted backup.
+
+To put an agent in the room, install and authenticate a supported agent runtime,
+open **Settings → Agents**, create one, and run it with the desktop app or
+from a terminal:
+
+```bash
+npx quintal-acp --key nsec1… --agent claude-code
+```
+
+Then walk up to it and say hello. The
+[user guide](./docs/guide/README.md) takes it from there.
+
+### From source
+
+For development, install Node 20.11+ and [pnpm](https://pnpm.io) 11+:
 
 ```bash
 git clone https://github.com/joaoh82/quintal.git
@@ -94,23 +133,9 @@ pnpm install
 pnpm dev
 ```
 
-Open <http://localhost:3000> and pick **Create identity**. The browser makes a
-key on the spot — put the secret half in a password manager, there is no
-reset — and you land in your own office. Open a second browser as somebody
-else and you will see each other.
-
-The database is created for you and migrations run on boot. There is no
-setup command to forget.
-
-To put an agent in the room, open **Settings → Agents**, create one, and run
-it with the desktop app (`pnpm desktop`) or from a terminal:
-
-```bash
-npx quintal-acp --key nsec1… --agent claude-code
-```
-
-Then walk up to it and say hello. The
-[user guide](./docs/guide/README.md) takes it from there.
+Open <http://localhost:3000> and choose **Create identity**. Set `QUINTAL_WEB_PORT`
+to a free port before starting if needed. `pnpm desktop` starts the development
+office and app together. See [Contributing](./CONTRIBUTING.md#getting-set-up).
 
 | Command | What it does |
 | --- | --- |
