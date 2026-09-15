@@ -7,7 +7,10 @@ named volume.
 
 ## Docker
 
-The office is one container and one volume. With only Docker installed:
+The office is one container and one volume. Needs **Docker Compose 2.24+**
+(Docker Desktop 4.27, January 2024, or newer). Older Compose stops with
+`services.quintal.env_file.0 must be a string` — check yours with
+`docker compose version` and update Docker Desktop if it is behind.
 
 ```bash
 curl -O https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
@@ -58,7 +61,8 @@ desktop app — never in this image.
 - pnpm 11+
 - A writable directory for the database
 
-Skip these if you are using [Docker](#docker).
+Skip these if you are using [Docker](#docker), which needs Docker Compose 2.24+
+instead.
 
 ## Running it
 
