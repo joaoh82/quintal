@@ -8,7 +8,8 @@
 #   docker compose up
 #
 # The office is at http://localhost:3000. Point the desktop app at that origin.
-# Compose 2.24+ (the optional .env form). Docker Desktop from 2024 includes it.
+# Needs Compose 2.24+ for the optional .env form below (Docker Desktop 4.27,
+# January 2024). Older Compose fails validation before anything starts.
 
 services:
   quintal:
