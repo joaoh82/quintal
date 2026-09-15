@@ -25,6 +25,13 @@ docker compose up --build
 ```
 
 The office is at <http://localhost:3000>. Point the desktop app at that origin.
+
+**From a checkout, mind your `.env`.** Compose forwards it to the container, so
+a development `DATABASE_URL` or `STORAGE_URL` — relative paths, resolved from
+the repo root — would put the database somewhere the volume is not. The
+container refuses to start rather than lose it; drop those keys from `.env` or
+give them absolute paths.
+
 Data lives in the `quintal-data` volume — the SQLite file, uploaded avatars,
 and the generated auth secret. Restarts keep it.
 
