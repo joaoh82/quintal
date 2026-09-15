@@ -37,12 +37,14 @@ For AppImage, run `chmod +x Quintal-linux-x64.AppImage` then
 macOS requires 13.0 or later. Linux AppImage requires host `libdbus-1-3` and a
 Secret Service provider such as GNOME Keyring for key storage.
 
-The release notes say whether macOS is Developer ID signed and notarized.
-For an unsigned build, copy the app to Applications and run
+macOS builds are Developer ID signed and notarized from v0.1.2 on, so they
+open with no extra step. Earlier releases are not: for one of those, copy the
+app to Applications and run
 `xattr -dr com.apple.quarantine /Applications/Quintal.app` before opening it.
-Windows and Linux releases are unsigned for now. Check `SHA256SUMS.txt` against
-your download. Maintainers: see [RELEASING.md](../RELEASING.md) for `just release`,
-signing secrets, stable download names and retries.
+Each release's notes state which it is. Windows and Linux releases are unsigned
+for now. Check `SHA256SUMS.txt` against your download. Maintainers: see
+[RELEASING.md](../RELEASING.md) for `just release`, signing secrets, stable
+download names and retries.
 
 ## Running it
 
