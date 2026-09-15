@@ -45,7 +45,11 @@ git rebase --signoff main
 
 ## Getting set up
 
+Requires Node 20.11+ and pnpm 11+.
+
 ```bash
+git clone https://github.com/joaoh82/quintal.git
+cd quintal
 pnpm install
 cp .env.example .env
 pnpm dev

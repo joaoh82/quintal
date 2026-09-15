@@ -1,0 +1,42 @@
+name: Check published downloads
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  downloads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Check the download page matches the asset contract
+        run: node scripts/check-release-links.mjs
+      - name: Follow every latest installer link to a successful response
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            for (const { name } of JSON.parse(readFileSync("scripts/release-assets.json", "utf8"))) {
+              console.log(`https://github.com/joaoh82/quintal/releases/latest/download/${name}`);
+            }
+          ' > "$RUNNER_TEMP/download-urls.txt"
+          while IFS= read -r url; do
+            echo "Checking $url"
+            result=$(curl -fsSLI --retry 3 --connect-timeout 15 --max-time 120 \
+              --output "$RUNNER_TEMP/download-headers.txt" \
+              --write-out '%{http_code} %{num_redirects}' "$url")
+            cat "$RUNNER_TEMP/download-headers.txt"
+            read -r status redirects <<< "$result"
+            test "$status" = 200
+            test "$redirects" -ge 1
+            grep -Eq '^HTTP/[^ ]+ 302' "$RUNNER_TEMP/download-headers.txt"
+          done < "$RUNNER_TEMP/download-urls.txt"

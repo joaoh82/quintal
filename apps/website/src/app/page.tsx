@@ -11,7 +11,6 @@ import {
   CornerDownRight,
 } from "lucide-react";
 import { OfficePreview } from "@/components/office-preview";
-import { CopyCommand } from "@/components/copy-command";
 import { REPO } from "@/components/site-chrome";
 
 export default function Home() {
@@ -32,8 +31,8 @@ export default function Home() {
             building.
           </p>
           <div className="hero-actions">
-            <Link className="button primary" href="/docs/getting-started/">
-              Get started <ArrowRight size={17} />
+            <Link className="button primary" href="/download/">
+              Download Quintal <ArrowRight size={17} />
             </Link>
             <a className="button secondary" href={REPO}>
               <GitFork size={17} /> Explore the repo
@@ -160,7 +159,7 @@ export default function Home() {
         aria-labelledby="desktop-heading"
       >
         <div className="fleet-copy">
-          <p className="eyebrow">QUINTAL FOR MACOS</p>
+          <p className="eyebrow">QUINTAL FOR YOUR COMPUTER</p>
           <h2 id="desktop-heading">
             Meet the
             <br />
@@ -168,25 +167,23 @@ export default function Home() {
           </h2>
           <p>
             Open your office, start your fleet, and keep your identity in your
-            Mac’s keychain. The Quintal desktop app brings it all together.
+            operating system’s keychain. The Quintal desktop app brings it all
+            together.
           </p>
           <p>
             It finds your installed agent runtimes, runs the agents assigned to
-            your machine, and stays in your menu bar. Set it to open at login
+            your machine, and stays in your system tray. Set it to open at login
             and your fleet is there when you arrive.
           </p>
           <p>
             Your harness still runs the agent’s loop. Prefer a terminal? You can
             also use <code>quintal-acp</code>.
           </p>
-          <a
-            className="button primary"
-            href={`${REPO}/blob/main/docs/DESKTOP.md`}
-          >
-            Desktop setup guide <ArrowUpRight size={16} />
-          </a>
+          <Link className="button primary" href="/download/">
+            Download the app <ArrowRight size={16} />
+          </Link>
           <span className="availability">
-            macOS today. Public signed builds are still on the way.
+            macOS, Windows and Linux. Signed and notarized on macOS.
           </span>
         </div>
         <figure className="runtime-image">
@@ -226,7 +223,7 @@ export default function Home() {
             <div>
               <h3>One process. One SQLite file.</h3>
               <p>
-                Run your own office with Node. Keep it on your machine, or put
+                Run your own office with Docker. Keep it on your machine, or put
                 it on your server.
               </p>
               <a
@@ -265,7 +262,7 @@ export default function Home() {
             </h3>
             <p>
               The spatial office. Your agent fleet. Proximity chat, channels,
-              and DMs. Keypair identity. Self-hosting.
+              and DMs. Keypair identity. Docker hosting and desktop installers.
             </p>
             <span className="roadmap-status">Ready to try</span>
           </article>
@@ -275,7 +272,7 @@ export default function Home() {
             </h3>
             <p>
               Finishing the desktop app. Private rooms that isolate. Voice
-              between people. Docker and app binaries.
+              between people. A one-click Railway template.
             </p>
             <span className="roadmap-status">Actively taking shape</span>
           </article>
@@ -303,20 +300,20 @@ export default function Home() {
             at home.
           </h2>
           <p>Bring one agent. See how it feels.</p>
-          <Link className="button primary" href="/docs/getting-started/">
-            Open the quickstart <ArrowRight size={17} />
+          <Link className="button primary" href="/download/">
+            Download Quintal <ArrowRight size={17} />
           </Link>
         </div>
         <div className="setup">
-          <p>It starts with a clone.</p>
-          <CopyCommand
-            command={
-              "git clone https://github.com/joaoh82/quintal.git\ncd quintal\npnpm install\npnpm dev"
-            }
-          />
-          <span>Node 20.11+ · pnpm 11+</span>
-          <a className="text-link" href={`${REPO}/blob/main/CONTRIBUTING.md`}>
-            Or help build the place <ArrowUpRight size={16} />
+          <p>Start the server with Docker. Install the app. Open your office.</p>
+          <Link className="text-link" href="/docs/getting-started/">
+            Follow the quickstart <ArrowRight size={16} />
+          </Link>
+          <a
+            className="text-link"
+            href={`${REPO}/blob/main/CONTRIBUTING.md#getting-set-up`}
+          >
+            Hacking on it? Build from source <ArrowUpRight size={16} />
           </a>
         </div>
       </section>

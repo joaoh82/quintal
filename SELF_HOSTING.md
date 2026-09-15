@@ -24,7 +24,8 @@ keeps HMR):
 docker compose up --build
 ```
 
-The office is at <http://localhost:3000>. Point the desktop app at that origin.
+The office is at <http://localhost:3000>. [Download the desktop app](https://quintal.sh/download/)
+and add that origin in its server picker. See [installation notes](./docs/DESKTOP.md#installing-a-release).
 
 **From a checkout, mind your `.env`.** Compose forwards it to the container, so
 a development `DATABASE_URL` or `STORAGE_URL` — relative paths, resolved from
@@ -115,8 +116,8 @@ Two consequences worth stating plainly:
 - **A lost key cannot be recovered.** We never had it. Tell your users to put
   their `nsec` in a password manager.
 - **"Save to this browser" is `localStorage`.** It is offered, and clearly
-  labelled as low-security, because the desktop app that will hold keys in the
-  OS keychain doesn't exist yet. A signing extension is better today.
+  labelled as low-security, while the [desktop app](https://quintal.sh/download/) holds keys in the
+  OS keychain. A signing extension is another option.
 
 Guests come in through links you mint at `/settings/guests`: bounded by an
 expiry (72 hours by default) and a use count, redeemable at `/join/<token>`,

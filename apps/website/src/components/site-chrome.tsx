@@ -13,6 +13,7 @@ export function Header() {
         <Link href="/#office">The office</Link>
         <Link href="/#agents">Your agents</Link>
         <Link href="/#desktop">Desktop app</Link>
+        <Link href="/download/">Download</Link>
         <Link href="/docs/">Docs</Link>
         <Link href="/#roadmap">Roadmap</Link>
       </nav>
@@ -27,6 +28,7 @@ export function Header() {
           <Link href="/#office">The office</Link>
           <Link href="/#agents">Your agents</Link>
           <Link href="/#desktop">Desktop app</Link>
+          <Link href="/download/">Download</Link>
           <Link href="/docs/">Docs</Link>
           <Link href="/#roadmap">Roadmap</Link>
         </nav>
@@ -48,6 +50,7 @@ export function Footer() {
         </p>
       </div>
       <nav aria-label="Footer navigation">
+        <Link href="/download/">Download</Link>
         <Link href="/docs/">Documentation</Link>
         <Link href="/#desktop">Desktop app</Link>
         <a href={`${REPO}/blob/main/SELF_HOSTING.md`}>Self-hosting</a>
