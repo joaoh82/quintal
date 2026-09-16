@@ -1,4 +1,17 @@
 /** Public, replayable activity. Never contains ACP thoughts or arbitrary raw payloads. */
+export const ACTIVITY_DETAIL_LEVELS = ['low', 'balanced', 'detailed'] as const;
+export type ActivityDetailLevel = (typeof ACTIVITY_DETAIL_LEVELS)[number];
+export const DEFAULT_ACTIVITY_DETAIL_LEVEL: ActivityDetailLevel = 'balanced';
+
+export function isActivityDetailLevel(value: unknown): value is ActivityDetailLevel {
+  return ACTIVITY_DETAIL_LEVELS.includes(value as ActivityDetailLevel);
+}
+
+/** Stored rows from a newer or malformed client must still have a safe display answer. */
+export function activityDetailLevel(value: unknown): ActivityDetailLevel {
+  return isActivityDetailLevel(value) ? value : DEFAULT_ACTIVITY_DETAIL_LEVEL;
+}
+
 export type ActivityState =
   | 'queued'
   | 'preparing'

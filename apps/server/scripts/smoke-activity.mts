@@ -3,7 +3,7 @@
  * Set QUIN49_HOLD=1 to leave the agents alive for browser/desktop inspection.
  */
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { Client, type Room } from 'colyseus.js';
 import { eq } from 'drizzle-orm';
@@ -26,11 +26,15 @@ import {
 } from '@quintal/shared/db';
 import { createTestUser } from '@quintal/shared/db/testing';
 const base = process.env.QUIN49_URL ?? 'http://127.0.0.1:3049';
-const output = '/tmp/quin49-verification';
+const output = process.env.QUIN49_OUTPUT ?? '/tmp/quin49-verification';
 assert.ok(process.env.DATABASE_URL?.startsWith('file:/tmp/'), 'Use an isolated temporary database');
 const db = getDb();
-const [owner] = await db.select().from(users).limit(1);
+const requestedOwner = process.env.QUIN49_OWNER_ID;
+const [owner] = requestedOwner
+  ? await db.select().from(users).where(eq(users.id, requestedOwner)).limit(1)
+  : await db.select().from(users).limit(1);
 assert.ok(owner, 'Run scripts/smoke.mjs first');
+mkdirSync(output, { recursive: true });
 await db.update(users).set({ name: 'Verification Owner' }).where(eq(users.id, owner.id));
 const [membership] = await db.select().from(memberships).where(eq(memberships.userId, owner.id));
 assert.ok(membership);

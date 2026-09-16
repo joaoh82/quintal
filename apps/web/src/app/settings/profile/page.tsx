@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 import { OverlayKeyField } from './OverlayKeyField';
+import { ActivityDetailField } from './ActivityDetailField';
 import { PushToTalkField } from './PushToTalkField';
 import { ProfileForm } from './ProfileForm';
 import { requestSession } from '@/lib/session';
@@ -26,6 +27,7 @@ export default async function ProfilePage() {
         description: users.description,
         pubkey: users.pubkey,
         image: users.image,
+        activityDetailLevel: users.activityDetailLevel,
       })
       .from(users)
       .where(eq(users.id, session.user.id))
@@ -44,6 +46,10 @@ export default async function ProfilePage() {
         isGuest={session.session.isGuest}
       />
       <OverlayKeyField />
+      <ActivityDetailField
+        userId={session.user.id}
+        initialLevel={row.activityDetailLevel}
+      />
       <section className="space-y-2 rounded-lg border p-4">
         <h2 className="text-sm font-medium">Appearance</h2>
         <p className="text-muted-foreground text-xs">

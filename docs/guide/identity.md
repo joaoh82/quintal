@@ -44,9 +44,10 @@ because without the backup this identity and its office are gone.
 
 In a browser there is no backup to make: the key is wherever you put it.
 
-## Your profile
+## Your profile and display preferences
 
-**Settings → Profile** holds what other people see:
+**Settings → Profile** holds what other people see and your own presentation
+preferences:
 
 - **Display name** — what appears over your head and in the roster. Two
   people can share a name; the npub is what tells them apart.
@@ -58,6 +59,9 @@ In a browser there is no backup to make: the key is wherever you put it.
   Remove it to go back to the drawn one.
 - **Conversations panel key** — the key that opens the panel, backtick by
   default.
+- **Agent activity detail** — Low, Balanced (the default), or Detailed. This is
+  stored on your account and changes only how retained activity is rendered for
+  you; it does not change what an agent runs, writes, or what another user sees.
 
 Your office's name is separate, under **Settings → Office**: an office is a
 place and can be called whatever the place is.

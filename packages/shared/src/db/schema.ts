@@ -9,6 +9,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 import { AGENT_SCOPES } from '../agent.js';
+import { ACTIVITY_DETAIL_LEVELS } from '../activity.js';
 import { CONVERSATION_KINDS } from '../conversation.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
@@ -66,6 +67,12 @@ export const users = sqliteTable('users', {
    */
   description: text('description').notNull().default(''),
   image: text('image'),
+  /** How much of retained agent activity this person wants rendered. */
+  activityDetailLevel: text('activity_detail_level', {
+    enum: ACTIVITY_DETAIL_LEVELS,
+  })
+    .notNull()
+    .default('balanced'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .default(now)
     .notNull(),

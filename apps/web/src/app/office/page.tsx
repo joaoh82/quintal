@@ -1,5 +1,5 @@
 import { displayName } from '@quintal/shared';
-import { getDb } from '@quintal/shared/db';
+import { getDb, getUserActivityDetailLevel } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -20,7 +20,11 @@ export default async function OfficePage() {
 
   // The office this session is in — the one a guest was invited to, or your
   // own — so the name over the room is the room's, not always yours.
-  const here = await currentOffice(getDb(), session);
+  const db = getDb();
+  const [here, activityDetailLevel] = await Promise.all([
+    currentOffice(db, session),
+    getUserActivityDetailLevel(db, session.user.id),
+  ]);
   if (!here) redirect('/login');
   const { workspace } = here;
 
@@ -52,7 +56,10 @@ export default async function OfficePage() {
       </header>
 
       <div className="min-h-0 flex-1">
-        <OfficeCanvas />
+        <OfficeCanvas
+          userId={session.user.id}
+          initialActivityDetailLevel={activityDetailLevel}
+        />
       </div>
 
       <MachineRegistration />

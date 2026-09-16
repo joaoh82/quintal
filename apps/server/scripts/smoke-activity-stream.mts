@@ -1,8 +1,10 @@
 /** Send 20 bounded snapshots to the isolated office seeded by smoke-activity.mts. */
 import { readFileSync } from 'node:fs';
 import { Client } from 'colyseus.js';
-const seed = JSON.parse(readFileSync('/tmp/quin49-verification/seed.json', 'utf8'));
-const room = await new Client('http://127.0.0.1:3049/colyseus').joinOrCreate('office', {
+const output = process.env.QUIN49_OUTPUT ?? '/tmp/quin49-verification';
+const base = process.env.QUIN49_URL ?? 'http://127.0.0.1:3049';
+const seed = JSON.parse(readFileSync(`${output}/seed.json`, 'utf8'));
+const room = await new Client(`${base}/colyseus`).joinOrCreate('office', {
   mapId: 'hq',
   workspaceId: seed.workspaceId,
   agentKey: seed.a.key,
