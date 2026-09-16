@@ -1,5 +1,5 @@
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
-import type { PublicActivity } from '../activity.js';
+import { activityText, parseActivity, type PublicActivity } from '../activity.js';
 import type { Database } from './client.js';
 import { agentActivity, conversations } from './schema.js';
 
@@ -11,7 +11,7 @@ export async function keepActivity(
   position: { x: number; y: number } | null,
 ): Promise<void> {
   const row = {
-    id: `${activity.agentId}:${activity.turnId}`,
+    id: `${workspaceId}:${activity.agentId}:${activity.turnId}`,
     workspaceId,
     conversationId,
     agentId: activity.agentId,
@@ -48,7 +48,7 @@ export async function readActivity(
   },
 ): Promise<PublicActivity[]> {
   const rows = await db
-    .select({ snapshot: agentActivity.snapshot })
+    .select({ activity: agentActivity })
     .from(agentActivity)
     .innerJoin(conversations, eq(agentActivity.conversationId, conversations.id))
     .where(
@@ -67,7 +67,10 @@ export async function readActivity(
     )
     .orderBy(desc(agentActivity.startedAt))
     .limit(50);
-  return rows.reverse().map((row) => JSON.parse(row.snapshot) as PublicActivity);
+  return rows.reverse().flatMap((row) => {
+    const value = decodeActivity(row.activity);
+    return value ? [value] : [];
+  });
 }
 
 export async function findActivity(
@@ -80,7 +83,37 @@ export async function findActivity(
     .select()
     .from(agentActivity)
     .where(
-      and(eq(agentActivity.workspaceId, workspaceId), eq(agentActivity.id, `${agentId}:${turnId}`)),
+      and(
+        eq(agentActivity.workspaceId, workspaceId),
+        eq(agentActivity.id, `${workspaceId}:${agentId}:${turnId}`),
+      ),
     );
-  return row;
+  if (!row) return undefined;
+  const activity = decodeActivity(row);
+  const { snapshot: _snapshot, ...metadata } = row;
+  return activity ? { ...metadata, activity } : undefined;
+}
+
+/** Durable storage is a trust boundary too: reject corrupt rows and strip future fields. */
+function decodeActivity(row: typeof agentActivity.$inferSelect): PublicActivity | null {
+  try {
+    const raw = JSON.parse(row.snapshot) as PublicActivity;
+    if (!raw || typeof raw !== 'object') return null;
+    const { agentId, agentName, receivedAt, nearby: _nearby, ...snapshot } = raw;
+    const value = parseActivity(snapshot);
+    if (
+      !value ||
+      agentId !== row.agentId ||
+      typeof agentName !== 'string' ||
+      !Number.isSafeInteger(receivedAt) ||
+      receivedAt < 0 ||
+      value.sequence !== row.sequence ||
+      value.startedAt !== row.startedAt ||
+      row.id !== `${row.workspaceId}:${agentId}:${value.turnId}`
+    )
+      return null;
+    return { ...value, agentId, agentName: activityText(agentName, 120), receivedAt };
+  } catch {
+    return null;
+  }
 }

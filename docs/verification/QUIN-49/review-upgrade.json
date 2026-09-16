@@ -1,0 +1,10 @@
+{
+  "before": {
+    "rows": 12,
+    "workspacePrefixed": 0
+  },
+  "after": {
+    "rows": 12,
+    "workspacePrefixed": 12
+  }
+}

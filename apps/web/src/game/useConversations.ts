@@ -44,6 +44,8 @@ import {
 export { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey };
 
 export interface Transcript {
+  /** Oldest fetched history boundary; live replay must never move this cursor. */
+  historyBefore?: number;
   messages: ChatBroadcastPayload[];
   /** The office has more before the first line here. */
   hasMore: boolean;
@@ -73,7 +75,7 @@ const READ_REPORT_INTERVAL_MS = 3_000;
  * back — and a message read from history carries a different `from` than
  * the same message heard live, so identity is the words.
  */
-function prepend(
+export function mergeHistoryPage(
   current: Transcript,
   earlier: ChatBroadcastPayload[],
   hasMore: boolean,
@@ -87,6 +89,7 @@ function prepend(
   }
   return {
     messages: [...merged.values()].sort((a, b) => a.sentAt - b.sentAt).slice(-KEEP),
+    historyBefore: earlier[0] ? Math.min(current.historyBefore ?? Infinity, earlier[0].sentAt) : current.historyBefore,
     hasMore, loaded: true, loading: false,
   };
 }
@@ -321,7 +324,7 @@ export function useConversations(
       }),
       gameBridge.on('history', ({ zoneId, channelId, messages, hasMore }) => {
         const key = channelId ? channelKey(channelId) : zoneId ? zoneKey(zoneId) : NEARBY;
-        patch(key, (t) => prepend(t, messages, hasMore));
+        patch(key, (t) => mergeHistoryPage(t, messages, hasMore));
       }),
       gameBridge.on('channels', ({ channels: mine, available: open, teams: named }) => {
         setChannels(mine);
@@ -391,7 +394,7 @@ export function useConversations(
       const current = transcripts[key];
       if (!current || current.loading || !current.hasMore) return;
       const oldest = current.messages[0];
-      if (oldest) load(key, oldest.sentAt);
+      if (oldest) load(key, current.historyBefore ?? oldest.sentAt);
     },
     [load, transcripts],
   );

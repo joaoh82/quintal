@@ -560,13 +560,16 @@ agent/turn and sequence (receive time breaks ties for disconnect revisions).
 Retention is bounded per snapshot: 64 items, 16,000 characters per message,
 240 per tool title, 2,000 per detail, and 64 KB overall. The oldest items are
 dropped at the cap. Inputs are allowlisted, control codes stripped, common
-credential patterns redacted, and rendered as text. Arbitrary raw ACP payloads,
+credential patterns (including GitHub tokens, private keys and URL credentials)
+redacted, and rendered as text. Arbitrary raw ACP payloads,
 reasoning, images and runtime notices are not forwarded. Text results may contain
 file excerpts when supplied by a tool.
 The server keeps at most 32 active turns per socket and 500 cached turns per
 room, with at most 128 pending snapshots per socket. The harness keeps a
 128-turn replay outbox, including replies completed during a disconnect.
-Durable snapshots live in `agent_activity` (migration 0029); history
+Durable snapshots live in `agent_activity` (migration 0029). Migration 0030
+prefixes persisted keys with the workspace ID and preserves existing rows. Reads
+revalidate snapshots and strip unknown fields before replay. History
 pages read up to 50 turns alongside chat; active turns are replayed separately on
 initial history loads even when older than that page. Completed summaries survive reloads.
 

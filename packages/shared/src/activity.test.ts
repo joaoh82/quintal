@@ -56,3 +56,23 @@ test('duplicate/out-of-order snapshots cannot rewind; server disconnect revision
     'disconnected',
   );
 });
+
+test('redacts GitHub credentials, private keys and connection URL passwords in public details', () => {
+  for (const token of ['ghp_example', 'gho_example', 'github_pat_example']) {
+    assert.equal(activityText(`echo ${token}`), 'echo [redacted]');
+  }
+  assert.equal(
+    activityText('postgres://alice:password@db.example/work'),
+    'postgres://[redacted]@db.example/work',
+  );
+  assert.equal(
+    activityText(
+      '-----BEGIN RSA PRIVATE KEY-----\nprivate material\n-----END RSA PRIVATE KEY-----',
+    ),
+    '[redacted private key]',
+  );
+  assert.equal(
+    activityText('-----BEGIN PRIVATE KEY-----\ntruncated material'),
+    '[redacted private key]',
+  );
+});

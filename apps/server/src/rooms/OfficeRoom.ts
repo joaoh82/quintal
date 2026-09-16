@@ -1928,7 +1928,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!previous) {
       const stored = await findActivity(getDb(), this.#workspaceId, session.identity.id, value.turnId);
       if (stored) {
-        previous = { value: JSON.parse(stored.snapshot) as PublicActivity, owner: client.sessionId,
+        previous = { value: stored.activity, owner: client.sessionId,
           conversationId: stored.conversationId, x: stored.x ?? player.x, y: stored.y ?? player.y };
       }
     }

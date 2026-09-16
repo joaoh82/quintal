@@ -59,7 +59,12 @@ export function activityText(value: unknown, limit = 2000): string {
     .replace(/[\x00-\x08\x0b-\x1f\x7f\u202a-\u202e\u2066-\u2069]/g, '')
     .replace(/(--(?:api-key|token|password|secret)\s+)[^\s]+/gi, '$1[redacted]')
     .replace(/(Bearer\s+)[A-Za-z0-9._~-]+/gi, '$1[redacted]')
-    .replace(/\b(?:nsec1|qa_|sk-)[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(
+      /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z]+ )?PRIVATE KEY-----|$)/g,
+      '[redacted private key]',
+    )
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/\b(?:nsec1|qa_|sk-|gh[pousr]_|github_pat_)[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(
       /((?:authorization|api[_-]?key|token|password|secret)\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi,
       '$1[redacted]',

@@ -1,0 +1,95 @@
+{
+  "pass": true,
+  "queueLatencyMs": 133,
+  "receivedSnapshots": 17,
+  "leakedSnapshots": 0,
+  "agentWakeups": 0,
+  "turnId": "d9419d02-b0d8-4ab2-9364-54a9061c2c14",
+  "channel": "Activity mu3upiej",
+  "dbRows": [
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:688ba577b53c4962a06562297e384473:a3266e80-10a6-4c35-9963-a6c1425d21d5",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:c69cae98932d8e1bd17b54d570946051:d9419d02-b0d8-4ab2-9364-54a9061c2c14",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:c69cae98932d8e1bd17b54d570946051:dfd0d862-b395-44bb-bdc4-b2ec2e128700",
+      "sequence": 1,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:d758a219f34a32c7352185aec88b54ce:6a9a58ce-cc64-4611-98ae-4aabee0fb3ff",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:6524a02872dad3b9c9164c3c94e07588:d983ce48-b8c6-4161-9f08-08c8bc44f89c",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:c69cae98932d8e1bd17b54d570946051:b40310e2-022f-49f8-9efb-9d617ea021eb",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:df7091031b8db324df7df7b50c6854c1:b54cd64a-6415-48de-b2d9-abbab20d3622",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:6524a02872dad3b9c9164c3c94e07588:e0b25e56-ebba-4c17-9c67-6a98cedf3389",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:6524a02872dad3b9c9164c3c94e07588:latency-1789537493070",
+      "sequence": 20,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:6524a02872dad3b9c9164c3c94e07588:latency-1789537696501",
+      "sequence": 20,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:3d90431792a8b5e0e5ec3d0d487c8da5:deef55af-1dae-485a-affd-31bafbac40bf",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:35402e87fd2f4ec6e9906c8b5ea14299:172c47a0-bfe1-429b-b44a-9416c5d4efb1",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:df7091031b8db324df7df7b50c6854c1:2a212ff3-589c-4f83-bcaf-e61c5235b2dd",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:df7091031b8db324df7df7b50c6854c1:9c085936-fe94-48f1-9c9d-26b73f1698f8",
+      "sequence": 1,
+      "state": "completed"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:d758a219f34a32c7352185aec88b54ce:331f44e3-af31-4c25-ad2e-2e9de240d3c8",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "4efea2fd-20b9-44ca-87e9-20a508bfaf62:4f059907f11025ba6ac46ca4d8b6ec17:e461bf08-a309-4b9b-91d9-184146b74b5d",
+      "sequence": 2,
+      "state": "cancelled"
+    }
+  ],
+  "restrictedHistory": {
+    "code": "unauthorised",
+    "message": "Not a channel you are in."
+  }
+}

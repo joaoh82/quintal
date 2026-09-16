@@ -116,3 +116,39 @@ pnpm exec tsx apps/server/scripts/smoke-activity-stream.mts
 The protocol smoke writes a mode-0600 seed file with disposable agent keys. The stream
 smoke reuses that seed. Open the newly created Activity channel to inspect streaming.
 Do not use these scripts against real office data.
+
+
+## PR review follow-up
+
+The initial GitHub `build` job failed its migration consistency check because the
+handwritten 0029 migration lacked its Drizzle snapshot. Added the generated 0029
+snapshot. Added data migration 0030 plus its generated snapshot to scope durable
+activity keys by workspace, preserving rows already written by the draft.
+`pnpm db:generate` now reports **No schema changes, nothing to migrate**.
+
+Other review fixes:
+
+- Both history reads and lookup reads validate stored snapshots and strip unknown
+  fields; malformed records are skipped. Lookup no longer returns raw JSON.
+- Redaction covers GitHub token prefixes, PEM private keys (including truncated
+  blocks), and credentials embedded in connection URLs. Result details remain part
+  of the requested UI; pattern redaction cannot recognize every arbitrary secret.
+- A real pagination bug was found around the separately replayed active turn: its
+  older timestamp could become the cursor and skip intervening chat. The client
+  now tracks the oldest *fetched page* independently of live rows. A regression
+  covers replay, paging and subsequent refresh without duplicated or skipped lines.
+- Kept the 100 ms server coalescing interval: the measured 102–111 ms delivery meets
+  the target, while skipping the wait on each singleton could let a rapid sender
+  bypass the fan-out/write bound. Repeated tab refreshes remain permitted for recovery;
+  a dedicated request-deduplication mechanism is not added by this follow-up.
+
+Follow-up checks: **870 tests passed** (shared 389, server 95, web 164, harness 222),
+typecheck, production build, client-manifest check and migration generation passed.
+The upgrade was applied to the previous isolated smoke DB: **12 rows before and
+12 after**, with all 12 keys workspace-prefixed. [Upgrade evidence](review-upgrade.json).
+The protocol smoke passed against the rebuilt server: 17 snapshots, zero leaks,
+zero agent wakeups. [Protocol evidence](review-protocol.json). Local logs use the
+`review-*` prefix under `/tmp/quin49-verification`.
+
+Desktop visual verification and Gemini authentication remain pending. These are
+acceptance gaps on QUIN-49; QUIN-50 is recommended only for broader latency/load work.
