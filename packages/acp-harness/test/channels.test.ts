@@ -209,8 +209,8 @@ describe('an agent in a channel', () => {
 
     // While it worked, it said *where*: the channel shows it thinking there.
     assert.ok(
-      statuses.some(([status, where]) => status === 'thinking' && where === ENGINEERING.id),
-      `thinking was attributed to the channel: ${JSON.stringify(statuses)}`,
+      statuses.some(([status, where]) => status === 'working' && where === ENGINEERING.id),
+      `generic work status was attributed to the channel: ${JSON.stringify(statuses)}`,
     );
     assert.ok(
       statuses.some(([status, where]) => status === '' && where === undefined),

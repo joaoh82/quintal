@@ -228,6 +228,7 @@ export interface AgentZone {
 }
 
 export interface AgentReadyPayload {
+  activityVersion?: 1;
   agentId: string;
   sessionId: string;
   name: string;

@@ -1,0 +1,238 @@
+{
+  "runtime": {
+    "name": "OpenCode",
+    "version": "1.4.3"
+  },
+  "capturedOn": "2026-09-16",
+  "scenario": "ls <workspace>; uname -a; false (separate calls)",
+  "updates": [
+    {
+      "toolCallId": "call_1a633ea88d89417ea7117f8d",
+      "title": "bash",
+      "kind": "execute",
+      "status": "pending",
+      "locations": [],
+      "rawInput": {},
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_1a633ea88d89417ea7117f8d",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "ls /workspace",
+        "description": "List runtime-workspace directory contents"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_1a633ea88d89417ea7117f8d",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "ls /workspace",
+        "description": "List runtime-workspace directory contents"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_1a633ea88d89417ea7117f8d",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "content": [
+        {
+          "content": {
+            "text": "fixture.txt\n",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "locations": [],
+      "rawInput": {
+        "command": "ls /workspace",
+        "description": "List runtime-workspace directory contents"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_1a633ea88d89417ea7117f8d",
+      "kind": "execute",
+      "status": "completed",
+      "title": "List runtime-workspace directory contents",
+      "content": [
+        {
+          "content": {
+            "text": "fixture.txt\n",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "ls /workspace",
+        "description": "List runtime-workspace directory contents"
+      },
+      "rawOutput": {
+        "output": "fixture.txt\n",
+        "metadata": {
+          "output": "fixture.txt\n",
+          "exit": 0,
+          "description": "List runtime-workspace directory contents",
+          "truncated": false
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_3a6e1e10b3c24780a2538574",
+      "title": "bash",
+      "kind": "execute",
+      "status": "pending",
+      "locations": [],
+      "rawInput": {},
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_3a6e1e10b3c24780a2538574",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "uname -a",
+        "description": "Print system kernel information"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_3a6e1e10b3c24780a2538574",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "uname -a",
+        "description": "Print system kernel information"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_3a6e1e10b3c24780a2538574",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "content": [
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "locations": [],
+      "rawInput": {
+        "command": "uname -a",
+        "description": "Print system kernel information"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_3a6e1e10b3c24780a2538574",
+      "kind": "execute",
+      "status": "completed",
+      "title": "Print system kernel information",
+      "content": [
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "uname -a",
+        "description": "Print system kernel information"
+      },
+      "rawOutput": {
+        "output": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+        "metadata": {
+          "output": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+          "exit": 0,
+          "description": "Print system kernel information",
+          "truncated": false
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_df541f2e173c49f7985c6317",
+      "title": "bash",
+      "kind": "execute",
+      "status": "pending",
+      "locations": [],
+      "rawInput": {},
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_df541f2e173c49f7985c6317",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "false",
+        "description": "Run the false command"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_df541f2e173c49f7985c6317",
+      "kind": "execute",
+      "status": "in_progress",
+      "title": "bash",
+      "locations": [],
+      "rawInput": {
+        "command": "false",
+        "description": "Run the false command"
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_df541f2e173c49f7985c6317",
+      "kind": "execute",
+      "status": "completed",
+      "title": "Run the false command",
+      "content": [
+        {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "false",
+        "description": "Run the false command"
+      },
+      "rawOutput": {
+        "output": "",
+        "metadata": {
+          "output": "",
+          "exit": 1,
+          "description": "Run the false command",
+          "truncated": false
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    }
+  ]
+}

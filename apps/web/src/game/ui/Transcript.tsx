@@ -4,6 +4,7 @@ import type { ChatBroadcastPayload, TeamRef } from '@quintal/shared';
 import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 
 import { segments } from './links';
+import { TurnActivity } from './TurnActivity';
 
 /**
  * A clock time for today, the date as well for anything older. History means
@@ -99,6 +100,7 @@ export function Transcript({
   const pinned = useRef(true);
   const before = useRef<{ height: number; top: number } | null>(null);
   const first = messages[0];
+  const previousFirst = useRef('');
   const firstIdentity = first ? `${first.sentAt} ${first.fromName}` : '';
 
   // Remember where we were before React writes the new list.
@@ -110,12 +112,13 @@ export function Transcript({
     if (!element) return;
     if (pinned.current) {
       element.scrollTop = element.scrollHeight;
-    } else if (before.current) {
+    } else if (before.current && previousFirst.current !== firstIdentity) {
       // Older lines went in above: keep the same line under the eye.
       element.scrollTop = before.current.top + (element.scrollHeight - before.current.height);
     }
     before.current = null;
-  }, [messages.length, firstIdentity]);
+    previousFirst.current = firstIdentity;
+  }, [messages, firstIdentity]);
 
   useEffect(() => {
     const element = logRef.current;
@@ -152,7 +155,9 @@ export function Transcript({
           {emptyText}
         </p>
       ) : (
-        messages.map((message) => (
+        messages.map((message) => message.activity ? (
+          <TurnActivity key={`${message.activity.agentId}:${message.activity.turnId}`} activity={message.activity} />
+        ) : (
           <p key={`${message.from}-${message.sentAt}`} className="leading-snug">
             <span className="font-mono text-[10px] text-white/35">{timeOf(message.sentAt)} </span>
             <span className={message.fromKind === 'agent' ? 'text-sky-300' : 'text-emerald-300'}>

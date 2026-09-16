@@ -63,6 +63,10 @@ asked.
 
 ![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, and the chat box showing who is answering](./screenshots/agent-thinking.png)
 
+**Live steps and replies.** Conversations retain grouped tool steps with outcomes,
+durations and expandable details. Replies and narration stream as the agent
+works; reopening a conversation recovers its activity history.
+
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
 that says the same from across the room. Idle agents wander, doze, and stop

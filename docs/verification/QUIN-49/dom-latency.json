@@ -1,0 +1,89 @@
+{
+  "method": "Node gateway send timestamp to browser MutationObserver on rendered public text, same local machine",
+  "samples": [
+    {
+      "sequence": 1,
+      "sendToDomMs": 103
+    },
+    {
+      "sequence": 2,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 3,
+      "sendToDomMs": 102
+    },
+    {
+      "sequence": 4,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 5,
+      "sendToDomMs": 104
+    },
+    {
+      "sequence": 6,
+      "sendToDomMs": 104
+    },
+    {
+      "sequence": 7,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 8,
+      "sendToDomMs": 109
+    },
+    {
+      "sequence": 9,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 10,
+      "sendToDomMs": 107
+    },
+    {
+      "sequence": 11,
+      "sendToDomMs": 104
+    },
+    {
+      "sequence": 12,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 13,
+      "sendToDomMs": 103
+    },
+    {
+      "sequence": 14,
+      "sendToDomMs": 105
+    },
+    {
+      "sequence": 15,
+      "sendToDomMs": 111
+    },
+    {
+      "sequence": 16,
+      "sendToDomMs": 104
+    },
+    {
+      "sequence": 17,
+      "sendToDomMs": 106
+    },
+    {
+      "sequence": 18,
+      "sendToDomMs": 103
+    },
+    {
+      "sequence": 19,
+      "sendToDomMs": 103
+    },
+    {
+      "sequence": 20,
+      "sendToDomMs": 108
+    }
+  ],
+  "minMs": 102,
+  "medianMs": 105.0,
+  "maxMs": 111,
+  "targetMs": 500
+}

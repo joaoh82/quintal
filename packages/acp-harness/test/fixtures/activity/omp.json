@@ -1,0 +1,343 @@
+{
+  "runtime": {
+    "name": "oh-my-pi",
+    "title": "Oh My Pi",
+    "version": "18.1.15"
+  },
+  "capturedOn": "2026-09-16",
+  "scenario": "ls <workspace>; uname -a; false (separate calls)",
+  "updates": [
+    {
+      "toolCallId": "call_4776e264a57e4ab2a30f811e|fc_tmp_84tpw9k9vaf",
+      "title": "$ ls /workspace",
+      "kind": "execute",
+      "status": "pending",
+      "content": [
+        {
+          "content": {
+            "text": "$ ls /workspace",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "ls /workspace"
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_f4b496cea593463db4716a2e|fc_tmp_3ery457r068",
+      "title": "$ uname -a",
+      "kind": "execute",
+      "status": "pending",
+      "content": [
+        {
+          "content": {
+            "text": "$ uname -a",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "uname -a"
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_06bbb4bb938b4c7eab067259|fc_tmp_5ksvayjbecf",
+      "title": "$ false",
+      "kind": "execute",
+      "status": "pending",
+      "content": [
+        {
+          "content": {
+            "text": "$ false",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "false"
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "call_f4b496cea593463db4716a2e|fc_tmp_3ery457r068",
+      "status": "in_progress",
+      "content": [
+        {
+          "content": {
+            "text": "$ uname -a",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n"
+          }
+        ],
+        "details": {}
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_4776e264a57e4ab2a30f811e|fc_tmp_84tpw9k9vaf",
+      "status": "in_progress",
+      "content": [
+        {
+          "content": {
+            "text": "$ ls /workspace",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "fixture.txt\n",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "fixture.txt",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "fixture.txt\n"
+          }
+        ],
+        "details": {}
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_f4b496cea593463db4716a2e|fc_tmp_3ery457r068",
+      "status": "in_progress",
+      "content": [
+        {
+          "content": {
+            "text": "$ uname -a",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n\n\nWall time: 0.04 seconds",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n\n\nWall time: 0.04 seconds"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 36.60695900000064
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_f4b496cea593463db4716a2e|fc_tmp_3ery457r068",
+      "status": "completed",
+      "content": [
+        {
+          "content": {
+            "text": "$ uname -a",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n\n\nWall time: 0.04 seconds",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64 Darwin\n\n\nWall time: 0.04 seconds"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 36.60695900000064
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_06bbb4bb938b4c7eab067259|fc_tmp_5ksvayjbecf",
+      "status": "in_progress",
+      "content": [
+        {
+          "content": {
+            "text": "$ false",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "(no output)\n\nWall time: 0.04 seconds\n\nCommand exited with code 1",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "(no output)\n\nWall time: 0.04 seconds\n\nCommand exited with code 1"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 40.39033300000301,
+          "exitCode": 1
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_06bbb4bb938b4c7eab067259|fc_tmp_5ksvayjbecf",
+      "status": "failed",
+      "content": [
+        {
+          "content": {
+            "text": "$ false",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "(no output)\n\nWall time: 0.04 seconds\n\nCommand exited with code 1",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "(no output)\n\nWall time: 0.04 seconds\n\nCommand exited with code 1"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 40.39033300000301,
+          "exitCode": 1
+        },
+        "isError": true
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_4776e264a57e4ab2a30f811e|fc_tmp_84tpw9k9vaf",
+      "status": "in_progress",
+      "content": [
+        {
+          "content": {
+            "text": "$ ls /workspace",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "fixture.txt\n\n\nWall time: 0.04 seconds",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "fixture.txt\n\n\nWall time: 0.04 seconds"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 42.61845900000117
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "call_4776e264a57e4ab2a30f811e|fc_tmp_84tpw9k9vaf",
+      "status": "completed",
+      "content": [
+        {
+          "content": {
+            "text": "$ ls /workspace",
+            "type": "text"
+          },
+          "type": "content"
+        },
+        {
+          "content": {
+            "text": "fixture.txt\n\n\nWall time: 0.04 seconds",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": {
+        "content": [
+          {
+            "type": "text",
+            "text": "fixture.txt\n\n\nWall time: 0.04 seconds"
+          }
+        ],
+        "details": {
+          "timeoutSeconds": 300,
+          "wallTimeMs": 42.61845900000117
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    }
+  ]
+}

@@ -204,6 +204,20 @@
       "when": 1789235306073,
       "tag": "0028_where_you_were_in_a_conversation",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1789500000000,
+      "tag": "0029_public_agent_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1789547783350,
+      "tag": "0030_scope_activity_ids",
+      "breakpoints": true
     }
   ]
 }
