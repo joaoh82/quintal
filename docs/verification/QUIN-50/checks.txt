@@ -1,0 +1,67 @@
+http-smoke-final.log
+smoke: http://127.0.0.1:3050
+
+public pages
+  ok   /
+  ok   /login
+  ok   /join/[token] (unknown token)
+
+signed in
+  ok   keypair sign-in
+  ok   / → /office
+  ok   /office
+  ok   /settings
+  ok   /settings/profile
+  ok   /settings/agents
+  ok   /settings/guests
+  ok   /settings/channels
+  ok   /settings/teams
+
+smoke passed
+
+
+typecheck-observer-final.log
+$ pnpm --filter @quintal/shared build && pnpm -r typecheck && tsc -p tsconfig.json --noEmit
+$ tsc -p tsconfig.build.json
+Scope: 6 of 7 workspace projects
+apps/website typecheck$ tsc --noEmit
+packages/shared typecheck$ tsc -p tsconfig.json --noEmit
+apps/website typecheck: Done
+packages/shared typecheck: Done
+apps/web typecheck$ tsc -p tsconfig.json --noEmit
+apps/server typecheck$ tsc -p tsconfig.json --noEmit
+packages/acp-harness typecheck$ pnpm embed && tsc -p tsconfig.json --noEmit
+packages/acp-harness typecheck: $ node scripts/embed-base-prompt.mjs
+apps/server typecheck: Done
+apps/web typecheck: Done
+packages/acp-harness typecheck: Done
+
+
+client-manifest-final.log
+client manifest: 22 boundaries expected, 23 route manifests checked
+
+
+harness-tests-reconnect-final.log
+  ✔ is said again in the tool hint (0.099125ms)
+✔ public streaming and explicit posts (0.262333ms)
+ℹ tests 234
+ℹ suites 58
+ℹ pass 234
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45574.919458
+
+latency-tests-observer-final.log
+  ✔ refuses an empty or undersampled comparison and mismatched models (0.805584ms)
+✔ before/after comparison (2.723375ms)
+ℹ tests 9
+ℹ suites 2
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 468.550791
+

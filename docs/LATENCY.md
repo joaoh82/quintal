@@ -129,7 +129,7 @@ After baseline approval and execution:
 3. Implement the smallest supported change, keeping model and parallelism
    fixed. If evidence only points to runtime/external cost, document that
    limitation and a supported configuration option or focused follow-up.
-4. Rerun the identical sample matrix and publish raw bounded timing artifacts,
+4. Rerun the identical selected comparison workloads and non-regression cohorts; publish raw bounded timing artifacts,
    budgets, before/after percentiles, failure counts and the acceptance verdict.
 
 Until those steps and real delivery observations are complete, QUIN-50 remains

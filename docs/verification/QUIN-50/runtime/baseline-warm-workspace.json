@@ -1,0 +1,1945 @@
+{
+  "run": {
+    "version": 1,
+    "label": "baseline",
+    "cohort": "warm",
+    "prompt": "workspace",
+    "runtime": "codex",
+    "model": "gpt-6-astra",
+    "parallelism": 2,
+    "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+    "implementationHash": "569736ffe5d0cf6b4e8dfaa1fbfd56d77b279066ce2e954e607854fb18d24a68",
+    "environment": "darwin arm64 25.5.0 Node v24.13.0",
+    "transport": "controlled-local-gateway",
+    "attempted": 30,
+    "timedOut": 0,
+    "samples": [
+      {
+        "version": 1,
+        "requestId": "53ec6756-8fbc-4ff6-ba40-252f99581f68",
+        "activityTurnId": "86629058-8c5e-43c4-b6aa-0d1cc4b4d382",
+        "attempt": 0,
+        "serverSentAt": 1789591114253,
+        "conversation": "channel",
+        "enqueuedAt": 1789591114253,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.10170800000014424,
+          "claimed": 0.1632499999996071,
+          "workerReady": 0.207749999999578,
+          "sessionReady": 0.25679200000013225,
+          "contextReady": 0.2969169999996666,
+          "promptDispatched": 0.3126249999995707,
+          "lastOutboundDispatched": 12995.4355,
+          "replyDispatched": 3118.360917,
+          "runtimeCompleted": 12995.347708000001
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 5918.246958,
+            "endMs": 6085.664457999999
+          },
+          {
+            "ordinal": 1,
+            "startMs": 9661.329833,
+            "endMs": 9662.26525
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 12995.437208,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "81bc50ef-90dc-44fe-8a5c-447ee54c016a",
+        "activityTurnId": "cd68ced0-8219-4539-b528-e5de8cb9af4d",
+        "attempt": 0,
+        "serverSentAt": 1789591127406,
+        "conversation": "channel",
+        "enqueuedAt": 1789591127406,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.5894160000025295,
+          "claimed": 0.6784580000021379,
+          "workerReady": 0.7177910000027623,
+          "sessionReady": 0.8186660000028496,
+          "contextReady": 0.8881660000006377,
+          "promptDispatched": 1.2147080000031565,
+          "lastOutboundDispatched": 6948.259875,
+          "replyDispatched": 3400.125333,
+          "runtimeCompleted": 6948.130333000001
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3595.6454580000027,
+            "endMs": 3597.5103750000017
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6948.262000000002,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "3c802dce-e84a-4a0f-a8a7-82c3efc37c59",
+        "activityTurnId": "8f7b3804-b356-49f0-bef9-2315376bc151",
+        "attempt": 0,
+        "serverSentAt": 1789591134525,
+        "conversation": "channel",
+        "enqueuedAt": 1789591134525,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.07791699999870616,
+          "claimed": 0.12095899999985704,
+          "workerReady": 0.13862499999959255,
+          "sessionReady": 0.15783400000145775,
+          "contextReady": 0.18091700000150013,
+          "promptDispatched": 0.19308399999863468,
+          "lastOutboundDispatched": 7215.338542000001,
+          "replyDispatched": 2234.6932500000003,
+          "runtimeCompleted": 7215.2585
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3726.8048339999987,
+            "endMs": 3728.371459000002
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7215.346792,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "f32e9159-a1e7-4af2-9beb-ff3bb6da417f",
+        "activityTurnId": "ca06119b-cf10-42a0-9593-3ccd89830d19",
+        "attempt": 0,
+        "serverSentAt": 1789591141902,
+        "conversation": "channel",
+        "enqueuedAt": 1789591141902,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.22966599999926984,
+          "claimed": 0.6158330000034766,
+          "workerReady": 0.6583749999990687,
+          "sessionReady": 0.7237910000039847,
+          "contextReady": 0.7743330000012065,
+          "promptDispatched": 0.804374999999709,
+          "lastOutboundDispatched": 8440.961499999998,
+          "replyDispatched": 1868.051250000004,
+          "runtimeCompleted": 8440.859833000002
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3250.4165829999984,
+            "endMs": 3252.6166660000017
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 8440.964375000003,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "aa161839-f80e-4ec0-ad1c-c0b9c6534f0f",
+        "activityTurnId": "eea0531a-5f8b-415c-a8bd-15882b59020f",
+        "attempt": 0,
+        "serverSentAt": 1789591150513,
+        "conversation": "channel",
+        "enqueuedAt": 1789591150513,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.6489999999976135,
+          "claimed": 0.7036670000015874,
+          "workerReady": 0.7521249999990687,
+          "sessionReady": 0.8036250000004657,
+          "contextReady": 0.884541999999783,
+          "promptDispatched": 0.9119169999976293,
+          "lastOutboundDispatched": 7122.207374999998,
+          "replyDispatched": 2453.4981249999983,
+          "runtimeCompleted": 7122.1315840000025
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3957.674791999998,
+            "endMs": 3959.062334000002
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7122.2100839999985,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "6f638b4b-90e8-4e7c-9d08-2e21a687dc58",
+        "activityTurnId": "c9ebd978-6fdf-4d8e-8c5b-08212856956e",
+        "attempt": 0,
+        "serverSentAt": 1789591157801,
+        "conversation": "channel",
+        "enqueuedAt": 1789591157801,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.15433299999858718,
+          "claimed": 0.2929169999988517,
+          "workerReady": 0.3373330000031274,
+          "sessionReady": 0.3807920000035665,
+          "contextReady": 0.45033300000068266,
+          "promptDispatched": 0.4773750000022119,
+          "lastOutboundDispatched": 8373.958333000002,
+          "replyDispatched": 2683.055708,
+          "runtimeCompleted": 8373.630582999998
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4018.402833,
+            "endMs": 4021.9611250000016
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 8373.966500000002,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "299819d0-c1ad-4060-80e4-a4361bc2486f",
+        "activityTurnId": "4d00b987-ddc4-4116-b43c-3d736da1a81f",
+        "attempt": 0,
+        "serverSentAt": 1789591166335,
+        "conversation": "channel",
+        "enqueuedAt": 1789591166335,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.23724999999831198,
+          "claimed": 2.182749999999942,
+          "workerReady": 28.149250000002212,
+          "sessionReady": 28.391999999999825,
+          "contextReady": 28.527709000001778,
+          "promptDispatched": 28.670749999997497,
+          "lastOutboundDispatched": 7106.489084000001,
+          "replyDispatched": 2098.1955000000016,
+          "runtimeCompleted": 7106.365625000006
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3437.220374999997,
+            "endMs": 3438.8264589999962
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7106.494791999998,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "35a83194-65a1-42e4-a155-d97ead16e514",
+        "activityTurnId": "c7a8bb17-67b2-456d-90a1-df773cc2f058",
+        "attempt": 0,
+        "serverSentAt": 1789591173602,
+        "conversation": "channel",
+        "enqueuedAt": 1789591173603,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.15491599999950267,
+          "claimed": 0.20345800000359304,
+          "workerReady": 0.27545800000370946,
+          "sessionReady": 0.3522500000108266,
+          "contextReady": 0.4195000000036089,
+          "promptDispatched": 0.4490829999995185,
+          "lastOutboundDispatched": 6961.438833000007,
+          "replyDispatched": 2208.059208000006,
+          "runtimeCompleted": 6961.286166000005
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3665.9290410000103,
+            "endMs": 3667.365208000003
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6961.44195800001,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "2aa40028-d3a8-4742-ac6e-bf1b46c95f10",
+        "activityTurnId": "7d8bd16e-374b-48a1-b2af-7d6bbde7e7ad",
+        "attempt": 0,
+        "serverSentAt": 1789591180738,
+        "conversation": "channel",
+        "enqueuedAt": 1789591180738,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.26879200000257697,
+          "claimed": 0.3477920000004815,
+          "workerReady": 0.4141669999953592,
+          "sessionReady": 0.47208400000818074,
+          "contextReady": 0.5426250000018626,
+          "promptDispatched": 0.5661669999972219,
+          "lastOutboundDispatched": 6823.329333999995,
+          "replyDispatched": 2125.852375000002,
+          "runtimeCompleted": 6823.247334
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3489.588042000003,
+            "endMs": 3490.663167000006
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6823.336416999999,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "cf553bb6-917e-434a-8814-cd28be8a627c",
+        "activityTurnId": "283403c8-dc46-47d0-aeab-0e729c73c4f5",
+        "attempt": 0,
+        "serverSentAt": 1789591187736,
+        "conversation": "channel",
+        "enqueuedAt": 1789591187736,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.23775000000023283,
+          "claimed": 0.35166600000229664,
+          "workerReady": 0.45841600000858307,
+          "sessionReady": 0.5249580000090646,
+          "contextReady": 0.5913750000036089,
+          "promptDispatched": 0.9128750000090804,
+          "lastOutboundDispatched": 7991.197249999997,
+          "replyDispatched": 3339.7356660000078,
+          "runtimeCompleted": 7991.059374999997
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4862.9442500000005,
+            "endMs": 4863.998583000008
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7991.201708000008,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "b0529728-96dc-4c42-9fb6-5f17759af331",
+        "activityTurnId": "14242557-e987-4d2b-96c7-efe35e78ebd6",
+        "attempt": 0,
+        "serverSentAt": 1789591195883,
+        "conversation": "channel",
+        "enqueuedAt": 1789591195883,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.21524999999383,
+          "claimed": 0.3023749999993015,
+          "workerReady": 0.3931250000023283,
+          "sessionReady": 1.5263750000012806,
+          "contextReady": 1.6622499999939464,
+          "promptDispatched": 1.6954589999950258,
+          "lastOutboundDispatched": 6875.804999999993,
+          "replyDispatched": 2259.642749999999,
+          "runtimeCompleted": 6875.708291999996
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3722.456917000003,
+            "endMs": 3723.5090419999906
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6875.81412499999,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "7ae74fe5-c879-47d5-9fd3-1428ba77e4b5",
+        "activityTurnId": "453fa891-744a-4c73-8def-cf0d8630821d",
+        "attempt": 0,
+        "serverSentAt": 1789591202929,
+        "conversation": "channel",
+        "enqueuedAt": 1789591202929,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.11562499999126885,
+          "claimed": 0.20024999999441206,
+          "workerReady": 0.2534999999916181,
+          "sessionReady": 0.32070899999234825,
+          "contextReady": 0.38220900000305846,
+          "promptDispatched": 0.39420899999095127,
+          "lastOutboundDispatched": 6807.323458999992,
+          "replyDispatched": 2191.961750000002,
+          "runtimeCompleted": 6807.073749999996
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3558.5316250000033,
+            "endMs": 3560.3931250000023
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6807.32699999999,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "2a35160c-e5d0-4173-84a7-019a642dc1d6",
+        "activityTurnId": "ab5b1dbf-9c56-4431-8568-f82b5d0de6d3",
+        "attempt": 0,
+        "serverSentAt": 1789591209898,
+        "conversation": "channel",
+        "enqueuedAt": 1789591209898,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.06075000000419095,
+          "claimed": 0.0882080000010319,
+          "workerReady": 0.10987500000919681,
+          "sessionReady": 0.13604200001282152,
+          "contextReady": 0.17579200000909623,
+          "promptDispatched": 0.18491700000595301,
+          "lastOutboundDispatched": 6782.943917000011,
+          "replyDispatched": 1810.9567080000124,
+          "runtimeCompleted": 6782.850458000001
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3375.062625000006,
+            "endMs": 3387.153250000003
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6782.945083000013,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "f7273ccf-31d8-4206-81b3-5569e7cc4495",
+        "activityTurnId": "a8d094d7-dda0-41f8-8a1d-6249fd24f785",
+        "attempt": 0,
+        "serverSentAt": 1789591216856,
+        "conversation": "channel",
+        "enqueuedAt": 1789591216857,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.14891699999861885,
+          "claimed": 0.20224999998754356,
+          "workerReady": 0.23512499999196734,
+          "sessionReady": 0.2770839999866439,
+          "contextReady": 0.32574999998905696,
+          "promptDispatched": 0.348666999998386,
+          "lastOutboundDispatched": 6627.302166999987,
+          "replyDispatched": 2165.488541999992,
+          "runtimeCompleted": 6627.204291999995
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3482.3667920000007,
+            "endMs": 3484.35325
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6627.314708999998,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "6a346b24-8c28-49d5-b535-027b56384dd2",
+        "activityTurnId": "72b90d8a-7958-41b7-b276-0bad43c010a5",
+        "attempt": 0,
+        "serverSentAt": 1789591223664,
+        "conversation": "channel",
+        "enqueuedAt": 1789591223664,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.13320900000690017,
+          "claimed": 0.18604200000117999,
+          "workerReady": 0.24025000000256114,
+          "sessionReady": 0.28850000000966247,
+          "contextReady": 0.33591700000397395,
+          "promptDispatched": 0.34704200000851415,
+          "lastOutboundDispatched": 11092.385292000006,
+          "replyDispatched": 3077.562584000014,
+          "runtimeCompleted": 11092.283334000007
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4507.431792000003,
+            "endMs": 4509.289334000001
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 11092.386625000014,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "c6f15dde-8d1d-4e1a-8953-82e45835ec12",
+        "activityTurnId": "37432ff9-5ecb-4cb6-8f64-d610ac7d8a43",
+        "attempt": 0,
+        "serverSentAt": 1789591234932,
+        "conversation": "channel",
+        "enqueuedAt": 1789591234932,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.17208299999765586,
+          "claimed": 0.2465000000083819,
+          "workerReady": 0.30962499999441206,
+          "sessionReady": 0.3577499999955762,
+          "contextReady": 5.609207999994396,
+          "promptDispatched": 5.666207999995095,
+          "lastOutboundDispatched": 6919.949250000005,
+          "replyDispatched": 2314.5580829999963,
+          "runtimeCompleted": 6919.8595410000125
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3675.9429579999996,
+            "endMs": 3678.7333750000107
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6919.952208000002,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "7a5eb4d3-d175-49f9-a471-1e6bdc013ff4",
+        "activityTurnId": "5117b872-be0d-44da-ab64-487471025827",
+        "attempt": 0,
+        "serverSentAt": 1789591242019,
+        "conversation": "channel",
+        "enqueuedAt": 1789591242019,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.13724999999976717,
+          "claimed": 0.2162909999897238,
+          "workerReady": 0.25824999998440035,
+          "sessionReady": 0.30662499999743886,
+          "contextReady": 0.591915999975754,
+          "promptDispatched": 0.6104579999810085,
+          "lastOutboundDispatched": 7699.216207999998,
+          "replyDispatched": 2543.3074579999957,
+          "runtimeCompleted": 7699.146832999977
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4000.5247909999744,
+            "endMs": 4002.475582999992
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7699.21762499999,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "c3c08712-a0a4-499c-86d6-cab7f81af386",
+        "activityTurnId": "c5f02f79-94db-4448-a4b9-dbe27f5fb4b5",
+        "attempt": 0,
+        "serverSentAt": 1789591249891,
+        "conversation": "channel",
+        "enqueuedAt": 1789591249891,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.053416999988257885,
+          "claimed": 0.07416699998429976,
+          "workerReady": 0.0861670000012964,
+          "sessionReady": 0.10425000000395812,
+          "contextReady": 0.12770799998543225,
+          "promptDispatched": 0.1351250000006985,
+          "lastOutboundDispatched": 7323.582374999998,
+          "replyDispatched": 2324.059749999986,
+          "runtimeCompleted": 7323.49549999999
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3634.8048750000016,
+            "endMs": 3636.0820829999866
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7323.592457999999,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "41d957c7-a817-4474-a959-9d4bbd05002d",
+        "activityTurnId": "617d68ca-d92d-44c2-823d-e584ef3dc08a",
+        "attempt": 0,
+        "serverSentAt": 1789591257375,
+        "conversation": "channel",
+        "enqueuedAt": 1789591257375,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.1961660000088159,
+          "claimed": 0.30062500000349246,
+          "workerReady": 0.45533299999078736,
+          "sessionReady": 0.5730000000039581,
+          "contextReady": 0.6954160000022966,
+          "promptDispatched": 0.7178330000024289,
+          "lastOutboundDispatched": 7971.228499999997,
+          "replyDispatched": 3085.961291000014,
+          "runtimeCompleted": 7971.153832999989
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4448.066374999995,
+            "endMs": 4454.350165999989
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7971.230083000002,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "0b8543a0-3a38-4e0d-bcb9-24daad3c758b",
+        "activityTurnId": "cd490d19-8a9e-42b8-b230-a3de6c3fbb9c",
+        "attempt": 0,
+        "serverSentAt": 1789591265513,
+        "conversation": "channel",
+        "enqueuedAt": 1789591265513,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.34304099998553284,
+          "claimed": 0.3974999999918509,
+          "workerReady": 0.42708299998776056,
+          "sessionReady": 0.4653330000001006,
+          "contextReady": 0.5231250000069849,
+          "promptDispatched": 0.540207999991253,
+          "lastOutboundDispatched": 7062.9659159999865,
+          "replyDispatched": 2322.3269579999906,
+          "runtimeCompleted": 7062.8524580000085
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3654.1299160000053,
+            "endMs": 3656.5804160000116
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7062.976250000007,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "9f6177b7-f102-4eb3-bb51-c12e22cb2702",
+        "activityTurnId": "b655f52a-245e-43ea-af59-c4a2a7e95faf",
+        "attempt": 0,
+        "serverSentAt": 1789591272730,
+        "conversation": "channel",
+        "enqueuedAt": 1789591272731,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.15474999998696148,
+          "claimed": 0.25479099998483434,
+          "workerReady": 0.4167079999751877,
+          "sessionReady": 0.5046659999934491,
+          "contextReady": 0.6508749999920838,
+          "promptDispatched": 0.7638749999750871,
+          "lastOutboundDispatched": 6673.686290999991,
+          "replyDispatched": 2097.1889579999843,
+          "runtimeCompleted": 6673.542625000002
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3458.7629579999775,
+            "endMs": 3460.7479579999927
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 6673.687707999983,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "b666ef1c-cd14-4e72-b7b9-f0dc5c73143b",
+        "activityTurnId": "b3450a62-bf8f-4aa8-b975-b5cac7bbed70",
+        "attempt": 0,
+        "serverSentAt": 1789591279574,
+        "conversation": "channel",
+        "enqueuedAt": 1789591279574,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.15508299999055453,
+          "claimed": 0.20408300001872703,
+          "workerReady": 0.23316699999850243,
+          "sessionReady": 0.28941699999268167,
+          "contextReady": 0.3809170000022277,
+          "promptDispatched": 0.4032500000030268,
+          "lastOutboundDispatched": 7515.741249999992,
+          "replyDispatched": 2919.1592919999966,
+          "runtimeCompleted": 7515.644417000003
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4260.142167000013,
+            "endMs": 4262.6882500000065
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7515.7557080000115,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "60cd303d-d20f-4d6d-b4a4-ece258ccd604",
+        "activityTurnId": "9d8b1289-88ab-4d95-80ca-ae3cdac9b7e3",
+        "attempt": 0,
+        "serverSentAt": 1789591287244,
+        "conversation": "channel",
+        "enqueuedAt": 1789591287244,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.08654100002604537,
+          "claimed": 0.1367910000262782,
+          "workerReady": 0.199666000000434,
+          "sessionReady": 0.25487500001327135,
+          "contextReady": 0.31137500001932494,
+          "promptDispatched": 0.32129100000020117,
+          "lastOutboundDispatched": 7108.802541000012,
+          "replyDispatched": 2132.4246660000063,
+          "runtimeCompleted": 7108.7107910000195
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3467.0643750000163,
+            "endMs": 3470.3152080000145
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7108.804833000002,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "4847f014-08e1-4ec9-8742-9a4b22381874",
+        "activityTurnId": "b1a4e4c5-f0a6-4313-890d-11d2f99f54b8",
+        "attempt": 0,
+        "serverSentAt": 1789591294512,
+        "conversation": "channel",
+        "enqueuedAt": 1789591294512,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.3330840000126045,
+          "claimed": 0.3900420000136364,
+          "workerReady": 0.4238750000076834,
+          "sessionReady": 0.4633750000211876,
+          "contextReady": 0.5235000000102445,
+          "promptDispatched": 0.5540840000030585,
+          "lastOutboundDispatched": 7381.6952920000185,
+          "replyDispatched": 2796.3190000000177,
+          "runtimeCompleted": 7381.577417000022
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4158.942209000001,
+            "endMs": 4161.005334000016
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7381.706166999997,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "5d6e5a4c-f8f2-4dba-8979-4e88590c7ab7",
+        "activityTurnId": "c5d71f35-5de7-4e4d-afa6-0f117eae1fee",
+        "attempt": 0,
+        "serverSentAt": 1789591302065,
+        "conversation": "channel",
+        "enqueuedAt": 1789591302065,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.16200000001117587,
+          "claimed": 0.25379200000315905,
+          "workerReady": 2.760999999998603,
+          "sessionReady": 2.875499999994645,
+          "contextReady": 2.990125000011176,
+          "promptDispatched": 3.019209000020055,
+          "lastOutboundDispatched": 7139.952125000011,
+          "replyDispatched": 1990.7801250000193,
+          "runtimeCompleted": 7139.840416999999
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3425.7185000000172,
+            "endMs": 3433.240542000014
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7139.966167000006,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "fea4c2aa-8b3f-4f45-b7a1-4bc1cd09dfea",
+        "activityTurnId": "81b00b95-4cfd-4336-b55a-3aff81f0b1f3",
+        "attempt": 0,
+        "serverSentAt": 1789591309370,
+        "conversation": "channel",
+        "enqueuedAt": 1789591309371,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.0820829999865964,
+          "claimed": 0.12041599999065511,
+          "workerReady": 0.17254099997808225,
+          "sessionReady": 0.2187909999920521,
+          "contextReady": 0.28295799999614246,
+          "promptDispatched": 0.29291599997668527,
+          "lastOutboundDispatched": 7591.294082999986,
+          "replyDispatched": 2791.3901659999974,
+          "runtimeCompleted": 7590.807332999975
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4242.172957999981,
+            "endMs": 4285.755207999988
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7591.345249999984,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "5b5d0b5a-4f2e-4e2d-8fc2-f774a9ada60a",
+        "activityTurnId": "12463db8-cc6a-4e21-8052-230b91f4a9cb",
+        "attempt": 0,
+        "serverSentAt": 1789591317117,
+        "conversation": "channel",
+        "enqueuedAt": 1789591317117,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.28845799999544397,
+          "claimed": 0.6125829999800771,
+          "workerReady": 0.9179159999766853,
+          "sessionReady": 1.7304579999763519,
+          "contextReady": 2.4135829999868292,
+          "promptDispatched": 2.641875000001164,
+          "lastOutboundDispatched": 8262.438915999985,
+          "replyDispatched": 3558.9022909999767,
+          "runtimeCompleted": 8262.356290999975
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4897.67525,
+            "endMs": 4899.128415999992
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 8262.442374999984,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "4fc137c3-76a0-4286-b03a-b04ae3bb1891",
+        "activityTurnId": "ffc04057-8589-4c92-9353-cfef3f931062",
+        "attempt": 0,
+        "serverSentAt": 1789591325542,
+        "conversation": "channel",
+        "enqueuedAt": 1789591325542,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.05591699999058619,
+          "claimed": 0.08233400000608526,
+          "workerReady": 0.11158399999840185,
+          "sessionReady": 0.15595899999607354,
+          "contextReady": 0.21012500001234002,
+          "promptDispatched": 0.22158400001353584,
+          "lastOutboundDispatched": 10064.152459000004,
+          "replyDispatched": 2425.997834000009,
+          "runtimeCompleted": 10064.026167000004
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3732.819334,
+            "endMs": 3735.631584000017
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 10064.165249999991,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "f5d0697f-07e1-4a46-81c7-dc3077f2c0f8",
+        "activityTurnId": "7721d3e8-69e2-4882-8a62-61f8b094719c",
+        "attempt": 0,
+        "serverSentAt": 1789591335777,
+        "conversation": "channel",
+        "enqueuedAt": 1789591335777,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.09779200001503341,
+          "claimed": 0.15137499998672865,
+          "workerReady": 0.2071670000150334,
+          "sessionReady": 0.2665839999972377,
+          "contextReady": 0.3372089999902528,
+          "promptDispatched": 0.3501669999968726,
+          "lastOutboundDispatched": 7425.770458999992,
+          "replyDispatched": 2142.0009589999972,
+          "runtimeCompleted": 7425.47108399999
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 3531.056749999989,
+            "endMs": 3533.685709000012
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7425.784667,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      },
+      {
+        "version": 1,
+        "requestId": "2f542995-c68e-424c-8f2c-57d5ff509c92",
+        "activityTurnId": "49fbf50f-fbbc-4bbf-b0d8-a5279187053b",
+        "attempt": 0,
+        "serverSentAt": 1789591343383,
+        "conversation": "channel",
+        "enqueuedAt": 1789591343383,
+        "session": "warm",
+        "saturated": false,
+        "reconnected": false,
+        "worker": 0,
+        "runtimeVersion": "1.12.0",
+        "runtimeStop": "end_turn",
+        "phases": {
+          "feedbackDispatched": 0.2262920000066515,
+          "claimed": 0.28495899998233654,
+          "workerReady": 0.3593339999788441,
+          "sessionReady": 0.4187919999822043,
+          "contextReady": 0.4980419999919832,
+          "promptDispatched": 0.5137089999916498,
+          "lastOutboundDispatched": 7506.041792000004,
+          "replyDispatched": 2728.6053749999846,
+          "runtimeCompleted": 7505.892292000004
+        },
+        "approvalMs": 0,
+        "tools": [
+          {
+            "ordinal": 0,
+            "startMs": 4081.6479999999865,
+            "endMs": 4084.090708999982
+          }
+        ],
+        "toolsTruncated": false,
+        "outcome": "completed",
+        "finishedMs": 7506.054417000007,
+        "unavailable": [
+          "browserSend",
+          "visibleFeedback",
+          "visibleReply",
+          "deliveryAcknowledgement",
+          "providerQueue",
+          "providerPrefill",
+          "providerGeneration"
+        ]
+      }
+    ]
+  },
+  "summary": {
+    "version": 1,
+    "label": "baseline",
+    "cohort": "warm",
+    "prompt": "workspace",
+    "runtime": "codex",
+    "model": "gpt-6-astra",
+    "parallelism": 2,
+    "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+    "implementationHash": "569736ffe5d0cf6b4e8dfaa1fbfd56d77b279066ce2e954e607854fb18d24a68",
+    "environment": "darwin arm64 25.5.0 Node v24.13.0",
+    "transport": "controlled-local-gateway",
+    "attempted": 30,
+    "timedOut": 0,
+    "observed": 30,
+    "successful": 30,
+    "missing": 0,
+    "outcomes": {
+      "completed": 30
+    },
+    "retryAttempts": 0,
+    "runtimeVersions": [
+      "1.12.0"
+    ],
+    "comparable": true,
+    "metrics": {
+      "queue": {
+        "n": 30,
+        "p50": 0.2465000000083819,
+        "p95": 0.7036670000015874,
+        "unavailable": 0
+      },
+      "startup": {
+        "n": 30,
+        "p50": 0.10795800000050804,
+        "p95": 2.621707999991486,
+        "unavailable": 0
+      },
+      "workerStartup": {
+        "n": 30,
+        "p50": 0.052124999987427145,
+        "p95": 2.507207999995444,
+        "unavailable": 0
+      },
+      "sessionSetup": {
+        "n": 30,
+        "p50": 0.05520900001283735,
+        "p95": 0.8125419999996666,
+        "unavailable": 0
+      },
+      "context": {
+        "n": 30,
+        "p50": 0.06724999999278225,
+        "p95": 0.6831250000104774,
+        "unavailable": 0
+      },
+      "runtime": {
+        "n": 30,
+        "p50": 7215.065416000001,
+        "p95": 11091.936291999999,
+        "unavailable": 0
+      },
+      "runtimeWithoutApproval": {
+        "n": 30,
+        "p50": 7215.065416000001,
+        "p95": 11091.936291999999,
+        "unavailable": 0
+      },
+      "approval": {
+        "n": 30,
+        "p50": 0,
+        "p95": 0,
+        "unavailable": 0
+      },
+      "feedbackDispatch": {
+        "n": 30,
+        "p50": 0.15491599999950267,
+        "p95": 0.5894160000025295,
+        "unavailable": 0
+      },
+      "firstReplyDispatch": {
+        "n": 30,
+        "p50": 2322.3269579999906,
+        "p95": 3400.125333,
+        "unavailable": 0
+      },
+      "completion": {
+        "n": 30,
+        "p50": 7215.2585,
+        "p95": 11092.283334000007,
+        "unavailable": 0
+      },
+      "completionWithoutApproval": {
+        "n": 30,
+        "p50": 7215.2585,
+        "p95": 11092.283334000007,
+        "unavailable": 0
+      },
+      "outboundAfterRuntime": {
+        "n": 30,
+        "p50": 0.10166699999535922,
+        "p95": 0.32775000000401633,
+        "unavailable": 0
+      },
+      "visibleFeedback": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "firstAnswer": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "delivery": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      }
+    },
+    "dominantObservedPhase": "runtimeWithoutApproval",
+    "tools": {
+      "durations": {
+        "n": 31,
+        "p50": 1.986457999999402,
+        "p95": 43.58225000000675
+      },
+      "incomplete": 0,
+      "truncatedRequests": 0
+    },
+    "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+  },
+  "byConversation": {
+    "channel": {
+      "version": 1,
+      "label": "baseline",
+      "cohort": "warm",
+      "prompt": "workspace",
+      "runtime": "codex",
+      "model": "gpt-6-astra",
+      "parallelism": 2,
+      "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+      "implementationHash": "569736ffe5d0cf6b4e8dfaa1fbfd56d77b279066ce2e954e607854fb18d24a68",
+      "environment": "darwin arm64 25.5.0 Node v24.13.0",
+      "transport": "controlled-local-gateway",
+      "attempted": 30,
+      "timedOut": 0,
+      "observed": 30,
+      "successful": 30,
+      "missing": 0,
+      "outcomes": {
+        "completed": 30
+      },
+      "retryAttempts": 0,
+      "runtimeVersions": [
+        "1.12.0"
+      ],
+      "comparable": true,
+      "metrics": {
+        "queue": {
+          "n": 30,
+          "p50": 0.2465000000083819,
+          "p95": 0.7036670000015874,
+          "unavailable": 0
+        },
+        "startup": {
+          "n": 30,
+          "p50": 0.10795800000050804,
+          "p95": 2.621707999991486,
+          "unavailable": 0
+        },
+        "workerStartup": {
+          "n": 30,
+          "p50": 0.052124999987427145,
+          "p95": 2.507207999995444,
+          "unavailable": 0
+        },
+        "sessionSetup": {
+          "n": 30,
+          "p50": 0.05520900001283735,
+          "p95": 0.8125419999996666,
+          "unavailable": 0
+        },
+        "context": {
+          "n": 30,
+          "p50": 0.06724999999278225,
+          "p95": 0.6831250000104774,
+          "unavailable": 0
+        },
+        "runtime": {
+          "n": 30,
+          "p50": 7215.065416000001,
+          "p95": 11091.936291999999,
+          "unavailable": 0
+        },
+        "runtimeWithoutApproval": {
+          "n": 30,
+          "p50": 7215.065416000001,
+          "p95": 11091.936291999999,
+          "unavailable": 0
+        },
+        "approval": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "unavailable": 0
+        },
+        "feedbackDispatch": {
+          "n": 30,
+          "p50": 0.15491599999950267,
+          "p95": 0.5894160000025295,
+          "unavailable": 0
+        },
+        "firstReplyDispatch": {
+          "n": 30,
+          "p50": 2322.3269579999906,
+          "p95": 3400.125333,
+          "unavailable": 0
+        },
+        "completion": {
+          "n": 30,
+          "p50": 7215.2585,
+          "p95": 11092.283334000007,
+          "unavailable": 0
+        },
+        "completionWithoutApproval": {
+          "n": 30,
+          "p50": 7215.2585,
+          "p95": 11092.283334000007,
+          "unavailable": 0
+        },
+        "outboundAfterRuntime": {
+          "n": 30,
+          "p50": 0.10166699999535922,
+          "p95": 0.32775000000401633,
+          "unavailable": 0
+        },
+        "visibleFeedback": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 30
+        },
+        "firstAnswer": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 30
+        },
+        "delivery": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 30
+        }
+      },
+      "dominantObservedPhase": "runtimeWithoutApproval",
+      "tools": {
+        "durations": {
+          "n": 31,
+          "p50": 1.986457999999402,
+          "p95": 43.58225000000675
+        },
+        "incomplete": 0,
+        "truncatedRequests": 0
+      },
+      "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+    },
+    "dm": {
+      "version": 1,
+      "label": "baseline",
+      "cohort": "warm",
+      "prompt": "workspace",
+      "runtime": "codex",
+      "model": "gpt-6-astra",
+      "parallelism": 2,
+      "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+      "implementationHash": "569736ffe5d0cf6b4e8dfaa1fbfd56d77b279066ce2e954e607854fb18d24a68",
+      "environment": "darwin arm64 25.5.0 Node v24.13.0",
+      "transport": "controlled-local-gateway",
+      "attempted": 0,
+      "timedOut": 0,
+      "observed": 0,
+      "successful": 0,
+      "missing": 0,
+      "outcomes": {},
+      "retryAttempts": 0,
+      "runtimeVersions": [],
+      "comparable": false,
+      "metrics": {
+        "queue": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "startup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "workerStartup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "sessionSetup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "context": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "runtime": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "runtimeWithoutApproval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "approval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "feedbackDispatch": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "firstReplyDispatch": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "completion": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "completionWithoutApproval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "outboundAfterRuntime": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "visibleFeedback": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "firstAnswer": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "delivery": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        }
+      },
+      "dominantObservedPhase": null,
+      "tools": {
+        "durations": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "incomplete": 0,
+        "truncatedRequests": 0
+      },
+      "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+    },
+    "spatial": {
+      "version": 1,
+      "label": "baseline",
+      "cohort": "warm",
+      "prompt": "workspace",
+      "runtime": "codex",
+      "model": "gpt-6-astra",
+      "parallelism": 2,
+      "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+      "implementationHash": "569736ffe5d0cf6b4e8dfaa1fbfd56d77b279066ce2e954e607854fb18d24a68",
+      "environment": "darwin arm64 25.5.0 Node v24.13.0",
+      "transport": "controlled-local-gateway",
+      "attempted": 0,
+      "timedOut": 0,
+      "observed": 0,
+      "successful": 0,
+      "missing": 0,
+      "outcomes": {},
+      "retryAttempts": 0,
+      "runtimeVersions": [],
+      "comparable": false,
+      "metrics": {
+        "queue": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "startup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "workerStartup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "sessionSetup": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "context": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "runtime": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "runtimeWithoutApproval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "approval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "feedbackDispatch": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "firstReplyDispatch": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "completion": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "completionWithoutApproval": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "outboundAfterRuntime": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "visibleFeedback": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "firstAnswer": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        },
+        "delivery": {
+          "n": 0,
+          "p50": null,
+          "p95": null,
+          "unavailable": 0
+        }
+      },
+      "dominantObservedPhase": null,
+      "tools": {
+        "durations": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "incomplete": 0,
+        "truncatedRequests": 0
+      },
+      "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+    }
+  },
+  "setupFailures": 0,
+  "limitations": [
+    "Controlled gateway: excludes human socket ingress, office persistence/fan-out and browser render.",
+    "Cold means a fresh conversation session after runner.start; boot before a human can send is excluded.",
+    "Approval grants are automatic in this read-only fixture; real human approval needs a separate office cohort.",
+    "No raw runtime errors, prompts, tool arguments/results or private activity snapshots are retained."
+  ]
+}

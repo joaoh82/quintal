@@ -1,0 +1,177 @@
+[
+  {
+    "requestId": "2f92fb71-2503-486b-b894-0b22907f69a0",
+    "sentAt": 142416.20000004768,
+    "turnId": "85c00677-b7f3-497b-9762-a76eef9fd485",
+    "feedbackMs": 123.89999997615814,
+    "replyMs": 2429.7999999523163,
+    "deliveryMs": 2594.6999999284744,
+    "answerCandidateMs": 2429.7999999523163,
+    "messages": [
+      {
+        "id": "85c00677-b7f3-497b-9762-a76eef9fd485:m1",
+        "firstVisibleMs": 2429.7999999523163
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "baseline"
+  },
+  {
+    "requestId": "cf5c9c5c-67f1-4b5c-9f88-a4efa7cef323",
+    "sentAt": 146337.80000007153,
+    "turnId": "7eb8bc9c-00d0-4098-870e-2181beb2bf44",
+    "feedbackMs": 2373.7999999523163,
+    "replyMs": null,
+    "deliveryMs": 2383.7999999523163,
+    "answerCandidateMs": null,
+    "messages": [],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "timeout-or-unverified",
+    "label": "baseline"
+  },
+  {
+    "requestId": "50734ea0-affe-41e8-98f2-a12d8da65d46",
+    "sentAt": 177737.5,
+    "turnId": "c7bd08f8-f8a3-470d-9295-0e4140cf9fea",
+    "feedbackMs": 112.39999997615814,
+    "replyMs": 2393.5,
+    "deliveryMs": 2490.8000000715256,
+    "answerCandidateMs": 2393.5,
+    "messages": [
+      {
+        "id": "c7bd08f8-f8a3-470d-9295-0e4140cf9fea:m1",
+        "firstVisibleMs": 2393.5
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "baseline"
+  },
+  {
+    "requestId": "3da3ce25-6b55-4a22-9d5f-ba313cd7b044",
+    "sentAt": 239728,
+    "turnId": "bb9a0c92-45d9-4594-b6c4-e8d97c055765",
+    "feedbackMs": 117.5,
+    "replyMs": 2336.5,
+    "deliveryMs": 2436.600000023842,
+    "answerCandidateMs": 2336.5,
+    "messages": [
+      {
+        "id": "bb9a0c92-45d9-4594-b6c4-e8d97c055765:m1",
+        "firstVisibleMs": 2336.5
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "baseline-settled"
+  },
+  {
+    "requestId": "b0887f6b-fda1-4824-a181-f66eae62d30d",
+    "sentAt": 244064,
+    "turnId": "c35ee234-e45d-4678-80fd-0501092ccf55",
+    "feedbackMs": 109.20000004768372,
+    "replyMs": 1880.5,
+    "deliveryMs": 1994.2000000476837,
+    "answerCandidateMs": 1880.5,
+    "messages": [
+      {
+        "id": "c35ee234-e45d-4678-80fd-0501092ccf55:m1",
+        "firstVisibleMs": 1880.5
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "baseline-settled"
+  },
+  {
+    "requestId": "3548c38e-cb7d-4b07-bed0-e01463b05873",
+    "sentAt": 247876,
+    "turnId": "1d367b0f-5923-4ce1-b50b-64e94e9bebc6",
+    "feedbackMs": 2199.600000023842,
+    "replyMs": null,
+    "deliveryMs": 2288.5,
+    "answerCandidateMs": null,
+    "messages": [],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "timeout-or-unverified",
+    "label": "baseline-settled"
+  },
+  {
+    "requestId": "e5a70ffc-fa1f-48ac-a2f9-2d4fe7a889a0",
+    "sentAt": 312980,
+    "turnId": "c7fdccd9-64b4-4b2f-9d8d-1a2962e2b008",
+    "feedbackMs": 155.20000004768372,
+    "replyMs": 3066.899999976158,
+    "deliveryMs": 3285.5,
+    "answerCandidateMs": 3066.899999976158,
+    "messages": [
+      {
+        "id": "c7fdccd9-64b4-4b2f-9d8d-1a2962e2b008:m1",
+        "firstVisibleMs": 3066.899999976158
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "scroll-diagnostic"
+  },
+  {
+    "requestId": "b259b324-f651-4872-8ddb-b798d6aedeee",
+    "sentAt": 324419.89999997616,
+    "turnId": "cd2b72d2-abaa-444b-9640-98ea7afa00a8",
+    "feedbackMs": 121.90000009536743,
+    "replyMs": 1896.2000000476837,
+    "deliveryMs": 2043.5,
+    "answerCandidateMs": 1896.2000000476837,
+    "messages": [
+      {
+        "id": "cd2b72d2-abaa-444b-9640-98ea7afa00a8:m1",
+        "firstVisibleMs": 1896.2000000476837
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "scroll-diagnostic"
+  },
+  {
+    "requestId": "fb1ffd28-830f-4872-93a5-83a6edf9bd11",
+    "sentAt": 328401.60000002384,
+    "turnId": "7eafc929-3c47-4c13-b879-e31b28f560ab",
+    "feedbackMs": 109.79999995231628,
+    "replyMs": 1971.5,
+    "deliveryMs": 2218.5,
+    "answerCandidateMs": 1971.5,
+    "messages": [
+      {
+        "id": "7eafc929-3c47-4c13-b879-e31b28f560ab:m1",
+        "firstVisibleMs": 1971.5
+      }
+    ],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "success",
+    "label": "scroll-diagnostic"
+  },
+  {
+    "requestId": "d05fd00f-f5f2-400a-9966-1f9307797ae2",
+    "sentAt": 332571.39999997616,
+    "turnId": "d87199f3-9550-49f7-9c0b-78d2f62ed526",
+    "feedbackMs": 5065.800000071526,
+    "replyMs": null,
+    "deliveryMs": 5150.300000071526,
+    "answerCandidateMs": null,
+    "messages": [],
+    "outcome": "completed",
+    "answerVerified": true,
+    "deadlineOutcome": "timeout-or-unverified",
+    "label": "scroll-diagnostic"
+  }
+]

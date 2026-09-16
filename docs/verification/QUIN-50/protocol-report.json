@@ -1,0 +1,35 @@
+{
+  "pass": true,
+  "queueLatencyMs": 154,
+  "receivedSnapshots": 17,
+  "leakedSnapshots": 0,
+  "agentWakeups": 0,
+  "turnId": "a003f597-75a0-471b-b443-27e9a7883a57",
+  "channel": "Activity mu4ka31u",
+  "dbRows": [
+    {
+      "id": "3066d302-feda-418c-a3e2-ad7476e9eb19:e175afc16bfcc5953bc16cd7ac75fa8e:e41fbe99-11fd-436a-8471-4c31104cbf7b",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "3066d302-feda-418c-a3e2-ad7476e9eb19:7dcfdfea7d76a3397f2aeddbfbf52b77:e81a0495-38c4-424c-95fd-38e76151070d",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "3066d302-feda-418c-a3e2-ad7476e9eb19:7dcfdfea7d76a3397f2aeddbfbf52b77:a003f597-75a0-471b-b443-27e9a7883a57",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "3066d302-feda-418c-a3e2-ad7476e9eb19:7dcfdfea7d76a3397f2aeddbfbf52b77:34c45f50-5a4a-4f7e-9b82-0ae69972caa8",
+      "sequence": 1,
+      "state": "completed"
+    }
+  ],
+  "restrictedHistory": {
+    "code": "unauthorised",
+    "message": "Not a channel you are in."
+  }
+}

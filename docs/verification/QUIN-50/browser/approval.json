@@ -1,0 +1,149 @@
+{
+  "boundary": "Fixture approval smoke, two turns; first unaddressed answer queued another turn; explicit @Probe Alpha yes Bash granted approval",
+  "samples": [
+    {
+      "version": 1,
+      "requestId": "f509b219-ade2-4135-bb8e-f14383cbd211",
+      "activityTurnId": "85cf2c95-9da2-40df-9369-65fb242c4b84",
+      "attempt": 0,
+      "serverSentAt": 1789592063561,
+      "conversation": "dm",
+      "enqueuedAt": 1789592063568,
+      "session": "cold",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 1.975416999999652,
+        "claimed": 2.1861250000001746,
+        "workerReady": 2.3626249999997526,
+        "sessionReady": 3.6670420000000377,
+        "contextReady": 7.225583999999799,
+        "promptDispatched": 7.3497919999999795,
+        "lastOutboundDispatched": 44797.254417000004,
+        "runtimeCompleted": 44795.258541999996,
+        "replyDispatched": 44797.24658399999
+      },
+      "approvalMs": 44411.204042,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 44797.309624999994,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "94fbebf1-f967-4f2a-92b7-1ccf40488877",
+      "activityTurnId": "63a5dc71-4aa0-4e8d-9a88-98b5939dd750",
+      "attempt": 0,
+      "serverSentAt": 1789592079068,
+      "conversation": "dm",
+      "enqueuedAt": 1789592079069,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.5299159999995027,
+        "claimed": 29298.491333,
+        "workerReady": 29298.508665999998,
+        "sessionReady": 29298.597458,
+        "contextReady": 29298.658458,
+        "promptDispatched": 29298.68025,
+        "lastOutboundDispatched": 45324.47895800001,
+        "runtimeCompleted": 45323.955541,
+        "replyDispatched": 45324.478416
+      },
+      "approvalMs": 15781.899625000002,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 45324.48150000001,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    }
+  ],
+  "browser": {
+    "version": 1,
+    "clock": "browser performance.now",
+    "boundary": "visible DOM at animation frame",
+    "evicted": 0,
+    "records": [
+      {
+        "requestId": "f509b219-ade2-4135-bb8e-f14383cbd211",
+        "sentAt": 145361.19999992847,
+        "turnId": "85cf2c95-9da2-40df-9369-65fb242c4b84",
+        "feedbackMs": 193.10000002384186,
+        "replyMs": 44930.200000047684,
+        "deliveryMs": 44930.200000047684,
+        "answerCandidateMs": 44930.200000047684,
+        "messages": [
+          {
+            "id": "85cf2c95-9da2-40df-9369-65fb242c4b84:m1",
+            "firstVisibleMs": 44930.200000047684
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "94fbebf1-f967-4f2a-92b7-1ccf40488877",
+        "sentAt": 160860.19999992847,
+        "turnId": "63a5dc71-4aa0-4e8d-9a88-98b5939dd750",
+        "feedbackMs": 244,
+        "replyMs": 45589.300000071526,
+        "deliveryMs": 45589.300000071526,
+        "answerCandidateMs": 45589.300000071526,
+        "messages": [
+          {
+            "id": "63a5dc71-4aa0-4e8d-9a88-98b5939dd750:m1",
+            "firstVisibleMs": 45589.300000071526
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "a5e2859c-66e7-4a70-885d-04793b5994d5",
+        "sentAt": 190154,
+        "turnId": null,
+        "feedbackMs": null,
+        "replyMs": null,
+        "deliveryMs": null,
+        "answerCandidateMs": null,
+        "messages": [],
+        "outcome": "pending"
+      },
+      {
+        "requestId": "0adb6efe-efdf-4043-88cb-b6c90da310f6",
+        "sentAt": 206187.79999995232,
+        "turnId": null,
+        "feedbackMs": null,
+        "replyMs": null,
+        "deliveryMs": null,
+        "answerCandidateMs": null,
+        "messages": [],
+        "outcome": "pending"
+      }
+    ]
+  },
+  "browserTimingsValid": false,
+  "note": "Harness approval measurements are valid; the browser observer predated clipping/overlay validation, so its timings are excluded."
+}
