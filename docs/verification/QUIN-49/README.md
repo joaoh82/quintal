@@ -82,11 +82,10 @@ names were used.
 
 ## Limitations and follow-up
 
-- **Desktop visual acceptance remains unverified.** An isolated copy of the prebuilt
-  Tauri host, pointed at port 3049, opened a blank webview with no page accessibility
-  content. [Screenshot](desktop-blank.png). No native source changed; Rust/native
-  suites and release signing were not run. Restore the local desktop test host and
-  repeat conversation checks before treating the task as fully accepted.
+- **Desktop visual acceptance confirmed by the user on 2026-09-16.** See the
+  user verification below. The earlier automated attempt using an isolated prebuilt
+  Tauri host opened a blank webview ([historical screenshot](desktop-blank.png)).
+  No native source changed; local Rust/native suites and release signing were not run.
 - Gemini needs an authenticated runtime before its live scenario can be verified.
 - No remote production DB, deployment, external service mutation, or background-job
   check was needed. This change adds no background job.
@@ -150,5 +149,26 @@ The protocol smoke passed against the rebuilt server: 17 snapshots, zero leaks,
 zero agent wakeups. [Protocol evidence](review-protocol.json). Local logs use the
 `review-*` prefix under `/tmp/quin49-verification`.
 
-Desktop visual verification and Gemini authentication remain pending. These are
-acceptance gaps on QUIN-49; QUIN-50 is recommended only for broader latency/load work.
+Desktop visual verification was subsequently confirmed by the user below. Gemini's
+live scenario remains unverified because authentication was unavailable. QUIN-50
+is recommended only for broader latency/load work.
+
+
+## User desktop verification — 2026-09-16
+
+Joao tested the desktop app by asking Bob to review a pull request and supplied a
+screenshot of the resulting DM transcript. His assessment was: “looks alright.
+maybe a bit too verbose but good.” He then explicitly authorized recording this
+verification and marking PR #109 ready for review.
+
+The screenshot shows the desktop conversation rendering public narration, tool
+rows with success/failed/unknown labels, elapsed durations, detail disclosure
+controls, and the final reply. This confirms the desktop rendering acceptance
+that the earlier blank prebuilt host could not establish. It does not independently
+verify every reconnect/cancellation/concurrency scenario; those remain covered by
+the previously recorded automated, protocol and browser checks.
+
+The verbosity feedback is accepted as a separate follow-up: a per-user Low /
+Balanced / Detailed activity display preference, with Balanced as the intended
+default. It does not expand this PR's scope. Gemini's authenticated live scenario
+remains an explicitly unverified runtime case.
