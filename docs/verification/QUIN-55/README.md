@@ -28,6 +28,9 @@ packages.
 
 ## Smoke checks
 
+- `node scripts/smoke.mjs http://127.0.0.1:3055` passed the public, identity,
+  authenticated office and Settings route checks; the captured responses are in
+  `http-smoke.log`.
 - The fresh database applied migration `0031_user_activity_detail.sql`. SQLite
   reported `activity_detail_level TEXT NOT NULL DEFAULT 'balanced'`.
 - A fresh browser identity rendered Balanced by default. Changing that identity
@@ -63,7 +66,7 @@ packages.
 Screenshots were captured during the browser and native desktop inspection in
 the computer-use session. Machine-readable local evidence is in
 `/tmp/quin55-verification.RAlJKZ`: `db-default.txt`,
-`db-low-isolation.txt`, `protocol-report.json`, `protocol-smoke.log`,
+`db-low-isolation.txt`, `http-smoke.log`, `protocol-report.json`, `protocol-smoke.log`,
 `live-stream.log`, `desktop-protocol.log`, and `dm-waiting-fixture.json`.
 
 ## Explicit gaps
