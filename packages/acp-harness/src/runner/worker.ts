@@ -28,6 +28,7 @@ import { SessionStore } from './sessions.js';
 /** A turn in flight: one scope, one worker, one prompt. */
 export interface Turn {
   id: number;
+  latency?: import('./latency.js').LatencyTrace[];
   scope: string;
   worker: Worker;
   /** The ACP session, once it exists. Updates are routed to the turn by it. */
@@ -122,6 +123,7 @@ export class Worker {
   turn: Turn | null = null;
   /** Crashes survived. The second one is the one worth telling a human about. */
   restarts = 0;
+  runtimeVersion: string | null = null;
   /** Given up on: it will not be claimed again and counts against the pool. */
   dead = false;
 
@@ -234,6 +236,7 @@ export class Worker {
     // stop() must own a process even while its initialize handshake is pending.
     this.#process = proc;
     const info = await proc.start();
+    this.runtimeVersion = info.agentInfo?.version?.slice(0, 100) ?? null;
     if (this.#stopping) {
       proc.stop();
       throw new Error('worker stopped while initializing');

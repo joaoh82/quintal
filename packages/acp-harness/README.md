@@ -286,6 +286,14 @@ where the conversation is, channel, DM or aloud, with the owner mentioned:
 `<dir>/<agent>.jsonl` — your own copy, separate from the server-side audit log
 at `/settings/agents/<id>/log`.
 
+## Latency measurement
+
+The runner exposes opt-in, content-free phase samples through its `latency`
+event. Queue, startup, context, runtime, tools, human approval and outbound
+dispatch are recorded separately. Browser delivery and provider internals are
+explicitly unavailable at this boundary. See [Conversation latency](../../docs/LATENCY.md)
+for the fixed-prompt cohort runner, privacy bounds and before/after protocol.
+
 ## Compatibility
 
 Real-harness findings, with versions and dates, are in

@@ -139,3 +139,14 @@ test('a result arriving after a completed patch resolves unknown without restart
   assert.equal(turn.value.items[0]?.state, 'success');
   turn.finish('completed');
 });
+
+test('public progress carries bounded human correlation without reusing it as a turn ID', () => {
+  const id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const turn = new PublicTurn({}, () => {}, id);
+  assert.equal(turn.value.requestId, id);
+  assert.notEqual(turn.value.turnId, id);
+  turn.finish('completed');
+  const invalid = new PublicTurn({}, () => {}, 'private-content');
+  assert.equal(invalid.value.requestId, invalid.value.turnId);
+  invalid.finish('completed');
+});

@@ -1,3 +1,4 @@
+import { latencyRequestId } from './latency.js';
 /** Public, replayable activity. Never contains ACP thoughts or arbitrary raw payloads. */
 export const ACTIVITY_DETAIL_LEVELS = ['low', 'balanced', 'detailed'] as const;
 export type ActivityDetailLevel = (typeof ACTIVITY_DETAIL_LEVELS)[number];
@@ -40,6 +41,8 @@ export interface AgentActivity {
   workerId: string;
   sessionId: string;
   requestId: string;
+  /** Human correlations for a batched turn; bounded and content-free. */
+  requestIds?: string[];
   sequence: number;
   channelId?: string;
   zoneId?: string;
@@ -118,6 +121,8 @@ export function parseActivity(value: unknown): AgentActivity | null {
     !id(v.workerId) ||
     !id(v.sessionId) ||
     !id(v.requestId) ||
+    (v.requestIds !== undefined && (!Array.isArray(v.requestIds) || v.requestIds.length > 20 ||
+      v.requestIds.some(value => latencyRequestId(value) === undefined))) ||
     !Number.isSafeInteger(v.sequence) ||
     v.sequence < 1 ||
     !states.includes(v.state) ||
@@ -161,6 +166,7 @@ export function parseActivity(value: unknown): AgentActivity | null {
     workerId: v.workerId,
     sessionId: v.sessionId,
     requestId: v.requestId,
+    ...(v.requestIds ? { requestIds: [...new Set(v.requestIds.map(value => value.toLowerCase()))] } : {}),
     sequence: v.sequence,
     state: v.state,
     startedAt: v.startedAt,

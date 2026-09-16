@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   ACTIVITY_INTERVAL_MS,
+  latencyRequestId,
   ACTIVITY_MAX_ITEMS,
   ACTIVITY_MAX_TEXT,
   ACTIVITY_MAX_BYTES,
@@ -64,12 +65,14 @@ export class PublicTurn {
   constructor(
     scope: { channelId?: string; zoneId?: string },
     private readonly publish: (v: AgentActivity) => void,
+    requestId?: string,
   ) {
     const turnId = randomUUID();
     this.value = {
       version: 1,
       turnId,
-      requestId: turnId,
+      requestId: latencyRequestId(requestId) ?? turnId,
+      ...(latencyRequestId(requestId) ? { requestIds: [latencyRequestId(requestId)!] } : {}),
       workerId: 'queued',
       sessionId: 'preparing',
       sequence: 0,

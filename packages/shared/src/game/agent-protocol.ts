@@ -294,6 +294,8 @@ export interface AgentReadyPayload {
 }
 
 export interface AgentChatEvent {
+  /** Optional human-send correlation; not an authorization identity. */
+  requestId?: string;
   /**
    * The speaker's session id while they are in the room. A message read back
    * from history carries their stable id here instead — sessions do not
@@ -330,6 +332,8 @@ export interface AgentChatEvent {
  * conversation the mention was part of.
  */
 export interface AgentChannelChatEvent {
+  /** Optional human-send correlation; not an authorization identity. */
+  requestId?: string;
   channel: ChannelRef;
   from: string;
   fromUserId: string;
@@ -380,6 +384,8 @@ export interface AgentChannelsEvent {
 
 /** A mention carries no distance: it reaches the agent from anywhere. */
 export interface AgentMentionEvent {
+  /** Optional human-send correlation; not an authorization identity. */
+  requestId?: string;
   from: string;
   fromUserId: string;
   fromName: string;

@@ -5,3 +5,5 @@ export * from './runner/context.js';
 export * from './runner/outbound.js';
 export * from './runner/sessions.js';
 export * from './supervisor.js';
+export * from './runner/latency.js';
+export * from './runner/latency-report.js';

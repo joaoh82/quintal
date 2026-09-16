@@ -8,6 +8,7 @@ import { after, describe, it } from 'node:test';
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner, pickWaiter } from '../src/runner/AgentRunner.js';
 import { Pool } from '../src/runner/pool.js';
+import type { LatencySample } from '../src/runner/latency.js';
 import type { Worker } from '../src/runner/worker.js';
 import type { AgentConfig } from '../src/config.js';
 
@@ -220,6 +221,24 @@ describe('answering several conversations at once', () => {
     await current.start();
     return { handlers, record, said, statuses };
   }
+
+  it('correlates queued human requests without exposing prompts and preserves parallelism', async () => {
+    const { handlers } = await start({ FAKE_DELAY_MS: '120', FAKE_REPLY: 'private-answer' }, { parallelism: 1 });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob private-prompt', 100);
+    mention(handlers, DM, '@Bob another-private-prompt', 101);
+    await until(() => samples.size === 2, 'both timing records');
+    const channel = [...samples.values()].find(s => s.conversation === 'channel')!;
+    const dm = [...samples.values()].find(s => s.conversation === 'dm')!;
+    assert.equal(channel.outcome, 'completed');
+    assert.equal(dm.outcome, 'completed');
+    assert.equal(dm.saturated, true);
+    assert.equal(current!.parallelism, 1);
+    assert.ok(dm.phases.claimed! > channel.phases.claimed!);
+    assert.ok(dm.phases.runtimeCompleted! >= dm.phases.promptDispatched!);
+    assert.doesNotMatch(JSON.stringify([...samples.values()]), /private-prompt|private-answer|Josh/);
+  });
 
   it('answers a DM while a channel review is still running, and shows it working in both', async () => {
     const { handlers, record, said, statuses } = await start(

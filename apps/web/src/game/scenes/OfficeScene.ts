@@ -464,7 +464,8 @@ export class OfficeScene extends Phaser.Scene {
   say(text: string): void {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
-    this.#room.send(ClientMessage.Chat, { text: trimmed });
+    const requestId = this.#latencyRequest();
+    this.#room.send(ClientMessage.Chat, { text: trimmed, requestId });
   }
 
   sayInChannel(channelId: string, text: string): void {
@@ -473,7 +474,18 @@ export class OfficeScene extends Phaser.Scene {
     this.#room.send(ClientMessage.ChannelChat, {
       channelId,
       text: trimmed,
+      requestId: this.#latencyRequest(),
     } satisfies ChannelChatSendPayload);
+  }
+
+  /** No retained log: a measurement observer may subscribe without seeing message content. */
+  #latencyRequest(): string | undefined {
+    if (typeof crypto.randomUUID !== 'function') return undefined;
+    const requestId = crypto.randomUUID();
+    window.dispatchEvent(new CustomEvent('quintal:human-send', {
+      detail: { requestId, at: performance.now() },
+    }));
+    return requestId;
   }
 
   /** Ask for a page of a transcript; it arrives as a `history` event. */

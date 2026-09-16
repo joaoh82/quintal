@@ -22,3 +22,4 @@ export * from './voice.js';
 export * from './workspace.js';
 
 export * from './activity.js';
+export * from './latency.js';
