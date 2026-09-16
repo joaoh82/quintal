@@ -22,7 +22,10 @@ remain supported; the harness generates a UUID when correlation is absent.
 Each human trigger keeps its own ID when up to 20 triggers share a prompt.
 Public activity carries a validated, deduplicated list capped at 20 IDs. The activity turn ID links to QUIN-49 progress. A pre-dispatch
 retry keeps the request ID and original enqueue origin, increments the attempt
-and records the failed attempt as `retry`. Cancelled/failed queued requests and
+and records the failed attempt as `retry`. Saturation describes the pool at
+initial enqueue; socket-interruption cohort labels follow queued requests and
+retries. The reconnect label is not proof of successful recovery: check the
+outcome and observed dispatches. Cancelled/failed queued requests and
 idle timeouts emit outcomes too. Agent-to-agent banter and memory commands are
 excluded. Per-request tools are capped at 128, with an explicit truncation flag;
 unknown starts/ends remain null. Raw tool IDs are never exported.
@@ -60,7 +63,7 @@ Tool spans overlap runtime and may overlap each other. Do not add these p95s.
 Tool histograms are per-trigger observations: batched human requests share the
 same physical calls, so their spans are not a count of distinct executions.
 Runtime minus approval is **not model generation time**. Provider queue,
-prefill and generation are unavailable. A public message may be narration;
+prefill, generation and the provider model build/version are unavailable. A public message may be narration;
 first answer quality must be checked by the benchmark observer. ACP notices and
 private thought chunks are not counted as public replies.
 
@@ -152,7 +155,10 @@ existing human message rate limit; retain unobserved sends as failures/missing.
 message identified by the terminal snapshot supplies `answerCandidateMs` only
 if that message was visible; only set
 `answerVerified: true` in a joined report after checking it answers the fixed
-prompt. Unverified answers stay unavailable. Batched sends may share one answer.
+prompt. Unverified answers stay unavailable. Batched sends may share one answer. If the observer sees multiple public turns
+for one human ID (retry or multiple responding agents), it marks the result
+`ambiguous` and leaves terminal delivery/answer timing unavailable. Those cases
+need an explicit per-turn join; they must not pass a latency budget.
 Use `observe-office-latency.ts CONFIG SEED OUTPUT.jsonl` for matching harness
 records in a seeded local office. Seed and configuration files contain credentials
 and must never be attached to reports.

@@ -363,6 +363,9 @@ export class AgentRunner {
       if (this.#stopping) return;
       this.#setState('offline');
       for (const turn of this.#turns.values()) for (const trace of turn.latency ?? []) trace.sample.reconnected = true;
+      for (const queue of this.#queues.values()) for (const trigger of queue) {
+        if (trigger.latency) trigger.latency.sample.reconnected = true;
+      }
       this.#log('warn', `office connection closed (${code})`);
       void this.#reconnect();
     });

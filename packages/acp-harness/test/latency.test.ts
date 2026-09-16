@@ -4,6 +4,14 @@ import { LatencyTrace, latencyDurations, percentiles, type LatencySample } from 
 import { summarizeLatency, type LatencyRun } from '../src/runner/latency-report.js';
 
 describe('latency diagnostics', () => {
+  it('contains asynchronous observer failures', async () => {
+    const trace = new LatencyTrace({ serverSentAt: 1, conversation: 'dm' }, async () => {
+      throw new Error('diagnostic sink unavailable');
+    });
+    trace.finish('failed');
+    await new Promise(resolve => setImmediate(resolve));
+  });
+
   it('separates phases with one monotonic clock and unions overlapping approvals', () => {
     let now = 0;
     const records: LatencySample[] = [];
@@ -46,11 +54,15 @@ describe('latency diagnostics', () => {
   it('retains request identity and original queue origin on retry; observer failure is harmless', () => {
     let now = 0;
     const trace = new LatencyTrace({ serverSentAt: 1, conversation: 'dm' }, () => { throw new Error('sink'); }, () => now);
+    trace.sample.saturated = true;
+    trace.sample.reconnected = true;
     now = 100; trace.finish('retry');
     const retry = trace.retry();
     now = 120; retry.mark('claimed');
     assert.equal(retry.requestId, trace.requestId);
     assert.equal(retry.sample.attempt, 1);
+    assert.equal(retry.sample.saturated, true);
+    assert.equal(retry.sample.reconnected, true);
     assert.equal(retry.sample.phases.claimed, 120);
     retry.finish('failed');
   });

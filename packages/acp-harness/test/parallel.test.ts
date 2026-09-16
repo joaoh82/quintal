@@ -32,6 +32,7 @@ const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.
  */
 
 interface Handlers {
+  closed?: (code: number) => void;
   chat?: (message: unknown) => void;
   channelChat?: (message: unknown) => void;
 }
@@ -258,6 +259,18 @@ describe('answering several conversations at once', () => {
     assert.equal(samples.get(first)?.activityTurnId, samples.get(second)?.activityTurnId);
     const queued = samples.get(second)!;
     assert.ok(queued.phases.feedbackDispatched! < queued.phases.claimed!, 'the shared queued snapshot was dispatched before claim');
+  });
+
+  it('tags queued traces when a reconnect interrupts saturation', async () => {
+    const { handlers, record } = await start({ FAKE_DELAY_MS: '300', FAKE_REPLY: 'done' }, { parallelism: 1 });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob review', 100);
+    await until(() => promptTexts(record).length === 1, 'busy worker');
+    mention(handlers, DM, 'queued ask', 101);
+    handlers.closed?.(1006);
+    await until(() => samples.size === 2, 'both timing records');
+    assert.ok([...samples.values()].every(sample => sample.reconnected));
   });
 
   it('answers a DM while a channel review is still running, and shows it working in both', async () => {

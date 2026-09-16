@@ -54,7 +54,8 @@ export class LatencyTrace {
       version: 1, requestId: this.requestId, activityTurnId: null,
       attempt: previous ? previous.sample.attempt + 1 : 0,
       serverSentAt: input.serverSentAt, conversation: input.conversation, enqueuedAt: previous?.sample.enqueuedAt ?? Date.now(),
-      session: 'unclaimed', saturated: false, reconnected: false,
+      session: 'unclaimed', saturated: previous?.sample.saturated ?? false,
+      reconnected: previous?.sample.reconnected ?? false,
       worker: null, runtimeVersion: null, runtimeStop: null, phases: {}, approvalMs: 0,
       tools: [], toolsTruncated: false, outcome: 'failed', finishedMs: 0,
       unavailable: ['browserSend', 'visibleFeedback', 'visibleReply', 'deliveryAcknowledgement',
@@ -122,7 +123,12 @@ export class LatencyTrace {
 
   #publish(): void {
     // Diagnostics must never fail a conversation. Consumers own storage/retention.
-    try { this.emit(structuredClone(this.sample)); } catch { /* observer failure */ }
+    try {
+      const pending: unknown = this.emit(structuredClone(this.sample));
+      if (pending && typeof (pending as PromiseLike<void>).then === 'function') {
+        void Promise.resolve(pending).catch(() => {});
+      }
+    } catch { /* observer failure */ }
   }
 }
 

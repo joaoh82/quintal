@@ -37,6 +37,15 @@
       if (!matching.length) continue;
       if (!visible(section)) continue;
       for (const record of matching) {
+        // A retry or multiple responding agents need an explicit per-turn join.
+        // Never report an earlier failed turn's terminal time as the final delivery.
+        if (record.turnId && record.turnId !== section.dataset.turnId) record.multipleTurns = true;
+        if (record.multipleTurns) {
+          record.deliveryMs = null;
+          record.answerCandidateMs = null;
+          record.outcome = 'ambiguous';
+          continue;
+        }
         record.turnId ??= section.dataset.turnId;
         record.feedbackMs ??= now - record.sentAt;
         const messages = [...section.querySelectorAll('[data-activity-message]')].filter(visible);
