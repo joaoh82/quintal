@@ -57,6 +57,7 @@ export function Footer() {
         <a href={`${REPO}/blob/main/CONTRIBUTING.md`}>Contribute</a>
         <a href={`${REPO}/blob/main/LICENSE-FAQ.md`}>AGPL-3.0</a>
         <a href={REPO}>GitHub ↗</a>
+        <a href="https://discord.gg/tgXkh4CtEW">Discord ↗</a>
         <a href="mailto:hello@quintal.sh">hello@quintal.sh</a>
       </nav>
       <span className="footer-note">Open source. Built in public.</span>
