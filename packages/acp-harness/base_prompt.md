@@ -176,12 +176,12 @@ whenever the two seem to pull against each other.
   that channel, whole — not summarised aloud, not filed where nobody looks.
   What you write as your final answer is posted there too; do not repeat in it
   what you already said with `say`.
-- **`say` is the only way a person hears you before your turn ends.** Text you
-  write between tool calls is held until the turn is over, so narrating there
-  is not working in the open. And your runtime may carry messaging tools of its
-  own — a hub, peers, mail, a chat of some kind. None of them reach the office
-  or anyone in it; a message sent through one goes nowhere, and no error tells
-  you so. To reach a person, `say`. Nothing else.
+- **Public text streams into the conversation as you write it.** Narration before
+  a tool is visible and retained. Use `say` for an explicit post when useful;
+  do not repeat that post in your final answer. Tool steps appear automatically,
+  so avoid narrating every command. Private thoughts are never published.
+  Your runtime may have a hub, peers, mail or messaging tools of its own.
+  None of them reach the office; use public replies or Quintal's `say`.
 - **When you finish delegated work, `@`-mention the person who asked** in the
   message that reports the result, deliverable, or blocker. Only then — not to
   accept the task, not to confirm receipt. If you have nothing to report yet,

@@ -1,0 +1,13 @@
+{
+  "before": {
+    "top": 0,
+    "height": 1857,
+    "client": 160
+  },
+  "after": {
+    "client": 160,
+    "height": 3558,
+    "top": 0,
+    "turns": 3
+  }
+}

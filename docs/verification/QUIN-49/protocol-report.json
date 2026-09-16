@@ -1,0 +1,75 @@
+{
+  "pass": true,
+  "queueLatencyMs": 136,
+  "receivedSnapshots": 17,
+  "leakedSnapshots": 0,
+  "agentWakeups": 0,
+  "turnId": "2a212ff3-589c-4f83-bcaf-e61c5235b2dd",
+  "channel": "Activity mu3on6jj",
+  "dbRows": [
+    {
+      "id": "688ba577b53c4962a06562297e384473:a3266e80-10a6-4c35-9963-a6c1425d21d5",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "d758a219f34a32c7352185aec88b54ce:6a9a58ce-cc64-4611-98ae-4aabee0fb3ff",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "6524a02872dad3b9c9164c3c94e07588:d983ce48-b8c6-4161-9f08-08c8bc44f89c",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "df7091031b8db324df7df7b50c6854c1:b54cd64a-6415-48de-b2d9-abbab20d3622",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "6524a02872dad3b9c9164c3c94e07588:e0b25e56-ebba-4c17-9c67-6a98cedf3389",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "6524a02872dad3b9c9164c3c94e07588:latency-1789537493070",
+      "sequence": 20,
+      "state": "completed"
+    },
+    {
+      "id": "6524a02872dad3b9c9164c3c94e07588:latency-1789537696501",
+      "sequence": 20,
+      "state": "completed"
+    },
+    {
+      "id": "3d90431792a8b5e0e5ec3d0d487c8da5:deef55af-1dae-485a-affd-31bafbac40bf",
+      "sequence": 2,
+      "state": "cancelled"
+    },
+    {
+      "id": "df7091031b8db324df7df7b50c6854c1:2a212ff3-589c-4f83-bcaf-e61c5235b2dd",
+      "sequence": 10,
+      "state": "completed"
+    },
+    {
+      "id": "df7091031b8db324df7df7b50c6854c1:9c085936-fe94-48f1-9c9d-26b73f1698f8",
+      "sequence": 1,
+      "state": "completed"
+    },
+    {
+      "id": "d758a219f34a32c7352185aec88b54ce:331f44e3-af31-4c25-ad2e-2e9de240d3c8",
+      "sequence": 1,
+      "state": "disconnected"
+    },
+    {
+      "id": "4f059907f11025ba6ac46ca4d8b6ec17:e461bf08-a309-4b9b-91d9-184146b74b5d",
+      "sequence": 2,
+      "state": "cancelled"
+    }
+  ],
+  "restrictedHistory": {
+    "code": "unauthorised",
+    "message": "Not a channel you are in."
+  }
+}

@@ -19,3 +19,5 @@ export * from './settings.js';
 export * from './teams.js';
 export * from './url.js';
 export * from './workspaces.js';
+
+export * from './activity.js';

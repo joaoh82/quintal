@@ -1,0 +1,115 @@
+{
+  "runtime": {
+    "name": "@agentclientprotocol/codex-acp",
+    "title": "Codex",
+    "version": "1.12.0"
+  },
+  "capturedOn": "2026-09-16",
+  "scenario": "ls <workspace>; uname -a; false (separate calls)",
+  "updates": [
+    {
+      "toolCallId": "exec-4caada58-aec0-430e-aa3c-a0795c6e90f5",
+      "title": "List files in 'runtime-workspace'",
+      "name": "exec_command",
+      "kind": "read",
+      "status": "in_progress",
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "exec-4caada58-aec0-430e-aa3c-a0795c6e90f5",
+      "status": "completed",
+      "name": "exec_command",
+      "rawOutput": {
+        "formatted_output": "fixture.txt\n",
+        "exit_code": 0
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1",
+      "title": "uname -a",
+      "name": "exec_command",
+      "kind": "execute",
+      "status": "in_progress",
+      "content": [
+        {
+          "terminalId": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1",
+          "type": "terminal"
+        }
+      ],
+      "rawInput": {
+        "command": "uname -a",
+        "cwd": "/workspace"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/workspace",
+          "terminal_id": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1"
+        }
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1",
+      "status": "completed",
+      "name": "exec_command",
+      "rawOutput": {
+        "formatted_output": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+        "exit_code": 0
+      },
+      "_meta": {
+        "terminal_output_delta": {
+          "data": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n",
+          "terminal_id": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1"
+        },
+        "terminal_exit": {
+          "exit_code": 0,
+          "signal": null,
+          "terminal_id": "exec-d819a13c-3f33-408b-81c0-f3d62f9fbfe1"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "exec-cb906bbf-0df2-4db5-b813-84afa2468963",
+      "title": "false",
+      "name": "exec_command",
+      "kind": "execute",
+      "status": "in_progress",
+      "content": [
+        {
+          "terminalId": "exec-cb906bbf-0df2-4db5-b813-84afa2468963",
+          "type": "terminal"
+        }
+      ],
+      "rawInput": {
+        "command": "false",
+        "cwd": "/workspace"
+      },
+      "_meta": {
+        "terminal_info": {
+          "cwd": "/workspace",
+          "terminal_id": "exec-cb906bbf-0df2-4db5-b813-84afa2468963"
+        }
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "exec-cb906bbf-0df2-4db5-b813-84afa2468963",
+      "status": "failed",
+      "name": "exec_command",
+      "rawOutput": {
+        "formatted_output": "",
+        "exit_code": 1
+      },
+      "_meta": {
+        "terminal_exit": {
+          "exit_code": 1,
+          "signal": null,
+          "terminal_id": "exec-cb906bbf-0df2-4db5-b813-84afa2468963"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    }
+  ]
+}

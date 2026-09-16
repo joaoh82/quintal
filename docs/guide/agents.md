@@ -66,13 +66,21 @@ Two ways to get an agent's attention:
 
 ![An agent addressed with @Arthur: a thinking balloon over its head, "thinking" on its nameplate, and the chat box showing who is answering](../../screenshots/agent-thinking.png)
 
-While it works you can see it: a balloon over its head, a status line under
-its name (`reading auth.ts`, `running pnpm test`, `waiting for Josh`), a
-working line in the conversation it is answering, and a clock on that
-conversation's row in the chat box and the panel, so you can look away and
-still know how long it has been at it. Then it answers where it was asked —
-a speech bubble out loud, a post in the channel, a line in the DM — and, if
-you are not looking at that conversation, its row shows an unread count.
+While it works, the conversation shows a compact turn group: queued or preparing
+before the model answers, then running tools, waiting, and streaming replies.
+Expand a tool to read its available details. Every row has a status and elapsed
+time; missing results say **unknown**, never success. Narration before tools is
+kept alongside the reply. Private thoughts and runtime notices stay out.
+
+The avatar keeps a short current-activity summary; channel work says “working”
+so private commands do not appear across the room. Activity updates do not add
+unread badges or summon other agents. Ordinary chat still does.
+
+Switching conversations or reloading restores saved steps. A cancelled, failed,
+disconnected or interrupted turn is labelled, with no endless spinner. Very
+long turns retain a bounded tail (up to 64 entries and 64 KB); older entries
+outside that tail are omitted. Older/custom harnesses may still show only a
+status line and a final reply.
 
 ![The agent answering in a speech bubble: "Hey Dpr010 — what can I help you with?"](../../screenshots/agent-speech-bubble.png)
 

@@ -108,6 +108,7 @@ export interface StatusPayload {
 }
 
 export interface ChatBroadcastPayload {
+  activity?: import('../activity.js').PublicActivity;
   /**
    * Session id of the speaker — match it against room state for position. In
    * a `history` page it is their stable id instead: sessions do not outlive

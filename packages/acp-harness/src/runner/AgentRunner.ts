@@ -1,9 +1,11 @@
+import { PublicTurn } from './activity.js';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
 import {
   AGENT_CHAT_INTERVAL_MS,
+  FLOOR_ZONE_ID,
   AGENT_PARALLELISM_MAX,
   AGENT_PARALLELISM_MIN,
   channelLabel,
@@ -11,6 +13,7 @@ import {
   isAddressed,
   parseAgentCommand,
   type RuntimeStatus,
+  type AgentActivity,
   type AgentBanterEvent,
   type AgentChannelChatEvent,
   type AgentChatEvent,
@@ -176,6 +179,10 @@ export class AgentRunner {
    * you were working" is only true of the session that was working.
    */
   readonly #steerPending = new Set<string>();
+  readonly #publicTurns = new Map<number, PublicTurn>();
+  /** Bounded replay outbox, including turns completed during a socket outage. */
+  readonly #activityOutbox = new Map<string, AgentActivity>();
+  readonly #queuedActivity = new Map<string, PublicTurn>();
   #turnSeq = 0;
   #statusSeq = 0;
   /**
@@ -280,6 +287,10 @@ export class AgentRunner {
   async stop(): Promise<void> {
     this.#stopping = true;
     this.#setState('stopped');
+    for (const turn of this.#turns.values()) turn.cancelled = true;
+    for (const waiter of this.#permissionWaiters.values()) waiter.resolve('deny');
+    for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.finish('cancelled');
+    this.#queuedActivity.clear();
     const pool = this.#pool;
     this.#pool = null;
     await Promise.allSettled((pool?.workers() ?? []).map((worker) => worker.stop()));
@@ -380,6 +391,8 @@ export class AgentRunner {
       // A new socket knows nothing: send the picture again, whatever it is.
       this.#statusKey = '';
       this.#publishStatus();
+      for (const value of this.#activityOutbox.values()) this.#gateway.activity?.(value);
+      for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.flush();
       this.#log('info', 'reconnected');
     } catch (error: unknown) {
       this.#log('warn', `reconnect failed: ${describe(error)}`);
@@ -398,6 +411,9 @@ export class AgentRunner {
    */
   async #onWorkerExit(worker: Worker, code: number | null): Promise<void> {
     if (this.#stopping) return;
+    for (const [id, waiter] of this.#permissionWaiters) {
+      if (id.startsWith(`${worker.index}:`)) waiter.resolve('deny');
+    }
     // A worker that died on the way up was already given up on by `ready()`;
     // restarting it would leave a live process nothing will ever claim.
     if (worker.dead) return;
@@ -414,9 +430,11 @@ export class AgentRunner {
     worker.restarts += 1;
     try {
       await worker.restart();
+      if (this.#stopping) return;
       this.#log('info', 'agent restarted');
     } catch (error: unknown) {
       worker.dead = true;
+      if (this.#stopping) return;
       this.#log('error', `restart failed: ${describe(error)}`);
       this.#noteIfNothingLeft();
     }
@@ -432,6 +450,7 @@ export class AgentRunner {
    * pool that just gave up.
    */
   #settleState(): void {
+    if (this.#stopping) { this.#setState('stopped'); return; }
     const pool = this.#pool;
     if (pool !== null && pool.live().length === 0) this.#setState('offline');
     else this.#setState(this.#turns.size > 0 ? 'working' : 'connected');
@@ -462,6 +481,8 @@ export class AgentRunner {
         this.#speak(`I can't answer right now — ${this.config.harness} is not running for me.`, scope);
       }
     }
+    for (const activity of this.#queuedActivity.values()) activity.finish('failed');
+    this.#queuedActivity.clear();
     this.#queues.clear();
     this.#steerPending.clear();
   }
@@ -677,8 +698,18 @@ export class AgentRunner {
         // there is a session to stop.
         const here = [...this.#turns.values()].filter((turn) => turn.scope === scope);
         const targets = here.length > 0 ? here : [...this.#turns.values()];
+        for (const [queuedScope, activity] of this.#queuedActivity) {
+          if (here.length > 0 && queuedScope !== scope) continue;
+          activity.finish('cancelled');
+          this.#queuedActivity.delete(queuedScope);
+          this.#queues.delete(queuedScope);
+        }
         for (const turn of targets) {
           turn.cancelled = true;
+          for (const [id, waiter] of this.#permissionWaiters) {
+            if (id.startsWith(`${turn.worker.index}:`)) waiter.resolve('deny');
+          }
+          this.#publicTurns.get(turn.id)?.finish('cancelled');
           if (turn.sessionId) turn.worker.cancel(turn.sessionId);
         }
         this.#log(
@@ -749,7 +780,19 @@ export class AgentRunner {
     }
   }
 
+  #publishActivity(value: AgentActivity): void {
+    this.#activityOutbox.delete(value.turnId);
+    this.#activityOutbox.set(value.turnId, value);
+    if (this.#activityOutbox.size > 128) this.#activityOutbox.delete(this.#activityOutbox.keys().next().value!);
+    this.#gateway.activity?.(value);
+  }
+
   #enqueue(scope: string, trigger: Trigger): void {
+    if (this.#gateway.activity && this.#gateway.ready?.activityVersion === 1 && !isBanterScope(scope) && !isForgetScope(scope) && !this.#queuedActivity.has(scope)) {
+      const channelId = channelIdOf(scope);
+      this.#queuedActivity.set(scope, new PublicTurn(channelId ? { channelId } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID },
+        value => this.#publishActivity(value)));
+    }
     const queue = this.#queues.get(scope) ?? [];
     queue.push(trigger);
     this.#queues.set(scope, queue);
@@ -808,6 +851,15 @@ export class AgentRunner {
       };
       // Claimed in the same tick: nothing else can take this worker now.
       worker.turn = turn;
+      const activity = this.#queuedActivity.get(scope) ??
+        (this.#gateway.activity && this.#gateway.ready?.activityVersion === 1 && !isBanterScope(scope) && !isForgetScope(scope)
+          ? new PublicTurn(channelIdOf(scope) ? { channelId: channelIdOf(scope)! } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID }, value => this.#publishActivity(value)) : undefined);
+      if (activity) {
+        this.#queuedActivity.delete(scope);
+        activity.value.workerId = String(worker.index);
+        activity.state('preparing');
+        this.#publicTurns.set(turn.id, activity);
+      }
 
       const triggers = queue.splice(0, MAX_BATCH);
       if (queue.length === 0) this.#queues.delete(scope);
@@ -822,13 +874,17 @@ export class AgentRunner {
     this.#turns.set(turn.id, turn);
     const steer = this.#steerPending.delete(scope);
     let requeued = false;
+    let failed = false;
 
     try {
       await worker.ready();
       await this.#runTurn(turn, triggers, steer);
     } catch (error: unknown) {
+      failed = true;
       requeued = this.#turnFailed(turn, triggers, steer, error);
     } finally {
+      this.#publicTurns.get(turn.id)?.finish(turn.cancelled ? 'cancelled' : turn.idled ? 'interrupted' : failed ? 'failed' : 'completed');
+      this.#publicTurns.delete(turn.id);
       if (turn.idleTimer) clearTimeout(turn.idleTimer);
       turn.idleTimer = null;
       this.#turns.delete(turn.id);
@@ -966,11 +1022,15 @@ export class AgentRunner {
     this.#audit('prompt', { scope, session, worker: worker.index, envelope, priming });
 
     turn.prompted = true;
+    const activity = this.#publicTurns.get(turn.id);
+    if (activity) { activity.value.sessionId = session; activity.state('running'); }
     this.#touch(turn);
     const response = await worker.prompt({
       sessionId: session,
       prompt: [{ type: 'text', text }],
     });
+
+    if (response.stopReason === 'cancelled') turn.cancelled = true;
 
     // Only once it has actually landed. A failed turn leaves the session still
     // knowing nothing, and the next one must say it all again — as must one
@@ -980,7 +1040,7 @@ export class AgentRunner {
     }
 
     if (banter) this.#speakBanter(turn.buffer);
-    else this.#speak(turn.buffer, scope);
+    else if (!this.#publicTurns.has(turn.id)) this.#speak(turn.buffer, scope);
     this.#audit('response', {
       scope,
       session,
@@ -1494,6 +1554,7 @@ export class AgentRunner {
     turn.idleTimer = null;
     if (turn.idled || turn.cancelled || turn.awaitingOwner > 0 || !this.#turns.has(turn.id)) return;
     turn.idled = true;
+    this.#publicTurns.get(turn.id)?.finish('interrupted');
     const span = describeSpan(turnIdleMs());
     this.#log('warn', `no word from the runtime for ${span} — stopping the turn in "${turn.scope}"`);
     if (!isBanterScope(turn.scope) && !isForgetScope(turn.scope)) {
@@ -1508,13 +1569,15 @@ export class AgentRunner {
 
   #onAcpUpdate(worker: Worker, params: schema.SessionNotification): void {
     const update = params.update as { sessionUpdate?: string } & Record<string, unknown>;
-    // By session first — that is what the protocol keys on, and each
-    // process mints its own ids so the worker is part of the key — and by
-    // worker otherwise, since a worker runs one turn at a time.
-    const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId)) ?? worker.turn;
+    // Route strictly by worker and session. An old session must never attach
+    // its late output to whatever turn this worker happens to run now.
+    const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId));
     if (!turn) return;
+    if (turn.cancelled || turn.idled) return;
     // Any update at all is a sign of life, thoughts included.
     this.#touch(turn);
+    const activity = this.#publicTurns.get(turn.id);
+    if (activity && Date.now() - activity.value.updatedAt > 30_000) activity.changed();
 
     switch (update.sessionUpdate) {
       case 'agent_message_chunk': {
@@ -1527,18 +1590,21 @@ export class AgentRunner {
           this.#log('warn', `runtime notice (not spoken): ${text.trim()}`);
           break;
         }
-        turn.buffer += text;
+        turn.buffer = (turn.buffer + text).slice(0, 64_000);
+        this.#publicTurns.get(turn.id)?.text(text);
         break;
       }
       case 'agent_thought_chunk':
         // Thinking is not for the office.
         break;
       case 'tool_call': {
+        this.#publicTurns.get(turn.id)?.tool(update);
         const name = String(update.title ?? update.name ?? 'tool');
         this.#setTurnStatus(turn, statusForTool(name, update.rawInput ?? update.input));
         break;
       }
       case 'tool_call_update': {
+        this.#publicTurns.get(turn.id)?.tool(update);
         const status = String(update.status ?? update.executionStatus ?? '');
         if (status === 'completed' || status === 'failed') this.#setTurnStatus(turn, 'thinking');
         break;
@@ -1590,12 +1656,12 @@ export class AgentRunner {
     // ask with the same one, and a waiter keyed by it alone would be
     // overwritten — the first question then waits out the whole timeout.
     const callId = `${worker.index}:${String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random())}`;
-    const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId)) ?? worker.turn;
+    const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId));
     const scope = turn?.scope ?? this.#scopeOf();
     const owner = ready?.ownerName ?? 'Owner';
     const me = ready?.name ?? this.name;
 
-    if (turn) this.#setTurnStatus(turn, `waiting for ${owner}`);
+    if (turn) { this.#setTurnStatus(turn, `waiting for ${owner}`); this.#publicTurns.get(turn.id)?.state('waiting'); }
     // The idle clock is the runtime's; the wait that follows is the owner's.
     // Held until the answer, or the question's own timeout.
     const release = turn ? this.#holdIdle(turn) : () => {};
@@ -1628,6 +1694,7 @@ export class AgentRunner {
       });
     } finally {
       release();
+      if (turn) this.#publicTurns.get(turn.id)?.state('running');
     }
 
     this.#audit('permission', { tool: toolName, decision });
@@ -1709,7 +1776,8 @@ export class AgentRunner {
   #sayNow(worker: Worker, text: string): { posted_to: string; parts: number } {
     if (worker.turn) this.#touch(worker.turn);
     const scope = worker.turn?.scope ?? this.#scopeOf();
-    const parts = this.#deliver(text, scope);
+    const activity = worker.turn ? this.#publicTurns.get(worker.turn.id) : undefined;
+    const parts = activity ? (activity.say(text), 1) : this.#deliver(text, scope);
     this.#audit('say', { scope, worker: worker.index, text });
     const channel = this.#channelOf(scope);
     const where =
@@ -1792,7 +1860,7 @@ export class AgentRunner {
     const offline = pool !== null && pool.running().length === 0;
 
     const status = latest
-      ? latest.status
+      ? (channelIdOf(latest.scope) ? 'working' : latest.status)
       : offline
         ? 'offline'
         : this.#modelRefusal !== null

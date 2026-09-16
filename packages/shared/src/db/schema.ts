@@ -818,3 +818,16 @@ export type TeamMember = typeof teamMembers.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type OfficeSettingsRow = typeof officeSettings.$inferSelect;
 export type InstanceSettingsRow = typeof instanceSettings.$inferSelect;
+
+/** Bounded public turn snapshots, kept separately from chat and mentions. */
+export const agentActivity = sqliteTable('agent_activity', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  agentId: text('agent_id').notNull(),
+  sequence: integer('sequence').notNull(),
+  startedAt: integer('started_at').notNull(),
+  x: integer('x'),
+  y: integer('y'),
+  snapshot: text('snapshot').notNull(),
+}, (table) => [index('agent_activity_conversation_idx').on(table.workspaceId, table.conversationId, table.startedAt)]);

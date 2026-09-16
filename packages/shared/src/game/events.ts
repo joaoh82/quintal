@@ -79,6 +79,7 @@ export type ConnectionStatus =
 // A type alias rather than an interface: interfaces have no implicit index
 // signature, so they don't satisfy the emitter's `Record<string, unknown>`.
 export type GameEvents = {
+  activity: import('../activity.js').PublicActivity;
   /** The scene has finished loading the map and is rendering. */
   ready: { mapName: string; width: number; height: number; zones: MapZone[] };
   /** The local player entered or left a zone. Fires only on change. */

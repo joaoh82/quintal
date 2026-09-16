@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, it } from 'node:test';
 
+import type { AgentActivity } from '@quintal/shared';
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner } from '../src/runner/AgentRunner.js';
 import type { AgentConfig } from '../src/config.js';
@@ -114,23 +115,31 @@ describe('saying something mid-turn', () => {
     delete process.env.FAKE_RECORD;
     delete process.env.FAKE_TOOL_CALL;
     delete process.env.FAKE_REPLY;
+    delete process.env.FAKE_CRASH_AFTER;
   }
 
   after(stopCurrent);
 
-  async function start(): Promise<{ handlers: Handlers; record: string; said: Said }> {
+  async function start(streaming = false, crash = false): Promise<{ handlers: Handlers; record: string; said: Said; activity: AgentActivity[] }> {
     await stopCurrent();
     const dir = mkdtempSync(join(tmpdir(), 'quintal-say-'));
     const record = join(dir, 'requests.jsonl');
     process.env.FAKE_RECORD = record;
     process.env.FAKE_TOOL_CALL = 'say:{"text":"on it — reading the diff"}';
     process.env.FAKE_REPLY = 'Review posted: two findings, one blocking.';
+    if (crash) process.env.FAKE_CRASH_AFTER = '0';
 
     const handlers: Handlers = {};
     const said: Said = [];
-    current = new AgentRunner(config(dir), undefined, fakeGateway(handlers, said));
+    const activity: AgentActivity[] = [];
+    const gateway = fakeGateway(handlers, said);
+    if (streaming) {
+      gateway.ready!.activityVersion = 1;
+      gateway.activity = value => activity.push(value);
+    }
+    current = new AgentRunner(config(dir), undefined, gateway);
     await current.start();
-    return { handlers, record, said };
+    return { handlers, record, said, activity };
   }
 
   it('posts into the channel the turn is in, ahead of the reply, and paces the reply behind it', async () => {
@@ -167,6 +176,29 @@ describe('saying something mid-turn', () => {
     const [answer] = toolResults(record);
     assert.ok(answer?.ok, `the tool answered ok: ${JSON.stringify(answer)}`);
     assert.deepEqual(answer.result, { posted_to: '#engineering', parts: 1 });
+  });
+
+  it('streams say and final reply once in the same turn without the chat limiter', async () => {
+    const { handlers, activity, said } = await start(true);
+    handlers.channelChat?.({ channel: ENGINEERING, from: 's-1', fromUserId: 'user-1',
+      fromName: 'Josh', fromKind: 'human', text: '@Bob review #52 please', sentAt: Date.now(), mentioned: true });
+    await until(() => activity.some(value => value.state === 'completed'), 'completed activity');
+    assert.equal(activity[0]?.state, 'queued');
+    const last = activity.at(-1)!;
+    assert.equal(last.channelId, ENGINEERING.id);
+    assert.deepEqual(last.items.filter(item => item.kind === 'message').map(item => item.text),
+      ['on it — reading the diff', 'Review posted: two findings, one blocking.']);
+    assert.equal(said.length, 0, 'activity did not become duplicate chat messages');
+    assert.ok(activity.some(value => value.items.length > 0 && value.state !== 'completed'));
+  });
+
+  it('closes the streamed turn as failed when its ACP process crashes', async () => {
+    const { handlers, activity } = await start(true, true);
+    handlers.channelChat?.({ channel: ENGINEERING, from: 's-1', fromUserId: 'user-1',
+      fromName: 'Josh', fromKind: 'human', text: '@Bob check the machine', sentAt: Date.now(), mentioned: true });
+    await until(() => activity.some(value => value.state === 'failed'), 'failed activity after process exit');
+    assert.equal(activity.at(-1)?.state, 'failed');
+    assert.equal(activity.at(-1)?.turnId, activity[0]?.turnId);
   });
 
   it('speaks aloud when the turn is a spatial one', async () => {

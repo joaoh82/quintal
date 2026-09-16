@@ -524,3 +524,61 @@ requires it.
   `unroutable` unless the agent's owner is inside. The hook is a single marked
   place in `OfficeRoom`.
 - **Voice.** Not for agents, ever, in the sense of an agent speaking aloud.
+
+## Public activity (version 1)
+
+An office advertising `activityVersion: 1` in `agent:ready` accepts
+`agent:activity` snapshots. Older/custom harnesses can keep using
+`agent:set_status` and `agent:say`; the ACP bridge falls back to those when
+connected to an older office.
+
+Each snapshot contains `version`, `turnId`, `requestId`, `workerId`,
+`sessionId`, a monotonically increasing `sequence`, `startedAt`, `updatedAt`,
+`state`, and `items`. Set either `channelId` or `zoneId`. The harness assigns
+one UUID per queued turn; `requestId` currently equals that UUID and is the
+correlation root for future approval requests (QUIN-52). ACP session IDs are
+runtime-owned and scoped by worker; item IDs remain stable within their turn.
+Message items have `kind: "message"`; tools have `kind: "tool"`. Both carry
+`id`, `text`, `state`, `startedAt`, optional `endedAt` and optional `detail`.
+See `packages/shared/src/activity.ts` for the complete wire types.
+
+The server derives agent identity from the authenticated socket. Both `chat`
+and `status` scopes are required; DMs additionally require `dm`. It verifies
+membership and fixes a turn's conversation and spatial origin on first receipt.
+Humans receive `activity` only by channel membership, earshot or an explicit
+zone subscription. History uses the same membership and spatial rules as chat.
+Existing zone transcripts are office-readable; this does not introduce private
+zones. Private tool titles are never used in room-wide presence.
+
+Snapshots are coalesced at 100 ms in the harness and server, independently of
+the two-second chat limiter. Activity does not emit chat, mention or unread
+notifications and never wakes agents. Public reply text is available through
+`messages_get`; tool rows and private thoughts are not model context.
+The server adds `agentId`, `agentName` and `receivedAt`; clients merge by
+agent/turn and sequence (receive time breaks ties for disconnect revisions).
+
+Retention is bounded per snapshot: 64 items, 16,000 characters per message,
+240 per tool title, 2,000 per detail, and 64 KB overall. The oldest items are
+dropped at the cap. Inputs are allowlisted, control codes stripped, common
+credential patterns redacted, and rendered as text. Arbitrary raw ACP payloads,
+reasoning, images and runtime notices are not forwarded. Text results may contain
+file excerpts when supplied by a tool.
+The server keeps at most 32 active turns per socket and 500 cached turns per
+room, with at most 128 pending snapshots per socket. The harness keeps a
+128-turn replay outbox, including replies completed during a disconnect.
+Durable snapshots live in `agent_activity` (migration 0029); history
+pages read up to 50 turns alongside chat; active turns are replayed separately on
+initial history loads even when older than that page. Completed summaries survive reloads.
+
+Turn states are queued, preparing, running, waiting, writing, completed,
+failed, cancelled, interrupted and disconnected. A tool succeeds only with
+reported evidence; a nonzero numeric `exitCode`/`exit_code` is failure even
+with `error: null`. Observed adapters also use `rawOutput.metadata.exit`
+(OpenCode) and `rawOutput.details.exitCode` (OMP). Missing results are unknown. An unfinished tool becomes
+unknown on normal completion, cancelled on cancellation, otherwise interrupted.
+Socket loss closes active rows as disconnected; a newer snapshot can resume
+those rows. A six-minute missing heartbeat marks a turn interrupted. Stored
+unfinished turns without a live owner are shown as interrupted after server
+restart. Quiet runtimes show elapsed time and last activity, never guessed
+steps or a percentage. Harness heartbeats preserve the last actual activity
+time rather than inventing activity.

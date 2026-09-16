@@ -1,0 +1,265 @@
+{
+  "runtime": {
+    "name": "@agentclientprotocol/claude-agent-acp",
+    "title": "Claude Agent",
+    "version": "0.78.0"
+  },
+  "capturedOn": "2026-09-16",
+  "scenario": "ls <workspace>; uname -a; false (separate calls)",
+  "updates": [
+    {
+      "toolCallId": "toolu_01Q5W8Xr4kAhUC7gbAxT6itU",
+      "title": "Terminal",
+      "name": "Bash",
+      "kind": "execute",
+      "status": "pending",
+      "content": [],
+      "rawInput": {},
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "toolu_01Q5W8Xr4kAhUC7gbAxT6itU",
+      "kind": "execute",
+      "title": "ls /workspace",
+      "rawInput": {
+        "command": "ls /workspace"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01Q5W8Xr4kAhUC7gbAxT6itU",
+      "kind": "execute",
+      "title": "ls /workspace",
+      "content": [
+        {
+          "content": {
+            "text": "List workspace directory contents",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "ls /workspace",
+        "description": "List workspace directory contents"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash",
+          "title": "List workspace directory contents"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01Q5W8Xr4kAhUC7gbAxT6itU",
+      "_meta": {
+        "claudeCode": {
+          "toolResponse": {
+            "stdout": "fixture.txt",
+            "stderr": "",
+            "interrupted": false,
+            "isImage": false,
+            "noOutputExpected": false
+          },
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01Q5W8Xr4kAhUC7gbAxT6itU",
+      "status": "completed",
+      "content": [
+        {
+          "content": {
+            "text": "```console\nfixture.txt\n```",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": "fixture.txt",
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01E547GFxL9gf3DJeuJop557",
+      "title": "Terminal",
+      "name": "Bash",
+      "kind": "execute",
+      "status": "pending",
+      "content": [],
+      "rawInput": {},
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "toolu_01E547GFxL9gf3DJeuJop557",
+      "kind": "execute",
+      "title": "uname -a",
+      "rawInput": {
+        "command": "uname -a"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01E547GFxL9gf3DJeuJop557",
+      "kind": "execute",
+      "title": "uname -a",
+      "content": [
+        {
+          "content": {
+            "text": "Print system information",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "uname -a",
+        "description": "Print system information"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash",
+          "title": "Print system information"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01E547GFxL9gf3DJeuJop557",
+      "_meta": {
+        "claudeCode": {
+          "toolResponse": {
+            "stdout": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64",
+            "stderr": "",
+            "interrupted": false,
+            "isImage": false,
+            "noOutputExpected": false
+          },
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_01E547GFxL9gf3DJeuJop557",
+      "status": "completed",
+      "content": [
+        {
+          "content": {
+            "text": "```console\nDarwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64\n```",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": "Darwin fixture-host 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64",
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_019MDgWuZTRzcvEdZ8hHZuNx",
+      "title": "Terminal",
+      "name": "Bash",
+      "kind": "execute",
+      "status": "pending",
+      "content": [],
+      "rawInput": {},
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call"
+    },
+    {
+      "toolCallId": "toolu_019MDgWuZTRzcvEdZ8hHZuNx",
+      "kind": "execute",
+      "title": "false",
+      "rawInput": {
+        "command": "false"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_019MDgWuZTRzcvEdZ8hHZuNx",
+      "kind": "execute",
+      "title": "false",
+      "content": [
+        {
+          "content": {
+            "text": "Run a command that exits non-zero",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawInput": {
+        "command": "false",
+        "description": "Run a command that exits non-zero"
+      },
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash",
+          "title": "Run a command that exits non-zero"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    },
+    {
+      "toolCallId": "toolu_019MDgWuZTRzcvEdZ8hHZuNx",
+      "status": "failed",
+      "content": [
+        {
+          "content": {
+            "text": "```\nExit code 1\n```",
+            "type": "text"
+          },
+          "type": "content"
+        }
+      ],
+      "rawOutput": "Exit code 1",
+      "_meta": {
+        "claudeCode": {
+          "toolName": "Bash"
+        }
+      },
+      "sessionUpdate": "tool_call_update"
+    }
+  ]
+}

@@ -20,3 +20,5 @@ export * from './settings.js';
 export * from './team.js';
 export * from './voice.js';
 export * from './workspace.js';
+
+export * from './activity.js';

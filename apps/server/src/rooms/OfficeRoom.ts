@@ -1,3 +1,5 @@
+import { activityTerminal, parseActivity, type PublicActivity } from '@quintal/shared';
+import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
 import { ErrorCode, Room, ServerError, type Client, logger } from '@colyseus/core';
 import {
   AGENT_CHAT_INTERVAL_MS,
@@ -317,6 +319,10 @@ export class OfficeRoom extends Room<OfficeState> {
    * person: a transcript you have open, not a wiretap on the office.
    */
   readonly #followed = new Map<string, string>();
+  readonly #activity = new Map<string, { value: PublicActivity; owner: string; conversationId: string; x: number; y: number }>();
+  readonly #activityPending = new Map<string, Map<string, unknown>>();
+  readonly #activityBusy = new Set<string>();
+
   #nextEmoteSweep = 0;
   /** sessionId -> a balloon asked for inside the flicker interval, applied when it is up. */
   readonly #emoteLater = new Map<
@@ -436,6 +442,17 @@ export class OfficeRoom extends Room<OfficeState> {
     );
 
     // --- agent protocol (docs/GATEWAY.md) ---
+    this.onMessage('agent:activity', (client, payload: unknown) => {
+      if (!this.#agents.has(client.sessionId)) return;
+      const value = parseActivity(payload);
+      if (!value) return;
+      const pending = this.#activityPending.get(client.sessionId) ?? new Map<string, unknown>();
+      if (pending.size >= 128 && !pending.has(value.turnId)) return;
+      const previous = pending.get(value.turnId) as PublicActivity | undefined;
+      if (!previous || previous.sequence < value.sequence) pending.set(value.turnId, value);
+      this.#activityPending.set(client.sessionId, pending);
+      void this.#drainActivity(client);
+    });
     this.onMessage(AgentMessage.Say, (client, payload: AgentSayPayload) =>
       this.#onAgentSay(client, payload),
     );
@@ -471,7 +488,14 @@ export class OfficeRoom extends Room<OfficeState> {
       void this.#refreshChannels();
     }, 10_000);
 
-    this.#heartbeatTimer = setInterval(() => this.#sendHeartbeats(), AGENT_HEARTBEAT_MS);
+    this.#heartbeatTimer = setInterval(() => {
+      this.#sendHeartbeats();
+      for (const entry of this.#activity.values()) {
+        if (!activityTerminal(entry.value.state) && Date.now() - entry.value.receivedAt > 360_000) {
+          this.#closeActivity(entry, 'interrupted');
+        }
+      }
+    }, AGENT_HEARTBEAT_MS);
     this.#revocationTimer = setInterval(
       () => void this.#kickRevokedAgents(),
       AGENT_REVOCATION_POLL_MS,
@@ -711,6 +735,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
     const zone = zoneAt(this.#map, spawn.x, spawn.y);
     const ready: AgentReadyPayload = {
+      activityVersion: 1,
       agentId: identity.id,
       sessionId: client.sessionId,
       name: identity.name,
@@ -755,6 +780,12 @@ export class OfficeRoom extends Room<OfficeState> {
     const agent = this.#agents.get(client.sessionId);
 
     if (agent) {
+      this.#activityPending.delete(client.sessionId);
+      for (const entry of this.#activity.values()) {
+        if (entry.owner === client.sessionId && !activityTerminal(entry.value.state)) {
+          this.#closeActivity(entry, 'disconnected');
+        }
+      }
       audit(agent.id, 'session.disconnected', { sessionId: client.sessionId, consented });
     }
 
@@ -790,6 +821,7 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   override onDispose(): void {
+    this.#activityPending.clear();
     voiceRelay.unregisterRoom(this.roomId);
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     if (this.#revocationTimer) clearInterval(this.#revocationTimer);
@@ -1710,7 +1742,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!player) return;
 
     const before = Number(payload?.before);
-    const limit = Math.min(Math.max(Number(payload?.n) || CHAT_LOG_LIMIT, 1), CHAT_LOG_LIMIT);
+    const limit = Math.min(Math.max(Number(payload?.n) || CHAT_LOG_LIMIT, 1), CHAT_LOG_LIMIT, 50);
     const paging = Number.isFinite(before) && before > 0 ? { before } : {};
     const workspaceId = this.#workspaceId;
 
@@ -1747,18 +1779,46 @@ export class OfficeRoom extends Room<OfficeState> {
           ...paging,
         });
       }
-      client.send(ServerMessage.History, {
-        zoneId,
-        channelId,
-        hasMore: page.hasMore,
-        messages: page.messages.map((message) => ({
+      const conversationId = channelId ?? (zoneId ? (await this.#conversations).get(zoneId) : undefined);
+      const activity = await readActivity(getDb(), workspaceId, {
+        ...(conversationId ? { conversationId } : {}), mapId: this.state.mapId,
+        x: player.x, y: player.y, radius: this.#settings.chatRadiusTiles * this.#map.tileSize, ...paging,
+      });
+      // Recheck membership after the asynchronous read.
+      if (channelId && !this.#channelFor(player.userId, channelId)) return;
+      for (const value of activity) {
+        const live = this.#activity.get(`${value.agentId}:${value.turnId}`);
+        if (!live && !activityTerminal(value.state)) {
+          value.state = 'interrupted';
+          for (const item of value.items) if (item.state === 'running' || item.state === 'pending') {
+            item.state = 'interrupted'; item.endedAt = value.updatedAt;
+          }
+        }
+      }
+      const combined: ChatBroadcastPayload[] = [...page.messages.map((message) => ({
           from: message.fromId,
           fromName: message.fromName,
           fromKind: message.fromKind,
           text: message.text,
           sentAt: message.sentAt,
-        })),
+        })), ...activity.map(value => ({ from: value.agentId, fromName: value.agentName,
+          fromKind: 'agent' as const, text: '', sentAt: value.startedAt, activity: value }))]
+          .sort((a, b) => a.sentAt - b.sentAt);
+      client.send(ServerMessage.History, {
+        zoneId, channelId,
+        hasMore: page.hasMore || activity.length === 50 || combined.length > limit,
+        messages: combined.slice(-limit),
       } satisfies HistoryPayload);
+      // A long-running turn can predate the latest history page. Replay active
+      // snapshots separately so reconnect never hides it behind newer chat.
+      if (!paging.before) for (const entry of this.#activity.values()) {
+        if (activityTerminal(entry.value.state)) continue;
+        const sameTarget = channelId ? entry.value.channelId === channelId :
+          !entry.value.channelId && (zoneId ? entry.value.zoneId === zoneId :
+            Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize);
+        if (sameTarget) client.send('activity', { ...entry.value, nearby: !entry.value.channelId &&
+          Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize });
+      }
     } catch (error: unknown) {
       logger.error('[office] could not read history', error);
     }
@@ -1835,6 +1895,83 @@ export class OfficeRoom extends Room<OfficeState> {
     // agent is doing something, so it is not idling.
     if (sim?.agent) this.#noteActivity(client.sessionId);
     return sim?.agent ?? null;
+  }
+
+  async #drainActivity(client: Client): Promise<void> {
+    if (this.#activityBusy.has(client.sessionId)) return;
+    this.#activityBusy.add(client.sessionId);
+    try {
+      while (this.#activityPending.has(client.sessionId)) {
+        // Bound fan-out and writes independently of the chat rate limiter.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const pending = this.#activityPending.get(client.sessionId);
+        this.#activityPending.delete(client.sessionId);
+        for (const payload of pending?.values() ?? []) await this.#onActivity(client, payload);
+      }
+    } catch (error) { logger.error('[office] activity could not be kept', error); }
+    finally { this.#activityBusy.delete(client.sessionId); }
+  }
+
+  async #onActivity(client: Client, payload: unknown): Promise<void> {
+    const session = this.#agentSession(client);
+    const player = this.state.players.get(client.sessionId);
+    const value = parseActivity(payload);
+    if (!session || !player || this.#sims.get(client.sessionId)?.away || !value || !hasScope(session.identity, 'chat') || !hasScope(session.identity, 'status')) return;
+    const channel = value.channelId ? this.#channelFor(player.userId, value.channelId) : null;
+    if (value.channelId && (!channel || (channel.kind === 'dm' && !hasScope(session.identity, 'dm')))) return;
+    const zoneId = value.channelId ? null : this.#zoneIdFor(player, value.zoneId);
+    if (!value.channelId && zoneId === null) return;
+    const conversationId = channel?.id ?? (await this.#conversations).get(zoneId!);
+    if (!conversationId) return;
+    const key = `${session.identity.id}:${value.turnId}`;
+    let previous = this.#activity.get(key);
+    if (!previous) {
+      const stored = await findActivity(getDb(), this.#workspaceId, session.identity.id, value.turnId);
+      if (stored) {
+        previous = { value: JSON.parse(stored.snapshot) as PublicActivity, owner: client.sessionId,
+          conversationId: stored.conversationId, x: stored.x ?? player.x, y: stored.y ?? player.y };
+      }
+    }
+    if (previous && (previous.conversationId !== conversationId || previous.value.sequence >= value.sequence ||
+        (activityTerminal(previous.value.state) && previous.value.state !== 'disconnected'))) return;
+    if (!previous && zoneId && zoneId !== this.#zoneIdFor(player, undefined)) return;
+    if (!previous && this.#activity.size >= 500 && ![...this.#activity.values()].some(e => activityTerminal(e.value.state))) return;
+    if (!previous && [...this.#activity.values()].filter(e => e.owner === client.sessionId && !activityTerminal(e.value.state)).length >= 32) return;
+    if (!this.state.players.has(client.sessionId) || (value.channelId && !this.#channelFor(player.userId, value.channelId))) return;
+    const now = Date.now();
+    const publicValue: PublicActivity = { ...value, agentId: session.identity.id, agentName: player.name,
+      startedAt: previous?.value.startedAt ?? now, receivedAt: now,
+      ...(zoneId ? { zoneId } : {}) };
+    const entry = { value: publicValue, owner: client.sessionId, conversationId,
+      x: previous?.x ?? player.x, y: previous?.y ?? player.y };
+    this.#activity.set(key, entry);
+    if (this.#activity.size > 500) {
+      const oldest = [...this.#activity].find(([, e]) => activityTerminal(e.value.state));
+      if (oldest) this.#activity.delete(oldest[0]);
+    }
+    this.#publishActivity(entry);
+    await keepActivity(getDb(), conversationId, this.#workspaceId, publicValue, value.channelId ? null : entry);
+  }
+
+  #publishActivity(entry: { value: PublicActivity; x: number; y: number }): void {
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.kind === 'agent') continue; // no wakeups, mentions or unread events
+      const visible = entry.value.channelId ? !!this.#channelFor(player.userId, entry.value.channelId) :
+        this.#followed.get(client.sessionId) === entry.value.zoneId ||
+        Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize;
+      if (visible) client.send('activity', { ...entry.value, nearby: !entry.value.channelId &&
+        Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize });
+    }
+  }
+
+  #closeActivity(entry: { value: PublicActivity; owner: string; conversationId: string; x: number; y: number }, state: 'disconnected' | 'interrupted'): void {
+    entry.value = { ...entry.value, state, updatedAt: Date.now(), receivedAt: Date.now(),
+      items: entry.value.items.map(item => item.state === 'running' || item.state === 'pending'
+        ? { ...item, state: 'interrupted', endedAt: Date.now() } : item) };
+    this.#publishActivity(entry);
+    void keepActivity(getDb(), entry.conversationId, this.#workspaceId, entry.value,
+      entry.value.channelId ? null : entry).catch(error => logger.error('[office] activity close failed', error));
   }
 
   #onAgentSay(client: Client, payload: AgentSayPayload): void {
@@ -1937,7 +2074,8 @@ export class OfficeRoom extends Room<OfficeState> {
     const player = this.state.players.get(client.sessionId);
     if (!session || !player) return;
 
-    const status = String(payload?.status ?? '').slice(0, AGENT_STATUS_MAX_LENGTH).trim();
+    const rawStatus = String(payload?.status ?? '').slice(0, AGENT_STATUS_MAX_LENGTH).trim();
+    const status = rawStatus && (payload?.channelId || payload?.channelIds?.length) ? 'working' : rawStatus;
     audit(session.identity.id, 'command.set_status', { status });
     markSeen(session.identity.id);
 
@@ -2150,7 +2288,7 @@ export class OfficeRoom extends Room<OfficeState> {
       payload?.scope === 'zone' || payload?.scope === 'mentions' || payload?.scope === 'channel'
         ? payload.scope
         : 'nearby';
-    const limit = Math.min(Math.max(Number(payload?.n) || MESSAGES_GET_MAX, 1), MESSAGES_GET_MAX);
+    const limit = Math.min(Math.max(Number(payload?.n) || MESSAGES_GET_MAX, 1), MESSAGES_GET_MAX, 50);
     const before = Number(payload?.before);
     const paging = Number.isFinite(before) && before > 0 ? { before } : {};
     audit(session.identity.id, 'command.messages_get', { scope, n: limit });
@@ -2198,6 +2336,20 @@ export class OfficeRoom extends Room<OfficeState> {
           limit,
           ...paging,
         });
+      }
+      if (scope !== 'mentions') {
+        const conversationId = channelId ?? (zoneId ? (await this.#conversations).get(zoneId) : undefined);
+        const activity = await readActivity(db, workspaceId, { ...(conversationId ? { conversationId } : {}),
+          mapId: this.state.mapId, x: player.x, y: player.y,
+          radius: this.#settings.chatRadiusTiles * this.#map.tileSize, ...paging });
+        if (channelId && !this.#channelFor(session.identity.id, channelId)) return;
+        const replies: StoredMessage[] = activity.map((turn): StoredMessage => ({
+          id: turn.turnId, conversationId: conversationId ?? '', fromId: turn.agentId, fromKind: 'agent',
+          fromName: turn.agentName, text: turn.items.filter(item => item.kind === 'message').map(item => item.text).join('\n\n'),
+          sentAt: turn.startedAt, x: null, y: null,
+        })).filter(message => message.text.length > 0);
+        const combined = [...page.messages, ...replies].sort((a, b) => a.sentAt - b.sentAt);
+        page = { messages: combined.slice(-limit), hasMore: page.hasMore || activity.length === 50 || combined.length > limit };
       }
     } catch (error: unknown) {
       logger.error('[office] could not read messages', error);

@@ -5,8 +5,9 @@ Put your agents in the office.
 `quintal-acp` bridges [ACP](https://agentclientprotocol.com) agents — Claude
 Code, Goose, Codex, anything speaking the protocol — into a
 [Quintal](https://github.com/joaoh82/quintal) office as first-class members.
-Office chat becomes prompts, agent output becomes speech, tool activity becomes
-a live status line over the agent's head.
+Office chat becomes prompts. Public replies stream into the conversation, with
+retained tool steps, durations and reported outcomes. The avatar keeps a short
+activity summary. See [the activity protocol](../../docs/GATEWAY.md#public-activity-version-1).
 
 It does **not** run an agentic loop. The loop stays in your harness, where it
 already is; this is a bridge, and that is the whole point.

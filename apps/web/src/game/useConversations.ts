@@ -2,6 +2,7 @@
 
 import {
   FLOOR_ZONE_ID,
+  mergeActivity,
   type ChannelRef,
   type ChatBroadcastPayload,
   type MapZone,
@@ -57,7 +58,7 @@ const EMPTY: Transcript = { messages: [], hasMore: false, loaded: false, loading
 /** Lines kept per transcript. Paging back grows towards this; live lines roll it. */
 const KEEP = 500;
 
-const identity = (m: ChatBroadcastPayload): string => `${m.sentAt} ${m.fromName} ${m.text}`;
+const identity = (m: ChatBroadcastPayload): string => m.activity ? `${m.activity.agentId}:${m.activity.turnId}` : `${m.sentAt} ${m.fromName} ${m.text}`;
 
 /**
  * How often read cursors go to the office. Long enough that reading a busy
@@ -77,13 +78,16 @@ function prepend(
   earlier: ChatBroadcastPayload[],
   hasMore: boolean,
 ): Transcript {
-  const seen = new Set(current.messages.map(identity));
-  const unseen = earlier.filter((m) => !seen.has(identity(m)));
+  const merged = new Map(current.messages.map(message => [identity(message), message]));
+  for (const message of earlier) {
+    const previous = merged.get(identity(message));
+    if (message.activity && previous?.activity) {
+      merged.set(identity(message), { ...message, activity: mergeActivity(previous.activity, message.activity) });
+    } else if (!previous) merged.set(identity(message), message);
+  }
   return {
-    messages: [...unseen, ...current.messages].slice(-KEEP),
-    hasMore,
-    loaded: true,
-    loading: false,
+    messages: [...merged.values()].sort((a, b) => a.sentAt - b.sentAt).slice(-KEEP),
+    hasMore, loaded: true, loading: false,
   };
 }
 
@@ -287,6 +291,22 @@ export function useConversations(
         const self = players.find((player) => player.isSelf);
         selfRef.current = { sessionId: selfSessionId, name: self?.name ?? '' };
       }),
+      gameBridge.on('activity', (activity) => {
+        const line: ChatBroadcastPayload = { from: activity.agentId, fromName: activity.agentName,
+          fromKind: 'agent', text: '', sentAt: activity.startedAt, activity };
+        const update = (t: Transcript): Transcript => {
+          const previous = t.messages.find(m => identity(m) === identity(line));
+          const next = { ...line, activity: mergeActivity(previous?.activity, activity) };
+          return { ...t, messages: [...t.messages.filter(m => identity(m) !== identity(line)), next]
+            .sort((a, b) => a.sentAt - b.sentAt).slice(-KEEP) };
+        };
+        if (activity.channelId) patch(channelKey(activity.channelId), update);
+        else {
+          if (activity.zoneId) patch(zoneKey(activity.zoneId), update);
+          // Server applies earshot/follow visibility; zone followers don't hear it nearby.
+          if (activity.nearby) patch(NEARBY, update);
+        }
+      }),
       gameBridge.on('chat', (line) => {
         patch(NEARBY, (t) => append(t, line));
         note(NEARBY, line);
@@ -305,6 +325,10 @@ export function useConversations(
       }),
       gameBridge.on('channels', ({ channels: mine, available: open, teams: named }) => {
         setChannels(mine);
+        setTranscripts(previous => Object.fromEntries(Object.entries(previous).filter(([key]) => {
+          const { channelId } = parseKey(key as ConversationKey);
+          return !channelId || mine.some(channel => channel.id === channelId);
+        })));
         setAvailable(open);
         setTeams(named ?? []);
         // Anything said in them since you last looked is waiting.
@@ -329,11 +353,14 @@ export function useConversations(
         setActive(channelKey(channel.id));
       }),
       gameBridge.on('notice', ({ message }) => setNotice(message)),
+      gameBridge.on('connection', ({ status }) => {
+        if (status === 'online') { load(NEARBY); if (activeRef.current !== NEARBY) load(activeRef.current); }
+      }),
     ];
     return () => {
       for (const unsubscribe of off) unsubscribe();
     };
-  }, [patch, note]);
+  }, [patch, note, load]);
 
   useEffect(() => {
     if (!notice) return;
@@ -349,10 +376,9 @@ export function useConversations(
     return () => sessionRef.current?.followZone(null);
   }, [active, sessionRef]);
 
-  // First look at a transcript loads its most recent page, once.
+  // Refresh on selection: a transcript may have missed updates while disconnected.
   useEffect(() => {
-    const current = transcripts[active];
-    if (current === undefined || (!current.loaded && !current.loading)) load(active);
+    load(active);
     // `transcripts` is deliberately not a dependency: this is about the first
     // look, and re-running on every line would ask again after each one.
     // eslint-disable-next-line react-hooks/exhaustive-deps

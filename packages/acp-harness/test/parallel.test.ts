@@ -231,7 +231,7 @@ describe('answering several conversations at once', () => {
     const t0 = Date.now();
     mention(handlers, ENGINEERING, '@Bob review PR 76', t0);
     await until(
-      () => statuses.some((s) => s.status === 'thinking' && s.channelId === ENGINEERING.id),
+      () => statuses.some((s) => s.status === 'working' && s.channelId === ENGINEERING.id),
       'the channel turn to start',
     );
     mention(handlers, DM, 'what model are you on?', t0 + 10);

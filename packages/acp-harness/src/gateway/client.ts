@@ -296,6 +296,10 @@ export class GatewayClient {
   // --- commands ------------------------------------------------------------
 
   /** Speak aloud, or — with a channel — post there instead. */
+  activity(value: import('@quintal/shared').AgentActivity): void {
+    this.#room?.send('agent:activity', value);
+  }
+
   say(text: string, channelId?: string): void {
     this.#room?.send(AgentMessage.Say, {
       text,
@@ -459,4 +463,4 @@ export type Gateway = Pick<
   | 'occupants'
   | 'channels'
   | 'on'
->;
+> & Partial<Pick<GatewayClient, 'activity'>>;

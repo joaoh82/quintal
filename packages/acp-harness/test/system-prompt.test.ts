@@ -312,14 +312,14 @@ describe('what reaches the model on the first turn', () => {
  * the owner saw nothing for twenty-five minutes. The words the prompt uses to
  * close that door are pinned here, in both places they are said.
  */
-describe('the one way to reach a person', () => {
+describe('public streaming and explicit posts', () => {
   it('is said in the base prompt', () => {
-    assert.match(basePrompt(), /`say` is the only way a person hears you/);
+    assert.match(basePrompt(), /Public text streams into the conversation/);
     assert.match(basePrompt(), /None of them reach the office/);
   });
 
   it('is said again in the tool hint', () => {
-    assert.match(TOOL_HINT, /say is the only way\s+to reach a person/);
+    assert.match(TOOL_HINT, /Public text streams\s+into this conversation/);
     assert.match(TOOL_HINT, /does not reach the office/);
   });
 });

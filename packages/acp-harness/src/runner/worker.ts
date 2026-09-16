@@ -179,12 +179,18 @@ export class Worker {
   }
 
   async #start(): Promise<void> {
+    if (this.#stopping) throw new Error('worker is stopping');
     if (!this.#bridge) {
-      this.#bridge = await startBridge(
+      const bridge = await startBridge(
         this.options.gateway,
         (tool) => this.#log('info', `tool: ${tool}`),
         this.options.hooks,
       );
+      if (this.#stopping) {
+        await bridge.close();
+        throw new Error('worker stopped while opening its bridge');
+      }
+      this.#bridge = bridge;
     }
     const bridge = this.#bridge;
 
@@ -225,8 +231,13 @@ export class Worker {
       },
     });
 
-    const info = await proc.start();
+    // stop() must own a process even while its initialize handshake is pending.
     this.#process = proc;
+    const info = await proc.start();
+    if (this.#stopping) {
+      proc.stop();
+      throw new Error('worker stopped while initializing');
+    }
     this.sessions.clear();
     this.unprimed.clear();
     this.#creating.clear();

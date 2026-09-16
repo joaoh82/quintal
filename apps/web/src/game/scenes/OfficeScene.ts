@@ -202,6 +202,9 @@ export class OfficeScene extends Phaser.Scene {
       this.#bridge.emit('notice', { code: notice.code, message: notice.message });
     });
 
+    room.onMessage('activity', (activity: import('@quintal/shared').PublicActivity) => {
+      this.#bridge.emit('activity', activity);
+    });
     room.onMessage(ServerMessage.History, (history: HistoryPayload) => {
       this.#bridge.emit('history', history);
     });
