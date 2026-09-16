@@ -218,6 +218,13 @@
       "when": 1789547783350,
       "tag": "0030_scope_activity_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789568162443,
+      "tag": "0031_user_activity_detail",
+      "breakpoints": true
     }
   ]
 }

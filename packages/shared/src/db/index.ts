@@ -11,6 +11,7 @@ export * from './host-tokens.js';
 export * from './hosts.js';
 export * from './invites.js';
 export * from './messages.js';
+export * from './preferences.js';
 export * from './migrate.js';
 export * from './reads.js';
 export * from './schema.js';

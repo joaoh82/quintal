@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type ActivityDetailLevel,
   type ConnectionStatus,
   type MapZone,
   type RosterEntry,
@@ -9,6 +10,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getOverlayKey } from '@/lib/preferences';
+import { subscribeActivityDetailLevel } from '@/lib/activity-preference';
 
 import { gameBridge } from './bridge';
 import type { OfficeSession } from './createGame';
@@ -63,7 +65,13 @@ function typingElsewhere(): boolean {
   );
 }
 
-export default function OfficeGame() {
+export default function OfficeGame({
+  userId,
+  initialActivityDetailLevel,
+}: {
+  userId: string;
+  initialActivityDetailLevel: ActivityDetailLevel;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sessionRef = useRef<OfficeSession | null>(null);
   /** True from the moment we start building a session until it exists. */
@@ -78,11 +86,19 @@ export default function OfficeGame() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayKey, setOverlayKey] = useState('`');
   const [voice, setVoice] = useState<VoiceUiState | null>(null);
+  const [activityDetailLevel, setActivityDetailLevel] = useState(initialActivityDetailLevel);
 
   const conversations = useConversations(sessionRef, { overlayOpen });
 
   // The key is a device preference; read it once the page has a window.
   useEffect(() => setOverlayKey(getOverlayKey()), []);
+
+  // A settings tab for this same account can change the presentation while a
+  // turn streams. The server-backed value remains the fresh-page authority.
+  useEffect(
+    () => subscribeActivityDetailLevel(userId, setActivityDetailLevel),
+    [userId],
+  );
 
   // The desktop app's global push-to-talk lands here: the same `setTalking`
   // the Space key drives, from a chord pressed while some other window had
@@ -268,6 +284,7 @@ export default function OfficeGame() {
           onFocusChange={setChatFocused}
           overlayKey={overlayKey}
           onOpenOverlay={() => setOverlayOpen(true)}
+          activityDetailLevel={activityDetailLevel}
         />
       </div>
 
@@ -332,6 +349,7 @@ export default function OfficeGame() {
             sessionRef.current?.leaveChannel(channelId);
             conversations.select('nearby');
           }}
+          activityDetailLevel={activityDetailLevel}
         />
       ) : null}
 

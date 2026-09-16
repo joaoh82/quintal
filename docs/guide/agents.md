@@ -68,9 +68,18 @@ Two ways to get an agent's attention:
 
 While it works, the conversation shows a compact turn group: queued or preparing
 before the model answers, then running tools, waiting, and streaming replies.
-Expand a tool to read its available details. Every row has a status and elapsed
-time; missing results say **unknown**, never success. Narration before tools is
-kept alongside the reply. Private thoughts and runtime notices stay out.
+**Settings → Profile → Agent activity detail** controls how much is open by
+default for you alone:
+
+- **Low** shows the current phase and elapsed time, any failures or request for
+  your input, then the final reply.
+- **Balanced** (the default) keeps public narration and the current step in view,
+  with honest succeeded, failed and unknown counts for completed steps.
+- **Detailed** shows every tool step, status, duration and expandable result.
+
+Low and Balanced keep a disclosure for the full sanitized history; changing the
+level does not rerun the agent or discard anything. Missing results say
+**unknown**, never success. Private thoughts and runtime notices stay out.
 
 The avatar keeps a short current-activity summary; channel work says “working”
 so private commands do not appear across the room. Activity updates do not add

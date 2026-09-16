@@ -5,6 +5,7 @@ import {
   FLOOR_ZONE_LABEL,
   channelLabel,
   messageMaxLength,
+  type ActivityDetailLevel,
   type RosterEntry,
 } from '@quintal/shared';
 import { useEffect, useMemo } from 'react';
@@ -32,6 +33,7 @@ interface CommsOverlayProps {
   toggleKey: string;
   onClose: () => void;
   onLeaveChannel: (channelId: string) => void;
+  activityDetailLevel: ActivityDetailLevel;
 }
 
 /**
@@ -52,6 +54,7 @@ export function CommsOverlay({
   toggleKey,
   onClose,
   onLeaveChannel,
+  activityDetailLevel,
 }: CommsOverlayProps) {
   const {
     zones,
@@ -288,6 +291,7 @@ export function CommsOverlay({
             loading={activeTranscript.loading}
             onLoadEarlier={() => conversations.loadEarlier(active)}
             size="full"
+            activityDetailLevel={activityDetailLevel}
             emptyText={
               activeChannel?.kind === 'dm'
                 ? `Nothing between you and ${activeChannel.name} yet.`

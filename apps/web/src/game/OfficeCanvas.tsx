@@ -1,5 +1,6 @@
 'use client';
 
+import type { ActivityDetailLevel } from '@quintal/shared';
 import dynamic from 'next/dynamic';
 
 /**
@@ -17,6 +18,17 @@ const OfficeGame = dynamic(() => import('./OfficeGame'), {
   ),
 });
 
-export function OfficeCanvas() {
-  return <OfficeGame />;
+export function OfficeCanvas({
+  userId,
+  initialActivityDetailLevel,
+}: {
+  userId: string;
+  initialActivityDetailLevel: ActivityDetailLevel;
+}) {
+  return (
+    <OfficeGame
+      userId={userId}
+      initialActivityDetailLevel={initialActivityDetailLevel}
+    />
+  );
 }

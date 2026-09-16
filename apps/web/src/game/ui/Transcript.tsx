@@ -1,6 +1,10 @@
 'use client';
 
-import type { ChatBroadcastPayload, TeamRef } from '@quintal/shared';
+import type {
+  ActivityDetailLevel,
+  ChatBroadcastPayload,
+  TeamRef,
+} from '@quintal/shared';
 import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 
 import { segments } from './links';
@@ -76,6 +80,7 @@ interface TranscriptProps {
   emptyText: string;
   /** The corner box is small and dense; the overlay has room. */
   size: 'compact' | 'full';
+  activityDetailLevel: ActivityDetailLevel;
 }
 
 /**
@@ -95,6 +100,7 @@ export function Transcript({
   onLoadEarlier,
   emptyText,
   size,
+  activityDetailLevel,
 }: TranscriptProps) {
   const logRef = useRef<HTMLDivElement | null>(null);
   const pinned = useRef(true);
@@ -118,7 +124,7 @@ export function Transcript({
     }
     before.current = null;
     previousFirst.current = firstIdentity;
-  }, [messages, firstIdentity]);
+  }, [messages, firstIdentity, activityDetailLevel]);
 
   useEffect(() => {
     const element = logRef.current;
@@ -156,7 +162,11 @@ export function Transcript({
         </p>
       ) : (
         messages.map((message) => message.activity ? (
-          <TurnActivity key={`${message.activity.agentId}:${message.activity.turnId}`} activity={message.activity} />
+          <TurnActivity
+            key={`${message.activity.agentId}:${message.activity.turnId}`}
+            activity={message.activity}
+            detailLevel={activityDetailLevel}
+          />
         ) : (
           <p key={`${message.from}-${message.sentAt}`} className="leading-snug">
             <span className="font-mono text-[10px] text-white/35">{timeOf(message.sentAt)} </span>

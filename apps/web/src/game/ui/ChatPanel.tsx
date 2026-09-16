@@ -1,6 +1,11 @@
 'use client';
 
-import { channelLabel, messageMaxLength, type RosterEntry } from '@quintal/shared';
+import {
+  channelLabel,
+  messageMaxLength,
+  type ActivityDetailLevel,
+  type RosterEntry,
+} from '@quintal/shared';
 
 import { activeWorkFor } from '../presence';
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
@@ -21,6 +26,7 @@ interface ChatPanelProps {
   /** The key that opens the full panel, for the hint. */
   overlayKey: string;
   onOpenOverlay: () => void;
+  activityDetailLevel: ActivityDetailLevel;
 }
 
 /**
@@ -38,6 +44,7 @@ export function ChatPanel({
   onFocusChange,
   overlayKey,
   onOpenOverlay,
+  activityDetailLevel,
 }: ChatPanelProps) {
   const { channels, active, select, send, transcripts, unread, myZone } = conversations;
 
@@ -107,6 +114,7 @@ export function ChatPanel({
         loading={transcript.loading && transcript.messages.length === 0}
         onLoadEarlier={() => {}}
         size="compact"
+        activityDetailLevel={activityDetailLevel}
         emptyText={
           activeChannel?.kind === 'dm'
             ? `Nothing between you and ${activeChannel.name} yet. Only the two of you read this.`

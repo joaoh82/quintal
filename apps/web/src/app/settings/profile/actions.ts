@@ -2,6 +2,7 @@
 
 import {
   displayName,
+  isActivityDetailLevel,
   normaliseDisplayName,
   normaliseProfileDescription,
   personalWorkspaceName,
@@ -11,6 +12,7 @@ import {
   ensurePersonalWorkspace,
   getDb,
   renameWorkspace,
+  setUserActivityDetailLevel,
   users,
 } from '@quintal/shared/db';
 import { eq } from 'drizzle-orm';
@@ -20,6 +22,21 @@ import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 
 export type SaveProfileResult = { ok: true } | { ok: false; error: string };
+
+export async function saveActivityDetailLevelAction(
+  level: unknown,
+): Promise<SaveProfileResult> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { ok: false, error: 'Not signed in.' };
+  if (!isActivityDetailLevel(level)) {
+    return { ok: false, error: 'Choose Low, Balanced or Detailed.' };
+  }
+
+  await setUserActivityDetailLevel(getDb(), session.user.id, level);
+  revalidatePath('/settings/profile');
+  revalidatePath('/office');
+  return { ok: true };
+}
 
 /**
  * Edit your own display name and description.
