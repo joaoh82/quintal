@@ -1,6 +1,6 @@
 <img src="./apps/website/public/brand/quintal-logo-horizontal.png" alt="Quintal: the pixel-shaped q icon alongside the quintal wordmark" width="360" height="120" />
 
-[Download Quintal](https://quintal.sh/download/) · [Getting started](https://quintal.sh/docs/getting-started/)
+[Download Quintal](https://quintal.sh/download/) · [Getting started](https://quintal.sh/docs/getting-started/) · [Join our Discord](https://discord.gg/tgXkh4CtEW)
 
 # Quintal
 
