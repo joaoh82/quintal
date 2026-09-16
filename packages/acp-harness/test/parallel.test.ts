@@ -53,6 +53,7 @@ function fakeGateway(
   said: Said,
   statuses: Statuses,
   options: {
+    activity?: boolean;
     parallelism?: number;
     channels?: unknown[];
     core?: string;
@@ -63,6 +64,7 @@ function fakeGateway(
 ): Gateway {
   const channels = options.channels ?? [ENGINEERING, DM];
   const ready = {
+    ...(options.activity ? { activityVersion: 1 } : {}),
     agentId: 'agent-1',
     name: 'Bob',
     ownerUserId: 'owner-1',
@@ -82,6 +84,7 @@ function fakeGateway(
     ready,
     roster: { zone: { id: 'lobby', label: 'the lobby' } },
     connected: true,
+    activity: options.activity ? () => {} : undefined,
     connect: async () => ready,
     leave: async () => {},
     say: (text: string, channelId?: string) => {
@@ -172,7 +175,7 @@ function aloud(handlers: Handlers, text: string): void {
   });
 }
 
-function mention(handlers: Handlers, channel: unknown, text: string, at: number): void {
+function mention(handlers: Handlers, channel: unknown, text: string, at: number, requestId?: string): void {
   handlers.channelChat?.({
     from: 'sess-josh',
     fromUserId: 'owner-1',
@@ -182,6 +185,7 @@ function mention(handlers: Handlers, channel: unknown, text: string, at: number)
     channel,
     mentioned: true,
     sentAt: at,
+    requestId,
   });
 }
 
@@ -238,6 +242,22 @@ describe('answering several conversations at once', () => {
     assert.ok(dm.phases.claimed! > channel.phases.claimed!);
     assert.ok(dm.phases.runtimeCompleted! >= dm.phases.promptDispatched!);
     assert.doesNotMatch(JSON.stringify([...samples.values()]), /private-prompt|private-answer|Josh/);
+  });
+
+  it('records batched queue feedback before a saturated worker claims the requests', async () => {
+    const { handlers, record } = await start({ FAKE_DELAY_MS: '500', FAKE_REPLY: 'done' }, { parallelism: 1, activity: true });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob review', 100);
+    await until(() => promptTexts(record).length === 1, 'busy worker');
+    const first = '11111111-1111-4111-8111-111111111111';
+    const second = '22222222-2222-4222-8222-222222222222';
+    mention(handlers, DM, 'first ask', 101, first);
+    mention(handlers, DM, 'second ask', 102, second);
+    await until(() => samples.size === 3, 'all correlated requests');
+    assert.equal(samples.get(first)?.activityTurnId, samples.get(second)?.activityTurnId);
+    const queued = samples.get(second)!;
+    assert.ok(queued.phases.feedbackDispatched! < queued.phases.claimed!, 'the shared queued snapshot was dispatched before claim');
   });
 
   it('answers a DM while a channel review is still running, and shows it working in both', async () => {

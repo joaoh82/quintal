@@ -830,13 +830,18 @@ export class AgentRunner {
     const queue = this.#queues.get(scope) ?? [];
     queue.push(trigger);
     const activity = this.#queuedActivity.get(scope);
-    if (activity && latencyRequestId(trigger.requestId) && queue.length <= MAX_BATCH) {
-      activity.value.requestIds = [...new Set([...(activity.value.requestIds ?? []), latencyRequestId(trigger.requestId)!])];
+    const requestId = latencyRequestId(trigger.requestId);
+    if (activity && requestId && queue.length <= MAX_BATCH && !activity.value.requestIds?.includes(requestId)) {
+      activity.value.requestIds = [...(activity.value.requestIds ?? []), requestId];
       activity.changed();
     }
-    if (activity && trigger.latency) {
+    if (activity && trigger.latency && queue.length <= MAX_BATCH) {
       trigger.latency.sample.activityTurnId = activity.value.turnId;
       if (!hadActivity && this.#gateway.connected) trigger.latency.mark('feedbackDispatched');
+      const traces = this.#activityLatency.get(activity.value.turnId) ?? [];
+      traces.push(trigger.latency);
+      this.#activityLatency.set(activity.value.turnId, traces);
+      if (this.#activityLatency.size > 128) this.#activityLatency.delete(this.#activityLatency.keys().next().value!);
     }
     this.#queues.set(scope, queue);
     void this.#drain();
@@ -894,6 +899,7 @@ export class AgentRunner {
       };
       // Claimed in the same tick: nothing else can take this worker now.
       worker.turn = turn;
+      const hadQueuedActivity = this.#queuedActivity.has(scope);
       const activity = this.#queuedActivity.get(scope) ??
         (this.#gateway.activity && this.#gateway.ready?.activityVersion === 1 && !isBanterScope(scope) && !isForgetScope(scope)
           ? new PublicTurn(channelIdOf(scope) ? { channelId: channelIdOf(scope)! } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID }, value => this.#publishActivity(value), queue[0]?.requestId) : undefined);
@@ -919,6 +925,7 @@ export class AgentRunner {
         trace.sample.session = worker.hasSession(scope) ? 'warm' : 'cold';
         trace.mark('claimed');
         if (activity) trace.sample.activityTurnId = activity.value.turnId;
+        if (activity && !hadQueuedActivity && this.#gateway.connected) trace.mark('feedbackDispatched');
       }
       if (activity && turn.latency.length) {
         this.#activityLatency.set(activity.value.turnId, turn.latency);
@@ -1929,7 +1936,6 @@ export class AgentRunner {
     turn.status = status;
     turn.statusAt = this.#statusSeq += 1;
     this.#publishStatus();
-    if (this.#gateway.connected) for (const trace of turn.latency ?? []) trace.mark('feedbackDispatched');
   }
 
   /**
@@ -1972,6 +1978,9 @@ export class AgentRunner {
     this.#statusLine = status;
 
     this.#gateway.setStatus(status === 'idle' ? '' : status, primary, { channelIds, spatial });
+    if (this.#gateway.connected) for (const turn of turns) {
+      for (const trace of turn.latency ?? []) trace.mark('feedbackDispatched');
+    }
     // The same state, as a balloon. Derived here so every status the runner
     // narrates gets its glyph without anybody remembering to ask for one.
     this.#setEmote(emoteForStatus(status));

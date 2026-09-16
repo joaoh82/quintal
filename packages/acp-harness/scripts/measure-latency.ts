@@ -20,7 +20,7 @@ const prompts = {
 const cohorts = ['cold', 'warm', 'concurrent', 'saturation', 'reconnect'] as const;
 type Cohort = typeof cohorts[number];
 const [configPath, outputPath, cohortArg = 'warm', promptArg = 'greeting', label = 'baseline'] = process.argv.slice(2);
-if (!configPath || !outputPath || !cohorts.includes(cohortArg as Cohort) || !(promptArg in prompts)) {
+if (!configPath || !outputPath || !cohorts.includes(cohortArg as Cohort) || !Object.hasOwn(prompts, promptArg) || !['baseline', 'after'].includes(label)) {
   throw new Error('Usage: tsx measure-latency.ts CONFIG OUTPUT cold|warm|concurrent|saturation|reconnect greeting|workspace|commands|review baseline|after');
 }
 const config = JSON.parse(readFileSync(configPath, 'utf8')) as AgentConfig;

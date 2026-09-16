@@ -10,7 +10,8 @@ queueing or token generation costs.
 
 Subscribe to `AgentRunner.on('latency', sample => …)` before starting the runner.
 Without a subscriber, no traces are allocated. The subscriber chooses storage
-and retention. It must upsert by `(requestId, attempt)`: delayed outbound sends
+and retention. Partition storage by runner (one human send may address several
+agents), then upsert by `(requestId, attempt)` within that runner: delayed outbound sends
 and reconnect replay can update an already completed sample. Exceptions from
 the subscriber are contained. Keep the callback fast; disk/network work should
 be buffered outside the conversation loop.
@@ -50,12 +51,14 @@ substitute harness dispatch for a visible browser result.
 | Runtime | `session/prompt` dispatch → response; includes runtime orchestration and tools |
 | Tool | First observed `tool_call` → terminal update; absent events stay unknown |
 | Approval | Union of periods waiting on the human; overlapping requests counted once |
-| Feedback dispatch | First progress snapshot or reply dispatched on a connected gateway |
+| Feedback dispatch | First progress/status snapshot or reply dispatched on a connected gateway |
 | First reply dispatch | First nonempty public message snapshot or paced reply dispatched |
 | Completion | Runtime response, with a separate approval-subtracted value |
 | Outbound after runtime | Last observed dispatch minus runtime completion, floored at zero |
 
 Tool spans overlap runtime and may overlap each other. Do not add these p95s.
+Tool histograms are per-trigger observations: batched human requests share the
+same physical calls, so their spans are not a count of distinct executions.
 Runtime minus approval is **not model generation time**. Provider queue,
 prefill and generation are unavailable. A public message may be narration;
 first answer quality must be checked by the benchmark observer. ACP notices and

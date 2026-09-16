@@ -20,6 +20,7 @@ export interface LatencyRun {
     deliveryMs: number | null; answerCandidateMs?: number | null;
     /** Only set after checking the final message answers the fixed prompt. */
     answerVerified?: boolean;
+    deadlineOutcome?: 'success' | 'timeout-or-unverified';
   }>;
 }
 
@@ -57,6 +58,7 @@ export function summarizeLatency(run: LatencyRun) {
     ...metadata, observed: terminal.size, successful: successful.length,
     missing: Math.max(0, run.attempted - terminal.size), outcomes,
     sessions: Object.fromEntries(['warm', 'cold', 'unclaimed'].map(kind => [kind, [...terminal.values()].filter(s => s.session === kind).length])),
+    browserDeadlineFailures: (run.browser ?? []).filter(s => s.deadlineOutcome === 'timeout-or-unverified').length,
     retryAttempts: [...attempts.values()].filter(s => s.outcome === 'retry').length,
     runtimeVersions: [...new Set([...terminal.values()].map(s => s.runtimeVersion))],
     comparable: successful.length >= 30 && run.attempted === terminal.size && run.model !== null,
@@ -81,8 +83,9 @@ export function compareLatency(before: LatencyRun, after: LatencyRun, budgets: R
     const b = baseline.metrics[metric];
     const a = result.metrics[metric];
     const sufficient = !!a && !!b && a.n >= 30 && b.n >= 30 &&
-      a.n === result.successful && b.n === baseline.successful;
+      a.n === result.successful;
     return [metric, { budgetMs, baselineP95: b?.p95 ?? null, afterP95: a?.p95 ?? null,
+      baselineUnavailable: b?.unavailable ?? baseline.successful, afterUnavailable: a?.unavailable ?? result.successful,
       pass: sufficient && Number.isFinite(budgetMs) && budgetMs >= 0 && a.p95 !== null && a.p95 <= budgetMs }];
   }));
   return {
@@ -90,6 +93,6 @@ export function compareLatency(before: LatencyRun, after: LatencyRun, budgets: R
     pass: mismatches.length === 0 && baseline.comparable && result.comparable &&
       Object.keys(checks).length > 0 && Object.values(checks).every(check => check.pass) &&
       result.successful / result.attempted >= baseline.successful / baseline.attempted &&
-      result.timedOut <= baseline.timedOut,
+      result.timedOut <= baseline.timedOut && result.browserDeadlineFailures <= baseline.browserDeadlineFailures,
   };
 }

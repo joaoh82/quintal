@@ -79,6 +79,29 @@ describe('latency diagnostics', () => {
 });
 
 describe('before/after comparison', () => {
+  it('retains baseline delivery failures while allowing a fully observed repeat', async () => {
+    const { compareLatency } = await import('../src/runner/latency-report.js');
+    const samples: LatencySample[] = [];
+    for (let i = 0; i < 31; i++) {
+      const trace = new LatencyTrace({ serverSentAt: i, conversation: 'dm' }, s => samples.push(s));
+      trace.mark('runtimeCompleted'); trace.finish('completed');
+    }
+    const before: LatencyRun = { version: 1, label: 'before', cohort: 'warm', prompt: 'greeting', runtime: 'fixture',
+      model: 'fixed', parallelism: 2, revision: 'test', environment: 'test', transport: 'office',
+      attempted: 31, timedOut: 0, samples, browser: samples.map((s, i) => ({ requestId: s.requestId,
+        feedbackMs: 10, replyMs: i === 30 ? null : 20, deliveryMs: 30,
+        answerCandidateMs: i === 30 ? null : 20, answerVerified: true,
+        deadlineOutcome: i === 30 ? 'timeout-or-unverified' : 'success' })) };
+    const after: LatencyRun = { ...before, label: 'after', browser: before.browser!.map(s => ({
+      ...s, replyMs: 20, answerCandidateMs: 20, deadlineOutcome: 'success',
+    })) };
+    const comparison = compareLatency(before, after, { firstAnswer: 100 });
+    assert.equal(comparison.pass, true);
+    assert.equal(comparison.baseline.browserDeadlineFailures, 1);
+    assert.equal(comparison.checks.firstAnswer?.baselineUnavailable, 1);
+    assert.equal(compareLatency(after, before, { firstAnswer: 100 }).pass, false);
+  });
+
   it('joins browser clocks by request ID and keeps unverified answers unavailable', () => {
     const samples: LatencySample[] = [];
     const trace = new LatencyTrace({ serverSentAt: 1, conversation: 'dm' }, s => samples.push(s));
