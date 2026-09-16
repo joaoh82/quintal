@@ -124,7 +124,10 @@ export function Transcript({
     }
     before.current = null;
     previousFirst.current = firstIdentity;
-  }, [messages, firstIdentity, activityDetailLevel]);
+    // A sibling (for example the working line) can resize this viewport without
+    // changing messages. Follow the bottom on every commit while still pinned,
+    // before the resulting scroll event mistakes that resize for user scrollback.
+  });
 
   useEffect(() => {
     const element = logRef.current;
