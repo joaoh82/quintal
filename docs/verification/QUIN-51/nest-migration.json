@@ -1,0 +1,10 @@
+{
+ "nest_version_constant": 3,
+ "version_on_disk_after_migration": "3",
+ "had_workspace_info_line_before": false,
+ "has_workspace_info_line_after": true,
+ "repos_row_mentions_tool": true,
+ "owner_note_survived": true,
+ "second_run_changed_nothing": true,
+ "warnings": []
+}

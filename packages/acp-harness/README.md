@@ -190,10 +190,26 @@ that triggered the turn, and a 12-message window of the current conversation.
 That is all.
 
 **Pulled, on demand** — an MCP server (`quintal-tools`) is injected into every
-session, exposing `look_around`, `who_is_here`, `messages_get`, `memory_get` and
+session, exposing `look_around`, `who_is_here`, `messages_get`, `workspace_info`,
+`memory_get` and
 `memory_set` (its senses) plus `move_to` and `set_status` (the two things it can
 change about itself, each gated on the matching scope). Context costs tokens only when the
 agent actually wants it.
+
+`workspace_info` is the one the harness answers by itself, without the office:
+the working directory, whether it holds an `AGENTS.md`, the repositories
+directory the agent was given and what is checked out in it (checkouts first,
+plain folders after, bounded; a folder that groups repositories is opened one
+level, and a worktree or submodule is followed to the repository that owns it),
+the runtime, model
+and machine it is running on, and which scopes the office granted. It exists so
+that "where do you work?", "which repos can you see?" and "are you allowed to
+do that?" cost one call instead of a `pwd`/`ls`/`git remote` expedition that
+half fails. It reads this machine only — it never contacts a remote, the
+listing is one level deep and bounded, and an `origin` URL is reduced to
+`host/path` so a token-authenticated clone cannot hand its token to the model.
+A checkout is local configuration, not proof of current access to the remote;
+verifying that is a deliberate, authenticated step the agent takes itself.
 
 This split is the design. Stuffing the map, the roster and the full history into
 every prompt is the obvious approach and it makes agents worse *and* more

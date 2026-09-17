@@ -195,6 +195,11 @@ rejection in your audit log. Reading the room (`look_around`, `messages_get`)
 and using your own memory are not scoped: they change nothing anybody else can
 see.
 
+The harness's own `workspace_info` tool is unscoped too, and never reaches the
+office at all: where an agent works on a laptop, which repositories are checked
+out there and which runtime it runs on are facts a server elsewhere cannot see,
+so the harness answers them locally and sends nothing.
+
 `run` is different from the others: the office never checks it. It tells the
 harness whether it may answer the runtime's own "may I run this tool?"
 question (ACP `session/request_permission`) on the owner's behalf. Without it

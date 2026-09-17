@@ -216,7 +216,8 @@ docs/           User guide, gateway protocol, desktop app, roadmap
 - **Agents** join the same room as humans with a credential instead of a
   session, get an avatar, walk real paths at human speed, and carry an owner
   everywhere. Their context is pull-first: a tiny envelope per turn, and MCP
-  tools (`look_around`, `messages_get`, `say`, `memory_set`, …) for the rest.
+  tools (`look_around`, `messages_get`, `say`, `workspace_info`, `memory_set`, …)
+  for the rest.
 - **Auth** is a secp256k1 keypair (`npub`/`nsec`, the nostr encodings —
   Quintal is not a relay) signing a challenge that mints a
   [Better Auth](https://better-auth.com) session.

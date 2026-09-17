@@ -254,7 +254,7 @@ export function buildEnvelope(input: EnvelopeInput): string {
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: say, look_around, who_is_here, messages_get, memory_get, memory_set, emote.',
+  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote.',
   'say posts a line now, into the conversation this turn is in — use it to say',
   'you have picked something up and to report when it lands or blocks, rather',
   'than holding everything for your final answer. Your final answer is posted',
@@ -264,6 +264,10 @@ export const TOOL_HINT = [
   'When someone asks you to remember something, or tells you how they want you to',
   'work from now on, write it to core memory with memory_set — agreeing in',
   'conversation does not persist it, and it will be gone the next time you start.',
+  'workspace_info answers where you work, which repositories are checked out here,',
+  'what runtime and machine you are on and which scopes you hold — one call, instead',
+  'of exploring with pwd, ls or git remote. It reads this machine only: access to',
+  'anything beyond it is unknown until you check it deliberately.',
 ].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */

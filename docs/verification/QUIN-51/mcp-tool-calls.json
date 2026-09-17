@@ -1,0 +1,242 @@
+{
+  "measured_at": "2026-09-17T20:29:04.590Z",
+  "node": "v24.13.0",
+  "tools_advertised": [
+    "say",
+    "look_around",
+    "workspace_info",
+    "move_to",
+    "set_status",
+    "who_is_here",
+    "messages_get",
+    "memory_get",
+    "memory_set",
+    "emote"
+  ],
+  "workspace_info_advertised": true,
+  "credential_leaks": [],
+  "calls": [
+    {
+      "label": "A: nest with REPOS link, token-bearing clone",
+      "tool_calls": 1,
+      "elapsed_ms": 32.91,
+      "payload": {
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/workspace",
+        "repositories": {
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/projects",
+          "reached_as": "REPOS/",
+          "checkouts": [
+            {
+              "name": "flotta",
+              "git": true,
+              "remote": "github.com/joaoh82/flotta"
+            },
+            {
+              "name": "quintal",
+              "git": true,
+              "remote": "github.com/joaoh82/quintal"
+            },
+            {
+              "name": "notes",
+              "git": false
+            }
+          ]
+        },
+        "runtime": {
+          "agent": "Smoke",
+          "owner": "Josh",
+          "runtime": "claude-code",
+          "model": "claude-opus-5",
+          "machine": "verification-box",
+          "platform": "darwin"
+        },
+        "quintal_scopes": {
+          "granted": {
+            "chat": "speak aloud and post in channels and direct messages (`say`)",
+            "status": "set your status line and show an emote (`set_status`, `emote`)",
+            "dm": "take part in direct messages at all"
+          },
+          "not_granted": {
+            "move": "walk to a person or a zone (`move_to`)",
+            "run": "your harness may approve the runtime's own \"may I run this?\" questions for you; without it each one is put to your owner, and silence denies"
+          },
+          "unscoped": "look_around, who_is_here, messages_get, memory_get, memory_set and this tool need no scope: they change nothing anybody else can see."
+        },
+        "external_access": {
+          "verified": "nothing",
+          "note": "This report reads only this machine, and never contacts a remote. A checkout here, or a git remote on it, shows that somebody cloned it — not that you can read, push or open a pull request against it now. Treat any access outside this machine as unknown until you check it deliberately, with the credentials your runtime already holds (`gh auth status`, `git ls-remote`, the API you were given). Say it is unknown rather than assuming either way."
+        },
+        "agents_md": "AGENTS.md is in your working directory. Read it once per session."
+      }
+    },
+    {
+      "label": "A2: same session, one repo cloned since",
+      "tool_calls": 1,
+      "elapsed_ms": 2.72,
+      "payload": {
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/workspace",
+        "repositories": {
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/projects",
+          "reached_as": "REPOS/",
+          "checkouts": [
+            {
+              "name": "buzz",
+              "git": true,
+              "remote": "github.com/joaoh82/buzz"
+            },
+            {
+              "name": "flotta",
+              "git": true,
+              "remote": "github.com/joaoh82/flotta"
+            },
+            {
+              "name": "quintal",
+              "git": true,
+              "remote": "github.com/joaoh82/quintal"
+            },
+            {
+              "name": "notes",
+              "git": false
+            }
+          ]
+        },
+        "runtime": {
+          "agent": "Smoke",
+          "owner": "Josh",
+          "runtime": "claude-code",
+          "model": "claude-opus-5",
+          "machine": "verification-box",
+          "platform": "darwin"
+        },
+        "quintal_scopes": {
+          "granted": {
+            "chat": "speak aloud and post in channels and direct messages (`say`)",
+            "status": "set your status line and show an emote (`set_status`, `emote`)",
+            "dm": "take part in direct messages at all"
+          },
+          "not_granted": {
+            "move": "walk to a person or a zone (`move_to`)",
+            "run": "your harness may approve the runtime's own \"may I run this?\" questions for you; without it each one is put to your owner, and silence denies"
+          },
+          "unscoped": "look_around, who_is_here, messages_get, memory_get, memory_set and this tool need no scope: they change nothing anybody else can see."
+        },
+        "external_access": {
+          "verified": "nothing",
+          "note": "This report reads only this machine, and never contacts a remote. A checkout here, or a git remote on it, shows that somebody cloned it — not that you can read, push or open a pull request against it now. Treat any access outside this machine as unknown until you check it deliberately, with the credentials your runtime already holds (`gh auth status`, `git ls-remote`, the API you were given). Say it is unknown rather than assuming either way."
+        },
+        "agents_md": "AGENTS.md is in your working directory. Read it once per session."
+      }
+    },
+    {
+      "label": "B: empty repositories directory",
+      "tool_calls": 1,
+      "elapsed_ms": 1.9,
+      "payload": {
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/empty-workspace",
+        "repositories": {
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/empty-projects",
+          "reached_as": "REPOS/",
+          "note": "nothing cloned here yet"
+        },
+        "runtime": {
+          "agent": "Smoke",
+          "owner": "Josh",
+          "runtime": "claude-code",
+          "model": "claude-opus-5",
+          "machine": "verification-box",
+          "platform": "darwin"
+        },
+        "quintal_scopes": {
+          "granted": {
+            "chat": "speak aloud and post in channels and direct messages (`say`)",
+            "status": "set your status line and show an emote (`set_status`, `emote`)",
+            "dm": "take part in direct messages at all"
+          },
+          "not_granted": {
+            "move": "walk to a person or a zone (`move_to`)",
+            "run": "your harness may approve the runtime's own \"may I run this?\" questions for you; without it each one is put to your owner, and silence denies"
+          },
+          "unscoped": "look_around, who_is_here, messages_get, memory_get, memory_set and this tool need no scope: they change nothing anybody else can see."
+        },
+        "external_access": {
+          "verified": "nothing",
+          "note": "This report reads only this machine, and never contacts a remote. A checkout here, or a git remote on it, shows that somebody cloned it — not that you can read, push or open a pull request against it now. Treat any access outside this machine as unknown until you check it deliberately, with the credentials your runtime already holds (`gh auth status`, `git ls-remote`, the API you were given). Say it is unknown rather than assuming either way."
+        }
+      }
+    },
+    {
+      "label": "C: REPOS link whose target is gone",
+      "tool_calls": 1,
+      "elapsed_ms": 2.88,
+      "payload": {
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/gone-workspace",
+        "repositories": {
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/no-such-dir",
+          "reached_as": "REPOS/",
+          "note": "this directory is not there"
+        },
+        "runtime": {
+          "agent": "Smoke",
+          "owner": "Josh",
+          "runtime": "claude-code",
+          "model": "claude-opus-5",
+          "machine": "verification-box",
+          "platform": "darwin"
+        },
+        "quintal_scopes": {
+          "granted": {
+            "chat": "speak aloud and post in channels and direct messages (`say`)",
+            "status": "set your status line and show an emote (`set_status`, `emote`)",
+            "dm": "take part in direct messages at all"
+          },
+          "not_granted": {
+            "move": "walk to a person or a zone (`move_to`)",
+            "run": "your harness may approve the runtime's own \"may I run this?\" questions for you; without it each one is put to your owner, and silence denies"
+          },
+          "unscoped": "look_around, who_is_here, messages_get, memory_get, memory_set and this tool need no scope: they change nothing anybody else can see."
+        },
+        "external_access": {
+          "verified": "nothing",
+          "note": "This report reads only this machine, and never contacts a remote. A checkout here, or a git remote on it, shows that somebody cloned it — not that you can read, push or open a pull request against it now. Treat any access outside this machine as unknown until you check it deliberately, with the credentials your runtime already holds (`gh auth status`, `git ls-remote`, the API you were given). Say it is unknown rather than assuming either way."
+        }
+      }
+    },
+    {
+      "label": "D: custom cwd, a single checkout, no REPOS",
+      "tool_calls": 1,
+      "elapsed_ms": 3.29,
+      "payload": {
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/solo/api",
+        "repositories": {
+          "path": null,
+          "note": "no repositories directory on this machine"
+        },
+        "runtime": {
+          "agent": "Smoke",
+          "owner": "Josh",
+          "runtime": "claude-code",
+          "model": "claude-opus-5",
+          "machine": "verification-box",
+          "platform": "darwin"
+        },
+        "quintal_scopes": {
+          "granted": {
+            "chat": "speak aloud and post in channels and direct messages (`say`)",
+            "status": "set your status line and show an emote (`set_status`, `emote`)",
+            "dm": "take part in direct messages at all"
+          },
+          "not_granted": {
+            "move": "walk to a person or a zone (`move_to`)",
+            "run": "your harness may approve the runtime's own \"may I run this?\" questions for you; without it each one is put to your owner, and silence denies"
+          },
+          "unscoped": "look_around, who_is_here, messages_get, memory_get, memory_set and this tool need no scope: they change nothing anybody else can see."
+        },
+        "external_access": {
+          "verified": "nothing",
+          "note": "This report reads only this machine, and never contacts a remote. A checkout here, or a git remote on it, shows that somebody cloned it — not that you can read, push or open a pull request against it now. Treat any access outside this machine as unknown until you check it deliberately, with the credentials your runtime already holds (`gh auth status`, `git ls-remote`, the API you were given). Say it is unknown rather than assuming either way."
+        },
+        "working_directory_repo": "github.com/acme/api"
+      }
+    }
+  ]
+}
