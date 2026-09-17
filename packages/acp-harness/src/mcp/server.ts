@@ -77,6 +77,22 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'workspace_info',
+    description:
+      'Where you work on this machine, and what you are allowed to do. One call ' +
+      'answers all of it: your working directory, whether it has an AGENTS.md, the ' +
+      'repositories directory you were given and the checkouts already in it (with ' +
+      'each origin remote as host/path), the runtime and model you are running on, ' +
+      'the machine you are on, and which Quintal scopes you hold. Call this instead ' +
+      'of exploring with pwd, ls, find or git remote — it is one call rather than a ' +
+      'shell session, and it will not send you looking for directories that are not ' +
+      'there. It reads only this machine and never contacts a remote: a checkout ' +
+      'here is not proof you can read or push its repository today, and access ' +
+      'outside this machine stays unknown until you check it deliberately with the ' +
+      'credentials your runtime already has.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'move_to',
     description:
       'Walk somewhere. Name either a person or a zone. ' +

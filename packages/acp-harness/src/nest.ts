@@ -47,7 +47,7 @@ export const NEST_DIRS = ['GUIDES', 'RESEARCH', 'PLANS', '.scratch'] as const;
  * The static part of an existing `AGENTS.md` is rewritten only then; between
  * bumps an owner's edits to it survive.
  */
-export const NEST_VERSION = 2;
+export const NEST_VERSION = 3;
 
 const VERSION_FILE = '.nest-version';
 const AGENTS_FILE = 'AGENTS.md';

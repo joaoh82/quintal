@@ -27,6 +27,8 @@ import {
 
 import { nestRoot, type AgentConfig } from '../config.js';
 import { writeGuide } from '../nest.js';
+import { hostLabel } from '../runtimes.js';
+import { workspaceReport, type WorkspaceReport } from './workspace.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { credentialFor } from '../credential.js';
 import { basePrompt } from './base-prompt.js';
@@ -156,6 +158,15 @@ export class AgentRunner {
    * has spoken past `ready`, so the prompt reads `ready.teams` until then.
    */
   #teams: AgentTeam[] | null = null;
+  /**
+   * What this machine last told the office about itself. Kept because it is
+   * also the honest answer to `workspace_info`: the supervisor knows the name
+   * the office registered this machine under and where it keeps repositories,
+   * and re-reports both whenever the fleet is reconciled — so an agent asked
+   * after a configuration change gets the new answer without any of it being
+   * pushed into a prompt.
+   */
+  #host: { label: string; reposDir: string } | null = null;
   /**
    * Set when the runtime did not offer the model the owner chose. A standing
    * state, not a moment: it holds the nameplate against the idle reset every
@@ -334,6 +345,7 @@ export class AgentRunner {
         setStatus: (status) => this.#statusFromTool(worker, status),
         memorySet: (slug, content, expectedHash) =>
           this.#memorySetFromTool(worker, slug, content, expectedHash),
+        workspaceInfo: () => this.workspaceInfo(),
       },
       onUpdate: (from, params) => this.#onAcpUpdate(from, params),
       onPermission: (from, params) => this.#onPermissionRequest(from, params),
@@ -584,9 +596,36 @@ export class AgentRunner {
    * `Supervisor.#reportHost`.
    */
   reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[] }): void {
+    this.#host = { label: host.label, reposDir: host.reposDir };
     this.#gateway.hostReport({
       ...host,
       workspacePath: this.config.cwd,
+    });
+  }
+
+  /**
+   * `workspace_info`: where this agent works and what it may do, resolved here
+   * because here is the only place that knows.
+   *
+   * The office holds the scopes and the names; this process holds the working
+   * directory, the runtime it spawned and the machine it is on; the filesystem
+   * holds the checkouts. None of it is pushed — an agent that never asks never
+   * pays for it — and it is read fresh on every call, so a repository cloned or
+   * a directory re-pointed since the session started is in the answer.
+   */
+  workspaceInfo(): WorkspaceReport {
+    const ready = this.#gateway.ready;
+    return workspaceReport({
+      cwd: this.config.cwd,
+      scopes: ready?.scopes ?? [],
+      identity: {
+        agent: ready?.name ?? this.name,
+        owner: ready?.ownerName ?? 'not known to this machine',
+        runtime: this.config.runtimeId ?? this.config.harness,
+        model: this.config.modelId ?? null,
+        machine: this.#host?.label ?? hostLabel(),
+      },
+      ...(this.#host?.reposDir ? { reposDir: this.#host.reposDir } : {}),
     });
   }
 
@@ -2111,6 +2150,11 @@ function select(
  * `AGENTS.md` to read — the nest, or a repository with its own — because
  * telling an agent to read a file that is not there is a wasted tool call
  * and a small lesson that the prompt is not to be trusted.
+ *
+ * What is deliberately *not* here: the checkouts, the runtime, the scopes.
+ * Those change, they are long, and most turns never need them — so they are
+ * pulled with `workspace_info` instead, and this section's last line is the
+ * pointer that makes that one call happen instead of a shell expedition.
  */
 export function workspaceSection(cwd: string): string {
   const lines = ['[Workspace]', `Your working directory is ${cwd}.`];
@@ -2122,6 +2166,9 @@ export function workspaceSection(cwd: string): string {
   if (existsSync(join(cwd, 'REPOS'))) {
     lines.push('Repositories are under REPOS/. Work in a checkout that is already there.');
   }
+  lines.push(
+    'For which checkouts are there, which runtime and machine you are on, or what your scopes let you do, call workspace_info once — do not go looking with pwd, ls or git remote.',
+  );
   return lines.join('\n');
 }
 

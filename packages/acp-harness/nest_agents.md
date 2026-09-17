@@ -12,12 +12,16 @@ belongs to you and your owner.
 | `GUIDES/` | Procedures your owner stated or confirmed: how to review a PR, how to cut a release. One file per procedure. |
 | `RESEARCH/` | Findings that cost real work and will be needed again: a repo quirk, an API behaviour, a verified fact with its source. |
 | `PLANS/` | Plans for work that spans sessions. |
-| `REPOS/` | The repositories you work in. Work in an existing checkout; clone here only when there is none. |
+| `REPOS/` | The repositories you work in. Work in an existing checkout; clone here only when there is none. `workspace_info` lists what is already here. |
 | `.scratch/` | Disposable working files. Assume it is gone next session. |
 
 ## Reading
 
 - Read this file once per session, before other work. Do not re-read it.
+- Where this workspace is, which checkouts are in `REPOS/`, and what you are
+  allowed to do: one `workspace_info` call, not a walk through the filesystem.
+  It reads this machine only — whether you can reach a remote is unknown until
+  you check it deliberately.
 - Before a kind of work you have not done this session, look at the guides
   index below and read the one guide that matches. Never read a folder; read
   one file.

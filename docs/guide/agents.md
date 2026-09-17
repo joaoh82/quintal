@@ -33,6 +33,14 @@ workspace the harness makes and keeps, with guides, research and plans, and
 that machine's repos directory reachable under `REPOS/`. Tell an agent which
 project is its own in its instructions ("You work in REPOS/api").
 
+Ask an agent where it works, which repositories it can see, or what it is
+allowed to do, and it answers from the harness in one step rather than
+rummaging around your filesystem — the directory it is in, the checkouts
+already in `REPOS/`, the runtime and machine it is on, and its scopes. It
+reads your machine only and never calls out to GitHub or anywhere else, so
+"there is a checkout of that here" is all it will claim; whether it can still
+push to the remote is something it has to go and check.
+
 Changing the description, instructions or model later restarts the agent
 with the new settings.
 

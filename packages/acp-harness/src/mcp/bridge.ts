@@ -52,6 +52,14 @@ export interface BridgeHooks {
    * write can be told their standing instructions moved.
    */
   memorySet?: (slug: string, content: string, expectedHash?: string) => Promise<unknown>;
+  /**
+   * `workspace_info`. Only the runner knows the agent's working directory,
+   * which runtime it is on and what this machine reported about itself — the
+   * bridge process's own `cwd` is the harness's, not the agent's, so there is
+   * deliberately no fallback here. A bridge without the hook says so rather
+   * than answering about the wrong directory.
+   */
+  workspaceInfo?: () => unknown;
 }
 
 export async function startBridge(
@@ -244,6 +252,16 @@ async function dispatch(
         ...(channelId.length > 0 ? { channelId } : {}),
         ...(Number.isFinite(before) && before > 0 ? { before } : {}),
       });
+    }
+
+    case 'workspace_info': {
+      if (!hooks.workspaceInfo) {
+        throw new Error(
+          'workspace_info is answered by the harness running this agent, and this tool ' +
+            'server was started without one',
+        );
+      }
+      return hooks.workspaceInfo();
     }
 
     case 'memory_get':
