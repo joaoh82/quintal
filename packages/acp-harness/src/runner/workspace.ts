@@ -223,15 +223,34 @@ function listing(path: string, reachedAs: string, limit: number): WorkspaceRepor
     return { path, reached_as: reachedAs, note: 'nothing cloned here yet' };
   }
 
-  const checkouts = names.slice(0, limit).map((name): Checkout => {
-    const dir = join(path, name);
-    const git = isGitCheckout(dir);
-    const remote = git ? originRemote(dir) : null;
+  // Checkouts first, plain directories with whatever room is left, each group
+  // alphabetical. The cap has to fall somewhere, and spending it in one
+  // alphabetical run spends it on the wrong things: a repositories directory
+  // that has collected scratch folders over the years can push real checkouts
+  // past the limit — on the machine this was written on, 38 plain folders were
+  // burying nine repositories whose names start late in the alphabet. The
+  // question is "which repositories are here", so repositories go first.
+  const entries = names.map((name) => ({ name, git: isGitCheckout(join(path, name)) }));
+  const ordered = [...entries.filter((entry) => entry.git), ...entries.filter((entry) => !entry.git)];
+
+  const checkouts = ordered.slice(0, limit).map(({ name, git }): Checkout => {
+    const remote = git ? originRemote(join(path, name)) : null;
     return remote === null ? { name, git } : { name, git, remote };
   });
 
   const result: WorkspaceReport['repositories'] = { path, reached_as: reachedAs, checkouts };
-  if (names.length > checkouts.length) result.more = names.length - checkouts.length;
+  const omitted = ordered.length - checkouts.length;
+  if (omitted > 0) {
+    result.more = omitted;
+    // Plain folders left out are housekeeping. Checkouts left out mean the
+    // answer is incomplete in the way that actually misleads, so say so
+    // rather than letting the agent conclude the list is all there is.
+    const omittedCheckouts = ordered.slice(limit).filter((entry) => entry.git).length;
+    if (omittedCheckouts > 0) {
+      result.note =
+        `${omittedCheckouts} more checkouts than this lists; look in ${path} yourself for one you do not see here`;
+    }
+  }
   return result;
 }
 

@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-09-17T14:48:57.527Z",
+  "measured_at": "2026-09-17T20:15:29.315Z",
   "node": "v24.13.0",
   "tools_advertised": [
     "say",
@@ -19,11 +19,11 @@
     {
       "label": "A: nest with REPOS link, token-bearing clone",
       "tool_calls": 1,
-      "elapsed_ms": 23.38,
+      "elapsed_ms": 32.97,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/projects",
           "reached_as": "REPOS/",
           "checkouts": [
             {
@@ -32,13 +32,13 @@
               "remote": "github.com/joaoh82/flotta"
             },
             {
-              "name": "notes",
-              "git": false
-            },
-            {
               "name": "quintal",
               "git": true,
               "remote": "github.com/joaoh82/quintal"
+            },
+            {
+              "name": "notes",
+              "git": false
             }
           ]
         },
@@ -72,11 +72,11 @@
     {
       "label": "A2: same session, one repo cloned since",
       "tool_calls": 1,
-      "elapsed_ms": 2.29,
+      "elapsed_ms": 2.73,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/projects",
           "reached_as": "REPOS/",
           "checkouts": [
             {
@@ -90,13 +90,13 @@
               "remote": "github.com/joaoh82/flotta"
             },
             {
-              "name": "notes",
-              "git": false
-            },
-            {
               "name": "quintal",
               "git": true,
               "remote": "github.com/joaoh82/quintal"
+            },
+            {
+              "name": "notes",
+              "git": false
             }
           ]
         },
@@ -130,11 +130,11 @@
     {
       "label": "B: empty repositories directory",
       "tool_calls": 1,
-      "elapsed_ms": 1.55,
+      "elapsed_ms": 2.21,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/empty-workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/empty-workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/empty-projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/empty-projects",
           "reached_as": "REPOS/",
           "note": "nothing cloned here yet"
         },
@@ -167,11 +167,11 @@
     {
       "label": "C: REPOS link whose target is gone",
       "tool_calls": 1,
-      "elapsed_ms": 1.14,
+      "elapsed_ms": 1.51,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/gone-workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/gone-workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/no-such-dir",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/no-such-dir",
           "reached_as": "REPOS/",
           "note": "this directory is not there"
         },
@@ -204,9 +204,9 @@
     {
       "label": "D: custom cwd, a single checkout, no REPOS",
       "tool_calls": 1,
-      "elapsed_ms": 1.96,
+      "elapsed_ms": 2.07,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-KYi77b/solo/api",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/solo/api",
         "repositories": {
           "path": null,
           "note": "no repositories directory on this machine"

@@ -99,7 +99,8 @@ describe('what the harness answers about this machine', () => {
       { name: 'flotta', git: true, remote: 'github.com/joaoh82/flotta' },
       { name: 'quintal', git: true, remote: 'github.com/joaoh82/quintal' },
       // Not a checkout, but it is there, and an agent told otherwise would
-      // clone on top of it.
+      // clone on top of it. After the repositories, because that is what was
+      // asked about.
       { name: 'scratchpad', git: false },
     ]);
     assert.equal(result.repositories.more, undefined);
@@ -169,6 +170,28 @@ describe('what the harness answers about this machine', () => {
     const result = report(nest(repos), { limit: 2 });
     assert.deepEqual(result.repositories.checkouts?.map((entry) => entry.name), ['a', 'b']);
     assert.equal(result.repositories.more, 3);
+    // Checkouts were cut, which is the case worth admitting to.
+    assert.match(result.repositories.note ?? '', /3 more checkouts/);
+  });
+
+  it('never lets a plain folder push a repository off the list', () => {
+    // The shape that made this necessary: a repositories directory that has
+    // collected scratch folders, and the repositories named late in the
+    // alphabet falling off the end of an alphabetical cut.
+    const repos = temp('repos');
+    for (const name of ['aaa-notes', 'bbb-downloads', 'ccc-tmp']) mkdirSync(join(repos, name));
+    checkout(repos, 'zzz-api', 'https://github.com/acme/api.git');
+    checkout(repos, 'yyy-web', 'https://github.com/acme/web.git');
+
+    const result = report(nest(repos), { limit: 3 });
+    assert.deepEqual(result.repositories.checkouts?.map((entry) => entry.name), [
+      'yyy-web',
+      'zzz-api',
+      'aaa-notes',
+    ]);
+    assert.equal(result.repositories.more, 2);
+    // Only folders were dropped, so there is nothing to warn about.
+    assert.equal(result.repositories.note, undefined);
   });
 
   it('reads the inventory again on every call', () => {

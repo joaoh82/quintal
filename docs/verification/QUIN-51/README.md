@@ -41,7 +41,8 @@ loopback bridge — no test fixture standing in for either.
 - Five `tools/call` invocations, **one call each**, 1.1–23.4 ms (the first
   includes process warm-up). Harness-side cost is a single directory read.
 - Payloads, in order: a nest whose `REPOS/` links to a repositories directory
-  (three entries, the non-git one marked `git: false`); the same session after a
+  (three entries, the two checkouts first and the non-git one marked
+  `git: false` after them); the same session after a
   repository was cloned **between calls**, which the second answer includes
   (nothing is cached); an empty repositories directory (`"nothing cloned here
   yet"`, not "missing"); a `REPOS/` link whose target is gone (`"this directory
@@ -99,6 +100,19 @@ below the end marker, then a fleet start:
   the `REPOS/` row and the Reading section (absent before, present after).
 - The owner's section below the end marker survives verbatim.
 - A second `ensureNest` changes nothing (idempotent), with no warnings.
+
+### Listing order, against a real repositories directory
+
+Found while smoke-testing the branch on the author's own machine, and fixed
+before merge. `~/projects` there holds 76 directories: 38 checkouts and 38 plain
+folders. An alphabetical cut at 60 dropped **nine real checkouts** — `rustunnel`,
+`this-week-in-rust`, `rust_sqlite` among them — while listing scratch folders
+ahead of them.
+
+Checkouts are now listed first and plain directories take what room is left, each
+group alphabetical, with the cap unchanged. The same machine now lists all 38
+checkouts plus 22 folders, `more: 16`. When the cut does reach checkouts the
+answer says so, rather than letting the agent read a truncated list as complete.
 
 ## What was not verified
 
