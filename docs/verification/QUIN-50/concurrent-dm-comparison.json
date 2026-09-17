@@ -1,0 +1,340 @@
+{
+  "baseline": {
+    "version": 1,
+    "label": "baseline",
+    "cohort": "concurrent-dm",
+    "prompt": "greeting",
+    "runtime": "codex",
+    "model": "gpt-6-astra",
+    "parallelism": 2,
+    "revision": "da2b5d5dd0c54992ce7aa1f8e4e33c8bca78d90d",
+    "implementationHash": "f1aa0d0e9838466bae87c2cbe04eac2cae2fda3c61f425fb130096ade08b0db9",
+    "environment": "darwin arm64 25.5.0 Node v24.13.0",
+    "transport": "controlled-local-gateway",
+    "attempted": 30,
+    "timedOut": 0,
+    "observed": 30,
+    "successful": 30,
+    "missing": 0,
+    "outcomes": {
+      "completed": 30
+    },
+    "sessions": {
+      "warm": 30,
+      "cold": 0,
+      "unclaimed": 0
+    },
+    "browserDeadlineFailures": 0,
+    "retryAttempts": 0,
+    "runtimeVersions": [
+      "1.12.0"
+    ],
+    "comparable": true,
+    "metrics": {
+      "queue": {
+        "n": 30,
+        "p50": 0.04625000001396984,
+        "p95": 0.22349999996367842,
+        "unavailable": 0
+      },
+      "startup": {
+        "n": 30,
+        "p50": 0.31524999999965075,
+        "p95": 0.7003750000149012,
+        "unavailable": 0
+      },
+      "workerStartup": {
+        "n": 30,
+        "p50": 0.08295799999905284,
+        "p95": 0.2273750000167638,
+        "unavailable": 0
+      },
+      "sessionSetup": {
+        "n": 30,
+        "p50": 0.1995840000017779,
+        "p95": 0.44987499999115244,
+        "unavailable": 0
+      },
+      "context": {
+        "n": 30,
+        "p50": 0.025917000020854175,
+        "p95": 0.07149999999819556,
+        "unavailable": 0
+      },
+      "runtime": {
+        "n": 30,
+        "p50": 2105.1635420000093,
+        "p95": 4674.808166999999,
+        "unavailable": 0
+      },
+      "runtimeWithoutApproval": {
+        "n": 30,
+        "p50": 2105.1635420000093,
+        "p95": 4674.808166999999,
+        "unavailable": 0
+      },
+      "approval": {
+        "n": 30,
+        "p50": 0,
+        "p95": 0,
+        "unavailable": 0
+      },
+      "feedbackDispatch": {
+        "n": 30,
+        "p50": 0.03279199998360127,
+        "p95": 0.10975000000325963,
+        "unavailable": 0
+      },
+      "firstReplyDispatch": {
+        "n": 30,
+        "p50": 1990.695292000004,
+        "p95": 3051.8682499999995,
+        "unavailable": 0
+      },
+      "completion": {
+        "n": 30,
+        "p50": 2105.664459000007,
+        "p95": 4675.0281669999995,
+        "unavailable": 0
+      },
+      "completionWithoutApproval": {
+        "n": 30,
+        "p50": 2105.664459000007,
+        "p95": 4675.0281669999995,
+        "unavailable": 0
+      },
+      "outboundAfterRuntime": {
+        "n": 30,
+        "p50": 0.05791600001975894,
+        "p95": 0.18408300000010058,
+        "unavailable": 0
+      },
+      "visibleFeedback": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "firstAnswer": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "delivery": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "firstPublicReply": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      }
+    },
+    "dominantObservedPhase": "runtimeWithoutApproval",
+    "tools": {
+      "durations": {
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "incomplete": 0,
+      "truncatedRequests": 0
+    },
+    "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+  },
+  "after": {
+    "version": 1,
+    "label": "after",
+    "cohort": "concurrent-dm",
+    "prompt": "greeting",
+    "runtime": "codex",
+    "model": "gpt-6-astra",
+    "parallelism": 2,
+    "revision": "1ac16079bbf3cefeead53cd22878d858148c1a23",
+    "implementationHash": "ace4ce320baca73f812b00f0d03112be4dcd519ee8e9ceaa68d497fb2ee9b8b2",
+    "environment": "darwin arm64 25.5.0 Node v24.13.0",
+    "transport": "controlled-local-gateway",
+    "attempted": 30,
+    "timedOut": 0,
+    "observed": 30,
+    "successful": 30,
+    "missing": 0,
+    "outcomes": {
+      "completed": 30
+    },
+    "sessions": {
+      "warm": 30,
+      "cold": 0,
+      "unclaimed": 0
+    },
+    "browserDeadlineFailures": 0,
+    "retryAttempts": 0,
+    "runtimeVersions": [
+      "1.12.0"
+    ],
+    "comparable": true,
+    "metrics": {
+      "queue": {
+        "n": 30,
+        "p50": 0.04204200001549907,
+        "p95": 0.13579200000094716,
+        "unavailable": 0
+      },
+      "startup": {
+        "n": 30,
+        "p50": 0.19808399997418746,
+        "p95": 4.249167000001762,
+        "unavailable": 0
+      },
+      "workerStartup": {
+        "n": 30,
+        "p50": 0.06929200000013225,
+        "p95": 0.43358299997635186,
+        "unavailable": 0
+      },
+      "sessionSetup": {
+        "n": 30,
+        "p50": 0.13279200001852587,
+        "p95": 4.206999999994878,
+        "unavailable": 0
+      },
+      "context": {
+        "n": 30,
+        "p50": 0.030499999993480742,
+        "p95": 0.095166999992216,
+        "unavailable": 0
+      },
+      "runtime": {
+        "n": 30,
+        "p50": 1845.244332999995,
+        "p95": 2476.84612500004,
+        "unavailable": 0
+      },
+      "runtimeWithoutApproval": {
+        "n": 30,
+        "p50": 1845.244332999995,
+        "p95": 2476.84612500004,
+        "unavailable": 0
+      },
+      "approval": {
+        "n": 30,
+        "p50": 0,
+        "p95": 0,
+        "unavailable": 0
+      },
+      "feedbackDispatch": {
+        "n": 30,
+        "p50": 0.030375000031199306,
+        "p95": 0.08991700000478886,
+        "unavailable": 0
+      },
+      "firstReplyDispatch": {
+        "n": 30,
+        "p50": 1662.911666000029,
+        "p95": 2309.1471250000177,
+        "unavailable": 0
+      },
+      "completion": {
+        "n": 30,
+        "p50": 1845.757500000007,
+        "p95": 2476.9908750000177,
+        "unavailable": 0
+      },
+      "completionWithoutApproval": {
+        "n": 30,
+        "p50": 1845.757500000007,
+        "p95": 2476.9908750000177,
+        "unavailable": 0
+      },
+      "outboundAfterRuntime": {
+        "n": 30,
+        "p50": 0.062375000008614734,
+        "p95": 0.10770900000352412,
+        "unavailable": 0
+      },
+      "visibleFeedback": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "firstAnswer": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "delivery": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      },
+      "firstPublicReply": {
+        "n": 0,
+        "p50": null,
+        "p95": null,
+        "unavailable": 30
+      }
+    },
+    "dominantObservedPhase": "runtimeWithoutApproval",
+    "tools": {
+      "durations": {
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "incomplete": 0,
+      "truncatedRequests": 0
+    },
+    "note": "Nearest-rank percentiles of successful requests. Failures and timeouts are reported separately. Dispatch is not visible delivery. Runtime contains tools; provider internals are unavailable."
+  },
+  "mismatches": [],
+  "checks": {
+    "completion": {
+      "budgetMs": 5844,
+      "baselineP95": 4675.0281669999995,
+      "afterP95": 2476.9908750000177,
+      "baselineUnavailable": 0,
+      "afterUnavailable": 0,
+      "pass": true
+    },
+    "firstReplyDispatch": {
+      "budgetMs": 3815,
+      "baselineP95": 3051.8682499999995,
+      "afterP95": 2309.1471250000177,
+      "baselineUnavailable": 0,
+      "afterUnavailable": 0,
+      "pass": true
+    },
+    "queue": {
+      "budgetMs": 10,
+      "baselineP95": 0.22349999996367842,
+      "afterP95": 0.13579200000094716,
+      "baselineUnavailable": 0,
+      "afterUnavailable": 0,
+      "pass": true
+    },
+    "context": {
+      "budgetMs": 10,
+      "baselineP95": 0.07149999999819556,
+      "afterP95": 0.095166999992216,
+      "baselineUnavailable": 0,
+      "afterUnavailable": 0,
+      "pass": true
+    },
+    "feedbackDispatch": {
+      "budgetMs": 10,
+      "baselineP95": 0.10975000000325963,
+      "afterP95": 0.08991700000478886,
+      "baselineUnavailable": 0,
+      "afterUnavailable": 0,
+      "pass": true
+    }
+  },
+  "pass": true
+}

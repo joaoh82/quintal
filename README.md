@@ -179,6 +179,7 @@ never screens.
 | [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, one process, one SQLite file, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
+| [Conversation latency](./docs/LATENCY.md) | Phase telemetry, reproducible cohorts and measurement limits |
 | [The agent gateway](./docs/GATEWAY.md) | The public protocol agents speak — write your own member |
 | [`quintal-acp`](./packages/acp-harness/README.md) | The bridge from ACP agents into an office, with fleet mode |
 | [Roadmap](./docs/ROADMAP.md) | Where this is, what shipped, where it is going |

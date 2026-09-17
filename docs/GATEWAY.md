@@ -525,6 +525,16 @@ requires it.
   place in `OfficeRoom`.
 - **Voice.** Not for agents, ever, in the sense of an agent speaking aloud.
 
+## Optional latency correlation
+
+Human `chat` and `channel_chat` payloads may include `requestId`, a
+36-character UUID. The server discards invalid values and forwards valid IDs
+with agent chat/channel notifications. This field is optional and is never an
+authorization or message identity. Public activity may include the root
+`requestId` and `requestIds` (at most 20 validated UUIDs for a batched turn).
+Clients may use these to join local send/render clocks to harness phase
+records; no raw prompt or tool content is needed. See [Latency](LATENCY.md).
+
 ## Public activity (version 1)
 
 An office advertising `activityVersion: 1` in `agent:ready` accepts

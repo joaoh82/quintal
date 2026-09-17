@@ -27,7 +27,7 @@ const elapsed = (start: number, end: number) =>
 
 function Message({ item }: { item: ActivityItem }) {
   return (
-    <p className="my-1 whitespace-pre-wrap break-words leading-snug text-white/90">
+    <p data-activity-message data-message-id={item.id} className="my-1 whitespace-pre-wrap break-words leading-snug text-white/90">
       {item.text}
     </p>
   );
@@ -124,6 +124,10 @@ export function TurnActivity({
     <section
       className="my-1 min-w-0 border-l border-sky-300/25 pl-2"
       data-turn-id={activity.turnId}
+      data-request-id={activity.requestId}
+      data-request-ids={(activity.requestIds ?? [activity.requestId]).join(' ')}
+      data-activity-state={shownState}
+      data-final-message-id={view.finalMessage?.id}
       data-detail-level={detailLevel}
     >
       <div className="flex flex-wrap items-baseline gap-2 text-[11px] text-white/45">

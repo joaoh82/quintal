@@ -26,6 +26,9 @@ export const WINDOW_SIZE = 12;
 export const MAX_BATCH = 20;
 
 export interface Trigger {
+  requestId?: string;
+  /** Local diagnostics only; never included in a prompt. */
+  latency?: import('./latency.js').LatencyTrace;
   /** Stable id of the speaker (`users.id` / `agents.id`). */
   fromUserId: string;
   fromName: string;

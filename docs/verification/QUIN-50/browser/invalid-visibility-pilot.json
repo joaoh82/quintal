@@ -1,0 +1,1878 @@
+{
+  "summary": {
+    "attempted": 30,
+    "completed": 30,
+    "harnessMatched": 30,
+    "persistedRows": 30,
+    "evicted": 0,
+    "answerVerified": 30,
+    "metrics": {
+      "feedbackMs": {
+        "n": 30,
+        "p50": 115.80000007152557,
+        "p95": 123.19999992847443
+      },
+      "replyMs": {
+        "n": 30,
+        "p50": 312.5,
+        "p95": 342.60000002384186
+      },
+      "deliveryMs": {
+        "n": 30,
+        "p50": 312.5,
+        "p95": 342.60000002384186
+      },
+      "answerCandidateMs": {
+        "n": 30,
+        "p50": 312.5,
+        "p95": 342.60000002384186
+      }
+    },
+    "budgetPass": true,
+    "boundary": "Visible DOM at animation frame; fake ACP runtime with injected 200 ms delay; local office transport, not model performance"
+  },
+  "browser": {
+    "version": 1,
+    "clock": "browser performance.now",
+    "boundary": "visible DOM at animation frame",
+    "evicted": 0,
+    "records": [
+      {
+        "requestId": "c5505a4b-c2f8-4c74-a31e-6f0bd9a439d6",
+        "sentAt": 33636.699999928474,
+        "turnId": "7977d1c6-92b8-4f59-b849-31a9a69d9c4e",
+        "feedbackMs": 130.70000004768372,
+        "replyMs": 358.10000002384186,
+        "deliveryMs": 358.10000002384186,
+        "answerCandidateMs": 358.10000002384186,
+        "messages": [
+          {
+            "id": "7977d1c6-92b8-4f59-b849-31a9a69d9c4e:m1",
+            "firstVisibleMs": 358.10000002384186
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "600d2b1d-a143-47f9-bd4d-c15b8fae0dd7",
+        "sentAt": 35208.60000002384,
+        "turnId": "99eb24c1-6985-4f78-9533-cde3e2763172",
+        "feedbackMs": 116.89999997615814,
+        "replyMs": 218.69999992847443,
+        "deliveryMs": 218.69999992847443,
+        "answerCandidateMs": 218.69999992847443,
+        "messages": [
+          {
+            "id": "99eb24c1-6985-4f78-9533-cde3e2763172:m1",
+            "firstVisibleMs": 218.69999992847443
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "b9a19379-9119-462c-abec-b49f83dfa0b4",
+        "sentAt": 36781.60000002384,
+        "turnId": "92a26535-293d-4ff8-bb24-157b9dc5820a",
+        "feedbackMs": 116.59999990463257,
+        "replyMs": 322.7999999523163,
+        "deliveryMs": 322.7999999523163,
+        "answerCandidateMs": 322.7999999523163,
+        "messages": [
+          {
+            "id": "92a26535-293d-4ff8-bb24-157b9dc5820a:m1",
+            "firstVisibleMs": 322.7999999523163
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "54a70aa5-95ce-4dfe-8478-019fc637743f",
+        "sentAt": 38355.60000002384,
+        "turnId": "f1f85112-f99f-41e3-b823-dbc4d8754cfd",
+        "feedbackMs": 117,
+        "replyMs": 322.6999999284744,
+        "deliveryMs": 322.6999999284744,
+        "answerCandidateMs": 322.6999999284744,
+        "messages": [
+          {
+            "id": "f1f85112-f99f-41e3-b823-dbc4d8754cfd:m1",
+            "firstVisibleMs": 322.6999999284744
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "4a73960d-382e-4d6c-b6f3-8dbf8709fa42",
+        "sentAt": 39951.799999952316,
+        "turnId": "8b4b32a2-8ec3-4075-9c50-774c9eb3295a",
+        "feedbackMs": 109.10000002384186,
+        "replyMs": 342.60000002384186,
+        "deliveryMs": 342.60000002384186,
+        "answerCandidateMs": 342.60000002384186,
+        "messages": [
+          {
+            "id": "8b4b32a2-8ec3-4075-9c50-774c9eb3295a:m1",
+            "firstVisibleMs": 342.60000002384186
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "a9cb0afd-2e73-4c8d-83ac-c327321adb3a",
+        "sentAt": 41489.199999928474,
+        "turnId": "e7c2f1d9-00ea-484d-802b-ef1ce855083d",
+        "feedbackMs": 116.5,
+        "replyMs": 323.2000000476837,
+        "deliveryMs": 323.2000000476837,
+        "answerCandidateMs": 323.2000000476837,
+        "messages": [
+          {
+            "id": "e7c2f1d9-00ea-484d-802b-ef1ce855083d:m1",
+            "firstVisibleMs": 323.2000000476837
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "050b7606-b1e8-4319-8e96-4ec37aa65b78",
+        "sentAt": 43079.60000002384,
+        "turnId": "1ff51161-0d1f-432c-bc85-aa4112507362",
+        "feedbackMs": 115.89999997615814,
+        "replyMs": 224.09999990463257,
+        "deliveryMs": 224.09999990463257,
+        "answerCandidateMs": 224.09999990463257,
+        "messages": [
+          {
+            "id": "1ff51161-0d1f-432c-bc85-aa4112507362:m1",
+            "firstVisibleMs": 224.09999990463257
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "f15f0d79-5b16-4df3-9027-56465685a165",
+        "sentAt": 44616.299999952316,
+        "turnId": "630dd0f1-9c77-4233-9d4b-f0da679303bb",
+        "feedbackMs": 107.80000007152557,
+        "replyMs": 216.60000002384186,
+        "deliveryMs": 216.60000002384186,
+        "answerCandidateMs": 216.60000002384186,
+        "messages": [
+          {
+            "id": "630dd0f1-9c77-4233-9d4b-f0da679303bb:m1",
+            "firstVisibleMs": 216.60000002384186
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "8a6e97e4-fb52-42da-b731-1df879dae6e1",
+        "sentAt": 46180.799999952316,
+        "turnId": "287747e3-3307-4aea-bf52-4f6f9924b783",
+        "feedbackMs": 117.20000004768372,
+        "replyMs": 316.89999997615814,
+        "deliveryMs": 316.89999997615814,
+        "answerCandidateMs": 316.89999997615814,
+        "messages": [
+          {
+            "id": "287747e3-3307-4aea-bf52-4f6f9924b783:m1",
+            "firstVisibleMs": 316.89999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "51c2c302-27aa-4696-aafc-017d9d6473d4",
+        "sentAt": 47755.799999952316,
+        "turnId": "9152857c-1e5c-4f38-9f7e-cb69f513a8ed",
+        "feedbackMs": 115.39999997615814,
+        "replyMs": 226.30000007152557,
+        "deliveryMs": 226.30000007152557,
+        "answerCandidateMs": 226.30000007152557,
+        "messages": [
+          {
+            "id": "9152857c-1e5c-4f38-9f7e-cb69f513a8ed:m1",
+            "firstVisibleMs": 226.30000007152557
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "7800bcc1-d4de-47ba-a689-44038245a075",
+        "sentAt": 61435.299999952316,
+        "turnId": "80035b56-2cee-42f9-bae9-6b3bd3d04499",
+        "feedbackMs": 111.60000002384186,
+        "replyMs": 317.89999997615814,
+        "deliveryMs": 317.89999997615814,
+        "answerCandidateMs": 317.89999997615814,
+        "messages": [
+          {
+            "id": "80035b56-2cee-42f9-bae9-6b3bd3d04499:m1",
+            "firstVisibleMs": 317.89999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "424e9255-dd5b-4322-93ca-0d807d0185ce",
+        "sentAt": 63074,
+        "turnId": "180627f7-acab-470b-b88f-bf5126ae6fa9",
+        "feedbackMs": 115.29999995231628,
+        "replyMs": 221.39999997615814,
+        "deliveryMs": 221.39999997615814,
+        "answerCandidateMs": 221.39999997615814,
+        "messages": [
+          {
+            "id": "180627f7-acab-470b-b88f-bf5126ae6fa9:m1",
+            "firstVisibleMs": 221.39999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "d3b42180-4715-4973-91c2-4e1eca31199c",
+        "sentAt": 64653,
+        "turnId": "e188f8d9-5048-4f65-8e99-53bbe1a01c4e",
+        "feedbackMs": 117.79999995231628,
+        "replyMs": 312.5,
+        "deliveryMs": 312.5,
+        "answerCandidateMs": 312.5,
+        "messages": [
+          {
+            "id": "e188f8d9-5048-4f65-8e99-53bbe1a01c4e:m1",
+            "firstVisibleMs": 312.5
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "df095fa9-cd20-4411-b46c-c158afd4dfc2",
+        "sentAt": 66245.19999992847,
+        "turnId": "31124f0d-ebb5-4c00-9ba3-7a57ffdc2581",
+        "feedbackMs": 120.70000004768372,
+        "replyMs": 219.70000004768372,
+        "deliveryMs": 219.70000004768372,
+        "answerCandidateMs": 219.70000004768372,
+        "messages": [
+          {
+            "id": "31124f0d-ebb5-4c00-9ba3-7a57ffdc2581:m1",
+            "firstVisibleMs": 219.70000004768372
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "94da8248-0b85-4e02-b50c-649ca561e942",
+        "sentAt": 67826.60000002384,
+        "turnId": "0e411566-6d49-4f5a-b0e9-62423ea5ffc9",
+        "feedbackMs": 111.69999992847443,
+        "replyMs": 233.09999990463257,
+        "deliveryMs": 233.09999990463257,
+        "answerCandidateMs": 233.09999990463257,
+        "messages": [
+          {
+            "id": "0e411566-6d49-4f5a-b0e9-62423ea5ffc9:m1",
+            "firstVisibleMs": 233.09999990463257
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "824828c7-1488-4003-bd46-26caf6b6d1a7",
+        "sentAt": 69416.19999992847,
+        "turnId": "e64f2df8-8db3-4f50-bd39-e7db6d1b4502",
+        "feedbackMs": 120.30000007152557,
+        "replyMs": 222.20000004768372,
+        "deliveryMs": 222.20000004768372,
+        "answerCandidateMs": 222.20000004768372,
+        "messages": [
+          {
+            "id": "e64f2df8-8db3-4f50-bd39-e7db6d1b4502:m1",
+            "firstVisibleMs": 222.20000004768372
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "34c80e61-cfc4-42bd-b6fb-1ac332280d15",
+        "sentAt": 70981.69999992847,
+        "turnId": "3ca5a202-0749-424c-8c0f-bc004650dd10",
+        "feedbackMs": 115.80000007152557,
+        "replyMs": 325.7000000476837,
+        "deliveryMs": 325.7000000476837,
+        "answerCandidateMs": 325.7000000476837,
+        "messages": [
+          {
+            "id": "3ca5a202-0749-424c-8c0f-bc004650dd10:m1",
+            "firstVisibleMs": 325.7000000476837
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "f3ba4cd9-6b64-42c3-a3a5-7e7a90c89c2f",
+        "sentAt": 72570.19999992847,
+        "turnId": "1779ce25-8769-4e00-b5fa-dd060c15898d",
+        "feedbackMs": 113.90000009536743,
+        "replyMs": 221.20000004768372,
+        "deliveryMs": 221.20000004768372,
+        "answerCandidateMs": 221.20000004768372,
+        "messages": [
+          {
+            "id": "1779ce25-8769-4e00-b5fa-dd060c15898d:m1",
+            "firstVisibleMs": 221.20000004768372
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "98ac9c5e-ce5d-4ae5-9614-93c7437a6e5b",
+        "sentAt": 74125.39999997616,
+        "turnId": "ed7efcbb-9c80-4d75-b79b-e7a89d775b4a",
+        "feedbackMs": 119.70000004768372,
+        "replyMs": 226.39999997615814,
+        "deliveryMs": 226.39999997615814,
+        "answerCandidateMs": 226.39999997615814,
+        "messages": [
+          {
+            "id": "ed7efcbb-9c80-4d75-b79b-e7a89d775b4a:m1",
+            "firstVisibleMs": 226.39999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "6960c19b-ee46-43b6-b64c-4c8c15ec3bb1",
+        "sentAt": 75706,
+        "turnId": "a6b6b30d-a1da-40d0-b6a1-bb1ba2f470f8",
+        "feedbackMs": 112.89999997615814,
+        "replyMs": 228.79999995231628,
+        "deliveryMs": 228.79999995231628,
+        "answerCandidateMs": 228.79999995231628,
+        "messages": [
+          {
+            "id": "a6b6b30d-a1da-40d0-b6a1-bb1ba2f470f8:m1",
+            "firstVisibleMs": 228.79999995231628
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "b8d8c18c-e78f-418e-81f1-cdb8371be5dc",
+        "sentAt": 77283.79999995232,
+        "turnId": "543480e6-0a66-40a9-8907-3f8f3e0ff42a",
+        "feedbackMs": 115.80000007152557,
+        "replyMs": 321.39999997615814,
+        "deliveryMs": 321.39999997615814,
+        "answerCandidateMs": 321.39999997615814,
+        "messages": [
+          {
+            "id": "543480e6-0a66-40a9-8907-3f8f3e0ff42a:m1",
+            "firstVisibleMs": 321.39999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "a478bfd4-b84d-4803-8ae2-3f48c7092a93",
+        "sentAt": 78881.19999992847,
+        "turnId": "d2d9451f-41cc-4898-a434-6c6db92354ad",
+        "feedbackMs": 121.80000007152557,
+        "replyMs": 326.2000000476837,
+        "deliveryMs": 326.2000000476837,
+        "answerCandidateMs": 326.2000000476837,
+        "messages": [
+          {
+            "id": "d2d9451f-41cc-4898-a434-6c6db92354ad:m1",
+            "firstVisibleMs": 326.2000000476837
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "d6ceaeaf-3c62-408a-91ff-cef4f22df958",
+        "sentAt": 80440.89999997616,
+        "turnId": "2cb02d83-340a-4c94-942f-beabb1355de6",
+        "feedbackMs": 115.60000002384186,
+        "replyMs": 331,
+        "deliveryMs": 331,
+        "answerCandidateMs": 331,
+        "messages": [
+          {
+            "id": "2cb02d83-340a-4c94-942f-beabb1355de6:m1",
+            "firstVisibleMs": 331
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "54798e70-36cc-43fb-a727-e647bce4c023",
+        "sentAt": 82036,
+        "turnId": "9ad74ab5-8e25-4e2c-88f6-d74c34d167de",
+        "feedbackMs": 123.19999992847443,
+        "replyMs": 318.89999997615814,
+        "deliveryMs": 318.89999997615814,
+        "answerCandidateMs": 318.89999997615814,
+        "messages": [
+          {
+            "id": "9ad74ab5-8e25-4e2c-88f6-d74c34d167de:m1",
+            "firstVisibleMs": 318.89999997615814
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "9e0c63de-cd31-400f-9a49-b09905223dcf",
+        "sentAt": 83631.89999997616,
+        "turnId": "737cb844-4425-4b67-8082-c9bc2e6c7d66",
+        "feedbackMs": 115.20000004768372,
+        "replyMs": 321.7000000476837,
+        "deliveryMs": 321.7000000476837,
+        "answerCandidateMs": 321.7000000476837,
+        "messages": [
+          {
+            "id": "737cb844-4425-4b67-8082-c9bc2e6c7d66:m1",
+            "firstVisibleMs": 321.7000000476837
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "8b8d1bb2-6327-4a65-904c-e8e1edf4a486",
+        "sentAt": 85174.19999992847,
+        "turnId": "ce1ef976-7774-4083-9229-cec28db2f1a1",
+        "feedbackMs": 113,
+        "replyMs": 211.5,
+        "deliveryMs": 211.5,
+        "answerCandidateMs": 211.5,
+        "messages": [
+          {
+            "id": "ce1ef976-7774-4083-9229-cec28db2f1a1:m1",
+            "firstVisibleMs": 211.5
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "a8b3fb29-eaca-4edb-b531-381ef08919a9",
+        "sentAt": 86745.89999997616,
+        "turnId": "fa3a0519-71ea-46dd-965f-625815acba89",
+        "feedbackMs": 118.10000002384186,
+        "replyMs": 231.79999995231628,
+        "deliveryMs": 231.79999995231628,
+        "answerCandidateMs": 231.79999995231628,
+        "messages": [
+          {
+            "id": "fa3a0519-71ea-46dd-965f-625815acba89:m1",
+            "firstVisibleMs": 231.79999995231628
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "78ed29bf-5ba0-4e07-98eb-31a97574d22b",
+        "sentAt": 88325.79999995232,
+        "turnId": "bff171b4-6f45-4765-9033-d20ea08eec51",
+        "feedbackMs": 121.10000002384186,
+        "replyMs": 222.30000007152557,
+        "deliveryMs": 222.30000007152557,
+        "answerCandidateMs": 222.30000007152557,
+        "messages": [
+          {
+            "id": "bff171b4-6f45-4765-9033-d20ea08eec51:m1",
+            "firstVisibleMs": 222.30000007152557
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "4a0bbb83-3dda-4c4a-ab7d-4ca7ebdfd122",
+        "sentAt": 89901.60000002384,
+        "turnId": "95a0f435-4c0d-43a2-88cf-3666d47a31fd",
+        "feedbackMs": 114.39999997615814,
+        "replyMs": 324.1999999284744,
+        "deliveryMs": 324.1999999284744,
+        "answerCandidateMs": 324.1999999284744,
+        "messages": [
+          {
+            "id": "95a0f435-4c0d-43a2-88cf-3666d47a31fd:m1",
+            "firstVisibleMs": 324.1999999284744
+          }
+        ],
+        "outcome": "completed"
+      },
+      {
+        "requestId": "3905b2b7-88a3-4dd9-91bb-589429db31f5",
+        "sentAt": 91489.69999992847,
+        "turnId": "24e727de-b869-4a1d-8ac5-b35e281f6e71",
+        "feedbackMs": 115.10000002384186,
+        "replyMs": 318.2000000476837,
+        "deliveryMs": 318.2000000476837,
+        "answerCandidateMs": 318.2000000476837,
+        "messages": [
+          {
+            "id": "24e727de-b869-4a1d-8ac5-b35e281f6e71:m1",
+            "firstVisibleMs": 318.2000000476837
+          }
+        ],
+        "outcome": "completed"
+      }
+    ]
+  },
+  "harness": [
+    {
+      "version": 1,
+      "requestId": "c5505a4b-c2f8-4c74-a31e-6f0bd9a439d6",
+      "activityTurnId": "7977d1c6-92b8-4f59-b849-31a9a69d9c4e",
+      "attempt": 0,
+      "serverSentAt": 1789591951838,
+      "conversation": "dm",
+      "enqueuedAt": 1789591951849,
+      "session": "cold",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 1.801166999997804,
+        "claimed": 2.0942920000015874,
+        "workerReady": 2.226457999997365,
+        "sessionReady": 5.167708000000857,
+        "contextReady": 8.672749999997905,
+        "promptDispatched": 8.970457999996142,
+        "lastOutboundDispatched": 235.22920799999702,
+        "runtimeCompleted": 234.31033300000126,
+        "replyDispatched": 235.19974999999977
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 235.28370800000266,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "600d2b1d-a143-47f9-bd4d-c15b8fae0dd7",
+      "activityTurnId": "99eb24c1-6985-4f78-9533-cde3e2763172",
+      "attempt": 0,
+      "serverSentAt": 1789591953407,
+      "conversation": "dm",
+      "enqueuedAt": 1789591953407,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.3096660000010161,
+        "claimed": 0.3392080000048736,
+        "workerReady": 0.3731660000048578,
+        "sessionReady": 0.5869160000002012,
+        "contextReady": 0.6290829999998095,
+        "promptDispatched": 0.6555829999997513,
+        "lastOutboundDispatched": 205.35695800000394,
+        "runtimeCompleted": 204.51666600000317,
+        "replyDispatched": 205.35570800000278
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 205.36104100000375,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "b9a19379-9119-462c-abec-b49f83dfa0b4",
+      "activityTurnId": "92a26535-293d-4ff8-bb24-157b9dc5820a",
+      "attempt": 0,
+      "serverSentAt": 1789591954980,
+      "conversation": "dm",
+      "enqueuedAt": 1789591954981,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.41608300000370946,
+        "claimed": 0.6454999999987194,
+        "workerReady": 0.7041250000038417,
+        "sessionReady": 1.0728329999983544,
+        "contextReady": 1.1175829999992857,
+        "promptDispatched": 1.1538330000039423,
+        "lastOutboundDispatched": 216.6408750000046,
+        "runtimeCompleted": 216.05025000000023,
+        "replyDispatched": 216.6397500000021
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 216.6507500000007,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "54a70aa5-95ce-4dfe-8478-019fc637743f",
+      "activityTurnId": "f1f85112-f99f-41e3-b823-dbc4d8754cfd",
+      "attempt": 0,
+      "serverSentAt": 1789591956554,
+      "conversation": "dm",
+      "enqueuedAt": 1789591956556,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 1.4820419999959995,
+        "claimed": 1.5816669999985606,
+        "workerReady": 1.6745419999933802,
+        "sessionReady": 1.9249999999956344,
+        "contextReady": 1.9772499999962747,
+        "promptDispatched": 2.010499999996682,
+        "lastOutboundDispatched": 209.901291999995,
+        "runtimeCompleted": 209.57554199999868,
+        "replyDispatched": 209.9000839999935
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 209.90520899999683,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "4a73960d-382e-4d6c-b6f3-8dbf8709fa42",
+      "activityTurnId": "8b4b32a2-8ec3-4075-9c50-774c9eb3295a",
+      "attempt": 0,
+      "serverSentAt": 1789591958150,
+      "conversation": "dm",
+      "enqueuedAt": 1789591958151,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.17529099999956088,
+        "claimed": 0.20912500000122236,
+        "workerReady": 0.2412079999994603,
+        "sessionReady": 0.3421660000021802,
+        "contextReady": 0.3672500000029686,
+        "promptDispatched": 0.3879159999996773,
+        "lastOutboundDispatched": 209.4497909999991,
+        "runtimeCompleted": 209.05862500000512,
+        "replyDispatched": 209.4473330000037
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 209.45383299999958,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "a9cb0afd-2e73-4c8d-83ac-c327321adb3a",
+      "activityTurnId": "e7c2f1d9-00ea-484d-802b-ef1ce855083d",
+      "attempt": 0,
+      "serverSentAt": 1789591959688,
+      "conversation": "dm",
+      "enqueuedAt": 1789591959688,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.21154199999728007,
+        "claimed": 0.23624999999447027,
+        "workerReady": 0.27370800000062445,
+        "sessionReady": 0.34724999999889405,
+        "contextReady": 0.37258299999666633,
+        "promptDispatched": 0.38762499999575084,
+        "lastOutboundDispatched": 204.39883299999929,
+        "runtimeCompleted": 203.80249999999796,
+        "replyDispatched": 204.39749999999913
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 204.4227499999979,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "050b7606-b1e8-4319-8e96-4ec37aa65b78",
+      "activityTurnId": "1ff51161-0d1f-432c-bc85-aa4112507362",
+      "attempt": 0,
+      "serverSentAt": 1789591961278,
+      "conversation": "dm",
+      "enqueuedAt": 1789591961278,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.2047080000047572,
+        "claimed": 0.22312500000407454,
+        "workerReady": 0.25658300000213785,
+        "sessionReady": 0.33991700000478886,
+        "contextReady": 0.37908299999980954,
+        "promptDispatched": 0.3965420000022277,
+        "lastOutboundDispatched": 202.19275000000198,
+        "runtimeCompleted": 201.83720800000447,
+        "replyDispatched": 202.19150000000081
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 202.19887500000186,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "f15f0d79-5b16-4df3-9027-56465685a165",
+      "activityTurnId": "630dd0f1-9c77-4233-9d4b-f0da679303bb",
+      "attempt": 0,
+      "serverSentAt": 1789591962815,
+      "conversation": "dm",
+      "enqueuedAt": 1789591962815,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.20016699999541743,
+        "claimed": 0.2294999999940046,
+        "workerReady": 0.27104200000030687,
+        "sessionReady": 0.33520799999678275,
+        "contextReady": 0.37358300000050804,
+        "promptDispatched": 0.39520799999445444,
+        "lastOutboundDispatched": 202.50170799999614,
+        "runtimeCompleted": 202.29787499999657,
+        "replyDispatched": 202.50112499999523
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 202.5055829999983,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "8a6e97e4-fb52-42da-b731-1df879dae6e1",
+      "activityTurnId": "287747e3-3307-4aea-bf52-4f6f9924b783",
+      "attempt": 0,
+      "serverSentAt": 1789591964379,
+      "conversation": "dm",
+      "enqueuedAt": 1789591964381,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.6855419999992591,
+        "claimed": 0.7267500000016298,
+        "workerReady": 0.835332999995444,
+        "sessionReady": 1.1852079999953276,
+        "contextReady": 1.265291999996407,
+        "promptDispatched": 1.3032919999968726,
+        "lastOutboundDispatched": 204.75866700000188,
+        "runtimeCompleted": 204.33229199999914,
+        "replyDispatched": 204.75737500000105
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 204.7624169999981,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "51c2c302-27aa-4696-aafc-017d9d6473d4",
+      "activityTurnId": "9152857c-1e5c-4f38-9f7e-cb69f513a8ed",
+      "attempt": 0,
+      "serverSentAt": 1789591965954,
+      "conversation": "dm",
+      "enqueuedAt": 1789591965955,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.18404200000077253,
+        "claimed": 0.2047919999968144,
+        "workerReady": 0.23216700000193669,
+        "sessionReady": 0.30112499999813735,
+        "contextReady": 0.3254579999993439,
+        "promptDispatched": 0.337666999999783,
+        "lastOutboundDispatched": 208.5165829999969,
+        "runtimeCompleted": 208.03187500000058,
+        "replyDispatched": 208.51541700000234
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 208.52466699999786,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "7800bcc1-d4de-47ba-a689-44038245a075",
+      "activityTurnId": "80035b56-2cee-42f9-bae9-6b3bd3d04499",
+      "attempt": 0,
+      "serverSentAt": 1789591979635,
+      "conversation": "dm",
+      "enqueuedAt": 1789591979636,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.8879170000000158,
+        "claimed": 1.0084999999962747,
+        "workerReady": 1.0779999999940628,
+        "sessionReady": 1.2966670000023441,
+        "contextReady": 1.382499999992433,
+        "promptDispatched": 1.4795829999929992,
+        "lastOutboundDispatched": 205.68054200000188,
+        "runtimeCompleted": 205.44716699999117,
+        "replyDispatched": 205.67999999999302
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 205.68204200000037,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "424e9255-dd5b-4322-93ca-0d807d0185ce",
+      "activityTurnId": "180627f7-acab-470b-b88f-bf5126ae6fa9",
+      "attempt": 0,
+      "serverSentAt": 1789591981273,
+      "conversation": "dm",
+      "enqueuedAt": 1789591981273,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.295458000007784,
+        "claimed": 0.3227500000066357,
+        "workerReady": 0.36225000000558794,
+        "sessionReady": 0.4510000000009313,
+        "contextReady": 0.4747920000081649,
+        "promptDispatched": 0.48883300001034513,
+        "lastOutboundDispatched": 207.23854200000642,
+        "runtimeCompleted": 207.05675000000338,
+        "replyDispatched": 207.23791700000584
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 207.2400830000115,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "d3b42180-4715-4973-91c2-4e1eca31199c",
+      "activityTurnId": "e188f8d9-5048-4f65-8e99-53bbe1a01c4e",
+      "attempt": 0,
+      "serverSentAt": 1789591982851,
+      "conversation": "dm",
+      "enqueuedAt": 1789591982852,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.16716699999233242,
+        "claimed": 0.19133400000282563,
+        "workerReady": 0.22079199999279808,
+        "sessionReady": 0.2902089999988675,
+        "contextReady": 0.3108749999955762,
+        "promptDispatched": 0.32329200000094716,
+        "lastOutboundDispatched": 202.59904200000165,
+        "runtimeCompleted": 202.151291999995,
+        "replyDispatched": 202.5977089999942
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 202.6023750000022,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "df095fa9-cd20-4411-b46c-c158afd4dfc2",
+      "activityTurnId": "31124f0d-ebb5-4c00-9ba3-7a57ffdc2581",
+      "attempt": 0,
+      "serverSentAt": 1789591984446,
+      "conversation": "dm",
+      "enqueuedAt": 1789591984451,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.28762499999720603,
+        "claimed": 0.30883300000277814,
+        "workerReady": 0.35404200000630226,
+        "sessionReady": 0.4399169999960577,
+        "contextReady": 0.46191700000781566,
+        "promptDispatched": 0.4747500000084983,
+        "lastOutboundDispatched": 202.57412499999919,
+        "runtimeCompleted": 202.4369580000057,
+        "replyDispatched": 202.57370799999626
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 202.57554200000595,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "94da8248-0b85-4e02-b50c-649ca561e942",
+      "activityTurnId": "0e411566-6d49-4f5a-b0e9-62423ea5ffc9",
+      "attempt": 0,
+      "serverSentAt": 1789591986025,
+      "conversation": "dm",
+      "enqueuedAt": 1789591986025,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.16962500000954606,
+        "claimed": 0.20491700001002755,
+        "workerReady": 0.24729200000001583,
+        "sessionReady": 0.37716699999873526,
+        "contextReady": 0.40041700001165736,
+        "promptDispatched": 0.415791999999783,
+        "lastOutboundDispatched": 205.34008300000278,
+        "runtimeCompleted": 204.19583300000522,
+        "replyDispatched": 205.33783300001232
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 205.34429200000886,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "824828c7-1488-4003-bd46-26caf6b6d1a7",
+      "activityTurnId": "e64f2df8-8db3-4f50-bd39-e7db6d1b4502",
+      "attempt": 0,
+      "serverSentAt": 1789591987615,
+      "conversation": "dm",
+      "enqueuedAt": 1789591987615,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.1860000000015134,
+        "claimed": 0.2172080000018468,
+        "workerReady": 0.25183300000207964,
+        "sessionReady": 0.317166000008001,
+        "contextReady": 0.3563330000033602,
+        "promptDispatched": 0.3696660000132397,
+        "lastOutboundDispatched": 203.06700000001,
+        "runtimeCompleted": 202.88445800000045,
+        "replyDispatched": 203.06654100000742
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 203.25266600000032,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "34c80e61-cfc4-42bd-b6fb-1ac332280d15",
+      "activityTurnId": "3ca5a202-0749-424c-8c0f-bc004650dd10",
+      "attempt": 0,
+      "serverSentAt": 1789591989181,
+      "conversation": "dm",
+      "enqueuedAt": 1789591989184,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.45691700000315905,
+        "claimed": 0.909417000002577,
+        "workerReady": 0.9812499999970896,
+        "sessionReady": 1.7069590000028256,
+        "contextReady": 1.7984589999978198,
+        "promptDispatched": 1.843208999998751,
+        "lastOutboundDispatched": 207.20116700000654,
+        "runtimeCompleted": 207.0617920000077,
+        "replyDispatched": 207.2007500000036
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 207.20249999999942,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "f3ba4cd9-6b64-42c3-a3a5-7e7a90c89c2f",
+      "activityTurnId": "1779ce25-8769-4e00-b5fa-dd060c15898d",
+      "attempt": 0,
+      "serverSentAt": 1789591990769,
+      "conversation": "dm",
+      "enqueuedAt": 1789591990769,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.1717919999937294,
+        "claimed": 0.1875,
+        "workerReady": 0.21358300000429153,
+        "sessionReady": 0.3277079999970738,
+        "contextReady": 0.4943329999950947,
+        "promptDispatched": 0.5087919999932637,
+        "lastOutboundDispatched": 203.5193750000035,
+        "runtimeCompleted": 203.16449999999895,
+        "replyDispatched": 203.51829199999338
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 203.52324999999837,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "98ac9c5e-ce5d-4ae5-9614-93c7437a6e5b",
+      "activityTurnId": "ed7efcbb-9c80-4d75-b79b-e7a89d775b4a",
+      "attempt": 0,
+      "serverSentAt": 1789591992324,
+      "conversation": "dm",
+      "enqueuedAt": 1789591992326,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 2.9026250000024447,
+        "claimed": 3.0286250000062864,
+        "workerReady": 3.11554199999955,
+        "sessionReady": 3.6755839999968885,
+        "contextReady": 3.7458750000078,
+        "promptDispatched": 3.7793749999982538,
+        "lastOutboundDispatched": 210.24412499999744,
+        "runtimeCompleted": 210.06645900000876,
+        "replyDispatched": 210.24370900000213
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 210.24604199999885,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "6960c19b-ee46-43b6-b64c-4c8c15ec3bb1",
+      "activityTurnId": "a6b6b30d-a1da-40d0-b6a1-bb1ba2f470f8",
+      "attempt": 0,
+      "serverSentAt": 1789591993905,
+      "conversation": "dm",
+      "enqueuedAt": 1789591993905,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.16312500000640284,
+        "claimed": 0.18016699999861885,
+        "workerReady": 0.20900000000256114,
+        "sessionReady": 0.2672500000044238,
+        "contextReady": 0.3034170000028098,
+        "promptDispatched": 0.3148749999963911,
+        "lastOutboundDispatched": 203.3935000000056,
+        "runtimeCompleted": 203.02150000000256,
+        "replyDispatched": 203.39112499999464
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 203.39891699999862,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "b8d8c18c-e78f-418e-81f1-cdb8371be5dc",
+      "activityTurnId": "543480e6-0a66-40a9-8907-3f8f3e0ff42a",
+      "attempt": 0,
+      "serverSentAt": 1789591995487,
+      "conversation": "dm",
+      "enqueuedAt": 1789591995488,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.32220899999083485,
+        "claimed": 0.37870899999688845,
+        "workerReady": 0.4807500000024447,
+        "sessionReady": 0.5922089999949094,
+        "contextReady": 0.6506669999944279,
+        "promptDispatched": 0.7408339999965392,
+        "lastOutboundDispatched": 203.34949999999662,
+        "runtimeCompleted": 203.04541700000118,
+        "replyDispatched": 203.34824999999546
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 203.3535419999971,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "a478bfd4-b84d-4803-8ae2-3f48c7092a93",
+      "activityTurnId": "d2d9451f-41cc-4898-a434-6c6db92354ad",
+      "attempt": 0,
+      "serverSentAt": 1789591997080,
+      "conversation": "dm",
+      "enqueuedAt": 1789591997083,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.44841700000688434,
+        "claimed": 0.5217499999998836,
+        "workerReady": 0.60295899999619,
+        "sessionReady": 0.8054169999959413,
+        "contextReady": 0.8758340000058524,
+        "promptDispatched": 0.9226250000065193,
+        "lastOutboundDispatched": 210.90420900000026,
+        "runtimeCompleted": 209.85025000000314,
+        "replyDispatched": 210.90216699999291
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 210.90908399999898,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "d6ceaeaf-3c62-408a-91ff-cef4f22df958",
+      "activityTurnId": "2cb02d83-340a-4c94-942f-beabb1355de6",
+      "attempt": 0,
+      "serverSentAt": 1789591998640,
+      "conversation": "dm",
+      "enqueuedAt": 1789591998642,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.507207999995444,
+        "claimed": 0.5795420000067679,
+        "workerReady": 0.6645830000052229,
+        "sessionReady": 0.8230420000036247,
+        "contextReady": 0.8743329999997513,
+        "promptDispatched": 1.0329579999961425,
+        "lastOutboundDispatched": 213.8513329999987,
+        "runtimeCompleted": 213.48641700000735,
+        "replyDispatched": 213.84966700000223
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 213.85516700000153,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "54798e70-36cc-43fb-a727-e647bce4c023",
+      "activityTurnId": "9ad74ab5-8e25-4e2c-88f6-d74c34d167de",
+      "attempt": 0,
+      "serverSentAt": 1789592000235,
+      "conversation": "dm",
+      "enqueuedAt": 1789592000236,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.5729169999976875,
+        "claimed": 0.6276669999933802,
+        "workerReady": 0.6882079999923008,
+        "sessionReady": 0.8580419999925653,
+        "contextReady": 0.9317920000030426,
+        "promptDispatched": 0.9560829999973066,
+        "lastOutboundDispatched": 204.2651249999908,
+        "runtimeCompleted": 203.9719999999943,
+        "replyDispatched": 204.26404199999524
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 204.26924999999756,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "9e0c63de-cd31-400f-9a49-b09905223dcf",
+      "activityTurnId": "737cb844-4425-4b67-8082-c9bc2e6c7d66",
+      "attempt": 0,
+      "serverSentAt": 1789592001831,
+      "conversation": "dm",
+      "enqueuedAt": 1789592001832,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 2.3142079999961425,
+        "claimed": 2.356082999991486,
+        "workerReady": 2.4202079999959096,
+        "sessionReady": 3.7940419999940787,
+        "contextReady": 3.886999999987893,
+        "promptDispatched": 3.9107919999951264,
+        "lastOutboundDispatched": 207.62904200000048,
+        "runtimeCompleted": 207.21954199999163,
+        "replyDispatched": 207.62758299999405
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 207.63312499999302,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "8b8d1bb2-6327-4a65-904c-e8e1edf4a486",
+      "activityTurnId": "ce1ef976-7774-4083-9229-cec28db2f1a1",
+      "attempt": 0,
+      "serverSentAt": 1789592003373,
+      "conversation": "dm",
+      "enqueuedAt": 1789592003373,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.2117080000025453,
+        "claimed": 0.228333000006387,
+        "workerReady": 0.256667000008747,
+        "sessionReady": 0.3071250000066357,
+        "contextReady": 0.3432500000053551,
+        "promptDispatched": 0.3542500000039581,
+        "lastOutboundDispatched": 202.20008300000336,
+        "runtimeCompleted": 202.07425000000512,
+        "replyDispatched": 202.1997080000001
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 202.20129199999792,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "a8b3fb29-eaca-4edb-b531-381ef08919a9",
+      "activityTurnId": "fa3a0519-71ea-46dd-965f-625815acba89",
+      "attempt": 0,
+      "serverSentAt": 1789592004945,
+      "conversation": "dm",
+      "enqueuedAt": 1789592004947,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.6430839999957243,
+        "claimed": 0.681708999996772,
+        "workerReady": 0.8273340000014286,
+        "sessionReady": 0.982625000004191,
+        "contextReady": 1.041624999998021,
+        "promptDispatched": 1.0626669999910519,
+        "lastOutboundDispatched": 210.9261669999978,
+        "runtimeCompleted": 210.4153340000048,
+        "replyDispatched": 210.92491699999664
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 210.9304589999956,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "78ed29bf-5ba0-4e07-98eb-31a97574d22b",
+      "activityTurnId": "bff171b4-6f45-4765-9033-d20ea08eec51",
+      "attempt": 0,
+      "serverSentAt": 1789592006525,
+      "conversation": "dm",
+      "enqueuedAt": 1789592006526,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.5777910000033444,
+        "claimed": 0.6669160000019474,
+        "workerReady": 0.73233299999265,
+        "sessionReady": 0.850124999997206,
+        "contextReady": 0.8834159999969415,
+        "promptDispatched": 0.9068750000005821,
+        "lastOutboundDispatched": 206.35095799999544,
+        "runtimeCompleted": 205.6030829999945,
+        "replyDispatched": 206.34912499999336
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 206.35487500000454,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "4a0bbb83-3dda-4c4a-ab7d-4ca7ebdfd122",
+      "activityTurnId": "95a0f435-4c0d-43a2-88cf-3666d47a31fd",
+      "attempt": 0,
+      "serverSentAt": 1789592008100,
+      "conversation": "dm",
+      "enqueuedAt": 1789592008103,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.4041670000005979,
+        "claimed": 0.7015830000018468,
+        "workerReady": 0.9560829999973066,
+        "sessionReady": 1.2146250000077998,
+        "contextReady": 1.2888749999983702,
+        "promptDispatched": 1.328458000003593,
+        "lastOutboundDispatched": 206.4050419999985,
+        "runtimeCompleted": 205.6924169999984,
+        "replyDispatched": 206.4032920000027
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 206.40941700000258,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    },
+    {
+      "version": 1,
+      "requestId": "3905b2b7-88a3-4dd9-91bb-589429db31f5",
+      "activityTurnId": "24e727de-b869-4a1d-8ac5-b35e281f6e71",
+      "attempt": 0,
+      "serverSentAt": 1789592009689,
+      "conversation": "dm",
+      "enqueuedAt": 1789592009689,
+      "session": "warm",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 0.1465840000018943,
+        "claimed": 0.16308399999979883,
+        "workerReady": 0.18629199999850243,
+        "sessionReady": 0.3302499999990687,
+        "contextReady": 0.38533399999141693,
+        "promptDispatched": 0.4021249999932479,
+        "lastOutboundDispatched": 207.38791700000002,
+        "runtimeCompleted": 206.9869999999937,
+        "replyDispatched": 207.3868749999965
+      },
+      "approvalMs": 0,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 207.39158399999724,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    }
+  ],
+  "persistedRows": [
+    {
+      "requestId": "c5505a4b-c2f8-4c74-a31e-6f0bd9a439d6",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "600d2b1d-a143-47f9-bd4d-c15b8fae0dd7",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "b9a19379-9119-462c-abec-b49f83dfa0b4",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "54a70aa5-95ce-4dfe-8478-019fc637743f",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "4a73960d-382e-4d6c-b6f3-8dbf8709fa42",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "a9cb0afd-2e73-4c8d-83ac-c327321adb3a",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "050b7606-b1e8-4319-8e96-4ec37aa65b78",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "f15f0d79-5b16-4df3-9027-56465685a165",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "8a6e97e4-fb52-42da-b731-1df879dae6e1",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "51c2c302-27aa-4696-aafc-017d9d6473d4",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "7800bcc1-d4de-47ba-a689-44038245a075",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "424e9255-dd5b-4322-93ca-0d807d0185ce",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "d3b42180-4715-4973-91c2-4e1eca31199c",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "df095fa9-cd20-4411-b46c-c158afd4dfc2",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "94da8248-0b85-4e02-b50c-649ca561e942",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "824828c7-1488-4003-bd46-26caf6b6d1a7",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "34c80e61-cfc4-42bd-b6fb-1ac332280d15",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "f3ba4cd9-6b64-42c3-a3a5-7e7a90c89c2f",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "98ac9c5e-ce5d-4ae5-9614-93c7437a6e5b",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "6960c19b-ee46-43b6-b64c-4c8c15ec3bb1",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "b8d8c18c-e78f-418e-81f1-cdb8371be5dc",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "a478bfd4-b84d-4803-8ae2-3f48c7092a93",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "d6ceaeaf-3c62-408a-91ff-cef4f22df958",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "54798e70-36cc-43fb-a727-e647bce4c023",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "9e0c63de-cd31-400f-9a49-b09905223dcf",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "8b8d1bb2-6327-4a65-904c-e8e1edf4a486",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "a8b3fb29-eaca-4edb-b531-381ef08919a9",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "78ed29bf-5ba0-4e07-98eb-31a97574d22b",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "4a0bbb83-3dda-4c4a-ab7d-4ca7ebdfd122",
+      "sequence": 3,
+      "state": "completed"
+    },
+    {
+      "requestId": "3905b2b7-88a3-4dd9-91bb-589429db31f5",
+      "sequence": 3,
+      "state": "completed"
+    }
+  ],
+  "valid": false,
+  "invalidReason": "Observer did not account for clipping and occlusion; excludes this run from visible latency conclusions"
+}

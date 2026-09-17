@@ -1,0 +1,45 @@
+{
+  "runtime": "fake-acp fixture, not a performance cohort",
+  "samples": [
+    {
+      "version": 1,
+      "requestId": "0caf9ca3-6a8e-47a3-a06f-073d289b9737",
+      "activityTurnId": "1cf49154-89da-4902-b669-667325228ccc",
+      "attempt": 0,
+      "serverSentAt": 1789596381977,
+      "conversation": "dm",
+      "enqueuedAt": 1789596381981,
+      "session": "cold",
+      "saturated": false,
+      "reconnected": false,
+      "worker": 0,
+      "runtimeVersion": "1.0.0",
+      "runtimeStop": "end_turn",
+      "phases": {
+        "feedbackDispatched": 1.5722090000001572,
+        "claimed": 4.298541999999998,
+        "workerReady": 4.763209000000188,
+        "sessionReady": 17.109084000000166,
+        "contextReady": 24.541292000000112,
+        "promptDispatched": 24.681500000000142,
+        "lastOutboundDispatched": 198808.594209,
+        "runtimeCompleted": 198808.23825,
+        "replyDispatched": 198808.58470900002
+      },
+      "approvalMs": 198562.967084,
+      "tools": [],
+      "toolsTruncated": false,
+      "outcome": "completed",
+      "finishedMs": 198808.61254200002,
+      "unavailable": [
+        "browserSend",
+        "visibleFeedback",
+        "visibleReply",
+        "deliveryAcknowledgement",
+        "providerQueue",
+        "providerPrefill",
+        "providerGeneration"
+      ]
+    }
+  ]
+}

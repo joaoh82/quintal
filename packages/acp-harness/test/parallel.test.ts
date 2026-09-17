@@ -8,6 +8,7 @@ import { after, describe, it } from 'node:test';
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner, pickWaiter } from '../src/runner/AgentRunner.js';
 import { Pool } from '../src/runner/pool.js';
+import type { LatencySample } from '../src/runner/latency.js';
 import type { Worker } from '../src/runner/worker.js';
 import type { AgentConfig } from '../src/config.js';
 
@@ -31,6 +32,7 @@ const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.
  */
 
 interface Handlers {
+  closed?: (code: number) => void;
   chat?: (message: unknown) => void;
   channelChat?: (message: unknown) => void;
 }
@@ -52,6 +54,7 @@ function fakeGateway(
   said: Said,
   statuses: Statuses,
   options: {
+    activity?: boolean;
     parallelism?: number;
     channels?: unknown[];
     core?: string;
@@ -62,6 +65,7 @@ function fakeGateway(
 ): Gateway {
   const channels = options.channels ?? [ENGINEERING, DM];
   const ready = {
+    ...(options.activity ? { activityVersion: 1 } : {}),
     agentId: 'agent-1',
     name: 'Bob',
     ownerUserId: 'owner-1',
@@ -81,6 +85,7 @@ function fakeGateway(
     ready,
     roster: { zone: { id: 'lobby', label: 'the lobby' } },
     connected: true,
+    activity: options.activity ? () => {} : undefined,
     connect: async () => ready,
     leave: async () => {},
     say: (text: string, channelId?: string) => {
@@ -171,7 +176,7 @@ function aloud(handlers: Handlers, text: string): void {
   });
 }
 
-function mention(handlers: Handlers, channel: unknown, text: string, at: number): void {
+function mention(handlers: Handlers, channel: unknown, text: string, at: number, requestId?: string): void {
   handlers.channelChat?.({
     from: 'sess-josh',
     fromUserId: 'owner-1',
@@ -181,6 +186,7 @@ function mention(handlers: Handlers, channel: unknown, text: string, at: number)
     channel,
     mentioned: true,
     sentAt: at,
+    requestId,
   });
 }
 
@@ -220,6 +226,52 @@ describe('answering several conversations at once', () => {
     await current.start();
     return { handlers, record, said, statuses };
   }
+
+  it('correlates queued human requests without exposing prompts and preserves parallelism', async () => {
+    const { handlers } = await start({ FAKE_DELAY_MS: '120', FAKE_REPLY: 'private-answer' }, { parallelism: 1 });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob private-prompt', 100);
+    mention(handlers, DM, '@Bob another-private-prompt', 101);
+    await until(() => samples.size === 2, 'both timing records');
+    const channel = [...samples.values()].find(s => s.conversation === 'channel')!;
+    const dm = [...samples.values()].find(s => s.conversation === 'dm')!;
+    assert.equal(channel.outcome, 'completed');
+    assert.equal(dm.outcome, 'completed');
+    assert.equal(dm.saturated, true);
+    assert.equal(current!.parallelism, 1);
+    assert.ok(dm.phases.claimed! > channel.phases.claimed!);
+    assert.ok(dm.phases.runtimeCompleted! >= dm.phases.promptDispatched!);
+    assert.doesNotMatch(JSON.stringify([...samples.values()]), /private-prompt|private-answer|Josh/);
+  });
+
+  it('records batched queue feedback before a saturated worker claims the requests', async () => {
+    const { handlers, record } = await start({ FAKE_DELAY_MS: '500', FAKE_REPLY: 'done' }, { parallelism: 1, activity: true });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob review', 100);
+    await until(() => promptTexts(record).length === 1, 'busy worker');
+    const first = '11111111-1111-4111-8111-111111111111';
+    const second = '22222222-2222-4222-8222-222222222222';
+    mention(handlers, DM, 'first ask', 101, first);
+    mention(handlers, DM, 'second ask', 102, second);
+    await until(() => samples.size === 3, 'all correlated requests');
+    assert.equal(samples.get(first)?.activityTurnId, samples.get(second)?.activityTurnId);
+    const queued = samples.get(second)!;
+    assert.ok(queued.phases.feedbackDispatched! < queued.phases.claimed!, 'the shared queued snapshot was dispatched before claim');
+  });
+
+  it('tags queued traces when a reconnect interrupts saturation', async () => {
+    const { handlers, record } = await start({ FAKE_DELAY_MS: '300', FAKE_REPLY: 'done' }, { parallelism: 1 });
+    const samples = new Map<string, LatencySample>();
+    current!.on('latency', sample => samples.set(sample.requestId, sample));
+    mention(handlers, ENGINEERING, '@Bob review', 100);
+    await until(() => promptTexts(record).length === 1, 'busy worker');
+    mention(handlers, DM, 'queued ask', 101);
+    handlers.closed?.(1006);
+    await until(() => samples.size === 2, 'both timing records');
+    assert.ok([...samples.values()].every(sample => sample.reconnected));
+  });
 
   it('answers a DM while a channel review is still running, and shows it working in both', async () => {
     const { handlers, record, said, statuses } = await start(

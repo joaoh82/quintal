@@ -1,3 +1,4 @@
+import { LatencyTrace, type LatencySample } from './latency.js';
 import { PublicTurn } from './activity.js';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -5,6 +6,7 @@ import { join } from 'node:path';
 import type * as schema from '@agentclientprotocol/sdk';
 import {
   AGENT_CHAT_INTERVAL_MS,
+  latencyRequestId,
   FLOOR_ZONE_ID,
   AGENT_PARALLELISM_MAX,
   AGENT_PARALLELISM_MIN,
@@ -81,6 +83,8 @@ export { forgetLines } from './forget.js';
 export type RunnerState = 'starting' | 'connected' | 'working' | 'offline' | 'stopped';
 
 export interface RunnerEvents {
+  /** Opt-in, content-free timings. Repeated request/attempt keys replace earlier snapshots. */
+  latency: (sample: LatencySample) => void;
   log: (level: 'info' | 'warn' | 'error', message: string) => void;
   state: (state: RunnerState) => void;
   /** A guide was written into the nest; whoever keeps its index should refresh it. */
@@ -183,6 +187,8 @@ export class AgentRunner {
   /** Bounded replay outbox, including turns completed during a socket outage. */
   readonly #activityOutbox = new Map<string, AgentActivity>();
   readonly #queuedActivity = new Map<string, PublicTurn>();
+  readonly #activityLatency = new Map<string, LatencyTrace[]>();
+  #connectionGeneration = 0;
   #turnSeq = 0;
   #statusSeq = 0;
   /**
@@ -287,10 +293,15 @@ export class AgentRunner {
   async stop(): Promise<void> {
     this.#stopping = true;
     this.#setState('stopped');
-    for (const turn of this.#turns.values()) turn.cancelled = true;
+    for (const turn of this.#turns.values()) {
+      turn.cancelled = true;
+      for (const trace of turn.latency ?? []) trace.finish('cancelled');
+    }
     for (const waiter of this.#permissionWaiters.values()) waiter.resolve('deny');
     for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.finish('cancelled');
     this.#queuedActivity.clear();
+    for (const queue of this.#queues.values()) for (const trigger of queue) trigger.latency?.finish('cancelled');
+    this.#queues.clear();
     const pool = this.#pool;
     this.#pool = null;
     await Promise.allSettled((pool?.workers() ?? []).map((worker) => worker.stop()));
@@ -351,6 +362,10 @@ export class AgentRunner {
     this.#gateway.on('closed', (code) => {
       if (this.#stopping) return;
       this.#setState('offline');
+      for (const turn of this.#turns.values()) for (const trace of turn.latency ?? []) trace.sample.reconnected = true;
+      for (const queue of this.#queues.values()) for (const trigger of queue) {
+        if (trigger.latency) trigger.latency.sample.reconnected = true;
+      }
       this.#log('warn', `office connection closed (${code})`);
       void this.#reconnect();
     });
@@ -391,8 +406,9 @@ export class AgentRunner {
       // A new socket knows nothing: send the picture again, whatever it is.
       this.#statusKey = '';
       this.#publishStatus();
-      for (const value of this.#activityOutbox.values()) this.#gateway.activity?.(value);
+      for (const value of [...this.#activityOutbox.values()]) this.#publishActivity(value);
       for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.flush();
+      this.#connectionGeneration++;
       this.#log('info', 'reconnected');
     } catch (error: unknown) {
       this.#log('warn', `reconnect failed: ${describe(error)}`);
@@ -483,6 +499,7 @@ export class AgentRunner {
     }
     for (const activity of this.#queuedActivity.values()) activity.finish('failed');
     this.#queuedActivity.clear();
+    for (const queue of this.#queues.values()) for (const trigger of queue) trigger.latency?.finish('failed');
     this.#queues.clear();
     this.#steerPending.clear();
   }
@@ -527,6 +544,7 @@ export class AgentRunner {
       text: message.text,
       distance,
       sentAt: message.sentAt,
+      requestId: message.requestId,
       viaTeam: message.viaTeam,
     });
   }
@@ -620,6 +638,7 @@ export class AgentRunner {
       distance: null,
       channel: message.channel,
       sentAt: message.sentAt,
+      requestId: message.requestId,
       viaTeam: message.viaTeam,
     });
   }
@@ -702,6 +721,7 @@ export class AgentRunner {
           if (here.length > 0 && queuedScope !== scope) continue;
           activity.finish('cancelled');
           this.#queuedActivity.delete(queuedScope);
+          for (const trigger of this.#queues.get(queuedScope) ?? []) trigger.latency?.finish('cancelled');
           this.#queues.delete(queuedScope);
         }
         for (const turn of targets) {
@@ -785,16 +805,47 @@ export class AgentRunner {
     this.#activityOutbox.set(value.turnId, value);
     if (this.#activityOutbox.size > 128) this.#activityOutbox.delete(this.#activityOutbox.keys().next().value!);
     this.#gateway.activity?.(value);
+    if (this.#gateway.connected) {
+      for (const trace of this.#activityLatency.get(value.turnId) ?? []) {
+        trace.activity(value.sequence, value.items.some(item => item.kind === 'message' && !!item.text.trim()),
+          ['completed', 'failed', 'cancelled', 'interrupted'].includes(value.state));
+      }
+    }
   }
 
   #enqueue(scope: string, trigger: Trigger): void {
+    if (this.#handlers.latency && trigger.fromKind === 'human' && !trigger.forget) {
+      trigger.latency = new LatencyTrace({
+        serverSentAt: trigger.sentAt,
+        requestId: trigger.requestId,
+        conversation: trigger.channel?.kind === 'dm' ? 'dm' : trigger.channel ? 'channel' : 'spatial',
+      }, sample => this.#handlers.latency?.(sample));
+      trigger.latency.sample.reconnected = this.#connectionGeneration > 0;
+      trigger.latency.sample.saturated = !!this.#pool && this.#pool.live().length >= this.#pool.max &&
+        this.#pool.live().every(worker => !worker.idle);
+    }
+    const hadActivity = this.#queuedActivity.has(scope);
     if (this.#gateway.activity && this.#gateway.ready?.activityVersion === 1 && !isBanterScope(scope) && !isForgetScope(scope) && !this.#queuedActivity.has(scope)) {
       const channelId = channelIdOf(scope);
       this.#queuedActivity.set(scope, new PublicTurn(channelId ? { channelId } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID },
-        value => this.#publishActivity(value)));
+        value => this.#publishActivity(value), trigger.requestId));
     }
     const queue = this.#queues.get(scope) ?? [];
     queue.push(trigger);
+    const activity = this.#queuedActivity.get(scope);
+    const requestId = latencyRequestId(trigger.requestId);
+    if (activity && requestId && queue.length <= MAX_BATCH && !activity.value.requestIds?.includes(requestId)) {
+      activity.value.requestIds = [...(activity.value.requestIds ?? []), requestId];
+      activity.changed();
+    }
+    if (activity && trigger.latency && queue.length <= MAX_BATCH) {
+      trigger.latency.sample.activityTurnId = activity.value.turnId;
+      if (!hadActivity && this.#gateway.connected) trigger.latency.mark('feedbackDispatched');
+      const traces = this.#activityLatency.get(activity.value.turnId) ?? [];
+      traces.push(trigger.latency);
+      this.#activityLatency.set(activity.value.turnId, traces);
+      if (this.#activityLatency.size > 128) this.#activityLatency.delete(this.#activityLatency.keys().next().value!);
+    }
     this.#queues.set(scope, queue);
     void this.#drain();
   }
@@ -851,9 +902,10 @@ export class AgentRunner {
       };
       // Claimed in the same tick: nothing else can take this worker now.
       worker.turn = turn;
+      const hadQueuedActivity = this.#queuedActivity.has(scope);
       const activity = this.#queuedActivity.get(scope) ??
         (this.#gateway.activity && this.#gateway.ready?.activityVersion === 1 && !isBanterScope(scope) && !isForgetScope(scope)
-          ? new PublicTurn(channelIdOf(scope) ? { channelId: channelIdOf(scope)! } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID }, value => this.#publishActivity(value)) : undefined);
+          ? new PublicTurn(channelIdOf(scope) ? { channelId: channelIdOf(scope)! } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID }, value => this.#publishActivity(value), queue[0]?.requestId) : undefined);
       if (activity) {
         this.#queuedActivity.delete(scope);
         activity.value.workerId = String(worker.index);
@@ -864,6 +916,25 @@ export class AgentRunner {
       const triggers = queue.splice(0, MAX_BATCH);
       if (queue.length === 0) this.#queues.delete(scope);
 
+      if (activity) {
+        activity.value.requestIds = triggers.flatMap(trigger => {
+          const id = latencyRequestId(trigger.requestId);
+          return id ? [id] : [];
+        });
+      }
+      turn.latency = triggers.flatMap(trigger => trigger.latency ? [trigger.latency] : []);
+      for (const trace of turn.latency) {
+        trace.sample.worker = worker.index;
+        trace.sample.session = worker.hasSession(scope) ? 'warm' : 'cold';
+        trace.mark('claimed');
+        if (activity) trace.sample.activityTurnId = activity.value.turnId;
+        if (activity && !hadQueuedActivity && this.#gateway.connected) trace.mark('feedbackDispatched');
+      }
+      if (activity && turn.latency.length) {
+        this.#activityLatency.set(activity.value.turnId, turn.latency);
+        // Match the existing bounded reconnect outbox; active traces also live on Turn.
+        if (this.#activityLatency.size > 128) this.#activityLatency.delete(this.#activityLatency.keys().next().value!);
+      }
       void this.#runTurnOn(turn, triggers);
     }
   }
@@ -878,12 +949,18 @@ export class AgentRunner {
 
     try {
       await worker.ready();
+      for (const trace of turn.latency ?? []) {
+        trace.sample.runtimeVersion = worker.runtimeVersion;
+        trace.mark('workerReady');
+      }
       await this.#runTurn(turn, triggers, steer);
     } catch (error: unknown) {
       failed = true;
       requeued = this.#turnFailed(turn, triggers, steer, error);
     } finally {
       this.#publicTurns.get(turn.id)?.finish(turn.cancelled ? 'cancelled' : turn.idled ? 'interrupted' : failed ? 'failed' : 'completed');
+      for (const trace of turn.latency ?? []) trace.finish(
+        turn.idled ? 'timeout' : turn.cancelled ? 'cancelled' : requeued ? 'retry' : failed || trace.sample.runtimeStop !== 'end_turn' ? 'failed' : 'completed');
       this.#publicTurns.delete(turn.id);
       if (turn.idleTimer) clearTimeout(turn.idleTimer);
       turn.idleTimer = null;
@@ -935,7 +1012,7 @@ export class AgentRunner {
     if (!turn.prompted && this.#modelRefusal === null && attempt < MAX_ATTEMPTS) {
       const queue = this.#queues.get(scope) ?? [];
       this.#queues.set(scope, [
-        ...triggers.map((trigger) => ({ ...trigger, attempt })),
+        ...triggers.map((trigger) => ({ ...trigger, attempt, latency: trigger.latency?.retry() })),
         ...queue,
       ]);
       // Still the same messages that arrived mid-turn, if they did.
@@ -981,6 +1058,7 @@ export class AgentRunner {
 
     const session = await this.#sessionOn(worker, scope);
     turn.sessionId = session;
+    for (const trace of turn.latency ?? []) trace.mark('sessionReady');
     this.#turnBySession.set(sessionKey(worker, session), turn);
     if (turn.cancelled) {
       this.#log('info', 'turn cancelled before it was prompted');
@@ -1018,6 +1096,7 @@ export class AgentRunner {
         ? `${await this.#systemPrompt()}\n\n${envelope}`
         : envelope;
 
+    for (const trace of turn.latency ?? []) trace.mark('contextReady');
     turn.buffer = '';
     this.#audit('prompt', { scope, session, worker: worker.index, envelope, priming });
 
@@ -1025,10 +1104,18 @@ export class AgentRunner {
     const activity = this.#publicTurns.get(turn.id);
     if (activity) { activity.value.sessionId = session; activity.state('running'); }
     this.#touch(turn);
+    for (const trace of turn.latency ?? []) trace.mark('promptDispatched');
     const response = await worker.prompt({
       sessionId: session,
       prompt: [{ type: 'text', text }],
     });
+
+    for (const trace of turn.latency ?? []) {
+      trace.mark('runtimeCompleted');
+      const reason = response.stopReason;
+      trace.sample.runtimeStop = reason === 'end_turn' || reason === 'cancelled' || reason === 'refusal' ||
+        reason === 'max_tokens' || reason === 'max_turn_requests' ? reason : 'other';
+    }
 
     if (response.stopReason === 'cancelled') turn.cancelled = true;
 
@@ -1040,7 +1127,7 @@ export class AgentRunner {
     }
 
     if (banter) this.#speakBanter(turn.buffer);
-    else if (!this.#publicTurns.has(turn.id)) this.#speak(turn.buffer, scope);
+    else if (!this.#publicTurns.has(turn.id)) this.#speak(turn.buffer, scope, turn.latency);
     this.#audit('response', {
       scope,
       session,
@@ -1530,10 +1617,12 @@ export class AgentRunner {
    * it is answered. Returns the matching release, which restarts it.
    */
   #holdIdle(turn: Turn): () => void {
+    const releaseLatency = (turn.latency ?? []).map(trace => trace.approval());
     turn.awaitingOwner += 1;
     if (turn.idleTimer) clearTimeout(turn.idleTimer);
     turn.idleTimer = null;
     return () => {
+      for (const release of releaseLatency) release();
       turn.awaitingOwner = Math.max(0, turn.awaitingOwner - 1);
       this.#touch(turn);
     };
@@ -1554,6 +1643,7 @@ export class AgentRunner {
     turn.idleTimer = null;
     if (turn.idled || turn.cancelled || turn.awaitingOwner > 0 || !this.#turns.has(turn.id)) return;
     turn.idled = true;
+    for (const trace of turn.latency ?? []) trace.finish('timeout');
     this.#publicTurns.get(turn.id)?.finish('interrupted');
     const span = describeSpan(turnIdleMs());
     this.#log('warn', `no word from the runtime for ${span} — stopping the turn in "${turn.scope}"`);
@@ -1598,12 +1688,14 @@ export class AgentRunner {
         // Thinking is not for the office.
         break;
       case 'tool_call': {
+        for (const trace of turn.latency ?? []) trace.tool(update, true);
         this.#publicTurns.get(turn.id)?.tool(update);
         const name = String(update.title ?? update.name ?? 'tool');
         this.#setTurnStatus(turn, statusForTool(name, update.rawInput ?? update.input));
         break;
       }
       case 'tool_call_update': {
+        for (const trace of turn.latency ?? []) trace.tool(update, false);
         this.#publicTurns.get(turn.id)?.tool(update);
         const status = String(update.status ?? update.executionStatus ?? '');
         if (status === 'completed' || status === 'failed') this.#setTurnStatus(turn, 'thinking');
@@ -1740,13 +1832,13 @@ export class AgentRunner {
    * out loud would be heard by whoever happens to stand nearby and by nobody
    * in the channel, which is the wrong audience twice.
    */
-  #speak(text: string, scope: string = this.#scopeOf()): void {
+  #speak(text: string, scope: string = this.#scopeOf(), traces?: LatencyTrace[]): void {
     if (text.trim().length === 0) {
       // Silence is a valid answer, and often the right one.
       this.#log('info', 'turn produced no reply (silence)');
       return;
     }
-    this.#deliver(text, scope);
+    this.#deliver(text, scope, traces);
   }
 
   /**
@@ -1777,7 +1869,7 @@ export class AgentRunner {
     if (worker.turn) this.#touch(worker.turn);
     const scope = worker.turn?.scope ?? this.#scopeOf();
     const activity = worker.turn ? this.#publicTurns.get(worker.turn.id) : undefined;
-    const parts = activity ? (activity.say(text), 1) : this.#deliver(text, scope);
+    const parts = activity ? (activity.say(text), 1) : this.#deliver(text, scope, worker.turn?.latency);
     this.#audit('say', { scope, worker: worker.index, text });
     const channel = this.#channelOf(scope);
     const where =
@@ -1810,10 +1902,10 @@ export class AgentRunner {
    * Cut to fit where it is going, and send. Speech is bubbles; a channel or
    * DM post keeps its shape and its length. Returns how many pieces went.
    */
-  #deliver(text: string, scope: string): number {
+  #deliver(text: string, scope: string, traces?: LatencyTrace[]): number {
     const channelId = this.#channelOf(scope)?.id;
     const pieces = channelId === undefined ? toBubbles(text) : toPosts(text);
-    for (const piece of pieces) this.#send(piece, channelId);
+    for (const piece of pieces) this.#send(piece, channelId, traces);
     return pieces.length;
   }
 
@@ -1824,15 +1916,23 @@ export class AgentRunner {
    * reply landing right behind a `say` waits its 2s instead of earning a
    * refusal and vanishing.
    */
-  #send(text: string, channelId: string | undefined): void {
+  #send(text: string, channelId: string | undefined, traces?: LatencyTrace[]): void {
+    const send = (): void => {
+      this.#gateway.say(text, channelId);
+      if (this.#gateway.connected) for (const trace of traces ?? []) {
+        trace.mark('feedbackDispatched');
+        trace.mark('replyDispatched');
+        trace.mark('lastOutboundDispatched');
+      }
+    };
     const now = Date.now();
     const at = Math.max(now, this.#nextSendAt);
     this.#nextSendAt = at + SEND_INTERVAL_MS;
     if (at === now) {
-      this.#gateway.say(text, channelId);
+      send();
       return;
     }
-    setTimeout(() => this.#gateway.say(text, channelId), at - now);
+    setTimeout(send, at - now);
   }
 
   #setTurnStatus(turn: Turn, status: string): void {
@@ -1881,6 +1981,9 @@ export class AgentRunner {
     this.#statusLine = status;
 
     this.#gateway.setStatus(status === 'idle' ? '' : status, primary, { channelIds, spatial });
+    if (this.#gateway.connected) for (const turn of turns) {
+      for (const trace of turn.latency ?? []) trace.mark('feedbackDispatched');
+    }
     // The same state, as a balloon. Derived here so every status the runner
     // narrates gets its glyph without anybody remembering to ask for one.
     this.#setEmote(emoteForStatus(status));

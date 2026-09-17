@@ -100,6 +100,8 @@ export interface WalkToPayload {
 }
 
 export interface ChatSendPayload {
+  /** Optional content-free browser correlation, validated by the server. */
+  requestId?: string;
   text: string;
 }
 
@@ -148,6 +150,8 @@ export interface HistoryPayload {
 }
 
 export interface ChannelChatSendPayload {
+  /** Optional content-free browser correlation, validated by the server. */
+  requestId?: string;
   channelId: string;
   text: string;
 }

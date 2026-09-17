@@ -1,3 +1,4 @@
+import { latencyRequestId } from '@quintal/shared';
 import { activityTerminal, parseActivity, type PublicActivity } from '@quintal/shared';
 import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
 import { ErrorCode, Room, ServerError, type Client, logger } from '@colyseus/core';
@@ -402,7 +403,7 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#onWalkTo(client, payload),
     );
     this.onMessage(ClientMessage.Chat, (client, payload: ChatSendPayload) =>
-      this.#onChat(client, payload?.text),
+      this.#onChat(client, payload?.text, latencyRequestId(payload?.requestId)),
     );
     this.onMessage(ClientMessage.SetStatus, (client, payload: StatusPayload) =>
       this.#onStatus(client, payload?.status),
@@ -1005,14 +1006,14 @@ export class OfficeRoom extends Room<OfficeState> {
     if (player.status !== next) player.status = next;
   }
 
-  #onChat(client: Client, rawText: unknown): void {
+  #onChat(client: Client, rawText: unknown, requestId?: string): void {
     const speaker = this.state.players.get(client.sessionId);
     if (!speaker) return;
 
     const text = this.#acceptHumanText(client, rawText);
     if (text === null) return;
 
-    this.#deliverChat(client.sessionId, speaker, text);
+    this.#deliverChat(client.sessionId, speaker, text, requestId);
   }
 
   #onChannelChat(client: Client, payload: ChannelChatSendPayload): void {
@@ -1029,7 +1030,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const text = this.#acceptHumanText(client, payload?.text, CHANNEL_POST_MAX_LENGTH);
     if (text === null) return;
 
-    this.#deliverChannelChat(client.sessionId, speaker, channel, text);
+    this.#deliverChannelChat(client.sessionId, speaker, channel, text, latencyRequestId(payload?.requestId));
   }
 
   /**
@@ -1149,7 +1150,7 @@ export class OfficeRoom extends Room<OfficeState> {
    * for agents — an agent has to be reachable by name from across the office,
    * or asking it to do something means walking over to it first.
    */
-  #deliverChat(sessionId: string, speaker: OfficePlayer, text: string): void {
+  #deliverChat(sessionId: string, speaker: OfficePlayer, text: string, requestId?: string): void {
     const sentAt = Date.now();
     const tile = this.#tileOf(speaker);
     const radius = this.#settings.chatRadiusTiles;
@@ -1217,6 +1218,7 @@ export class OfficeRoom extends Room<OfficeState> {
             text,
             distance: round(distance),
             sentAt,
+            ...(requestId ? { requestId } : {}),
             ...via,
           } satisfies AgentChatEvent);
         } else if (woken) {
@@ -1227,6 +1229,7 @@ export class OfficeRoom extends Room<OfficeState> {
             fromKind: speaker.kind,
             text,
             sentAt,
+            ...(requestId ? { requestId } : {}),
             ...via,
           } satisfies AgentMentionEvent);
         }
@@ -1572,6 +1575,7 @@ export class OfficeRoom extends Room<OfficeState> {
     speaker: OfficePlayer,
     channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
     text: string,
+    requestId?: string,
   ): void {
     const sentAt = Date.now();
     this.#lastMessageAt.set(channel.id, sentAt);
@@ -1606,6 +1610,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const wakes = mayWake(hop, this.#settings.mentionMaxHops);
 
     const line = {
+      ...(requestId ? { requestId } : {}),
       from: sessionId,
       fromUserId: speaker.userId,
       fromName: speaker.name,
