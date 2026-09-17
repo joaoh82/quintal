@@ -114,6 +114,29 @@ group alphabetical, with the cap unchanged. The same machine now lists all 38
 checkouts plus 22 folders, `more: 16`. When the cut does reach checkouts the
 answer says so, rather than letting the agent read a truncated list as complete.
 
+### Worktrees and grouped repositories, against the same machine
+
+Two more gaps found the same way, and fixed before merge.
+
+A worktree or submodule keeps a `.git` *file* rather than a directory, and the
+first implementation gave it no remote. On a machine where worktrees are routine
+that is most of the answer missing: `sonar-pin170` was reported as a checkout of
+nothing in particular, where git resolves it to
+`github.com/joaoh82/sonar-smart-news`. The `gitdir:` pointer is now followed one
+hop — via `commondir` for a worktree, the gitdir itself for a submodule — still
+without a subprocess.
+
+Folders that group repositories were invisible: `r_n_d/` held five checkouts,
+`rust/` three, and the inventory reported them as plain directories. A folder
+that is *not itself a checkout* is now opened one level, and repositories found
+there are named `parent/child`. A checkout is never opened — its subdirectories
+are its source tree — and nothing goes two levels deep. On the author's machine
+this surfaced **24 repositories that were previously unreported**, which in turn
+pushed the total past the old cap of 60, so the cap is now 100: an answer that
+silently omits repositories is the failure being prevented, where a slightly
+longer list is only a cost. That machine now lists 87 entries (62 checkouts, 25
+folders) with nothing omitted, in 23 ms, for a 6.9 KB payload.
+
 ## What was not verified
 
 - **No live office server.** `workspace_info` is answered entirely by the

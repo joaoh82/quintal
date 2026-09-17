@@ -208,6 +208,53 @@ describe('what the harness answers about this machine', () => {
     ]);
   });
 
+  it('opens a folder that groups repositories, one level and no further', () => {
+    // `r_n_d/` holding five repositories is not a scratch folder, and an
+    // inventory that cannot see inside it reports five repositories as none.
+    const repos = temp('repos');
+    checkout(repos, 'quintal', 'https://github.com/joaoh82/quintal.git');
+    const group = join(repos, 'r_n_d');
+    mkdirSync(group);
+    checkout(group, 'parser', 'https://github.com/joaoh82/parser.git');
+    checkout(group, 'sketches');
+    // Two levels down is somebody's source tree. Not ours.
+    mkdirSync(join(group, 'deeper', 'too-far', '.git'), { recursive: true });
+
+    const result = report(nest(repos));
+    assert.deepEqual(result.repositories.checkouts, [
+      { name: 'quintal', git: true, remote: 'github.com/joaoh82/quintal' },
+      { name: 'r_n_d/parser', git: true, remote: 'github.com/joaoh82/parser' },
+      { name: 'r_n_d/sketches', git: true },
+    ]);
+    // Only repositories come back from inside a folder. `r_n_d/deeper` is a
+    // plain directory one level in, and listing every one of those would fill
+    // the answer with the noise the descent was meant to see past.
+    assert.ok(!result.repositories.checkouts?.some((entry) => entry.name.includes('deeper')));
+    assert.ok(!result.repositories.checkouts?.some((entry) => entry.name.includes('too-far')));
+  });
+
+  it('does not open a checkout looking for more checkouts inside it', () => {
+    const repos = temp('repos');
+    const outer = checkout(repos, 'quintal', 'https://github.com/joaoh82/quintal.git');
+    // A vendored tree inside a repository is that repository's business.
+    mkdirSync(join(outer, 'vendor', 'thing', '.git'), { recursive: true });
+
+    assert.deepEqual(report(nest(repos)).repositories.checkouts, [
+      { name: 'quintal', git: true, remote: 'github.com/joaoh82/quintal' },
+    ]);
+  });
+
+  it('keeps a folder that turned out to hold nothing', () => {
+    const repos = temp('repos');
+    checkout(repos, 'api', 'https://github.com/acme/api.git');
+    mkdirSync(join(repos, 'downloads', 'zips'), { recursive: true });
+
+    assert.deepEqual(report(nest(repos)).repositories.checkouts, [
+      { name: 'api', git: true, remote: 'github.com/acme/api' },
+      { name: 'downloads', git: false },
+    ]);
+  });
+
   it('splits the scopes the office granted from the ones it did not', () => {
     const result = report(temp('bare'), { scopes: ['chat', 'dm'] });
     assert.deepEqual(Object.keys(result.quintal_scopes.granted), ['chat', 'dm']);
@@ -276,12 +323,45 @@ describe('what a remote is allowed to say', () => {
     assert.equal(urlOfOrigin('[core]\n\tbare = false\n'), null);
   });
 
-  it('leaves a worktree or submodule without a remote rather than chasing one', () => {
+  it('follows a worktree to the repository that owns it', () => {
+    // Somebody who works in worktrees has several checkouts of one repository
+    // side by side. Reporting each as a checkout of nothing in particular is
+    // how an agent ends up unable to say what it is looking at.
     const repos = temp('repos');
-    const dir = join(repos, 'worktree');
+    const owner = checkout(repos, 'quintal', 'git@github.com:joaoh82/quintal.git');
+    const wt = join(repos, 'quintal-pin170');
+    const gitdir = join(owner, '.git', 'worktrees', 'pin170');
+    mkdirSync(wt, { recursive: true });
+    mkdirSync(gitdir, { recursive: true });
+    writeFileSync(join(gitdir, 'commondir'), '../..\n');
+    writeFileSync(join(wt, '.git'), `gitdir: ${gitdir}\n`);
+
+    assert.deepEqual(report(nest(repos)).repositories.checkouts, [
+      { name: 'quintal', git: true, remote: 'github.com/joaoh82/quintal' },
+      { name: 'quintal-pin170', git: true, remote: 'github.com/joaoh82/quintal' },
+    ]);
+  });
+
+  it('follows a submodule to the config in its own gitdir', () => {
+    const repos = temp('repos');
+    const dir = join(repos, 'vendored');
+    const gitdir = join(repos, '.store', 'modules', 'vendored');
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, '.git'), 'gitdir: /Users/josh/projects/quintal/.git/worktrees/wt\n');
-    assert.deepEqual(report(nest(repos)).repositories.checkouts, [{ name: 'worktree', git: true }]);
+    mkdirSync(gitdir, { recursive: true });
+    writeFileSync(join(gitdir, 'config'), '[remote "origin"]\n\turl = https://github.com/acme/lib.git\n');
+    writeFileSync(join(dir, '.git'), `gitdir: ${gitdir}\n`);
+
+    assert.deepEqual(report(nest(repos)).repositories.checkouts, [
+      { name: 'vendored', git: true, remote: 'github.com/acme/lib' },
+    ]);
+  });
+
+  it('says a checkout has no remote rather than inventing one', () => {
+    const repos = temp('repos');
+    const dir = join(repos, 'orphan');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, '.git'), 'gitdir: /nowhere/that/exists/.git/worktrees/x\n');
+    assert.deepEqual(report(nest(repos)).repositories.checkouts, [{ name: 'orphan', git: true }]);
   });
 });
 

@@ -1,5 +1,5 @@
 {
-  "measured_at": "2026-09-17T20:15:29.315Z",
+  "measured_at": "2026-09-17T20:29:04.590Z",
   "node": "v24.13.0",
   "tools_advertised": [
     "say",
@@ -19,11 +19,11 @@
     {
       "label": "A: nest with REPOS link, token-bearing clone",
       "tool_calls": 1,
-      "elapsed_ms": 32.97,
+      "elapsed_ms": 32.91,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/projects",
           "reached_as": "REPOS/",
           "checkouts": [
             {
@@ -72,11 +72,11 @@
     {
       "label": "A2: same session, one repo cloned since",
       "tool_calls": 1,
-      "elapsed_ms": 2.73,
+      "elapsed_ms": 2.72,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/projects",
           "reached_as": "REPOS/",
           "checkouts": [
             {
@@ -130,11 +130,11 @@
     {
       "label": "B: empty repositories directory",
       "tool_calls": 1,
-      "elapsed_ms": 2.21,
+      "elapsed_ms": 1.9,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/empty-workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/empty-workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/empty-projects",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/empty-projects",
           "reached_as": "REPOS/",
           "note": "nothing cloned here yet"
         },
@@ -167,11 +167,11 @@
     {
       "label": "C: REPOS link whose target is gone",
       "tool_calls": 1,
-      "elapsed_ms": 1.51,
+      "elapsed_ms": 2.88,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/gone-workspace",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/gone-workspace",
         "repositories": {
-          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/no-such-dir",
+          "path": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/no-such-dir",
           "reached_as": "REPOS/",
           "note": "this directory is not there"
         },
@@ -204,9 +204,9 @@
     {
       "label": "D: custom cwd, a single checkout, no REPOS",
       "tool_calls": 1,
-      "elapsed_ms": 2.07,
+      "elapsed_ms": 3.29,
       "payload": {
-        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-WnYu1b/solo/api",
+        "working_directory": "/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin51-rxhr9u/solo/api",
         "repositories": {
           "path": null,
           "note": "no repositories directory on this machine"

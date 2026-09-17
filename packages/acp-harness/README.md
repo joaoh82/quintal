@@ -199,7 +199,9 @@ agent actually wants it.
 `workspace_info` is the one the harness answers by itself, without the office:
 the working directory, whether it holds an `AGENTS.md`, the repositories
 directory the agent was given and what is checked out in it (checkouts first,
-plain folders after, bounded), the runtime, model
+plain folders after, bounded; a folder that groups repositories is opened one
+level, and a worktree or submodule is followed to the repository that owns it),
+the runtime, model
 and machine it is running on, and which scopes the office granted. It exists so
 that "where do you work?", "which repos can you see?" and "are you allowed to
 do that?" cost one call instead of a `pwd`/`ls`/`git remote` expedition that

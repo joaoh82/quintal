@@ -34,11 +34,27 @@ import type { AgentScope } from '@quintal/shared';
  *   takes with the credentials its runtime already has.
  */
 
-/** Directories listed under the repositories directory before the list is cut. */
-export const MAX_CHECKOUTS = 60;
+/**
+ * Directories listed under the repositories directory before the list is cut.
+ *
+ * Sized against a real machine rather than picked: the one this was written on
+ * holds 38 checkouts at the top level and another 24 inside folders that group
+ * them, which a cap of 60 cut. At roughly 75 bytes an entry this is a few
+ * thousand tokens at its very worst, paid only by a turn that asks — and an
+ * answer that quietly omits repositories is the failure this tool exists to
+ * prevent, where a slightly long list is merely a cost.
+ */
+export const MAX_CHECKOUTS = 100;
 
 /** A `.git/config` larger than this is not one we are going to parse. */
 const MAX_GIT_CONFIG_BYTES = 256 * 1024;
+
+/**
+ * Above this many entries, the repositories directory is not opened one level
+ * deeper. The descent is one readdir per folder, which is nothing for the
+ * dozens a person accumulates and something for a directory holding thousands.
+ */
+const MAX_SCANNED_FOLDERS = 250;
 
 export interface WorkspaceIdentity {
   /** The agent, by the name the office knows it under. */
@@ -71,6 +87,10 @@ export interface WorkspaceReportInput {
 }
 
 export interface Checkout {
+  /**
+   * Relative to the repositories directory: `quintal`, or `r_n_d/parser` for
+   * one found a level inside a folder that groups repositories.
+   */
   name: string;
   /** True when it has a `.git` — anything else is just a directory sitting there. */
   git: boolean;
@@ -230,8 +250,33 @@ function listing(path: string, reachedAs: string, limit: number): WorkspaceRepor
   // past the limit — on the machine this was written on, 38 plain folders were
   // burying nine repositories whose names start late in the alphabet. The
   // question is "which repositories are here", so repositories go first.
-  const entries = names.map((name) => ({ name, git: isGitCheckout(join(path, name)) }));
-  const ordered = [...entries.filter((entry) => entry.git), ...entries.filter((entry) => !entry.git)];
+  //
+  // A folder that is not itself a checkout is opened once, because people
+  // group repositories: `r_n_d/` holding five of them is not a scratch folder,
+  // and an inventory that cannot see inside it reports ten repositories as
+  // nothing at all. One level, and only into folders that are not checkouts
+  // themselves — a checkout's own subdirectories are its source tree, not more
+  // repositories, and walking into them is the crawl this tool exists to
+  // avoid.
+  const top = names.map((name) => ({ name, git: isGitCheckout(join(path, name)) }));
+  const nested: { name: string; git: true }[] = [];
+  const containers = new Set<string>();
+  if (top.length <= MAX_SCANNED_FOLDERS) {
+    for (const entry of top) {
+      if (entry.git) continue;
+      for (const child of childCheckouts(join(path, entry.name))) {
+        nested.push({ name: `${entry.name}/${child}`, git: true });
+        containers.add(entry.name);
+      }
+    }
+  }
+
+  const ordered = [
+    ...[...top.filter((entry) => entry.git), ...nested].sort((a, b) => a.name.localeCompare(b.name)),
+    // A folder represented by the repositories inside it is not also listed as
+    // an empty-handed folder of its own.
+    ...top.filter((entry) => !entry.git && !containers.has(entry.name)),
+  ];
 
   const checkouts = ordered.slice(0, limit).map(({ name, git }): Checkout => {
     const remote = git ? originRemote(join(path, name)) : null;
@@ -276,16 +321,63 @@ function isGitCheckout(dir: string): boolean {
   return existsSync(join(dir, '.git'));
 }
 
+/** Checkouts immediately inside a folder. One level; never opened further. */
+function childCheckouts(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => !entry.name.startsWith('.'))
+      .filter((entry) => entry.isDirectory() || (entry.isSymbolicLink() && isDir(join(dir, entry.name))))
+      .filter((entry) => isGitCheckout(join(dir, entry.name)))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * The `origin` URL from a checkout's own config, read rather than shelled out
  * for: sixty `git remote -v` subprocesses to answer one question is exactly
  * the exploration this tool exists to replace.
  *
- * A worktree or submodule keeps a `.git` file pointing elsewhere; those get no
- * remote rather than a path walk to find one.
+ * A worktree or a submodule keeps a `.git` *file* holding `gitdir: <path>`
+ * instead of a directory, and its remote lives with the repository that owns
+ * it. Following that one pointer matters more than it sounds: somebody who
+ * works in worktrees has several checkouts of the same repository side by side,
+ * and reporting each of them as a checkout of nothing in particular is how an
+ * agent ends up unable to say what it is looking at. One or two small reads,
+ * still no subprocess and still no walk.
  */
 function originRemote(dir: string): string | null {
-  const path = join(dir, '.git', 'config');
+  return readOrigin(join(dir, '.git', 'config')) ?? readOrigin(linkedConfig(dir));
+}
+
+/** The config a `.git` file points at, or null when `.git` is an ordinary directory. */
+function linkedConfig(dir: string): string | null {
+  const marker = join(dir, '.git');
+  let gitdir: string;
+  try {
+    if (!statSync(marker).isFile()) return null;
+    const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(marker, 'utf8'));
+    if (!pointer) return null;
+    gitdir = resolve(dir, pointer[1]!.trim());
+  } catch {
+    return null;
+  }
+
+  // A worktree's gitdir carries `commondir` — the repository's real `.git`,
+  // where the remotes are. A submodule's gitdir holds its own config.
+  try {
+    const common = readFileSync(join(gitdir, 'commondir'), 'utf8').trim();
+    if (common.length > 0) return join(resolve(gitdir, common), 'config');
+  } catch {
+    // Not a worktree, or a gitdir we cannot read: fall through.
+  }
+  return join(gitdir, 'config');
+}
+
+function readOrigin(path: string | null): string | null {
+  if (path === null) return null;
   try {
     if (statSync(path).size > MAX_GIT_CONFIG_BYTES) return null;
     return redactRemote(urlOfOrigin(readFileSync(path, 'utf8')));
