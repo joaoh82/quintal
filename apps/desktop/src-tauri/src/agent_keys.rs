@@ -127,7 +127,13 @@ pub fn provision_with(
     // The blob before the fleet: a locked keychain must stop this before a
     // single request leaves the machine, let alone before a key is made.
     let mut blob = store.load()?;
-    let fleet = office.fleet().map_err(IdentityError::Office)?;
+    let fleet = match office.fleet() {
+        Ok(fleet) => fleet,
+        Err(why) if is_stale_host_token(&why) => {
+            return Err(IdentityError::StaleHostToken);
+        }
+        Err(why) => return Err(IdentityError::Office(why)),
+    };
 
     let mut out = Provisioned::default();
     let mut dirty = false;
@@ -240,6 +246,14 @@ struct ErrorBody {
     error: Option<String>,
 }
 
+/// Prefix `HttpOffice` puts on a 401 so provisioning can tell "this token
+/// is not a machine here" from "the office is down".
+const STALE_HOST_TOKEN: &str = "stale-host-token";
+
+fn is_stale_host_token(why: &str) -> bool {
+    why.starts_with(STALE_HOST_TOKEN) || why.contains("unknown or revoked host token")
+}
+
 fn describe(error: ureq::Error) -> String {
     match error {
         ureq::Error::Status(code, response) => {
@@ -248,10 +262,15 @@ fn describe(error: ureq::Error) -> String {
                 .ok()
                 .and_then(|body| body.error)
                 .unwrap_or_default();
-            if body.is_empty() {
+            let detail = if body.is_empty() {
                 format!("the office answered {code}")
             } else {
                 format!("the office answered {code}: {body}")
+            };
+            if code == 401 {
+                format!("{STALE_HOST_TOKEN}: {detail}")
+            } else {
+                detail
             }
         }
         ureq::Error::Transport(transport) => format!("could not reach the office: {transport}"),
@@ -501,6 +520,43 @@ mod tests {
             office.registrations().len(),
             1,
             "nothing new reached the office"
+        );
+    }
+
+    #[test]
+    fn a_rejected_host_token_is_stale_not_an_unreachable_office() {
+        // The bug this exists to name. A token from office A presented to
+        // office B (or to A after its database was recreated) is a 401
+        // that used to surface as an auth-server failure. It is a machine
+        // that is not registered here.
+        struct StaleOffice;
+        impl Office for StaleOffice {
+            fn fleet(&self) -> Result<Vec<FleetAgent>, String> {
+                Err("stale-host-token: the office answered 401: unknown or revoked host token".into())
+            }
+            fn register(
+                &self,
+                _agent_id: &str,
+                _agent_pubkey: &str,
+                _attestation: &Attestation,
+            ) -> Result<(), String> {
+                panic!("must not register under a rejected token");
+            }
+        }
+
+        let (_dir, store) = new_store();
+        match provision_with(&store, SERVER, &StaleOffice, owner(&store)) {
+            Err(IdentityError::StaleHostToken) => {}
+            other => panic!("stale, not a generic office error: {other:?}"),
+        }
+        assert!(
+            !store
+                .load()
+                .unwrap()
+                .slots
+                .keys()
+                .any(|k| k.starts_with(AGENT_KEY_SLOT)),
+            "nothing is written for a token the office refused",
         );
     }
 

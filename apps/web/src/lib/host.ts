@@ -35,7 +35,11 @@ export interface HostError {
     | 'bad_passphrase'
     | 'not_a_backup'
     | 'cost_too_high'
-    | 'host_error';
+    | 'host_error'
+    | 'not_registered'
+    | 'stale_token'
+    | 'office'
+    | 'no_server';
   message: string;
 }
 
@@ -413,6 +417,19 @@ export function hostPromptFor({
  * reached a user as "This computer did not answer." The diagnosis was sitting
  * right there and the handler threw it away.
  */
+/**
+ * Did the host refuse to start the fleet because this machine is not
+ * registered with *this* office?
+ *
+ * Covers both "we have no token" and "we had one this office rejected" —
+ * the second is what pointing the app at a second office looks like, and
+ * the fix is the same: register here.
+ */
+export function isMachineRegistrationError(cause: unknown): boolean {
+  if (!isHostError(cause)) return false;
+  return cause.code === 'stale_token' || cause.code === 'not_registered';
+}
+
 export function describeHostFailure(cause: unknown): string {
   const text = extractMessage(cause);
   return text !== undefined && text.trim().length > 0

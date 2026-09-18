@@ -26,6 +26,9 @@ docker compose up --build
 
 The office is at <http://localhost:3000>. [Download the desktop app](https://quintal.sh/download/)
 and add that origin in its server picker. See [installation notes](./docs/DESKTOP.md#installing-a-release).
+A second instance on another port is a different office: add it as another
+server, register this machine there, and the first office's registration
+stays put.
 
 **From a checkout, mind your `.env`.** Compose forwards it to the container, so
 a development `DATABASE_URL` or `STORAGE_URL` — relative paths, resolved from

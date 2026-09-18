@@ -51,12 +51,15 @@ describe('a host token the office turns down', () => {
     assert.match(error.message, /host\.json/, 'says which file to fix');
     assert.match(error.message, /2026-08-08/, 'dates it, so an orphan is obvious');
     assert.match(error.message, /recreated/, 'offers the common cause');
+    assert.match(error.message, /localhost:3000/, 'names the office that refused');
+    assert.match(error.message, /register this machine/, 'names the fix');
   });
 
   it('names the variable when the token came from the environment', async () => {
     const error = await rejection(fetchFleet({ ...base, source: 'env' }, null));
 
     assert.match(error.message, /QUINTAL_HOST_TOKEN/);
+    assert.match(error.message, /localhost:3000/, 'names the office that refused');
     assert.doesNotMatch(error.message, /host\.json/, 'no file is involved');
   });
 

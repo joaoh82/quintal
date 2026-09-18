@@ -183,7 +183,7 @@ export function nestRoot(): string {
 
 /**
  * Where this machine's own configuration lives: `host.json`, the fleet
- * token `quintal-acp login` remembers.
+ * tokens `quintal-acp login` remembers — one per office URL.
  *
  * `~/.config/quintal` (or `$XDG_CONFIG_HOME/quintal`), deliberately not the
  * nest. The token used to sit at `~/.quintal/host.json`, which was fine while

@@ -92,6 +92,7 @@ impl From<IdentityError> for HostError {
             IdentityError::Backup(Nip49Error::NotNcryptsec) => "not_a_backup",
             IdentityError::Backup(Nip49Error::CostTooHigh { .. }) => "cost_too_high",
             IdentityError::Office(_) => "office",
+            IdentityError::StaleHostToken => "stale_token",
             _ => "host_error",
         };
         HostError {
@@ -313,7 +314,17 @@ pub fn start_fleet_here(state: &HostState) -> Result<FleetState, HostError> {
     // map in its environment. An agent the office would not take a key for
     // is reported and boots on the host token while legacy credentials last.
     let office = agent_keys::HttpOffice::new(server, &token);
-    let provisioned = agent_keys::provision(&state.store, server, &office)?;
+    let provisioned = match agent_keys::provision(&state.store, server, &office) {
+        Ok(provisioned) => provisioned,
+        Err(IdentityError::StaleHostToken) => {
+            // Drop it so the next status check reports unregistered and the
+            // UI offers to register with *this* office, rather than retrying
+            // a token this office has already refused.
+            let _ = machine::forget_for(&state.store, server);
+            return Err(IdentityError::StaleHostToken.into());
+        }
+        Err(error) => return Err(error.into()),
+    };
     let keys = agent_keys::env_value(&provisioned.keys);
 
     let started = state.fleet.start(&dir, server, &token, Some(&keys))?;

@@ -50,9 +50,20 @@ export interface StoredHost {
 }
 
 const HOST_FILE = 'host.json';
+const DEFAULT_OFFICE = 'http://localhost:3000';
 
 export function hostFilePath(): string {
   return join(configDir(), HOST_FILE);
+}
+
+/**
+ * The key a stored token is filed under: the office URL, trimmed, with no
+ * trailing slash. `http://localhost:3001/` and `http://localhost:3001` are
+ * one office; a token minted by one of them is refused by the other if we
+ * stored them apart.
+ */
+export function officeKey(url: string): string {
+  return url.trim().replace(/\/+$/, '');
 }
 
 /**
@@ -102,42 +113,170 @@ export function evictLegacyHostFile(
   }
 }
 
-export function readStoredHost(): StoredHost | null {
-  const fromEnv = process.env.QUINTAL_HOST_TOKEN;
-  if (fromEnv && fromEnv.trim().length > 0) {
-    return {
-      token: fromEnv.trim(),
-      url: process.env.QUINTAL_URL ?? 'http://localhost:3000',
-      source: 'env',
-    };
-  }
+/**
+ * What `login` actually writes: one entry per office URL.
+ *
+ * A token minted by office A means nothing to office B. Filing them under
+ * one key — the old shape of this file — is how pointing the same machine
+ * at a second office presented the first office's credential and failed
+ * with an auth error that named the wrong component.
+ */
+interface PersistedHost {
+  token: string;
+  label?: string;
+  reposDir?: string;
+  /** When this slot was last written, as ISO-8601. */
+  writtenAt?: string;
+}
 
+function isPersistedHost(value: unknown): value is PersistedHost {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as PersistedHost).token === 'string' &&
+    (value as PersistedHost).token.length > 0
+  );
+}
+
+function loadHostFile(): { hosts: Record<string, PersistedHost>; path: string } {
   evictLegacyHostFile();
   const path = hostFilePath();
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as StoredHost;
-    if (typeof parsed?.token !== 'string' || parsed.token.length === 0) return null;
-    let writtenAt: Date | undefined;
-    try {
-      writtenAt = statSync(path).mtime;
-    } catch {
-      // The token is what matters; its age is a nicety.
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const record = parsed as Record<string, unknown>;
+      if (record.hosts && typeof record.hosts === 'object' && !Array.isArray(record.hosts)) {
+        const hosts: Record<string, PersistedHost> = {};
+        for (const [url, entry] of Object.entries(record.hosts as Record<string, unknown>)) {
+          if (isPersistedHost(entry)) hosts[officeKey(url)] = entry;
+        }
+        return { hosts, path };
+      }
+      // Legacy: a single `{ token, url }` for the whole app. That is the
+      // file a `login` wrote before offices were plural, and the token in
+      // it belongs to the URL it names.
+      if (isPersistedHost(record)) {
+        const rawUrl = (parsed as { url?: unknown }).url;
+        const url = officeKey(
+          typeof rawUrl === 'string' && rawUrl.trim().length > 0 ? rawUrl : DEFAULT_OFFICE,
+        );
+        return {
+          hosts: {
+            [url]: {
+              token: record.token,
+              ...(typeof record.label === 'string' ? { label: record.label } : {}),
+              ...(typeof record.reposDir === 'string' ? { reposDir: record.reposDir } : {}),
+            },
+          },
+          path,
+        };
+      }
     }
-    return { ...parsed, source: 'file', path, writtenAt };
   } catch {
-    return null;
+    // Missing or unreadable: no stored hosts.
+  }
+  return { hosts: {}, path };
+}
+
+function persistHostFile(hosts: Record<string, PersistedHost>, path: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const legacy = legacyHostFilePath();
+  if (legacy !== path && existsSync(legacy)) unlinkSync(legacy);
+  writeFileSync(path, `${JSON.stringify({ hosts }, null, 2)}\n`);
+  // A credential for the whole fleet has no business being world-readable.
+  chmodSync(path, 0o600);
+}
+
+function fileWrittenAt(path: string): Date | undefined {
+  try {
+    return statSync(path).mtime;
+  } catch {
+    return undefined;
   }
 }
 
+function storedFromPersisted(
+  url: string,
+  entry: PersistedHost,
+  path: string,
+  fallbackWrittenAt?: Date,
+): StoredHost {
+  let writtenAt: Date | undefined;
+  if (typeof entry.writtenAt === 'string') {
+    const parsed = new Date(entry.writtenAt);
+    if (!Number.isNaN(parsed.getTime())) writtenAt = parsed;
+  }
+  return {
+    token: entry.token,
+    url,
+    source: 'file',
+    path,
+    writtenAt: writtenAt ?? fallbackWrittenAt,
+    label: entry.label,
+    reposDir: entry.reposDir,
+  };
+}
+
+/** Office URLs this machine holds a host token for. */
+export function listedOfficeUrls(): string[] {
+  return Object.keys(loadHostFile().hosts).sort();
+}
+
+/**
+ * The host token for one office.
+ *
+ * `url` selects the slot. Without one, `QUINTAL_URL` is used; if that is
+ * unset too and exactly one office is stored, that one is returned — the
+ * historical `login` / `up` path. Two or more stored offices and no URL
+ * is `null`; the caller says so, rather than guessing and presenting the
+ * wrong token.
+ *
+ * `QUINTAL_HOST_TOKEN` still wins, but only for the office in `QUINTAL_URL`.
+ * An env token from office A must not be handed to office B just because
+ * `up --url B` was typed in a shell that still has A exported.
+ */
+export function readStoredHost(url?: string | null): StoredHost | null {
+  const envToken = process.env.QUINTAL_HOST_TOKEN?.trim();
+  const envUrl = officeKey(process.env.QUINTAL_URL ?? DEFAULT_OFFICE);
+  const requested =
+    url != null && url.trim().length > 0 ? officeKey(url) : officeKey(process.env.QUINTAL_URL ?? '');
+
+  if (envToken) {
+    const envApplies = requested.length === 0 || requested === envUrl;
+    if (envApplies) {
+      return { token: envToken, url: envUrl, source: 'env' };
+    }
+  }
+
+  const { hosts, path } = loadHostFile();
+  const writtenAt = fileWrittenAt(path);
+
+  if (requested.length > 0) {
+    const entry = hosts[requested];
+    return entry ? storedFromPersisted(requested, entry, path, writtenAt) : null;
+  }
+
+  const urls = Object.keys(hosts);
+  if (urls.length === 1) {
+    const only = urls[0]!;
+    return storedFromPersisted(only, hosts[only]!, path, writtenAt);
+  }
+  return null;
+}
+
 export function writeStoredHost(host: StoredHost): string {
-  const path = hostFilePath();
-  mkdirSync(dirname(path), { recursive: true });
-  // A fresh login supersedes whatever the old location held.
-  const legacy = legacyHostFilePath();
-  if (legacy !== path && existsSync(legacy)) unlinkSync(legacy);
-  writeFileSync(path, `${JSON.stringify(host, null, 2)}\n`);
-  // A credential for the whole fleet has no business being world-readable.
-  chmodSync(path, 0o600);
+  const url = officeKey(host.url);
+  if (url.length === 0) {
+    throw new ConfigError('a host token needs the office URL it belongs to');
+  }
+  const { hosts, path } = loadHostFile();
+  hosts[url] = {
+    token: host.token,
+    ...(host.label && host.label.trim().length > 0 ? { label: host.label.trim() } : {}),
+    ...(host.reposDir && host.reposDir.trim().length > 0 ? { reposDir: host.reposDir } : {}),
+    writtenAt: new Date().toISOString(),
+  };
+  persistHostFile(hosts, path);
   return path;
 }
 
@@ -165,9 +304,20 @@ interface FleetResponse {
  * Naming the file and when it was written lets somebody tell the two apart at a
  * glance, which "it may have been revoked" does not.
  */
-function staleTokenMessage(host: StoredHost): string {
+/**
+ * What to say when the office turns a token down. Exported so the desktop
+ * host can use the same words — a 401 from `/api/host/fleet` is this
+ * situation, whether the caller is `quintal-acp up` or the app.
+ */
+export function staleTokenMessage(host: StoredHost): string {
+  const office = host.url.trim().length > 0 ? ` at ${host.url}` : '';
+
   if (host.source === 'env') {
-    return 'the office rejected the host token in QUINTAL_HOST_TOKEN. Check it is the one this office issued.';
+    return (
+      `the office${office} rejected the host token in QUINTAL_HOST_TOKEN. ` +
+      'Check it is the one this office issued — a token from another office means nothing here. ' +
+      'If this machine is not registered with this office, register it again.'
+    );
   }
 
   const where = host.path ?? 'the stored host file';
@@ -177,8 +327,9 @@ function staleTokenMessage(host: StoredHost): string {
       : '';
 
   return (
-    `the office rejected the host token in ${where}${age}. ` +
-    'If the office or its database was recreated since then, that token refers to a machine that no longer exists — ' +
+    `the office${office} rejected the host token in ${where}${age}. ` +
+    'If you pointed this machine at a different office, or the office or its database was recreated since then, ' +
+    'that token refers to a machine that no longer exists — ' +
     'register this machine again and run `login` with the new token. ' +
     'If you revoked it on purpose, create a new one at /settings/agents.'
   );

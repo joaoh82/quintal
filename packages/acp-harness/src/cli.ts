@@ -26,6 +26,7 @@ import {
   fetchFleet,
   type StoredHost,
   labelFor,
+  listedOfficeUrls,
   readStoredHost,
   toAgentConfigs,
   writeStoredHost,
@@ -47,9 +48,11 @@ import { Supervisor } from './supervisor.js';
 
 const USAGE = `quintal-acp — bridge ACP agents into a Quintal office
 
-  quintal-acp login --token <qh_…>
-                               remember this machine's host token, so the office
-                               can define agents that boot here
+  quintal-acp login --token <qh_…> [--url <url>]
+                               remember this machine's host token for that office,
+                               so it can define agents that boot here. Each
+                               office keeps its own token; logging into a second
+                               one does not forget the first.
   quintal-acp up [name]        boot the fleet — from quintal.fleet.json if there
                                is one, otherwise whatever the office assigns
   quintal-acp status           show the fleet's connection and status lines
@@ -263,10 +266,18 @@ async function main(): Promise<void> {
     // A local fleet file wins. Somebody who wrote one meant it, and silently
     // preferring the office would make a checked-in config stop working the
     // moment a machine was registered.
-    const stored = readStoredHost();
+    const officeUrl = stringFlag(flags, 'url') ?? process.env.QUINTAL_URL;
+    const stored = readStoredHost(officeUrl);
     const localFleet = stringFlag(flags, 'config') ?? findFleetFile(cwd);
     // Keys the desktop app holds for office-defined agents, one per agent id.
     const agentKeys = readAgentKeyMap();
+
+    const knownOffices = listedOfficeUrls();
+    if (localFleet === null && stored === null && !officeUrl && knownOffices.length > 1) {
+      throw new ConfigError(
+        `this machine is registered with more than one office (${knownOffices.join(', ')}); pass --url`,
+      );
+    }
 
     if (localFleet === null && stored !== null) {
       // Null lets the office answer for the name the token was registered

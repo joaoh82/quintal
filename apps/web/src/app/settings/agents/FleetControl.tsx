@@ -2,8 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { RegisterMachineForm } from '@/components/RegisterMachineForm';
 import { Button } from '@/components/ui/button';
-import { describeHostFailure, type FleetState, type LogLine } from '@/lib/host';
+import {
+  describeHostFailure,
+  isMachineRegistrationError,
+  type FleetState,
+  type LogLine,
+} from '@/lib/host';
+import { existingMachineNames, machineNaming } from '@/lib/machine';
 import { useHost } from '@/lib/use-host';
 
 /**
@@ -28,6 +35,9 @@ export function FleetControl() {
   const [problem, setProblem] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [atLogin, setAtLogin] = useState<boolean | null>(null);
+  const [needsRegistration, setNeedsRegistration] = useState(false);
+  const [suggested, setSuggested] = useState('');
+  const [existing, setExisting] = useState<string[]>([]);
   const tail = useRef<HTMLPreElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -42,14 +52,23 @@ export function FleetControl() {
     }
   }, [host]);
 
+  const offerRegistration = useCallback(async () => {
+    const prompt = await machineNaming();
+    if (prompt.kind !== 'ask') return;
+    setSuggested(prompt.suggested);
+    setExisting(await existingMachineNames());
+    setNeedsRegistration(true);
+  }, []);
+
   useEffect(() => {
     if (!host) return;
     // Null until asked, so the checkbox is not drawn in a state nobody chose.
     void host.opensAtLogin().then(setAtLogin).catch(() => setAtLogin(null));
     void refresh();
+    void offerRegistration();
     const timer = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(timer);
-  }, [host, refresh]);
+  }, [host, refresh, offerRegistration]);
 
   useEffect(() => {
     if (showLogs && tail.current) tail.current.scrollTop = tail.current.scrollHeight;
@@ -81,6 +100,9 @@ export function FleetControl() {
       else await host.stopFleet();
     } catch (error: unknown) {
       setProblem(describeHostFailure(error));
+      if (what === 'start' && isMachineRegistrationError(error)) {
+        await offerRegistration();
+      }
     }
     setBusy(false);
     await refresh();
@@ -132,6 +154,17 @@ export function FleetControl() {
           Open Quintal at login, so your agents are running before you are
         </label>
       )}
+
+      {needsRegistration ? (
+        <div className="mt-3 rounded-md border p-3">
+          <h3 className="text-xs font-semibold">Register this machine</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            This office does not know this computer yet. Register it here to
+            run agents — a token from another office will not work.
+          </p>
+          <RegisterMachineForm suggested={suggested} existing={existing} />
+        </div>
+      ) : null}
 
       {problem ? <p className="mt-2 text-xs text-red-600">{problem}</p> : null}
 

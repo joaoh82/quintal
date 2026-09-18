@@ -6,6 +6,7 @@ import {
   getHost,
   hasHost,
   hostPromptFor,
+  isMachineRegistrationError,
   resetHostForTests,
   type HostBridge,
 } from './host';
@@ -200,5 +201,32 @@ describe('describeHostFailure', () => {
     for (const nothing of [undefined, null, '', new Error('')]) {
       assert.match(describeHostFailure(nothing), /no reason/);
     }
+  });
+});
+
+describe('isMachineRegistrationError', () => {
+  it('treats a missing token and a rejected token as the same fix', () => {
+    assert.equal(
+      isMachineRegistrationError({
+        code: 'not_registered',
+        message: 'this machine has not registered with a server yet',
+      }),
+      true,
+    );
+    assert.equal(
+      isMachineRegistrationError({
+        code: 'stale_token',
+        message: 'the office rejected this machine\'s host token',
+      }),
+      true,
+    );
+  });
+
+  it('does not send a locked keychain to the register-machine form', () => {
+    assert.equal(
+      isMachineRegistrationError({ code: 'locked', message: 'the keychain would not unlock' }),
+      false,
+    );
+    assert.equal(isMachineRegistrationError(new Error('boom')), false);
   });
 });
