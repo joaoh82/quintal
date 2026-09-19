@@ -532,7 +532,10 @@ mod tests {
         struct StaleOffice;
         impl Office for StaleOffice {
             fn fleet(&self) -> Result<Vec<FleetAgent>, String> {
-                Err("stale-host-token: the office answered 401: unknown or revoked host token".into())
+                Err(
+                    "stale-host-token: the office answered 401: unknown or revoked host token"
+                        .into(),
+                )
             }
             fn register(
                 &self,
