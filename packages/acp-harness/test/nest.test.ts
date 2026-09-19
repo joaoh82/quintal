@@ -329,7 +329,11 @@ describe('the machine credential is never in the workspace', () => {
       const result = ensureNest({ root });
 
       assert.equal(existsSync(join(root, 'host.json')), false, 'gone from cwd');
-      assert.equal(JSON.parse(readFileSync(join(config, 'host.json'), 'utf8')).token, 'qh_old');
+      assert.equal(
+        readStoredHost('http://x')?.token,
+        'qh_old',
+        'the token that lived in the nest is the one for the office it named',
+      );
       assert.equal(statSync(join(config, 'host.json')).mode & 0o777, 0o600);
       assert.ok(result.warnings.some((line) => /moved .*host\.json/.test(line)), 'says it did');
     });

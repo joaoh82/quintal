@@ -98,11 +98,16 @@ overridable with `--repos-dir`, the `QUINTAL_REPOS_DIR` environment variable,
 or `"reposDir"` in the fleet file — so agents work in the checkouts you already
 have. Leave it unset and `REPOS/` is a real directory agents clone into.
 
-Nothing secret lives in the nest. The machine token `quintal-acp login`
-remembers goes to `~/.config/quintal/host.json` (or under `$XDG_CONFIG_HOME`),
-and a token found at the old `~/.quintal/host.json` is moved there the first
-time anything runs: a credential in an agent's working directory is a
-credential its own `ls` finds, and file modes only hide it from *other* users.
+Nothing secret lives in the nest. The machine tokens `quintal-acp login`
+remembers go to `~/.config/quintal/host.json` (or under `$XDG_CONFIG_HOME`),
+one per office URL — a token minted by office A means nothing to office B,
+and logging into a second office does not forget the first. A token found
+at the old `~/.quintal/host.json` is moved there the first time anything
+runs: a credential in an agent's working directory is a credential its own
+`ls` finds, and file modes only hide it from *other* users. If this machine
+is registered with more than one office, `up` needs `--url` so it does not
+guess. A rejected token names that file, when it was written, and says to
+register this machine again.
 
 One workspace rather than one per agent, on purpose: what makes agents differ
 is what the office already gives each of them (an owner's instructions, a core

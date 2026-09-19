@@ -40,6 +40,16 @@ pub enum IdentityError {
     /// The office could not be asked, or refused. Carries what it said.
     #[error("{0}")]
     Office(String),
+    /// The office rejected this machine's host token.
+    ///
+    /// Same HTTP 401 as a revoked token, and the same 401 as a token minted
+    /// by a different office — a fresh database has no such machine. The
+    /// words say so, and name registration as the fix, rather than blaming
+    /// an "auth server" that was up and answering.
+    #[error(
+        "the office rejected this machine's host token. If you pointed Quintal at a different office, or the office or its database was recreated, that token refers to a machine that no longer exists — register this machine again under Settings → Agents."
+    )]
+    StaleHostToken,
 }
 
 /// What the UI is allowed to know about the state of the key.

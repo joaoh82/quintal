@@ -123,6 +123,16 @@ arrive at starts its own.
 Forgetting a server also forgets this machine's registration with it — that
 token names a machine in an office the app no longer has.
 
+**Each office registers this machine separately.** A host token is minted by
+one office and refused by any other, so pointing the app at a second office
+— a throwaway local instance, a move from `localhost` to a real server —
+does not reuse the first office's credential. On a first connection to an
+office this computer is not registered with, the app asks you to name the
+machine (the same prompt lives under Settings → Agents). A token this
+office rejects is forgotten and the prompt comes back, naming registration
+as the fix rather than an auth server that was up and answering. Switching
+back to the first office keeps its registration intact.
+
 ### Getting out of one
 
 Sign-in can fail for reasons that have nothing to do with your key. The

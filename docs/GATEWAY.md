@@ -140,8 +140,11 @@ recoverably rather than as hashes.
 A host token is more powerful than an agent key — it can act as **any** agent
 its owner assigned to that machine, including ones created later. So the office
 re-checks ownership on every join: same workspace, same owner, not revoked.
-Sharing a workspace never means sharing a fleet. Revoke a machine at
-`/settings/agents`; per-agent keys are unaffected and keep working.
+Sharing a workspace never means sharing a fleet. A token is minted *by* one
+office and means nothing at another — the desktop app and `quintal-acp login`
+keep one per office URL, so switching offices does not present the wrong
+credential. Revoke a machine at `/settings/agents`; per-agent keys are
+unaffected and keep working.
 
 `GET /api/host/fleet` (Bearer host token, `?host=<label>`) returns what that
 machine should be running. It carries a **runtime id, never a command line** —

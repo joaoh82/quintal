@@ -52,9 +52,11 @@ app's **Agents** tab is where that happens:
 
 ![The desktop app's Agents tab: the fleet is running, and each runtime found on this machine is listed as Ready, Not installed or Unsupported](../../screenshots/desktop-runtimes.png)
 
-- **Register this machine** once, under Settings → Agents → Machines, from
-  the app. The office gives the machine a token of its own; no agent key is
-  ever copied anywhere.
+- **Register this machine** once per office, under Settings → Agents, from
+  the app — the first-run prompt, **Running agents**, or **Machines**. The
+  office gives the machine a token of its own; no agent key is ever copied
+  anywhere. A token from another office will not work here; pointing the
+  app at a second office asks you to register with that one too.
 - **Start** runs every agent assigned to this machine. Enabling and
   disabling an agent in Settings decides what runs, live, without a restart.
 - The **runtimes** list is what this machine can run, with the reason for

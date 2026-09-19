@@ -6,6 +6,7 @@ import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+import { DesktopMachineRegister } from './DesktopMachineRegister';
 import {
   createHostTokenAction,
   revokeHostTokenAction,
@@ -53,8 +54,11 @@ export function Machines({
         A machine registered here can run agents you create in this page — no
         copying keys, no editing a config file. Quintal can&rsquo;t start a process
         on your computer, so your computer holds a token and asks what it should
-        be running.
+        be running. Each office has its own registration: pointing this app at
+        a second office means registering with that one too.
       </p>
+
+      <DesktopMachineRegister />
 
       {state.ok && state.token ? (
         <div className="mt-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3">
@@ -92,7 +96,11 @@ export function Machines({
         </div>
       ) : null}
 
-      <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
+      <p className="text-muted-foreground mt-3 text-xs">
+        For a machine that is not this app, mint a token and run{' '}
+        <code className="font-mono">quintal-acp login</code> on it:
+      </p>
+      <form action={formAction} className="mt-2 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium">Machine name</span>
           <Input name="label" placeholder="laptop" required className="w-48" />
