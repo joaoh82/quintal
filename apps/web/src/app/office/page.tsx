@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AppVersion } from '@/components/AppVersion';
 import { SignOutButton } from '@/components/SignOutButton';
 import { AutoStartFleet } from '@/components/AutoStartFleet';
 import { MachineRegistration } from '@/components/MachineRegistration';
@@ -46,6 +47,7 @@ export default async function OfficePage() {
         <p className="text-muted-foreground ml-auto text-xs">
           Enter to chat · @name to address someone
         </p>
+        <AppVersion />
         <Link
           href="/settings"
           className="hover:bg-accent rounded-md border px-2.5 py-1 text-xs"

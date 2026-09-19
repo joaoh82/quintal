@@ -21,6 +21,7 @@ import {
   type IdentityState,
 } from '@/lib/host';
 import { useHost } from '@/lib/use-host';
+import { AppVersion } from '@/components/AppVersion';
 import { WhichServer } from '@/components/WhichServer';
 import { Wordmark } from '@/components/Wordmark';
 import {
@@ -491,6 +492,7 @@ export default function LoginPage() {
       </Card>
 
       <WhichServer className="text-muted-foreground mt-4 text-center text-xs" />
+      <AppVersion className="text-muted-foreground mt-1 text-center text-xs" />
 
       <p className="text-muted-foreground mt-4 text-center text-sm">
         <Link

@@ -16,7 +16,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,6 +59,10 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // Ordered: read state, create and sign, then exercise the backup gate, then
     // replace the identity, then destroy it. Every command in the bridge gets
     // called on the hop where the ACL applies.
+    // Which app this is. First because it is the one call that needs nothing
+    // to have happened yet, and because a version line that silently renders
+    // nothing is invisible in a way a refused signature is not.
+    await run('app_version', 'app_version', {});
     await run('has_identity', 'has_identity', {});
     await run('get_public_key', 'get_public_key', {});
     await run('sign_challenge', 'sign_challenge', { payload: ${JSON.stringify(PAYLOAD)} });
@@ -141,6 +145,17 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
 </script></body>`;
 
 const BUNDLE_ID = 'sh.quintal.desktop';
+
+/**
+ * The version this build should report.
+ *
+ * Read from the Tauri config rather than hardcoded, so a release bump does not
+ * break this check — and compared for equality rather than presence, because
+ * "answered with some string" is exactly the pass that would hide the bug.
+ */
+const DECLARED_VERSION = JSON.parse(
+  readFileSync('apps/desktop/src-tauri/tauri.conf.json', 'utf8'),
+).version;
 
 /** The repos directory seeded below, for the expectation to compare against. */
 let chosenReposDir = '';
@@ -276,6 +291,10 @@ const EXPECTED = {
   // Contents depend on what is installed on the machine; what must hold is
   // that the call is permitted and answers.
   'detect_runtimes': { ok: true },
+  // Equality, not merely "answered". The UI prints this beside the office's own
+  // number, so a host answering some other version would have the app
+  // accusing the server of a drift that is really its own.
+  'app_version': { ok: true, value: DECLARED_VERSION },
   // An identity exists by now (`get_public_key` made one), so registration is
   // allowed; `registered` must be false until something is actually stored.
   'host_status (fresh)': { ok: true, value: { registered: false } },

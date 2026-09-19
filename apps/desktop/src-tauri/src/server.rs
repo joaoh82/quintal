@@ -169,6 +169,10 @@ pub fn capability_for(server: Option<&str>) -> String {
         // Generated from `AppManifest::commands` in build.rs. Named one by one
         // rather than wildcarded: a command added later should have to be
         // granted deliberately, not inherit a blanket allow.
+        // Which version this app is. Not sensitive — the release it came
+        // from is public — but named here like every other one, because
+        // the rule above is that a command is granted deliberately.
+        "allow-app-version",
         "allow-has-identity",
         "allow-detect-runtimes",
         "allow-get-public-key",
