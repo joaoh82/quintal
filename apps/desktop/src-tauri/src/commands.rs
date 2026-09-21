@@ -548,3 +548,40 @@ pub fn set_push_to_talk_chord(
     crate::ptt::register(&app, &stored)?;
     Ok(stored)
 }
+
+// --- this build -------------------------------------------------------------
+
+/// Which version of the app this is.
+///
+/// The number Tauri stamped this bundle with, which `check-release-version.mjs`
+/// pins to every other manifest at release — so it is the same number the
+/// release tag, the download page and `SHA256SUMS.txt` are talking about.
+///
+/// Its own command rather than granting `core:app:allow-version`, which answers
+/// the same question: the bridge is the one surface the page knows about, and a
+/// second way in is a second thing to grant and a second thing to keep true.
+#[tauri::command]
+pub fn app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[cfg(test)]
+mod version_tests {
+    /// The crate version and the Tauri config version must agree.
+    ///
+    /// `app_version` answers from whichever one Tauri resolved, and the UI
+    /// prints that beside the office's own number — so a disagreement here
+    /// makes the app claim a version no release ever had.
+    /// `scripts/check-release-version.mjs` catches this at release time, which
+    /// is late: the mistake is made in the same commit that bumps one of them.
+    #[test]
+    fn the_crate_version_matches_the_tauri_config() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(
+            config["version"].as_str(),
+            Some(env!("CARGO_PKG_VERSION")),
+            "tauri.conf.json and Cargo.toml disagree about this app's version"
+        );
+    }
+}

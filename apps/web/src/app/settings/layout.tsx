@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { AppVersion } from '@/components/AppVersion';
 import { MachineRegistration } from '@/components/MachineRegistration';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -37,6 +38,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
           {here.role === 'guest' ? ' (visiting)' : ''} · {displayName(session.user)}
         </p>
         <div className="ml-auto flex items-center gap-2">
+          <AppVersion />
           <ThemeToggle compact />
           <Link
             href="/office"

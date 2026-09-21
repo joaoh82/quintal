@@ -96,6 +96,14 @@ export function isHostError(value: unknown): value is HostError {
  * that it is the one call whose result the UI shows rather than stores.
  */
 export interface HostBridge {
+  /**
+   * Which version of the app this is.
+   *
+   * The number the release tag and the download page are talking about. Asked
+   * of the host rather than read from the office bundle, because those are two
+   * different programs shipped at two different times — see `lib/version.ts`.
+   */
+  appVersion(): Promise<string>;
   hasIdentity(): Promise<IdentityState>;
   /** x-only public key, lowercase hex. Creates one on a genuine first run. */
   getPublicKey(): Promise<string>;
@@ -315,6 +323,7 @@ function tauriBridge(): HostBridge {
   };
 
   return {
+    appVersion: () => call<string>('app_version'),
     hasIdentity: () => call<IdentityState>('has_identity'),
     getPublicKey: () => call<string>('get_public_key'),
     signChallenge: (payload) => call<string>('sign_challenge', { payload }),

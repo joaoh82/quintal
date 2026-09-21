@@ -42,6 +42,8 @@
   }
   .problem { color: #fca5a5; font-size: 12px; margin: .6rem 0 0; }
   #status { color: #a1a1aa; text-align: center; }
+  #version { color: #52525b; text-align: center; font-size: 12px;
+    font-family: ui-monospace, monospace; margin: 1.25rem 0 0; }
 </style>
 
 <main>
@@ -66,6 +68,8 @@
     </form>
     <p class="problem" id="problem" hidden></p>
   </section>
+
+  <p id="version"></p>
 </main>
 
 <script type="module">
@@ -78,6 +82,16 @@
     el('status').textContent = 'Open this in the Quintal app.';
   } else {
     void render();
+    // Which app this is. The one screen where the number cannot come from the
+    // office — there is no office yet — and the one screen somebody stares at
+    // while working out whether their install is the one the docs describe.
+    void invoke('app_version')
+      .then((version) => {
+        el('version').textContent = `Quintal ${version}`;
+      })
+      // Furniture, not a feature: a picker that cannot say its version still
+      // has a server to add.
+      .catch(() => {});
   }
 
   function fail(message) {

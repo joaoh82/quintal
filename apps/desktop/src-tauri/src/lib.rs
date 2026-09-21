@@ -34,6 +34,7 @@ pub fn run() {
         // the page cannot register a global key on its own.
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            commands::app_version,
             commands::has_identity,
             commands::detect_runtimes,
             commands::get_public_key,
