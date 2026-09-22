@@ -127,8 +127,14 @@ export interface HostBridge {
   installUpdate(): Promise<void>;
   /** The version this machine last declined, if any. */
   updateState(): Promise<UpdateStatus>;
-  /** Remember a "not now", so the same version is not asked about again. */
-  dismissUpdate(version: string): Promise<void>;
+  /**
+   * Remember a "not now", so the same version is not asked about again.
+   *
+   * Takes no version: the host records the one it offered. The page naming a
+   * version would let a hostile office silence every future prompt by
+   * declining one that does not exist yet. Resolves with what was recorded.
+   */
+  dismissUpdate(): Promise<string>;
   hasIdentity(): Promise<IdentityState>;
   /** x-only public key, lowercase hex. Creates one on a genuine first run. */
   getPublicKey(): Promise<string>;
@@ -352,7 +358,7 @@ function tauriBridge(): HostBridge {
     checkForUpdate: () => call<Available | null>('check_for_update'),
     installUpdate: () => call<void>('install_update'),
     updateState: () => call<UpdateStatus>('update_state'),
-    dismissUpdate: (version) => call<void>('dismiss_update', { version }),
+    dismissUpdate: () => call<string>('dismiss_update'),
     hasIdentity: () => call<IdentityState>('has_identity'),
     getPublicKey: () => call<string>('get_public_key'),
     signChallenge: (payload) => call<string>('sign_challenge', { payload }),

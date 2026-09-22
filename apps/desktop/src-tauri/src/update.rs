@@ -115,6 +115,20 @@ async fn look(app: &AppHandle) -> Option<Available> {
 
     match updater.check().await {
         Ok(Some(update)) => {
+            // The same rule the page applies, applied again here.
+            //
+            // Not redundancy for its own sake: the page's copy is a rendering
+            // decision, and this one is about what this process will act on.
+            // `install_update` re-checks through exactly this path, so a
+            // manifest offering a release candidate cannot be installed on a
+            // stable copy even by something calling the command directly.
+            if is_prerelease(&update.version) && !is_prerelease(&update.current_version) {
+                eprintln!(
+                    "[quintal] ignoring prerelease {} offered to stable {}",
+                    update.version, update.current_version
+                );
+                return None;
+            }
             let (can_install, blocked) = installability();
             Some(Available {
                 version: update.version.clone(),
@@ -131,6 +145,15 @@ async fn look(app: &AppHandle) -> Option<Available> {
             None
         }
     }
+}
+
+/// Does this version carry a prerelease tag — `0.3.0-rc.1` and friends?
+///
+/// SemVer ranks a prerelease *above* the release before it, so `0.3.0-rc.1`
+/// looks newer than `0.2.0` to any ordinary comparison. The release rehearsal
+/// in RELEASING.md publishes exactly those tags.
+fn is_prerelease(version: &str) -> bool {
+    version.trim_start_matches('v').contains('-')
 }
 
 /// Whether this copy can replace itself, and why not when it cannot.
@@ -228,13 +251,32 @@ pub fn update_state(state: State<'_, HostState>) -> UpdateState {
     }
 }
 
-/// Remember that this version was declined, so it is not asked about again.
+/// Remember that the offered version was declined, so it is not asked again.
+///
+/// Takes no version. The page saying *which* version it is declining would let
+/// a hostile office write "999.0.0" and silence every future prompt on the
+/// machine — a small attack, but a free one, and the page has no information
+/// here that this process does not already hold. So the answer recorded is the
+/// version this host actually offered.
 #[tauri::command]
-pub fn dismiss_update(state: State<'_, HostState>, version: String) -> Result<(), HostError> {
+pub fn dismiss_update(app: AppHandle, state: State<'_, HostState>) -> Result<String, HostError> {
+    let offered = app
+        .state::<Checked>()
+        .0
+        .lock()
+        .unwrap()
+        .clone()
+        .flatten()
+        .map(|available| available.version)
+        .ok_or_else(|| HostError {
+            code: "no_update".into(),
+            message: "There is nothing on offer to decline.".into(),
+        })?;
+
     let mut settings = spawn::read_settings(&state.dir);
-    settings.dismissed_update = Some(version);
+    settings.dismissed_update = Some(offered.clone());
     spawn::write_settings(&state.dir, &settings)?;
-    Ok(())
+    Ok(offered)
 }
 
 /// Download the update, install it, and come back up on the new version.
@@ -359,5 +401,21 @@ mod tests {
             repos.path(),
             "and declining did not erase the other settings"
         );
+    }
+}
+
+#[cfg(test)]
+mod prerelease_tests {
+    use super::is_prerelease;
+
+    #[test]
+    fn a_rehearsal_tag_is_recognised_as_a_prerelease() {
+        // RELEASING.md rehearses with these, and SemVer ranks them above the
+        // stable release before them — which is exactly why they must not be
+        // offered to a stable install.
+        assert!(is_prerelease("0.0.1-rc.1"));
+        assert!(is_prerelease("v0.3.0-beta.2"));
+        assert!(!is_prerelease("0.3.0"));
+        assert!(!is_prerelease("v1.0.0"));
     }
 }

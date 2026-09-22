@@ -35,11 +35,12 @@ export function UpdateNotice({ compact = false }: { compact?: boolean }) {
   }, [offer.kind, compact]);
 
   // The host reports the download through a page hook, the same way the global
-  // push-to-talk key arrives (see `ptt.rs`). Defined only while this component
-  // is mounted, so a screen without a progress bar simply has no hook and the
-  // host's call is a no-op.
+  // push-to-talk key arrives (see `ptt.rs`). Defined for the whole life of the
+  // component rather than from the moment the install starts: an effect that
+  // waited on `installing` could still be pending when the first chunks land,
+  // and the bar would jump rather than fill. A screen without this component
+  // has no hook at all, and the host's call is a no-op.
   useEffect(() => {
-    if (!installing) return;
     const hook = (fraction: number | null) => setProgress(fraction);
     (window as unknown as { __quintalUpdateProgress?: typeof hook }).__quintalUpdateProgress =
       hook;
@@ -47,7 +48,7 @@ export function UpdateNotice({ compact = false }: { compact?: boolean }) {
       delete (window as unknown as { __quintalUpdateProgress?: unknown })
         .__quintalUpdateProgress;
     };
-  }, [installing]);
+  }, []);
 
   if (offer.kind === 'none') return null;
   const { update } = offer;
@@ -137,8 +138,19 @@ export function UpdateNotice({ compact = false }: { compact?: boolean }) {
               variant="ghost"
               size="sm"
               onClick={() => {
-                setOpen(false);
-                void dismiss();
+                // Closed only once the host has written it down. If that
+                // fails the panel stays up with the reason, because a "Later"
+                // that did not persist would ask again next launch and make
+                // the answer meaningless.
+                void dismiss()
+                  .then(() => setOpen(false))
+                  .catch((cause: unknown) =>
+                    setProblem(
+                      isHostError(cause)
+                        ? cause.message
+                        : 'That could not be saved, so you will be asked again.',
+                    ),
+                  );
               }}
             >
               Later

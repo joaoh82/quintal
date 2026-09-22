@@ -29,6 +29,17 @@ describe('ordering versions', () => {
     assert.ok(compareVersions('0.3.0-rc.2', '0.3.0-rc.1') > 0);
   });
 
+  it('orders prerelease counters as numbers, so rc.10 lands after rc.2', () => {
+    // A plain string compare says "rc.10" < "rc.2" and would quietly stop
+    // offering the eleventh release candidate of a series.
+    assert.ok(compareVersions('0.3.0-rc.10', '0.3.0-rc.2') > 0);
+    assert.ok(compareVersions('0.3.0-rc.9', '0.3.0-rc.10') < 0);
+    // A shorter run of identifiers is the lower one, and a numeric identifier
+    // ranks below an alphanumeric one.
+    assert.ok(compareVersions('0.3.0-rc', '0.3.0-rc.1') < 0);
+    assert.ok(compareVersions('0.3.0-1', '0.3.0-alpha') < 0);
+  });
+
   it('knows a prerelease when it sees one', () => {
     assert.equal(isPrerelease('0.0.1-rc.1'), true);
     assert.equal(isPrerelease('v0.3.0-beta'), true);

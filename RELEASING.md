@@ -62,8 +62,9 @@ installs the baseline build *as* its Bun, through `bun-download-url`, and asks i
 for the target it is already running. Keep that URL's version in step with
 `bun-version` on the other platforms.
 
-The build applies `tauri.bundle.conf.json` for the sidecar and
-`tauri.release.conf.json` for release settings, on top of the base Tauri config.
+The build applies `tauri.bundle.conf.json` for the sidecar,
+`tauri.release.conf.json` for release settings, and `tauri.updater.conf.json`
+only when there is an updater signing key, on top of the base Tauri config.
 Keep the latter a delta: never duplicate `bundle.externalBin` there, because
 JSON merge-patch replaces arrays. The AppImage is the exception: it is bundled
 *without* `tauri.bundle.conf.json`, so linuxdeploy never sees the harness. Given
@@ -101,11 +102,22 @@ that can produce an update an installed copy will accept; losing it means no
 future release can ever update anyone, permanently, and the only way back is
 asking every user to download an installer by hand.
 
-`tauri.release.conf.json` sets `createUpdaterArtifacts`, so each platform
-bundles a payload and a `.sig` beside its installer. Both are declared in
-`scripts/release-assets.json` and go out under stable names like every other
-asset. They are **optional**: a build with no signing key still publishes every
-installer, and the release simply carries no manifest rather than failing.
+`tauri.updater.conf.json` turns on `createUpdaterArtifacts`, and
+`build-desktop-release.mjs` applies that overlay **only when
+`TAURI_SIGNING_PRIVATE_KEY` is set**. That condition is load-bearing, not
+tidiness: with `plugins.updater.pubkey` in the config, asking for updater
+artifacts without the private key makes the bundler exit with *"A public key
+has been found, but no private key"*. It does not skip them. Keeping the flag
+in `tauri.release.conf.json` broke the Linux packaging job, which has no
+business holding the production signing secret — as would any fork PR, and any
+release attempted before the secrets existed.
+
+Each platform then bundles a payload and a `.sig` beside its installer, both
+declared in `scripts/release-assets.json` and shipped under stable names like
+every other asset. They are **optional** all the way through: staging and
+collection skip what is not there, and a build with no signing key publishes
+every installer and simply carries no manifest. The build log and the job
+summary say which of the two happened.
 
 `publish-release.mjs` writes `latest.json` only when every platform's payload
 and signature is present *and* the release is a stable one that is becoming the

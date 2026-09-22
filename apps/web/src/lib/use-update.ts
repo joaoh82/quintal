@@ -49,11 +49,12 @@ export function useUpdateOffer(): {
     offer,
     dismiss: async () => {
       if (offer.kind === 'none') return;
-      const version = offer.update.version;
-      // Remembered first, shown second. If the host cannot write the
-      // preference, the honest outcome is that the question comes back — not a
-      // page that looks settled and asks again next launch anyway.
-      await host?.dismissUpdate(version).catch(() => {});
+      // Remembered first, shown second, and **only** if the remembering
+      // worked. Swallowing the failure here would leave the page looking
+      // settled for one session and asking again next launch, which is the
+      // exact behaviour "Later" is supposed to rule out. A failure propagates
+      // so the caller can leave the question open.
+      await host?.dismissUpdate();
       setOffer({ kind: 'badge', update: offer.update });
     },
   };

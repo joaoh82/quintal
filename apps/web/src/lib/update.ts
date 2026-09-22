@@ -65,7 +65,31 @@ export function compareVersions(a: string, b: string): number {
   if (left.pre === right.pre) return 0;
   if (left.pre === null) return 1;
   if (right.pre === null) return -1;
-  return left.pre < right.pre ? -1 : 1;
+
+  // Dot-separated identifiers, compared one at a time. Numeric ones compare as
+  // numbers, which is the difference between `rc.10` being after `rc.2` and
+  // being before it — a plain string compare says `"rc.10" < "rc.2"` and would
+  // quietly stop offering the eleventh release candidate.
+  const mine = left.pre.split('.');
+  const theirs = right.pre.split('.');
+  for (let index = 0; index < Math.max(mine.length, theirs.length); index += 1) {
+    const a = mine[index];
+    const b = theirs[index];
+    // A shorter run of identifiers is the lower one: `rc` precedes `rc.1`.
+    if (a === undefined) return -1;
+    if (b === undefined) return 1;
+    const numeric = /^\d+$/.test(a) && /^\d+$/.test(b);
+    if (numeric) {
+      const difference = Number(a) - Number(b);
+      if (difference !== 0) return difference;
+    } else if (a !== b) {
+      // SemVer puts numeric identifiers below alphanumeric ones.
+      if (/^\d+$/.test(a)) return -1;
+      if (/^\d+$/.test(b)) return 1;
+      return a < b ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 /** Does this version carry a prerelease tag — `0.3.0-rc.1` and friends? */

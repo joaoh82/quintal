@@ -77,7 +77,7 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // is reachable at all, and that declining is remembered.
     await run('check_for_update', 'check_for_update', {});
     await run('update_state (fresh)', 'update_state', {});
-    await run('dismiss_update', 'dismiss_update', { version: '99.0.0' });
+    await run('dismiss_update (nothing offered)', 'dismiss_update', {});
     await run('update_state (declined)', 'update_state', {});
     await run('get_public_key', 'get_public_key', {});
     await run('sign_challenge', 'sign_challenge', { payload: ${JSON.stringify(PAYLOAD)} });
@@ -306,15 +306,21 @@ const EXPECTED = {
   // Contents depend on what is installed on the machine; what must hold is
   // that the call is permitted and answers.
   'detect_runtimes': { ok: true },
-  // Null here means "nothing to offer", which is also what offline means —
-  // deliberately indistinguishable, and the reason a CI runner with no
-  // published manifest can assert this exactly rather than loosely.
-  'check_for_update': { ok: true, value: null },
+  // Answered, not pinned to a value. Null is the usual result here — a runner
+  // whose binary is already the latest published one, or which cannot reach
+  // GitHub at all — but a real manifest newer than the binary under test is a
+  // perfectly correct answer too, and pinning `null` would fail this check for
+  // a command that worked. What is being proven is reachability.
+  'check_for_update': { ok: true },
   'update_state (fresh)': { ok: true, value: { dismissed: null } },
-  'dismiss_update': { ok: true },
-  // The load-bearing half: a decline has to survive, or the same version asks
-  // again every launch and the answer stops meaning anything.
-  'update_state (declined)': { ok: true, value: { dismissed: '99.0.0' } },
+  // Declining takes no version: the host records what it offered. With nothing
+  // on offer there is nothing to decline, and recording a version nobody was
+  // shown is exactly what a hostile page would want. So this refuses...
+  'dismiss_update (nothing offered)': { ok: false },
+  // ...and nothing was written. The round trip itself is covered by
+  // `update::tests::a_declined_version_is_remembered_beside_the_other_preferences`,
+  // which can arrange an offer that this check has no way to publish.
+  'update_state (declined)': { ok: true, value: { dismissed: null } },
   // Equality, not merely "answered". The UI prints this beside the office's own
   // number, so a host answering some other version would have the app
   // accusing the server of a drift that is really its own.
