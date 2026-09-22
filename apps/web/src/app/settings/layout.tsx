@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { AppVersion } from '@/components/AppVersion';
+import { UpdateNotice } from '@/components/UpdateNotice';
 import { MachineRegistration } from '@/components/MachineRegistration';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -39,6 +40,7 @@ export default async function SettingsLayout({ children }: { children: ReactNode
         </p>
         <div className="ml-auto flex items-center gap-2">
           <AppVersion />
+          <UpdateNotice compact />
           <ThemeToggle compact />
           <Link
             href="/office"

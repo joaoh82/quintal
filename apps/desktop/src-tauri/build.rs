@@ -10,6 +10,10 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "app_version",
+            "check_for_update",
+            "install_update",
+            "update_state",
+            "dismiss_update",
             "has_identity",
             "detect_runtimes",
             "get_public_key",

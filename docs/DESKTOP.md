@@ -17,6 +17,7 @@ both. The app adds capability; it never adds screens.
 | Encrypted key backup and restore | — | ✓ |
 | Detecting which agent CLIs you have | — | ✓ |
 | Running your agents | list, assign, enable, disable | ✓ |
+| Updating itself | — | ✓ |
 
 The browser is not a degraded client. It is missing exactly the things that
 require a computer you control, and it says so where those things would be.
@@ -69,6 +70,33 @@ sudo apt install ./Quintal-linux-x64.deb
 Linux releases are unsigned. Check `SHA256SUMS.txt` against your download.
 Maintainers: see [RELEASING.md](../RELEASING.md) for `just release`, signing
 secrets, stable download names and retries.
+
+## Updating
+
+The app checks for a new version when the office loads, and asks once if there
+is one. Say yes and it downloads the release, replaces itself and restarts. Say
+**Later** and it does not ask about that version again — the offer moves to a
+quiet **Update to …** button in the office and settings headers, and stays
+there until you take it or a newer version arrives.
+
+Every payload is verified against a public key compiled into the app before a
+single file is replaced, so an update can only come from a Quintal release that
+was signed with the matching private key.
+
+Not every install can replace itself, and the app says so rather than offering
+a button that fails:
+
+| Install | Updates itself |
+|---|---|
+| macOS DMG, copied to Applications | ✓ |
+| macOS, still running from the mounted DMG | — copy it to Applications first |
+| Windows NSIS | ✓ |
+| Linux AppImage | ✓ if the file is somewhere you can write |
+| Linux .deb | — apt owns it; update it the way you installed it |
+
+Checking is best-effort and deliberately quiet. Offline, a blocked network or a
+release that published no manifest all mean the same thing: no offer, no error,
+nothing in the way of signing in.
 
 ## Running from source
 

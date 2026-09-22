@@ -24,9 +24,25 @@ if (process.platform === 'darwin') {
     console.log(`::warning::${platform}: ${signing}`);
   }
 }
+// Updater payloads are produced only when there is a key to sign them with.
+//
+// Not a nicety: once `plugins.updater.pubkey` is in the config, asking for
+// updater artifacts without `TAURI_SIGNING_PRIVATE_KEY` makes the bundler exit
+// with "A public key has been found, but no private key" — it does not skip
+// them. That took the whole Linux packaging job down, on a workflow that has no
+// business holding the production signing secret. Staging and collection treat
+// the payloads as optional (see release-assets.mjs), but that code never runs
+// if the bundler dies first, so the decision has to be made here.
+const signsUpdates = Boolean(env.TAURI_SIGNING_PRIVATE_KEY);
+const updaterConfig = signsUpdates ? ['--config', 'src-tauri/tauri.updater.conf.json'] : [];
+const updates = signsUpdates
+  ? 'Updater payloads signed'
+  : 'NO updater payloads (no signing key): this build cannot publish an update manifest';
+if (!signsUpdates) console.log(`::warning::${platform}: ${updates}`);
+
 mkdirSync('stage', { recursive: true });
 writeFileSync('stage/signing.txt', `${signing}\n`);
-if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `## ${platform}\n**${signing}**\n`);
+if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `## ${platform}\n**${signing}**\n\n${updates}\n`);
 // On Windows, pnpm is a .cmd shim. All interpolated arguments below are fixed
 // workflow matrix values, never tag or dispatch input.
 // A failed AppImage bundle reports `failed to run linuxdeploy` and nothing
@@ -40,7 +56,8 @@ function build(bundleArg, sidecar) {
     '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
     '--bundles', bundleArg,
     ...(sidecar ? ['--config', 'src-tauri/tauri.bundle.conf.json'] : []),
-    '--config', 'src-tauri/tauri.release.conf.json', '--', '--locked',
+    '--config', 'src-tauri/tauri.release.conf.json',
+    ...updaterConfig, '--', '--locked',
   ], { env, stdio: 'inherit', shell: process.platform === 'win32' });
 }
 

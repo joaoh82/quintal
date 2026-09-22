@@ -64,6 +64,21 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     // nothing is invisible in a way a refused signature is not.
     await run('app_version', 'app_version', {});
     await run('has_identity', 'has_identity', {});
+
+    // Updating, from the outside. install_update is deliberately never called:
+    // it downloads a release and replaces this binary, which would end the
+    // check by restarting the thing running it. Its grant is covered instead
+    // by every_declared_command_is_granted, the same way pick_repos_dir's is.
+    // (No backticks in this block — it lives inside a template literal.)
+    //
+    // The check itself is allowed to find nothing — offline, or an endpoint
+    // with no manifest on it yet — because "could not ask" and "nothing new"
+    // are the same answer by design. What is proven here is that the command
+    // is reachable at all, and that declining is remembered.
+    await run('check_for_update', 'check_for_update', {});
+    await run('update_state (fresh)', 'update_state', {});
+    await run('dismiss_update (nothing offered)', 'dismiss_update', {});
+    await run('update_state (declined)', 'update_state', {});
     await run('get_public_key', 'get_public_key', {});
     await run('sign_challenge', 'sign_challenge', { payload: ${JSON.stringify(PAYLOAD)} });
     await run('can_wipe (before)', 'can_wipe', {});
@@ -291,6 +306,21 @@ const EXPECTED = {
   // Contents depend on what is installed on the machine; what must hold is
   // that the call is permitted and answers.
   'detect_runtimes': { ok: true },
+  // Answered, not pinned to a value. Null is the usual result here — a runner
+  // whose binary is already the latest published one, or which cannot reach
+  // GitHub at all — but a real manifest newer than the binary under test is a
+  // perfectly correct answer too, and pinning `null` would fail this check for
+  // a command that worked. What is being proven is reachability.
+  'check_for_update': { ok: true },
+  'update_state (fresh)': { ok: true, value: { dismissed: null } },
+  // Declining takes no version: the host records what it offered. With nothing
+  // on offer there is nothing to decline, and recording a version nobody was
+  // shown is exactly what a hostile page would want. So this refuses...
+  'dismiss_update (nothing offered)': { ok: false },
+  // ...and nothing was written. The round trip itself is covered by
+  // `update::tests::a_declined_version_is_remembered_beside_the_other_preferences`,
+  // which can arrange an offer that this check has no way to publish.
+  'update_state (declined)': { ok: true, value: { dismissed: null } },
   // Equality, not merely "answered". The UI prints this beside the office's own
   // number, so a host answering some other version would have the app
   // accusing the server of a drift that is really its own.

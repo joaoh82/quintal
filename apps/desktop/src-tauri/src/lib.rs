@@ -17,6 +17,7 @@ pub mod secrets;
 pub mod server;
 pub mod spawn;
 pub mod tray;
+pub mod update;
 
 use tauri::Manager;
 
@@ -33,8 +34,16 @@ pub fn run() {
         // window has the keyboard. Registered from here, not from the page:
         // the page cannot register a global key on its own.
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Self-update. Carries no policy of its own: what it will accept is
+        // fixed by the endpoint and public key in the config, and when it is
+        // asked is decided by the page — see `update.rs`.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
+            update::check_for_update,
+            update::install_update,
+            update::update_state,
+            update::dismiss_update,
             commands::has_identity,
             commands::detect_runtimes,
             commands::get_public_key,
@@ -92,6 +101,7 @@ pub fn run() {
                 }
             }
 
+            app.manage(update::Checked::default());
             app.manage(commands::HostState {
                 store: secrets::SecretStore::new(&dir)?,
                 dir: dir.clone(),

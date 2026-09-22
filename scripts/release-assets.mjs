@@ -4,6 +4,23 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const assets = JSON.parse(readFileSync(new URL('./release-assets.json', import.meta.url), 'utf8'));
+
+/**
+ * Updater payloads and their signatures are optional; installers are not.
+ *
+ * A build with no signing key produces neither, and that must still publish —
+ * a release without self-update is a smaller problem than no release at all.
+ * The manifest is what refuses to exist in that case, so nothing ever ships
+ * pointing at a payload that is missing or unsigned.
+ */
+export function optional(asset) {
+  return Boolean(asset.updater || asset.signs);
+}
+
+/** The stable names every platform's update payload and signature go out under. */
+export function updaterNames() {
+  return assets.filter(optional).map((asset) => asset.name);
+}
 function files(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? files(join(directory, entry.name)) : [join(directory, entry.name)],
@@ -18,15 +35,20 @@ export function stage(platform, bundleDir, destination) {
     const matches = readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(asset.extension))
       .map((entry) => join(directory, entry.name));
+    if (matches.length === 0 && optional(asset)) {
+      console.log(`No ${asset.extension} to stage (unsigned build); skipping`);
+      continue;
+    }
     if (matches.length !== 1) throw new Error(`Expected one ${asset.extension}, found ${matches.length}`);
     copyFileSync(matches[0], join(destination, basename(matches[0])));
   }
 }
 export function collect(staged, destination) {
-  const selected = assets.map((asset) => {
+  const selected = assets.flatMap((asset) => {
     const matches = files(join(staged, asset.platform)).filter((path) => path.endsWith(asset.extension));
+    if (matches.length === 0 && optional(asset)) return [];
     if (matches.length !== 1) throw new Error(`Missing or ambiguous installer: ${asset.name}`);
-    return { ...asset, source: matches[0] };
+    return [{ ...asset, source: matches[0] }];
   });
   // Validate the whole set before writing anything intended for publication.
   const names = selected.flatMap((asset) => [basename(asset.source), asset.name]);

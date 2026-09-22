@@ -37,7 +37,15 @@ const selected = [...page.matchAll(/\binstaller\(\s*["']([^"']+)["']/g)].map((ma
 for (const name of selected) {
   if (!names.has(name)) errors.push(`${pagePath}: unknown installer ${name}`);
 }
-for (const name of names) {
+// The download page lists what a person downloads. Update payloads and their
+// signatures are in the same contract because the release pipeline stages them
+// the same way, but nobody downloads a `.app.tar.gz` by hand — the app fetches
+// it. Requiring them here would put four files on the page that only confuse
+// the one decision it exists to help with.
+const downloadable = new Set(
+  assets.filter((asset) => !asset.updater && !asset.signs).map((asset) => asset.name),
+);
+for (const name of downloadable) {
   if (!selected.includes(name)) errors.push(`${pagePath}: missing installer ${name}`);
 }
 if (selected.length !== new Set(selected).size) errors.push(`${pagePath}: duplicate installer selection`);
@@ -68,5 +76,5 @@ if (errors.length) {
   console.error(errors.join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`Release links OK: ${names.size} installers on /download, ${literalLinks} literal links checked across ${files.length} files.`);
+  console.log(`Release links OK: ${downloadable.size} installers on /download (${names.size - downloadable.size} update payloads not listed there), ${literalLinks} literal links checked across ${files.length} files.`);
 }

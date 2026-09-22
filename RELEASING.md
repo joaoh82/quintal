@@ -62,8 +62,9 @@ installs the baseline build *as* its Bun, through `bun-download-url`, and asks i
 for the target it is already running. Keep that URL's version in step with
 `bun-version` on the other platforms.
 
-The build applies `tauri.bundle.conf.json` for the sidecar and
-`tauri.release.conf.json` for release settings, on top of the base Tauri config.
+The build applies `tauri.bundle.conf.json` for the sidecar,
+`tauri.release.conf.json` for release settings, and `tauri.updater.conf.json`
+only when there is an updater signing key, on top of the base Tauri config.
 Keep the latter a delta: never duplicate `bundle.externalBin` there, because
 JSON merge-patch replaces arrays. The AppImage is the exception: it is bundled
 *without* `tauri.bundle.conf.json`, so linuxdeploy never sees the harness. Given
@@ -82,7 +83,63 @@ copies and `SHA256SUMS.txt`, then un-draft as its final step. Notes contain the
 Git log since the previous reachable version tag and signing/platform details.
 Prereleases are marked as such and do not replace the latest stable download.
 A retry can replace assets in an existing draft; it refuses to modify a public
-release. No auto-updater manifest or updater signing keys are involved.
+release. A stable release that is becoming the latest also publishes
+`latest.json`, the update manifest installed copies read — see **Self-update**.
+
+## Self-update
+
+Installed copies check `releases/latest/download/latest.json` and update
+themselves from it. Two repository secrets sign the payloads:
+
+| Secret | Value |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | Private key from `tauri signer generate` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password protecting that key |
+
+The matching public key lives in `tauri.conf.json` under `plugins.updater` and
+is compiled into every build. **Back the private key up.** It is the only thing
+that can produce an update an installed copy will accept; losing it means no
+future release can ever update anyone, permanently, and the only way back is
+asking every user to download an installer by hand.
+
+`tauri.updater.conf.json` turns on `createUpdaterArtifacts`, and
+`build-desktop-release.mjs` applies that overlay **only when
+`TAURI_SIGNING_PRIVATE_KEY` is set**. That condition is load-bearing, not
+tidiness: with `plugins.updater.pubkey` in the config, asking for updater
+artifacts without the private key makes the bundler exit with *"A public key
+has been found, but no private key"*. It does not skip them. Keeping the flag
+in `tauri.release.conf.json` broke the Linux packaging job, which has no
+business holding the production signing secret — as would any fork PR, and any
+release attempted before the secrets existed.
+
+Each platform then bundles a payload and a `.sig` beside its installer, both
+declared in `scripts/release-assets.json` and shipped under stable names like
+every other asset. They are **optional** all the way through: staging and
+collection skip what is not there, and a build with no signing key publishes
+every installer and simply carries no manifest. The build log and the job
+summary say which of the two happened.
+
+`publish-release.mjs` writes `latest.json` only when every platform's payload
+and signature is present *and* the release is a stable one that is becoming the
+latest. A prerelease never writes one — a rehearsal tag would otherwise hand a
+release candidate to every installed copy that asks — and neither does a re-run
+of an older tag. URLs inside it are pinned to that tag, never to `latest`, so a
+published signature always describes the file it points at.
+
+Two platforms cannot replace themselves, and the app offers a download and an
+explanation instead: a `.deb`, which apt owns, and any copy running from a
+directory it cannot write, such as a macOS app still inside its mounted DMG.
+
+The AppImage needs care. `fix-appimage.sh` repacks it *after* Tauri bundles it,
+so whatever Tauri wrapped and signed is a binary nobody ships — an update built
+from it would hand Linux users back the AppImage without its harness, correctly
+signed, which is worse than failing. The release therefore rebuilds and
+re-signs that payload from the repacked image, and checks the tarball holds
+exactly one member named for it. Keep those steps together if either changes.
+
+When verifying a release, add to the manual pass: install the previous version
+on a clean machine, publish this one, launch the old copy, accept the update,
+and confirm it comes back on the new version with its signature intact.
 
 ## Signing
 
@@ -169,7 +226,10 @@ a planned production version tag for a sabotage test.
 
 - `pnpm test:release` exercises manifest versioning, malformed input, Cargo
   rollback, tag mismatch, release guards, an atomic push to a temporary local
-  bare repository, complete asset collection and checksum integrity.
+  bare repository, complete asset collection and checksum integrity. It also
+  covers the update manifest: every platform present, signatures carried
+  through, an empty signature refused, a prerelease never publishing one, and
+  an unsigned build still shipping its installers.
 - The ordinary CI job runs those tests through `pnpm test`. Desktop CI retains
   Rust format, Clippy, unit tests and its existing IPC checks. The Windows release
   job additionally tests lookup of the packaged `quintal-acp.exe`.
