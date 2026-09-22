@@ -67,8 +67,9 @@ edges found by living in it.
 Roughly in order. Each of these is a few days of work with an agent, not a
 quarter.
 
-- **Finish the desktop app.** Windows signing, auto-update, and
-  the last native affordances.
+- **Finish the desktop app.** Windows signing and the last native
+  affordances. Auto-update landed: the app checks at launch, asks once, and
+  installs and restarts itself.
 - **Agent keypairs.** Agents stop presenting bearer secrets and start proving
   key ownership, with a signed attestation from their owner. The gateway gets
   a versioned credentials change.

@@ -3,5 +3,14 @@
   {"platform": "macos-x64", "extension": ".dmg", "name": "Quintal-macos-x64.dmg", "directory": "dmg"},
   {"platform": "linux-x64", "extension": ".AppImage", "name": "Quintal-linux-x64.AppImage", "directory": "appimage"},
   {"platform": "linux-x64", "extension": ".deb", "name": "Quintal-linux-x64.deb", "directory": "deb"},
-  {"platform": "windows-x64", "extension": ".exe", "name": "Quintal-windows-x64-setup.exe", "directory": "nsis"}
+  {"platform": "windows-x64", "extension": ".exe", "name": "Quintal-windows-x64-setup.exe", "directory": "nsis"},
+
+  {"platform": "macos-arm64", "extension": ".app.tar.gz", "name": "Quintal-macos-arm64.app.tar.gz", "directory": "macos", "updater": "darwin-aarch64"},
+  {"platform": "macos-arm64", "extension": ".app.tar.gz.sig", "name": "Quintal-macos-arm64.app.tar.gz.sig", "directory": "macos", "signs": "darwin-aarch64"},
+  {"platform": "macos-x64", "extension": ".app.tar.gz", "name": "Quintal-macos-x64.app.tar.gz", "directory": "macos", "updater": "darwin-x86_64"},
+  {"platform": "macos-x64", "extension": ".app.tar.gz.sig", "name": "Quintal-macos-x64.app.tar.gz.sig", "directory": "macos", "signs": "darwin-x86_64"},
+  {"platform": "linux-x64", "extension": ".AppImage.tar.gz", "name": "Quintal-linux-x64.AppImage.tar.gz", "directory": "appimage", "updater": "linux-x86_64"},
+  {"platform": "linux-x64", "extension": ".AppImage.tar.gz.sig", "name": "Quintal-linux-x64.AppImage.tar.gz.sig", "directory": "appimage", "signs": "linux-x86_64"},
+  {"platform": "windows-x64", "extension": ".nsis.zip", "name": "Quintal-windows-x64-setup.nsis.zip", "directory": "nsis", "updater": "windows-x86_64"},
+  {"platform": "windows-x64", "extension": ".nsis.zip.sig", "name": "Quintal-windows-x64-setup.nsis.zip.sig", "directory": "nsis", "signs": "windows-x86_64"}
 ]

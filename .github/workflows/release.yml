@@ -130,6 +130,12 @@ jobs:
           APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+          # Signs the updater payloads on every platform. Without these the
+          # build produces no signatures, publish-release.mjs refuses to write
+          # a manifest, and the release simply ships without self-update —
+          # loudly, rather than with payloads nothing can verify.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/build-desktop-release.mjs '${{ matrix.target }}' '${{ matrix.bundles }}' '${{ matrix.platform }}'
       - name: Keep AppImage libdbus on the host and install the harness
         if: runner.os == 'Linux'
@@ -138,6 +144,36 @@ jobs:
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c
           chmod +x "$RUNNER_TEMP/appimagetool"
           bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu
+      - name: Rebuild and re-sign the AppImage updater payload after the repack
+        if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # fix-appimage.sh rewrites the AppImage *after* Tauri bundled it —
+          # dropping libdbus and installing the harness. Whatever Tauri wrapped
+          # and signed is therefore the binary nobody ships: an update built
+          # from it would hand Linux users back the exact AppImage the repack
+          # exists to fix, and the signature would be valid, which is worse.
+          # So the payload is rebuilt from the file that actually ships.
+          set -euo pipefail
+          cd apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage
+          image=$(ls *.AppImage)
+          rm -f ./*.AppImage.tar.gz ./*.AppImage.tar.gz.sig
+          tar -czf "$image.tar.gz" "$image"
+          # Exactly one member, named for the image: the updater unpacks the
+          # tarball expecting to find the AppImage and nothing else.
+          [ "$(tar -tzf "$image.tar.gz")" = "$image" ]
+          cd - >/dev/null
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            pnpm --filter @quintal/desktop exec tauri signer sign \
+              --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+              --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+              apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.tar.gz
+          else
+            echo "::warning::no updater signing key; this release will publish no update manifest"
+          fi
+
       - name: Stage installers from the shared asset contract
         run: node scripts/release-assets.mjs stage '${{ matrix.platform }}' 'apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle' stage
       - name: AppImage first-launch smoke

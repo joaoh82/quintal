@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { AppVersion } from '@/components/AppVersion';
+import { UpdateNotice } from '@/components/UpdateNotice';
 import { SignOutButton } from '@/components/SignOutButton';
 import { AutoStartFleet } from '@/components/AutoStartFleet';
 import { MachineRegistration } from '@/components/MachineRegistration';
@@ -48,6 +49,7 @@ export default async function OfficePage() {
           Enter to chat · @name to address someone
         </p>
         <AppVersion />
+        <UpdateNotice />
         <Link
           href="/settings"
           className="hover:bg-accent rounded-md border px-2.5 py-1 text-xs"

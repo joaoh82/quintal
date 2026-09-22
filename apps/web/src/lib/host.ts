@@ -15,6 +15,8 @@
  * it does not.
  */
 
+import type { Available } from './update';
+
 /**
  * What the identity subsystem can tell the UI about itself.
  *
@@ -57,6 +59,11 @@ export interface HostRuntime {
   /** How the classification was made, so the UI can explain rather than assert. */
   evidence: string;
   install: string;
+}
+
+/** What this machine last said "not now" to. */
+export interface UpdateStatus {
+  dismissed: string | null;
 }
 
 export interface Backup {
@@ -104,6 +111,24 @@ export interface HostBridge {
    * different programs shipped at two different times — see `lib/version.ts`.
    */
   appVersion(): Promise<string>;
+  /**
+   * Is there a newer Quintal? `null` for "nothing to offer" *and* for "could
+   * not ask" — offline is not an error worth a screen, and the two lead to
+   * the same place. Asked at most once per run of the app.
+   */
+  checkForUpdate(): Promise<Available | null>;
+  /**
+   * Download it, install it, and come back up on the new version.
+   *
+   * The app restarts itself, so nothing after this resolves. What gets
+   * installed is not this call's to choose: the endpoint is compiled into the
+   * host and the payload is signature-checked before a file is replaced.
+   */
+  installUpdate(): Promise<void>;
+  /** The version this machine last declined, if any. */
+  updateState(): Promise<UpdateStatus>;
+  /** Remember a "not now", so the same version is not asked about again. */
+  dismissUpdate(version: string): Promise<void>;
   hasIdentity(): Promise<IdentityState>;
   /** x-only public key, lowercase hex. Creates one on a genuine first run. */
   getPublicKey(): Promise<string>;
@@ -324,6 +349,10 @@ function tauriBridge(): HostBridge {
 
   return {
     appVersion: () => call<string>('app_version'),
+    checkForUpdate: () => call<Available | null>('check_for_update'),
+    installUpdate: () => call<void>('install_update'),
+    updateState: () => call<UpdateStatus>('update_state'),
+    dismissUpdate: (version) => call<void>('dismiss_update', { version }),
     hasIdentity: () => call<IdentityState>('has_identity'),
     getPublicKey: () => call<string>('get_public_key'),
     signChallenge: (payload) => call<string>('sign_challenge', { payload }),

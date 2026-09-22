@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkReleaseVersion } from './check-release-version.mjs';
-import { collect } from './release-assets.mjs';
+import { collect, updaterNames } from './release-assets.mjs';
+import { latestJson, setReleaseDir, shouldPublish } from './latest-json.mjs';
 
 const tag = process.argv[2];
 const version = checkReleaseVersion(tag);
@@ -32,11 +33,33 @@ else {
   // A previous partial upload may contain stale files; only drafts are mutable.
   for (const asset of existing.assets) gh('release', 'delete-asset', tag, asset.name, '--yes');
 }
-gh('release', 'upload', tag, ...filenames.map((name) => join('release', name)), '--clobber');
 const prerelease = version.split('+')[0].includes('-');
 // Re-running an old tag must not move /latest backwards.
 const latestPublished = tags.find((item) => releases.some((release) =>
   release.tag_name === item && !release.draft && !release.prerelease,
 ));
 const newerPublished = latestPublished && tags.indexOf(latestPublished) < tags.indexOf(tag);
+const becomingLatest = !prerelease && !newerPublished;
+
+// The update manifest, and only where it belongs. Installed copies read it
+// through `releases/latest/download/latest.json`, so a prerelease or a re-run
+// of an older tag must not write one — that would hand every machine that asks
+// a release candidate, or walk them backwards.
+// Every platform's payload and signature, or no manifest at all. A manifest
+// missing one platform silently stops updating it while every other platform
+// keeps working, which is the kind of failure nobody notices for a release or
+// two.
+const updaterComplete = updaterNames().every((name) => filenames.includes(name));
+if (!updaterComplete) console.log('No latest.json: some update payloads or signatures are missing');
+if (updaterComplete && shouldPublish(version, becomingLatest)) {
+  setReleaseDir('release');
+  const manifest = latestJson(tag, version, `Quintal ${tag}`);
+  writeFileSync(join('release', 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  filenames.push('latest.json');
+  console.log(`latest.json: ${Object.keys(manifest.platforms).length} platforms for ${version}`);
+} else {
+  console.log(`No latest.json: prerelease=${prerelease}, newer already published=${Boolean(newerPublished)}`);
+}
+
+gh('release', 'upload', tag, ...filenames.map((name) => join('release', name)), '--clobber');
 gh('release', 'edit', tag, '--draft=false', `--prerelease=${prerelease}`, `--latest=${!prerelease && !newerPublished}`);

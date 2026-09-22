@@ -152,6 +152,11 @@ pub struct Settings {
     /// preference: the key you hold is about this keyboard, not the office.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_to_talk: Option<String>,
+    /// A version this machine was offered and declined. Also a device
+    /// preference: "not now" is an answer about this computer, and it must
+    /// survive a restart or the same question arrives every launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dismissed_update: Option<String>,
 }
 
 fn settings_path(dir: &Path) -> PathBuf {

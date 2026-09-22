@@ -173,6 +173,21 @@ pub fn capability_for(server: Option<&str>) -> String {
         // from is public — but named here like every other one, because
         // the rule above is that a command is granted deliberately.
         "allow-app-version",
+        // Updating, from the office page.
+        //
+        // `install_update` is the one grant here that *does* something
+        // irreversible, so it is worth saying what it cannot do: it does not
+        // choose what gets installed. The endpoint is compiled into the config
+        // and the payload is verified against the public key in this binary
+        // before a file is touched, so a page that called it through XSS could
+        // at worst move this machine onto a genuine signed Quintal release.
+        // The alternative — driving it from a native dialog — would put a
+        // screen in the app that the browser cannot have, which `docs/DESKTOP.md`
+        // rules out.
+        "allow-check-for-update",
+        "allow-install-update",
+        "allow-update-state",
+        "allow-dismiss-update",
         "allow-has-identity",
         "allow-detect-runtimes",
         "allow-get-public-key",

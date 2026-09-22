@@ -57,6 +57,9 @@ open = "5"
 # agent. Small and synchronous; the fleet start already blocks on the spawn.
 ureq = { version = "2", features = ["json"] }
 tauri-plugin-global-shortcut = "2"
+# Self-update. The endpoint and the public key live in `tauri.conf.json`; the
+# matching private key never leaves the release secrets. See `update.rs`.
+tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
