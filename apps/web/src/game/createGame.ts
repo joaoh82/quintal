@@ -1,4 +1,4 @@
-import { RECONNECTION_SECONDS, type OfficeState } from '@quintal/shared';
+import { RECONNECTION_SECONDS, type ApprovalOptionId, type OfficeState } from '@quintal/shared';
 import type { Room } from 'colyseus.js';
 // Namespace import, not default: Phaser's ESM build (`module` entry, which is
 // what the bundler picks) has no default export, and webpack warns on every
@@ -37,6 +37,11 @@ export interface OfficeSession {
   loadHistory(target: { channelId?: string; zoneId?: string; before?: number }): void;
   /** Open a direct message with a person or agent. Arrives as a `dmOpened` bridge event. */
   openDm(target: { memberId?: string; name?: string }): void;
+  /**
+   * Answer an agent's pending tool approval. Only its owner may; the office
+   * refuses anything else, by request id and by who is asking.
+   */
+  decideApproval(requestId: string, optionId: ApprovalOptionId): void;
   /** Read a zone live wherever you stand, or stop. Lines arrive as `zoneChat`. */
   followZone(zoneId: string | null): void;
   /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
@@ -306,6 +311,9 @@ export async function createGame(
     },
     openDm(target) {
       scene()?.openDm(target);
+    },
+    decideApproval(requestId, optionId) {
+      scene()?.decideApproval(requestId, optionId);
     },
     followZone(zoneId) {
       scene()?.followZone(zoneId);

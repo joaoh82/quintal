@@ -1,0 +1,38 @@
+{
+  "deliveryMs": 24,
+  "pass": true,
+  "cardsToOwner": 6,
+  "cardsToMember": 5,
+  "cardsToNonMember": 0,
+  "refusals": [
+    "invalid_payload",
+    "not_found",
+    "not_found",
+    "not_found",
+    "missing_scope"
+  ],
+  "decisions": {
+    "alpha": 1,
+    "beta": 1
+  },
+  "resolutions": [
+    [
+      "121be6",
+      "allowed"
+    ],
+    [
+      "c411b4",
+      "interrupted"
+    ],
+    [
+      "6fa873",
+      "interrupted"
+    ],
+    [
+      "82828e",
+      "expired"
+    ]
+  ],
+  "privateCardId": "c411b4",
+  "expiredCardId": "82828e"
+}

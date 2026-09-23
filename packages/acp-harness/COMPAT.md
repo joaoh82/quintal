@@ -91,6 +91,24 @@ Building against the prose docs would have produced three bugs. Ground truth is
 | permission outcome `approved \| denied \| cancelled` | **`selected`** (with `optionId`) or `cancelled` |
 | `protocolVersion: "1.0.0"` | `1` (a number) |
 
+### 7. Claude Code answers its own permission questions by default
+
+`@agentclientprotocol/claude-agent-acp` 0.81 opens sessions in mode `auto`
+("Claude handles permission decisions") and never sends
+`session/request_permission` — verified by driving the adapter directly. An
+agent with no `run` scope therefore got the same silent self-approval as one
+with it, until the harness started selecting `default` ("Manual") for it via
+`session/set_mode`. "Manual" asks before *changes*: a `Write` asks, an `echo`
+does not. A user's `~/.claude/settings.json` `permissions.defaultMode` and
+`allow` list also feed into this.
+
+Of the option `kind`s a runtime may offer — `allow_once`, `allow_always`,
+`reject_once`, `reject_always` — an approval card surfaces only `allow_once`
+and `deny`, and only when the request actually offered one of that shape.
+What an `allow_always` really grants, and for how long, differs per runtime
+and is not yet established (QUIN-53), so no button claims it. The text
+fallback's `always` still maps to `allow_always` where offered.
+
 ### 6. Goose is unverified
 
 Goose is not installed on the machine this was built on, so `goose acp` has

@@ -50,6 +50,16 @@ export const AgentMessage = {
    * way the settings page can show what you could actually run.
    */
   HostReport: 'agent:host_report',
+  /**
+   * The runtime wants to run a tool and the owner has to say yes.
+   *
+   * Sent alongside the text question, not instead of it: a client that
+   * predates approval cards still shows the line, and an office that predates
+   * them ignores this. See `docs/GATEWAY.md`.
+   */
+  ApprovalRequest: 'agent:approval_request',
+  /** That question has stopped waiting — answered, expired, cancelled or lost. */
+  ApprovalResolved: 'agent:approval_resolved',
 } as const;
 export type AgentMessage = (typeof AgentMessage)[keyof typeof AgentMessage];
 
@@ -197,6 +207,12 @@ export const AgentServerMessage = {
    * Only ever sent when the office's banter setting allows it.
    */
   Banter: 'agent:banter',
+  /**
+   * The owner answered an approval card. Routed by exact `requestId`: the
+   * office has already checked who clicked, so the harness only has to find
+   * the question and make sure nothing else has settled it first.
+   */
+  ApprovalDecision: 'agent:approval_decision',
 } as const;
 export type AgentServerMessage =
   (typeof AgentServerMessage)[keyof typeof AgentServerMessage];
@@ -229,6 +245,11 @@ export interface AgentZone {
 
 export interface AgentReadyPayload {
   activityVersion?: 1;
+  /**
+   * Set when this office understands `agent:approval_request`. A harness
+   * talking to an older office keeps to the text question alone.
+   */
+  approvalVersion?: 1;
   agentId: string;
   sessionId: string;
   name: string;

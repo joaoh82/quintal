@@ -295,11 +295,30 @@ user id, not display name):
 
 Runtimes ask before running some tools (ACP `session/request_permission`). An
 agent with the `run` scope on its card gets those answered by the harness —
-allowed, and written to its audit log — so it is never left waiting on a
-question nobody is looking at. Without `run`, the question goes to the owner
-where the conversation is, channel, DM or aloud, with the owner mentioned:
-`@reviewer yes`, `@reviewer always` (for the rest of that session) or
-`@reviewer no`. Five minutes of silence is a no.
+allowed, and written to its audit log and the office's — so it is never left
+waiting on a question nobody is looking at.
+
+Without `run`, the question goes to the owner where the conversation is:
+channel, DM or aloud. It arrives as a **card** with the tool named, the
+command it would run, and Allow once / Deny — answered by the request's own
+id, so two turns asking about `Bash` at the same time can never be confused.
+Five minutes of silence is a no, and the turn's idle clock is held for
+exactly as long as the owner is being waited on.
+
+For an agent with no `run` scope the harness also puts the runtime into a mode
+that actually asks (`session/set_mode`). Claude Code's adapter otherwise opens
+in `auto` and answers its own permission questions, which made the scope
+decorative. Its asking mode is "Manual", which asks before *changes* — a file
+write asks, a shell `echo` it considers safe does not. Runtimes whose modes
+are not yet established are left alone and the log says so.
+
+The same question is also said in words, for clients that predate cards:
+`@reviewer yes #a1b2c3`, `@reviewer always #a1b2c3` (for the rest of that
+session) or `@reviewer no #a1b2c3`, where the handle is in the question. A
+bare `yes` answers the only open question; with more than one open, an
+ambiguous answer settles none of them and the agent asks which. Cards do not
+offer `always`: what a runtime's standing grant actually covers is not yet
+established (QUIN-53). See [the gateway](../../docs/GATEWAY.md#tool-approvals-version-1).
 
 ## Auditing
 

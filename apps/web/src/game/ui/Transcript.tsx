@@ -2,11 +2,14 @@
 
 import type {
   ActivityDetailLevel,
+  ApprovalOptionId,
   ChatBroadcastPayload,
   TeamRef,
 } from '@quintal/shared';
 import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 
+import type { ApprovalState } from '../approvals';
+import { ApprovalCard } from './ApprovalCard';
 import { segments } from './links';
 import { TurnActivity } from './TurnActivity';
 
@@ -81,6 +84,11 @@ interface TranscriptProps {
   /** The corner box is small and dense; the overlay has room. */
   size: 'compact' | 'full';
   activityDetailLevel: ActivityDetailLevel;
+  /** Approval cards, and how each ended. Read by the cards in this transcript. */
+  approvals: ApprovalState;
+  /** `users.id` of whoever is reading, so only the owner is offered buttons. */
+  myUserId: string;
+  onDecideApproval: (requestId: string, optionId: ApprovalOptionId) => void;
 }
 
 /**
@@ -101,6 +109,9 @@ export function Transcript({
   emptyText,
   size,
   activityDetailLevel,
+  approvals,
+  myUserId,
+  onDecideApproval,
 }: TranscriptProps) {
   const logRef = useRef<HTMLDivElement | null>(null);
   const pinned = useRef(true);
@@ -164,7 +175,15 @@ export function Transcript({
           {emptyText}
         </p>
       ) : (
-        messages.map((message) => message.activity ? (
+        messages.map((message) => message.approval ? (
+          <ApprovalCard
+            key={`approval:${message.approval.requestId}`}
+            approval={message.approval}
+            approvals={approvals}
+            isOwner={message.approval.ownerUserId === myUserId}
+            onDecide={onDecideApproval}
+          />
+        ) : message.activity ? (
           <TurnActivity
             key={`${message.activity.agentId}:${message.activity.turnId}`}
             activity={message.activity}

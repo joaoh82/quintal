@@ -205,6 +205,18 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage('activity', (activity: import('@quintal/shared').PublicActivity) => {
       this.#bridge.emit('activity', activity);
     });
+    room.onMessage(
+      ServerMessage.Approval,
+      (approval: import('@quintal/shared').PublicApprovalRequest) => {
+        this.#bridge.emit('approval', approval);
+      },
+    );
+    room.onMessage(
+      ServerMessage.ApprovalResolved,
+      (resolved: import('@quintal/shared').PublicApprovalResolved) => {
+        this.#bridge.emit('approvalResolved', resolved);
+      },
+    );
     room.onMessage(ServerMessage.History, (history: HistoryPayload) => {
       this.#bridge.emit('history', history);
     });
@@ -500,6 +512,14 @@ export class OfficeScene extends Phaser.Scene {
   /** Open a direct message with somebody. The office answers with `dm_opened`. */
   openDm(target: { memberId?: string; name?: string }): void {
     this.#room.send(ClientMessage.DmOpen, target satisfies DmOpenPayload);
+  }
+
+  /** Answer an agent's approval card. Refused by the office if it is not ours. */
+  decideApproval(requestId: string, optionId: import('@quintal/shared').ApprovalOptionId): void {
+    this.#room?.send(ClientMessage.ApprovalDecide, {
+      requestId,
+      optionId,
+    } satisfies import('@quintal/shared').ApprovalDecidePayload);
   }
 
   followZone(zoneId: string | null): void {

@@ -56,6 +56,28 @@ export function UnreadPill({ unread }: { unread: Unread | undefined }) {
   );
 }
 
+/**
+ * One of your agents is stopped on a question in this conversation.
+ *
+ * Only ever rendered for the person who can answer it — see
+ * `attentionKeys`. It says that something is waiting and where, and
+ * deliberately not what: a tab label is room-wide chrome, and the command
+ * belongs on the card, behind the conversation's own access rules.
+ */
+export function ApprovalPill({ waiting }: { waiting: boolean }) {
+  if (!waiting) return null;
+  return (
+    <span
+      role="img"
+      aria-label="Waiting for your approval"
+      title="An agent is waiting for you to approve a tool"
+      className="rounded-full bg-amber-300 px-1 font-mono text-[9px] leading-4 text-black"
+    >
+      !
+    </span>
+  );
+}
+
 /** "Lead", "Lead and Marvin", "Lead, Marvin and Arthur". */
 export function listNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? '';

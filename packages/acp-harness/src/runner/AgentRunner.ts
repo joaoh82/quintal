@@ -1,5 +1,6 @@
 import { LatencyTrace, type LatencySample } from './latency.js';
 import { PublicTurn } from './activity.js';
+import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -23,6 +24,12 @@ import {
   type ChannelRef,
   type AgentTeam,
   type AgentChannelsEvent,
+  APPROVAL_TIMEOUT_MS,
+  type AgentApprovalDecisionEvent,
+  type ApprovalRequest,
+  type ApprovalResolution,
+  type ApprovalResolved,
+  type ApprovalVia,
 } from '@quintal/shared';
 
 import { nestRoot, type AgentConfig } from '../config.js';
@@ -52,6 +59,15 @@ import {
   selectWindow,
   type Trigger,
 } from './context.js';
+import {
+  approvalHandle,
+  describeApproval,
+  pickApproval,
+  summariseToolCall,
+  supportedOptions,
+  type PendingApproval,
+  type PermissionDecision,
+} from './approvals.js';
 import { isHarnessNotice, statusForTool, toBubbles, toPosts } from './outbound.js';
 import { Pool } from './pool.js';
 import {
@@ -96,9 +112,16 @@ export interface RunnerEvents {
 /**
  * How long an owner has to answer a tool-approval question before silence
  * denies it. Five minutes: the question now goes where the owner is, so this
- * is the time to read and type, not the time to notice.
+ * is the time to read and type, not the time to notice. Shared with the
+ * office, which puts the same deadline on the card.
  */
-const PERMISSION_TIMEOUT_MS = 300_000;
+const PERMISSION_TIMEOUT_MS = APPROVAL_TIMEOUT_MS;
+
+/**
+ * Resolutions kept for replay after a reconnect, so a card the office is
+ * still showing is taken down rather than left offering dead buttons.
+ */
+const APPROVAL_RESOLVED_OUTBOX = 64;
 
 /**
  * How long a turn may go with no sign of life from the runtime — no chunk,
@@ -219,14 +242,14 @@ export class AgentRunner {
   #reconnectAttempts = 0;
 
   /**
-   * Permission questions asked in chat, keyed by tool call id. Several may be
-   * open at once — one per turn — so an answer that names the tool goes to
-   * that one, and a bare "yes" to the oldest.
+   * Approval questions the runtime is holding a tool on, keyed by the request
+   * id we minted. Several may be open at once — one per turn — and each is
+   * answered by its own id, from a card or by a text answer that names it
+   * unambiguously. Never by "the oldest one": see `pickApproval`.
    */
-  readonly #permissionWaiters = new Map<
-    string,
-    { toolName: string; resolve: (decision: PermissionDecision) => void }
-  >();
+  readonly #approvals = new Map<string, PendingApproval>();
+  /** Recently resolved, oldest first, so a reconnect can take the cards down. */
+  readonly #resolvedApprovals: ApprovalResolved[] = [];
 
   readonly #handlers: Partial<RunnerEvents> = {};
 
@@ -308,7 +331,7 @@ export class AgentRunner {
       turn.cancelled = true;
       for (const trace of turn.latency ?? []) trace.finish('cancelled');
     }
-    for (const waiter of this.#permissionWaiters.values()) waiter.resolve('deny');
+    this.#sweepApprovals(() => true, 'cancelled');
     for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.finish('cancelled');
     this.#queuedActivity.clear();
     for (const queue of this.#queues.values()) for (const trigger of queue) trigger.latency?.finish('cancelled');
@@ -367,6 +390,7 @@ export class AgentRunner {
     this.#gateway.on('channelChat', (message) => this.#onChannelChat(message));
     this.#gateway.on('banter', (event) => this.#onBanter(event));
     this.#gateway.on('channels', (event) => this.#onChannels(event));
+    this.#gateway.on('approvalDecision', (decision) => this.#onApprovalDecision(decision));
     this.#gateway.on('error', (error) => {
       this.#log('warn', `office refused something: [${error.code}] ${error.message}`);
       if (error.message.toLowerCase().includes('revoked')) void this.stop();
@@ -420,6 +444,13 @@ export class AgentRunner {
       this.#publishStatus();
       for (const value of [...this.#activityOutbox.values()]) this.#publishActivity(value);
       for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.flush();
+      // A new socket knows nothing about the questions still open, nor about
+      // the ones that stopped waiting while it was down. Say both, so a card
+      // is neither lost nor left offering buttons that would land nowhere.
+      for (const pending of this.#approvals.values()) {
+        if (!pending.settled) this.#gateway.approvalRequest?.(pending.request);
+      }
+      for (const resolved of this.#resolvedApprovals) this.#gateway.approvalResolved?.(resolved);
       this.#connectionGeneration++;
       this.#log('info', 'reconnected');
     } catch (error: unknown) {
@@ -439,9 +470,10 @@ export class AgentRunner {
    */
   async #onWorkerExit(worker: Worker, code: number | null): Promise<void> {
     if (this.#stopping) return;
-    for (const [id, waiter] of this.#permissionWaiters) {
-      if (id.startsWith(`${worker.index}:`)) waiter.resolve('deny');
-    }
+    // A question held by a process that has gone can never be answered: the
+    // runtime is not there to hear it. Take the cards down rather than leave
+    // buttons that would land on nothing.
+    this.#sweepApprovals((pending) => pending.workerIndex === worker.index, 'interrupted');
     // A worker that died on the way up was already given up on by `ready()`;
     // restarting it would leave a live process nothing will ever claim.
     if (worker.dead) return;
@@ -532,7 +564,7 @@ export class AgentRunner {
 
     // "@me yes" / "@me no" answers an outstanding permission question rather
     // than starting a turn about it.
-    if (this.#answersPermission(message, ready)) return;
+    if (this.#answersPermission(message, ready, scope)) return;
 
     // A line that named a team we are on is addressed to us as surely as one
     // that named us: the office expanded the team and says so. Its word, not
@@ -666,7 +698,7 @@ export class AgentRunner {
     if (message.fromUserId === ready.agentId) return;
     if (this.#handleOwnerCommand(asChat, scope)) return;
     // The question was asked here, so the answer arrives here.
-    if (this.#answersPermission(asChat, ready)) return;
+    if (this.#answersPermission(asChat, ready, scope)) return;
     if (!message.mentioned) return;
 
     this.#enqueue(scope, {
@@ -765,9 +797,7 @@ export class AgentRunner {
         }
         for (const turn of targets) {
           turn.cancelled = true;
-          for (const [id, waiter] of this.#permissionWaiters) {
-            if (id.startsWith(`${turn.worker.index}:`)) waiter.resolve('deny');
-          }
+          this.#sweepApprovals((pending) => pending.turnId === turn.id, 'cancelled');
           this.#publicTurns.get(turn.id)?.finish('cancelled');
           if (turn.sessionId) turn.worker.cancel(turn.sessionId);
         }
@@ -1780,45 +1810,81 @@ export class AgentRunner {
     if (ready?.scopes?.includes('run')) {
       this.#log('info', `permission for ${toolName}: allowed by the run scope`);
       this.#audit('permission', { tool: toolName, decision: 'allowed by the run scope' });
+      // Nobody is interrupted, but the office still records that something
+      // was approved on the owner's behalf: a resolution with no card.
+      this.#publishApprovalResolved({
+        version: 1,
+        requestId: randomUUID(),
+        turnId: String(this.#turnBySession.get(sessionKey(worker, params.sessionId))?.id ?? 'unknown'),
+        resolution: 'auto_allowed',
+        via: 'run_scope',
+        resolvedAt: Date.now(),
+      });
       return select(options, 'always');
     }
 
     // Tool-call ids are the runtime's, minted per process: two workers can
-    // ask with the same one, and a waiter keyed by it alone would be
-    // overwritten — the first question then waits out the whole timeout.
+    // ask with the same one, and a question keyed by it alone would be
+    // overwritten — the first then waits out the whole timeout. The id the
+    // office and the card use is ours, and unique by construction.
     const callId = `${worker.index}:${String((params.toolCall as { toolCallId?: string }).toolCallId ?? Math.random())}`;
     const turn = this.#turnBySession.get(sessionKey(worker, params.sessionId));
     const scope = turn?.scope ?? this.#scopeOf();
     const owner = ready?.ownerName ?? 'Owner';
     const me = ready?.name ?? this.name;
+    const now = Date.now();
+    // The turn's activity correlation root, so a card joins the turn it is
+    // part of rather than floating beside it. See QUIN-49.
+    const activityRequestId =
+      turn === undefined ? undefined : this.#publicTurns.get(turn.id)?.value.requestId;
+    const request: ApprovalRequest = {
+      version: 1,
+      requestId: randomUUID(),
+      turnId: String(turn?.id ?? `w${worker.index}`),
+      workerId: String(worker.index),
+      sessionId: params.sessionId,
+      ...(activityRequestId ? { activityRequestId } : {}),
+      ...this.#approvalTarget(scope),
+      toolName,
+      summary: summariseToolCall(params.toolCall, 400, toolName),
+      options: supportedOptions(options),
+      askedAt: now,
+      expiresAt: now + PERMISSION_TIMEOUT_MS,
+    };
 
     if (turn) { this.#setTurnStatus(turn, `waiting for ${owner}`); this.#publicTurns.get(turn.id)?.state('waiting'); }
     // The idle clock is the runtime's; the wait that follows is the owner's.
     // Held until the answer, or the question's own timeout.
     const release = turn ? this.#holdIdle(turn) : () => {};
-    // The tool is always named in the offered replies: whether a second
-    // question will be open by the time the owner reads this is not known
-    // when it is asked, and a bare "yes" still answers the oldest one.
+
+    // The card is the answerable thing. The sentence stays for clients and
+    // harnesses that predate cards — and carries a handle now, because two
+    // questions about the same tool cannot be told apart by name alone.
+    this.#gateway.approvalRequest?.(request);
     this.#deliver(
-      `@${owner} may I run ${toolName}? Reply "@${me} yes ${toolName}", "@${me} always ${toolName}" (for the rest of this session), or "@${me} no ${toolName}".`,
+      `@${owner} may I run ${toolName}${request.summary ? ` (${request.summary.slice(0, 80)})` : ''}? Use the card, or reply "@${me} yes #${approvalHandle(request.requestId)}" or "@${me} no #${approvalHandle(request.requestId)}".`,
       scope,
     );
-    this.#log('info', `permission requested: ${toolName}`);
+    this.#log('info', `permission requested: ${toolName} (#${approvalHandle(request.requestId)})`);
 
     let decision: PermissionDecision;
     try {
       decision = await new Promise<PermissionDecision>((resolve) => {
         const timer = setTimeout(() => {
-          this.#permissionWaiters.delete(callId);
           this.#log('warn', `permission for ${toolName} timed out — denying`);
-          resolve('deny');
+          this.#settleApproval(request.requestId, 'deny', 'expired', 'timeout');
         }, PERMISSION_TIMEOUT_MS);
+        timer.unref?.();
 
-        this.#permissionWaiters.set(callId, {
-          toolName,
+        this.#approvals.set(request.requestId, {
+          request,
+          callId,
+          workerIndex: worker.index,
+          turnId: turn?.id ?? null,
+          scope,
+          settled: false,
           resolve: (answer) => {
             clearTimeout(timer);
-            this.#permissionWaiters.delete(callId);
             resolve(answer);
           },
         });
@@ -1828,8 +1894,101 @@ export class AgentRunner {
       if (turn) this.#publicTurns.get(turn.id)?.state('running');
     }
 
-    this.#audit('permission', { tool: toolName, decision });
+    this.#audit('permission', { tool: toolName, requestId: request.requestId, decision });
     return select(options, decision);
+  }
+
+  /**
+   * Where the card goes: the channel the turn is in, or the zone we stand in.
+   *
+   * The same rule activity uses, and for the same reason — a question asked
+   * about a review in a channel belongs in that channel, not shouted across
+   * whichever room the avatar happens to be standing in.
+   */
+  #approvalTarget(scope: string): { channelId: string } | { zoneId: string } {
+    const channelId = channelIdOf(scope);
+    return channelId
+      ? { channelId }
+      : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID };
+  }
+
+  /**
+   * Stop one question waiting, whatever stopped it.
+   *
+   * The one place a pending approval is taken out of the map, so the runtime
+   * is answered exactly once and the office is told exactly once — however
+   * it ended: a click, a typed answer, the deadline, a cancel, a crash.
+   */
+  #settleApproval(
+    requestId: string,
+    decision: PermissionDecision,
+    resolution: ApprovalResolution,
+    via: ApprovalVia,
+  ): boolean {
+    const pending = this.#approvals.get(requestId);
+    if (!pending || pending.settled) return false;
+    pending.settled = true;
+    this.#approvals.delete(requestId);
+    this.#publishApprovalResolved({
+      version: 1,
+      requestId,
+      turnId: pending.request.turnId,
+      resolution,
+      ...(resolution === 'allowed' ? { optionId: 'allow_once' as const } : {}),
+      ...(resolution === 'denied' ? { optionId: 'deny' as const } : {}),
+      via,
+      resolvedAt: Date.now(),
+    });
+    pending.resolve(decision);
+    return true;
+  }
+
+  /** Tell the office, and keep it for replay: a reconnect must not strand a card. */
+  #publishApprovalResolved(resolved: ApprovalResolved): void {
+    this.#resolvedApprovals.push(resolved);
+    while (this.#resolvedApprovals.length > APPROVAL_RESOLVED_OUTBOX) this.#resolvedApprovals.shift();
+    this.#gateway.approvalResolved?.(resolved);
+  }
+
+  /**
+   * Take down every question a turn, a worker or the whole agent was holding.
+   *
+   * The runtime is told no — it is the only safe answer for a question
+   * nobody will ever see — and the card is resolved rather than left
+   * offering buttons that would land on a dead process.
+   */
+  #sweepApprovals(
+    matches: (pending: PendingApproval) => boolean,
+    resolution: ApprovalResolution,
+  ): void {
+    for (const [requestId, pending] of [...this.#approvals]) {
+      if (matches(pending)) this.#settleApproval(requestId, 'deny', resolution, 'system');
+    }
+  }
+
+  /** The office says the owner clicked. Routed by exact id and nothing else. */
+  #onApprovalDecision(decision: AgentApprovalDecisionEvent): void {
+    const pending = this.#approvals.get(decision.requestId);
+    if (!pending) {
+      // Stale: already answered, expired, or cancelled under them. The office
+      // has already taken the card down; there is nothing left to do.
+      this.#log('info', `approval ${decision.requestId} is no longer waiting`);
+      return;
+    }
+    // The office authenticated the owner and checked the option against the
+    // request. We check the one thing only we know: that it is still ours.
+    if (!pending.request.options.some((option) => option.id === decision.optionId)) return;
+    const allowed = decision.optionId === 'allow_once';
+    this.#log(
+      'info',
+      `${decision.decidedByName} ${allowed ? 'allowed' : 'denied'} ${pending.request.toolName} (#${approvalHandle(decision.requestId)})`,
+    );
+    this.#settleApproval(
+      decision.requestId,
+      allowed ? 'once' : 'deny',
+      allowed ? 'allowed' : 'denied',
+      'card',
+    );
   }
 
   /**
@@ -1841,25 +2000,49 @@ export class AgentRunner {
   #answersPermission(
     message: Pick<AgentChatEvent, 'fromUserId' | 'text'>,
     ready: { ownerUserId: string; name: string },
+    scope: string,
   ): boolean {
-    if (this.#permissionWaiters.size === 0) return false;
+    if (this.#approvals.size === 0) return false;
     if (message.fromUserId !== ready.ownerUserId) return false;
     if (!isAddressed(message.text, ready.name)) return false;
-    return this.answerPermission(stripMention(message.text, ready.name));
+    return this.answerPermission(stripMention(message.text, ready.name), scope);
   }
 
   /**
-   * Answer an outstanding permission question. Called from the chat handlers.
-   * `which` names a tool when the owner said one — the whole name first, then
-   * the start of one, then a fragment only if it fits exactly one question.
-   * Anything less certain, or no name at all, answers the oldest question.
+   * Answer an outstanding permission question by text.
+   *
+   * `which` names a question: its handle, or its tool. An answer that could
+   * be about more than one — including a bare "yes" with two open — is not
+   * applied to any of them. It used to go to the oldest, which meant a "yes"
+   * meant for the review could authorise the shell command that arrived
+   * while it was being typed. Now the agent says what is waiting and asks
+   * again, and the card remains the unambiguous way to answer.
    */
-  #resolvePermission(decision: PermissionDecision, which: string): boolean {
-    const waiters = [...this.#permissionWaiters.values()];
-    const target = pickWaiter(waiters, which) ?? waiters[0];
-    if (!target) return false;
-    target.resolve(decision);
-    return true;
+  #resolvePermission(decision: PermissionDecision, which: string, scope: string): boolean {
+    const open = [...this.#approvals.values()].filter((pending) => !pending.settled);
+    const match = pickApproval(open, which);
+    if (match.kind === 'none') return false;
+    if (match.kind === 'ambiguous') {
+      const me = this.#gateway.ready?.name ?? this.name;
+      const word = decision === 'deny' ? 'no' : 'yes';
+      this.#speak(
+        `I have ${match.candidates.length} requests waiting and "${which.trim() || word}" does not say which: ${match.candidates
+          .map((pending) => describeApproval(pending.request))
+          .join(', ')}. Answer on the card, or reply "@${me} ${word} #${approvalHandle(match.candidates[0]!.request.requestId)}".`,
+        scope,
+      );
+      this.#log('warn', `ambiguous permission answer "${which.trim()}" — asked which`);
+      return true;
+    }
+    // "always" is the text fallback's standing approval, kept as documented
+    // until QUIN-53 establishes what breadth a runtime actually grants. The
+    // card deliberately does not offer it.
+    return this.#settleApproval(
+      match.approval.request.requestId,
+      decision,
+      decision === 'deny' ? 'denied' : 'allowed',
+      'text',
+    );
   }
 
   // --- outbound ------------------------------------------------------------
@@ -2082,21 +2265,22 @@ export class AgentRunner {
     }
   }
 
-  /** Exposed for the chat handlers: "@agent yes/always/no [tool]" answers a permission ask. */
-  answerPermission(text: string): boolean {
+  /**
+   * Exposed for the chat handlers: "@agent yes/always/no [#handle|tool]"
+   * answers a permission ask. The documented text fallback; a card carries
+   * the same question with no words to get wrong.
+   */
+  answerPermission(text: string, scope: string = this.#scopeOf()): boolean {
     const normalised = text.trim().toLowerCase();
     const always = /^(always)\b\s*(.*)$/.exec(normalised);
-    if (always) return this.#resolvePermission('always', always[2] ?? '');
+    if (always) return this.#resolvePermission('always', always[2] ?? '', scope);
     const yes = /^(yes|y|allow|ok)\b\s*(.*)$/.exec(normalised);
-    if (yes) return this.#resolvePermission('once', yes[2] ?? '');
+    if (yes) return this.#resolvePermission('once', yes[2] ?? '', scope);
     const no = /^(no|n|deny|stop)\b\s*(.*)$/.exec(normalised);
-    if (no) return this.#resolvePermission('deny', no[2] ?? '');
+    if (no) return this.#resolvePermission('deny', no[2] ?? '', scope);
     return false;
   }
 }
-
-/** What the owner said, or what silence means. */
-type PermissionDecision = 'once' | 'always' | 'deny';
 
 /**
  * A span of time, said the way a person would: "5 minutes", "30 seconds",
@@ -2175,25 +2359,6 @@ export function workspaceSection(cwd: string): string {
 /** Session ids are minted per process, so the worker is part of the key. */
 function sessionKey(worker: Worker, sessionId: string): string {
   return `${worker.index}:${sessionId}`;
-}
-
-/**
- * Which open question an answer names, or undefined for none in particular.
- * Exported for its tests: the rule is worth pinning without a runtime.
- */
-export function pickWaiter<T extends { toolName: string }>(
-  waiters: readonly T[],
-  which: string,
-): T | undefined {
-  const wanted = which.trim().toLowerCase();
-  if (wanted.length === 0) return undefined;
-  const names = waiters.map((waiter) => waiter.toolName.toLowerCase());
-  const exact = names.findIndex((name) => name === wanted);
-  if (exact !== -1) return waiters[exact];
-  const prefixed = names.flatMap((name, index) => (name.startsWith(wanted) ? [index] : []));
-  if (prefixed.length === 1) return waiters[prefixed[0]!];
-  const within = names.flatMap((name, index) => (name.includes(wanted) ? [index] : []));
-  return within.length === 1 ? waiters[within[0]!] : undefined;
 }
 
 function textOf(content: unknown): string {

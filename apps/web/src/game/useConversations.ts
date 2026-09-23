@@ -3,13 +3,26 @@
 import {
   FLOOR_ZONE_ID,
   mergeActivity,
+  type ApprovalOptionId,
   type ChannelRef,
   type ChatBroadcastPayload,
   type MapZone,
+  type PublicApprovalRequest,
   type TeamRef,
 } from '@quintal/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
+import {
+  EMPTY_APPROVALS,
+  approvalKey,
+  attentionKeys,
+  clearSent,
+  noteSent,
+  privateApprovals,
+  receiveApproval,
+  receiveResolution,
+  type ApprovalState,
+} from './approvals';
 import { gameBridge } from './bridge';
 import { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
@@ -60,7 +73,20 @@ const EMPTY: Transcript = { messages: [], hasMore: false, loaded: false, loading
 /** Lines kept per transcript. Paging back grows towards this; live lines roll it. */
 const KEEP = 500;
 
-const identity = (m: ChatBroadcastPayload): string => m.activity ? `${m.activity.agentId}:${m.activity.turnId}` : `${m.sentAt} ${m.fromName} ${m.text}`;
+const identity = (m: ChatBroadcastPayload): string =>
+  m.approval ? `approval:${m.approval.requestId}`
+  : m.activity ? `${m.activity.agentId}:${m.activity.turnId}`
+  : `${m.sentAt} ${m.fromName} ${m.text}`;
+
+/** A card, as a transcript line, so it is ordered and paged like everything else. */
+const approvalLine = (approval: PublicApprovalRequest): ChatBroadcastPayload => ({
+  from: approval.agentId,
+  fromName: approval.agentName,
+  fromKind: 'agent',
+  text: '',
+  sentAt: approval.askedAt,
+  approval,
+});
 
 /**
  * How often read cursors go to the office. Long enough that reading a busy
@@ -127,6 +153,19 @@ export interface Conversations {
    * looked, and whether one was for you. No entry means nothing is.
    */
   unread: Record<ConversationKey, Unread>;
+  /** `users.id` of whoever is signed in here. Empty until the roster lands. */
+  myUserId: string;
+  /** Every approval card this client knows about, and how each one ended. */
+  approvals: ApprovalState;
+  /** Conversations holding a card only I can answer — for the attention pill. */
+  approvalAttention: Set<ConversationKey>;
+  /**
+   * Cards the office sent me directly because I cannot read the conversation
+   * they were asked in. Shown in my own corner; nobody else sees them.
+   */
+  ownApprovals: PublicApprovalRequest[];
+  /** Answer one. Refused by the office unless it is mine and still waiting. */
+  decideApproval: (requestId: string, optionId: ApprovalOptionId) => void;
 }
 
 export interface ConversationsView {
@@ -153,9 +192,15 @@ export function useConversations(
   const [active, setActive] = useState<ConversationKey>(NEARBY);
   const [notice, setNotice] = useState('');
   const [readState, setReadState] = useState<ReadState>(EMPTY_READ_STATE);
+  const [approvals, setApprovals] = useState<ApprovalState>(EMPTY_APPROVALS);
   const activeRef = useRef(active);
   /** Who I am, from the roster, so my own lines are never news to me. */
-  const selfRef = useRef<{ sessionId: string | null; name: string }>({ sessionId: null, name: '' });
+  const selfRef = useRef<{ sessionId: string | null; name: string; userId: string }>({
+    sessionId: null,
+    name: '',
+    userId: '',
+  });
+  const [myUserId, setMyUserId] = useState('');
   const channelsRef = useRef(channels);
   const transcriptsRef = useRef(transcripts);
   /** Storage has been read; only then is it written, or a reload would wipe it. */
@@ -292,7 +337,37 @@ export function useConversations(
       gameBridge.on('zone', ({ zone }) => setMyZone(zone?.id ?? FLOOR_ZONE_ID)),
       gameBridge.on('roster', ({ players, selfSessionId }) => {
         const self = players.find((player) => player.isSelf);
-        selfRef.current = { sessionId: selfSessionId, name: self?.name ?? '' };
+        selfRef.current = {
+          sessionId: selfSessionId,
+          name: self?.name ?? '',
+          userId: self?.identityId ?? '',
+        };
+        // Owner-only chrome needs this in render, not only in a callback: a
+        // card is answerable by exactly one person and nobody else is shown
+        // buttons for it.
+        setMyUserId((current) => (current === selfRef.current.userId ? current : selfRef.current.userId));
+      }),
+      gameBridge.on('approval', (approval) => {
+        setApprovals((state) => receiveApproval(state, approval));
+        // A card in a conversation goes into that transcript, so it is read
+        // in place rather than as a notification about somewhere else.
+        const key = approval.private ? null : approvalKey(approval);
+        if (key) {
+          patch(key, (t) => ({
+            ...t,
+            messages: [...t.messages.filter((m) => identity(m) !== `approval:${approval.requestId}`),
+              approvalLine(approval)].sort((a, b) => a.sentAt - b.sentAt).slice(-KEEP),
+          }));
+          // A spatial card is also within earshot of wherever we stand.
+          if (approval.zoneId) patch(NEARBY, (t) => ({
+            ...t,
+            messages: [...t.messages.filter((m) => identity(m) !== `approval:${approval.requestId}`),
+              approvalLine(approval)].sort((a, b) => a.sentAt - b.sentAt).slice(-KEEP),
+          }));
+        }
+      }),
+      gameBridge.on('approvalResolved', (resolved) => {
+        setApprovals((state) => receiveResolution(state, resolved));
       }),
       gameBridge.on('activity', (activity) => {
         const line: ChatBroadcastPayload = { from: activity.agentId, fromName: activity.agentName,
@@ -355,7 +430,17 @@ export function useConversations(
         setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]));
         setActive(channelKey(channel.id));
       }),
-      gameBridge.on('notice', ({ message }) => setNotice(message)),
+      gameBridge.on('notice', ({ code, message }) => {
+        setNotice(message);
+        // The office refused an answer — already resolved, timed out, or not
+        // ours. Whichever it was, this browser is not waiting on a click any
+        // more, and a card must stop saying it is.
+        if (['not_found', 'missing_scope', 'invalid_payload', 'unroutable'].includes(code)) {
+          setApprovals((state) =>
+            Object.keys(state.sent).reduce((next, requestId) => clearSent(next, requestId), state),
+          );
+        }
+      }),
       gameBridge.on('connection', ({ status }) => {
         if (status === 'online') { load(NEARBY); if (activeRef.current !== NEARBY) load(activeRef.current); }
       }),
@@ -401,6 +486,25 @@ export function useConversations(
 
   const openDm = useCallback(
     (target: { memberId?: string; name?: string }) => sessionRef.current?.openDm(target),
+    [sessionRef],
+  );
+
+  /**
+   * Answer a card. The click is noted so the buttons stop offering
+   * themselves, but nothing is claimed about the outcome: the office decides,
+   * and says so with a resolution. With no socket the click is dropped and
+   * the card keeps waiting, which is the truth.
+   */
+  const decideApproval = useCallback(
+    (requestId: string, optionId: ApprovalOptionId) => {
+      const session = sessionRef.current;
+      if (!session) {
+        setNotice('Not connected to the office — that answer did not go anywhere.');
+        return;
+      }
+      setApprovals((state) => noteSent(state, requestId, optionId));
+      session.decideApproval(requestId, optionId);
+    },
     [sessionRef],
   );
   const joinChannel = useCallback(
@@ -471,6 +575,14 @@ export function useConversations(
     [channels, myZone, sessionRef, available],
   );
 
+  // Recomputed on the clock as well as on state: a deadline passing is a
+  // change nothing sends an event for.
+  const approvalAttention = useMemo(
+    () => attentionKeys(approvals, myUserId),
+    [approvals, myUserId],
+  );
+  const ownApprovals = useMemo(() => privateApprovals(approvals, myUserId), [approvals, myUserId]);
+
   const activeTranscript = transcripts[active] ?? EMPTY;
   const { channelId: activeChannelId } = parseKey(active);
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) ?? null;
@@ -492,5 +604,10 @@ export function useConversations(
     joinChannel,
     notice,
     unread: readState.unread,
+    myUserId,
+    approvals,
+    approvalAttention,
+    ownApprovals,
+    decideApproval,
   };
 }

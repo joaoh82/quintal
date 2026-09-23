@@ -45,6 +45,11 @@ export const ClientMessage = {
    * is wherever you happen to be standing.
    */
   Read: 'read',
+  /**
+   * Answer an agent's pending tool approval. Only the agent's owner may, and
+   * only by the exact `requestId` on the card in front of them.
+   */
+  ApprovalDecide: 'approval_decide',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -76,6 +81,10 @@ export const ServerMessage = {
   DmOpened: 'dm_opened',
   /** Somebody spoke in the zone you are following. Sent whether or not you also heard it. */
   ZoneChat: 'zone_chat',
+  /** An agent is waiting on its owner to approve a tool. */
+  Approval: 'approval',
+  /** That approval stopped waiting — answered, expired, cancelled or lost. */
+  ApprovalResolved: 'approval_resolved',
   /** Something was rejected — a bad move, or the chat rate limit. */
   Error: 'error',
   /**
@@ -111,6 +120,12 @@ export interface StatusPayload {
 
 export interface ChatBroadcastPayload {
   activity?: import('../activity.js').PublicActivity;
+  /**
+   * A pending or just-resolved tool approval, in the conversation the turn
+   * is in. Carried on a chat line so the transcript orders and pages it the
+   * same way it does everything else.
+   */
+  approval?: import('../approval.js').PublicApprovalRequest;
   /**
    * Session id of the speaker — match it against room state for position. In
    * a `history` page it is their stable id instead: sessions do not outlive
@@ -215,7 +230,17 @@ export interface DmOpenedPayload {
 }
 
 export interface ErrorPayload {
-  code: 'rate_limited' | 'invalid_move' | 'invalid_message' | 'unauthorised';
+  code:
+    | 'rate_limited'
+    | 'invalid_move'
+    | 'invalid_message'
+    | 'unauthorised'
+    /** An approval card that is no longer waiting, or was never yours. */
+    | 'not_found'
+    | 'missing_scope'
+    | 'invalid_payload'
+    /** The agent that asked is no longer connected to hear the answer. */
+    | 'unroutable';
   message: string;
 }
 

@@ -212,6 +212,19 @@ export const AGENT_EVENT_KINDS = [
    * shown; it woke nobody. See `AGENT_MENTION_MAX_HOPS`.
    */
   'effect.mention_suppressed',
+  /**
+   * The runtime asked to run a tool and the question went to the owner.
+   * Its `requestId` is how the three approval rows below join up.
+   */
+  'approval.requested',
+  /** The owner chose an option on the card. Records who, and which option. */
+  'approval.decided',
+  /**
+   * The question stopped waiting: answered, denied, expired, cancelled, or
+   * approved outright by the `run` scope — which is the one that never
+   * interrupts anybody, and so is the one that most needs to be on the record.
+   */
+  'approval.resolved',
 ] as const;
 export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
 

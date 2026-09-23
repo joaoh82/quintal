@@ -206,8 +206,9 @@ so the harness answers them locally and sends nothing.
 `run` is different from the others: the office never checks it. It tells the
 harness whether it may answer the runtime's own "may I run this tool?"
 question (ACP `session/request_permission`) on the owner's behalf. Without it
-the harness puts the question to the owner where the conversation is, and
-silence denies after five minutes.
+the harness puts the question to the owner where the conversation is, as a
+card (see [Tool approvals](#tool-approvals-version-1)), and silence denies
+after five minutes.
 
 ---
 
@@ -542,6 +543,8 @@ authorization or message identity. Public activity may include the root
 `requestId` and `requestIds` (at most 20 validated UUIDs for a batched turn).
 Clients may use these to join local send/render clocks to harness phase
 records; no raw prompt or tool content is needed. See [Latency](LATENCY.md).
+An approval request carries the same root as `activityRequestId`, so a card
+joins the turn it belongs to.
 
 ## Public activity (version 1)
 
@@ -554,7 +557,7 @@ Each snapshot contains `version`, `turnId`, `requestId`, `workerId`,
 `sessionId`, a monotonically increasing `sequence`, `startedAt`, `updatedAt`,
 `state`, and `items`. Set either `channelId` or `zoneId`. The harness assigns
 one UUID per queued turn; `requestId` currently equals that UUID and is the
-correlation root for future approval requests (QUIN-52). ACP session IDs are
+correlation root approval requests carry as `activityRequestId`. ACP session IDs are
 runtime-owned and scoped by worker; item IDs remain stable within their turn.
 Message items have `kind: "message"`; tools have `kind: "tool"`. Both carry
 `id`, `text`, `state`, `startedAt`, optional `endedAt` and optional `detail`.
@@ -603,3 +606,92 @@ unfinished turns without a live owner are shown as interrupted after server
 restart. Quiet runtimes show elapsed time and last activity, never guessed
 steps or a percentage. Harness heartbeats preserve the last actual activity
 time rather than inventing activity.
+
+## Tool approvals (version 1)
+
+An office advertising `approvalVersion: 1` in `agent:ready` accepts
+`agent:approval_request` and `agent:approval_resolved`, and sends
+`agent:approval_decision` back. A harness or office that predates this keeps
+to the text fallback below, which still works.
+
+A request carries `version`, `requestId`, `turnId`, `workerId`, `sessionId`,
+either `channelId` or `zoneId`, `toolName`, a sanitized `summary` of the
+action, the `options` offered, `askedAt` and `expiresAt`. Optionally
+`activityRequestId`, the turn's activity correlation root.
+
+**`requestId` is the identity and the whole routing rule.** The harness mints
+one UUID per ask. Runtime tool-call ids are per process — two workers can mint
+the same one — so they are never the identity. An answer names a `requestId`
+and nothing else, which is how two turns asking about the same tool in
+different conversations stay separate.
+
+`options` are only what the runtime actually offered, narrowed to what can be
+explained: `allow_once` and `deny`. There is deliberately no standing-grant
+option. What breadth and lifetime `allow_always` really has differs per
+runtime and is QUIN-53's to establish; a button that cannot say what it grants
+should not exist. A runtime that offers no reject option still gets `deny` —
+every ACP agent must accept a `cancelled` outcome.
+
+A human answers with `approval_decide` (`requestId`, `optionId`). The server
+checks, in order: that the request exists, that the sender is its
+`ownerUserId`, that it is neither already decided nor already resolved, that
+the deadline has not passed, and that `optionId` is one the request actually
+advertised. Hiding a button in a browser is not a check; a crafted
+`approval_decide` naming an option the card never offered is refused with
+`invalid_payload`. Anything else fails with `not_found`, `missing_scope` or
+`unroutable`, and nothing reaches the agent.
+
+`agent:approval_resolved` says how a question stopped waiting: `allowed`,
+`denied`, `expired`, `cancelled`, `interrupted` or `auto_allowed` (the `run`
+scope), with `via` one of `card`, `text`, `timeout`, `run_scope` or `system`.
+The harness sends one for every ask it settles, including the `run`-scope path
+that never showed a card — an automatic approval interrupts nobody but is
+still an authorization decision, so it is still on the record. Three audit
+rows join by `requestId`: `approval.requested`, `approval.decided` and
+`approval.resolved`.
+
+Cards go to whoever can see the conversation, by the same membership, earshot
+and zone-subscription rules as activity — an agent stopped on a question is
+worth seeing. Only the owner is offered controls, and only the owner's answer
+is accepted. When the conversation would not reach the owner at all — an agent
+in a channel they are not in, or asking from across the office — the server
+sends them a copy marked `private`, shown in their own corner rather than in a
+transcript they cannot open. Nothing about a request travels through presence
+or a public mention.
+
+The harness holds the turn's idle clock for exactly as long as the owner is
+being waited on, and no longer; the question has its own five-minute deadline.
+It resolves a card on a card answer, a text answer, that deadline, `!cancel`,
+a runtime crash and shutdown, and the server closes one whose agent
+disconnects or whose deadline passed with nothing said (30 s grace). On
+reconnect the harness resends every question still open and the last 64
+resolutions, so a reopened panel finds what is waiting and never a button that
+would land nowhere. Pending cards are also replayed on an initial `history_get`.
+The server keeps at most 16 open questions per agent and 256 per room, and
+forgets a resolved one after a minute.
+
+**Making the runtime ask.** A card only appears if the runtime asks, and some
+runtimes decide for themselves unless told otherwise.
+`@agentclientprotocol/claude-agent-acp` 0.81 opens every session in mode
+`auto` — "Claude handles permission decisions" — and never sends
+`session/request_permission`, so an agent *without* the `run` scope was
+getting the same silent self-approval as one with it. When the agent has no
+`run` scope the harness now switches the session to that runtime's asking mode
+with `session/set_mode` (`default`, "Manual", for Claude Code). This is a
+short verified allowlist, not a guess: a mode id means what its adapter says
+it means, and runtimes whose modes have not been established keep what they
+open with while the harness logs that it may never ask. Establishing the rest
+is QUIN-53's. Note that Claude Code's "Manual" asks before *changes* — a file
+write asks; a shell `echo` it judges safe does not.
+
+**Text fallback.** The sentence is still said alongside the card, so a client
+that predates cards is not left silent, and it is still answerable:
+`@agent yes #<handle>`, `@agent always #<handle>` or `@agent no #<handle>`,
+where the handle is the first six characters of the `requestId` and appears in
+the question. A bare `yes` answers the only open question. With more than one
+open, an answer that could mean more than one — including a bare `yes`, or a
+tool name two questions share — settles none of them: the agent says what is
+waiting and asks again. It used to answer the oldest, which meant a "yes"
+meant for one turn could authorise another. `always` remains the fallback's
+standing approval, unchanged and documented, until QUIN-53 settles what a
+runtime actually grants.

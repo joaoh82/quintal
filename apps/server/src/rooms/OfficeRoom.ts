@@ -1,5 +1,25 @@
 import { latencyRequestId } from '@quintal/shared';
 import { activityTerminal, parseActivity, type PublicActivity } from '@quintal/shared';
+import {
+  APPROVAL_MAX_PER_AGENT,
+  APPROVAL_MAX_PER_ROOM,
+  parseApprovalDecide,
+  parseApprovalRequest,
+  parseApprovalResolved,
+  type AgentApprovalDecisionEvent,
+  type ApprovalDecidePayload,
+  type ApprovalResolved,
+  type PublicApprovalRequest,
+  type PublicApprovalResolved,
+} from '@quintal/shared';
+import {
+  canSeeApproval,
+  expiredApprovals,
+  forgettableApprovals,
+  judgeDecision,
+  needsPrivateCopy,
+  type TrackedApproval,
+} from './approvals.js';
 import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
 import { ErrorCode, Room, ServerError, type Client, logger } from '@colyseus/core';
 import {
@@ -323,6 +343,14 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #activity = new Map<string, { value: PublicActivity; owner: string; conversationId: string; x: number; y: number }>();
   readonly #activityPending = new Map<string, Map<string, unknown>>();
   readonly #activityBusy = new Set<string>();
+  /**
+   * Tool approvals waiting on their owners, by the harness's request id.
+   *
+   * The id is the whole routing rule: an answer names one, and only its
+   * owner's may land. Two agents asking about `Bash` in two conversations
+   * are two entries here and can never be confused for each other.
+   */
+  readonly #approvals = new Map<string, TrackedApproval>();
 
   #nextEmoteSweep = 0;
   /** sessionId -> a balloon asked for inside the flicker interval, applied when it is up. */
@@ -441,6 +469,9 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.ChannelLeave, (client, payload: ChannelLeavePayload) =>
       void this.#onChannelLeave(client, payload),
     );
+    this.onMessage(ClientMessage.ApprovalDecide, (client, payload: unknown) =>
+      this.#onApprovalDecide(client, payload),
+    );
 
     // --- agent protocol (docs/GATEWAY.md) ---
     this.onMessage('agent:activity', (client, payload: unknown) => {
@@ -454,6 +485,12 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#activityPending.set(client.sessionId, pending);
       void this.#drainActivity(client);
     });
+    this.onMessage(AgentMessage.ApprovalRequest, (client, payload: unknown) =>
+      void this.#onApprovalRequest(client, payload),
+    );
+    this.onMessage(AgentMessage.ApprovalResolved, (client, payload: unknown) =>
+      this.#onApprovalResolved(client, payload),
+    );
     this.onMessage(AgentMessage.Say, (client, payload: AgentSayPayload) =>
       this.#onAgentSay(client, payload),
     );
@@ -495,6 +532,14 @@ export class OfficeRoom extends Room<OfficeState> {
         if (!activityTerminal(entry.value.state) && Date.now() - entry.value.receivedAt > 360_000) {
           this.#closeActivity(entry, 'interrupted');
         }
+      }
+      // A harness that died mid-question cannot say the question expired.
+      // The deadline is on the card, so the office can say it instead.
+      for (const requestId of expiredApprovals(this.#approvals)) {
+        this.#closeApproval(requestId, 'expired');
+      }
+      for (const requestId of forgettableApprovals(this.#approvals)) {
+        this.#approvals.delete(requestId);
       }
     }, AGENT_HEARTBEAT_MS);
     this.#revocationTimer = setInterval(
@@ -737,6 +782,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const zone = zoneAt(this.#map, spawn.x, spawn.y);
     const ready: AgentReadyPayload = {
       activityVersion: 1,
+      approvalVersion: 1,
       agentId: identity.id,
       sessionId: client.sessionId,
       name: identity.name,
@@ -785,6 +831,13 @@ export class OfficeRoom extends Room<OfficeState> {
       for (const entry of this.#activity.values()) {
         if (entry.owner === client.sessionId && !activityTerminal(entry.value.state)) {
           this.#closeActivity(entry, 'disconnected');
+        }
+      }
+      // The runtime holding these tools is on the other end of this socket.
+      // Nothing an owner clicked now could reach it, so the cards come down.
+      for (const [requestId, entry] of this.#approvals) {
+        if (entry.owner === client.sessionId && entry.resolvedAt === undefined) {
+          this.#closeApproval(requestId, 'interrupted');
         }
       }
       audit(agent.id, 'session.disconnected', { sessionId: client.sessionId, consented });
@@ -1824,6 +1877,22 @@ export class OfficeRoom extends Room<OfficeState> {
         if (sameTarget) client.send('activity', { ...entry.value, nearby: !entry.value.channelId &&
           Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize });
       }
+      // Cards are live state, not transcript: a reopened panel or a fresh
+      // tab must find the questions still waiting rather than a gap where
+      // one was. Resolved ones are left out — a dead button is worse than
+      // no button.
+      if (!paging.before) for (const entry of this.#approvals.values()) {
+        if (entry.resolvedAt !== undefined) continue;
+        const audience = this.#approvalAudience(client, entry);
+        if (!audience.visible) continue;
+        const sameTarget = channelId
+          ? entry.value.channelId === channelId
+          : !entry.value.channelId && (zoneId ? entry.value.zoneId === zoneId : !audience.private);
+        if (sameTarget || audience.private) {
+          client.send(ServerMessage.Approval, { ...entry.value,
+            ...(audience.private ? { private: true } : {}) } satisfies PublicApprovalRequest);
+        }
+      }
     } catch (error: unknown) {
       logger.error('[office] could not read history', error);
     }
@@ -1956,6 +2025,226 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     this.#publishActivity(entry);
     await keepActivity(getDb(), conversationId, this.#workspaceId, publicValue, value.channelId ? null : entry);
+  }
+
+  // --- tool approvals (docs/GATEWAY.md) ------------------------------------
+
+  /**
+   * An agent is holding a tool until its owner says yes.
+   *
+   * Same audience rules as activity, because the card sits in the transcript
+   * beside the turn it belongs to: channel membership, or earshot, or a zone
+   * somebody is reading. What is different is that only one person can answer
+   * it, and that person may not be in the room the question was asked in — so
+   * they get their own copy either way.
+   */
+  async #onApprovalRequest(client: Client, payload: unknown): Promise<void> {
+    const session = this.#agentSession(client);
+    const player = this.state.players.get(client.sessionId);
+    const value = parseApprovalRequest(payload);
+    if (
+      !session ||
+      !player ||
+      !value ||
+      !hasScope(session.identity, 'chat') ||
+      !hasScope(session.identity, 'status')
+    )
+      return;
+    const channel = value.channelId ? this.#channelFor(player.userId, value.channelId) : null;
+    if (value.channelId && (!channel || (channel.kind === 'dm' && !hasScope(session.identity, 'dm'))))
+      return;
+    const zoneId = value.channelId ? null : this.#zoneIdFor(player, value.zoneId);
+    if (!value.channelId && zoneId === null) return;
+    // An agent may only put a card in the room it is actually standing in.
+    // The earshot test below is against where it stands, so a claimed zone
+    // elsewhere would show the card to that zone's readers and nobody near.
+    if (zoneId && zoneId !== this.#zoneIdFor(player, undefined)) return;
+    const conversationId = channel?.id ?? (await this.#conversations).get(zoneId!);
+    if (!conversationId) return;
+    // Recheck after the asynchronous read: membership can move under it.
+    if (value.channelId && !this.#channelFor(player.userId, value.channelId)) return;
+
+    const existing = this.#approvals.get(value.requestId);
+    // A replay after a reconnect is the same question, not a new one. A
+    // resolved one stays resolved: a harness must not un-answer a card.
+    if (existing) {
+      if (existing.owner !== client.sessionId || existing.resolvedAt !== undefined) return;
+      existing.owner = client.sessionId;
+      this.#publishApproval(existing);
+      return;
+    }
+    const mine = [...this.#approvals.values()].filter(
+      (entry) => entry.owner === client.sessionId && entry.resolvedAt === undefined,
+    ).length;
+    if (mine >= APPROVAL_MAX_PER_AGENT || this.#approvals.size >= APPROVAL_MAX_PER_ROOM) {
+      logger.warn(`[office] ${session.identity.name} has too many approvals open; dropping one`);
+      return;
+    }
+
+    const entry: TrackedApproval = {
+      value: {
+        ...value,
+        agentId: session.identity.id,
+        agentName: player.name,
+        ownerUserId: session.identity.ownerUserId,
+        ownerName: session.identity.ownerName,
+        receivedAt: Date.now(),
+        ...(zoneId ? { zoneId } : {}),
+      },
+      owner: client.sessionId,
+      conversationId,
+      x: player.x,
+      y: player.y,
+    };
+    this.#approvals.set(value.requestId, entry);
+    audit(session.identity.id, 'approval.requested', {
+      requestId: value.requestId,
+      tool: value.toolName,
+      turnId: value.turnId,
+      ...(value.channelId ? { channelId: value.channelId } : { zoneId }),
+    });
+    this.#publishApproval(entry);
+  }
+
+  /** The harness says a question stopped waiting, however it stopped. */
+  #onApprovalResolved(client: Client, payload: unknown): void {
+    const session = this.#agentSession(client);
+    const value = parseApprovalResolved(payload);
+    if (!session || !value) return;
+    const entry = this.#approvals.get(value.requestId);
+    if (!entry) {
+      // No card: a `run` scope approval, or one this office never saw. It is
+      // still an authorization decision, so it is still on the record.
+      audit(session.identity.id, 'approval.resolved', {
+        requestId: value.requestId,
+        resolution: value.resolution,
+        via: value.via,
+      });
+      return;
+    }
+    if (entry.owner !== client.sessionId || entry.resolvedAt !== undefined) return;
+    this.#settleApproval(entry, value, session.identity.id);
+  }
+
+  /** The office's own word: nobody answered, or the agent that asked has gone. */
+  #closeApproval(requestId: string, resolution: 'expired' | 'interrupted'): void {
+    const entry = this.#approvals.get(requestId);
+    if (!entry || entry.resolvedAt !== undefined) return;
+    this.#settleApproval(
+      entry,
+      { version: 1, requestId, turnId: entry.value.turnId, resolution, via: 'system', resolvedAt: Date.now() },
+      entry.value.agentId,
+    );
+  }
+
+  #settleApproval(entry: TrackedApproval, resolved: ApprovalResolved, agentId: string): void {
+    entry.resolvedAt = Date.now();
+    audit(agentId, 'approval.resolved', {
+      requestId: resolved.requestId,
+      resolution: resolved.resolution,
+      via: resolved.via,
+      ...(entry.decidedBy ? { decidedBy: entry.decidedBy } : {}),
+    });
+    const publicValue: PublicApprovalResolved = {
+      ...resolved,
+      agentId: entry.value.agentId,
+      agentName: entry.value.agentName,
+      ...(entry.decidedBy ? { decidedByName: entry.decidedBy } : {}),
+      receivedAt: entry.resolvedAt,
+    };
+    for (const client of this.clients) {
+      if (this.#approvalAudience(client, entry).visible) {
+        client.send(ServerMessage.ApprovalResolved, publicValue);
+      }
+    }
+  }
+
+  /**
+   * A human clicked Allow once or Deny.
+   *
+   * Everything that matters is checked here rather than in the browser: who
+   * they are, which request they named, whether it is still waiting, and
+   * whether the option was one this request actually offered. Only then is
+   * the answer handed to the agent that asked — by id, on its own socket.
+   */
+  #onApprovalDecide(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.kind === 'agent') return;
+    const decide: ApprovalDecidePayload | null = parseApprovalDecide(payload);
+    if (!decide) {
+      this.#sendError(client, 'invalid_payload', 'That is not an answer this office understands.');
+      return;
+    }
+    const entry = this.#approvals.get(decide.requestId);
+    const verdict = judgeDecision(entry, decide, player.userId);
+    if (!verdict.ok) {
+      this.#sendError(client, verdict.code, verdict.message);
+      return;
+    }
+    const agentClient = this.clients.find((candidate) => candidate.sessionId === entry!.owner);
+    if (!agentClient) {
+      this.#sendError(client, 'unroutable', `${entry!.value.agentName} is no longer connected.`);
+      this.#closeApproval(decide.requestId, 'interrupted');
+      return;
+    }
+    entry!.decidedBy = player.name;
+    audit(entry!.value.agentId, 'approval.decided', {
+      requestId: decide.requestId,
+      optionId: verdict.optionId,
+      tool: entry!.value.toolName,
+      decidedByUserId: player.userId,
+    });
+    agentClient.send(AgentServerMessage.ApprovalDecision, {
+      requestId: decide.requestId,
+      optionId: verdict.optionId,
+      decidedByUserId: player.userId,
+      decidedByName: player.name,
+    } satisfies AgentApprovalDecisionEvent);
+    // Nothing is broadcast here. What the runtime was actually told is the
+    // harness's to say, and it says it with a resolution a moment later; a
+    // card claiming an outcome before the runtime has heard the answer would
+    // be this office guessing. A second click meanwhile is refused above.
+  }
+
+  /**
+   * Whether this client sees the card, and whether it reaches them privately.
+   *
+   * The owner always sees it. When the conversation would not have reached
+   * them — an agent in a channel they are not in, or asking from across the
+   * office — their copy is marked private and shown in their own corner
+   * rather than in a transcript they cannot open.
+   */
+  #approvalAudience(
+    client: Client,
+    entry: TrackedApproval,
+  ): { visible: boolean; private: boolean } {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.kind === 'agent') return { visible: false, private: false };
+    const inConversation = canSeeApproval(
+      entry,
+      {
+        x: player.x,
+        y: player.y,
+        inChannel: !!(entry.value.channelId && this.#channelFor(player.userId, entry.value.channelId)),
+        followedZone: this.#followed.get(client.sessionId) ?? null,
+      },
+      this.#settings.chatRadiusTiles * this.#map.tileSize,
+    );
+    const isOwner = player.userId === entry.value.ownerUserId;
+    if (inConversation) return { visible: true, private: false };
+    if (isOwner && needsPrivateCopy(inConversation)) return { visible: true, private: true };
+    return { visible: false, private: false };
+  }
+
+  #publishApproval(entry: TrackedApproval): void {
+    for (const client of this.clients) {
+      const audience = this.#approvalAudience(client, entry);
+      if (!audience.visible) continue;
+      client.send(ServerMessage.Approval, {
+        ...entry.value,
+        ...(audience.private ? { private: true } : {}),
+      } satisfies PublicApprovalRequest);
+    }
   }
 
   #publishActivity(entry: { value: PublicActivity; x: number; y: number }): void {

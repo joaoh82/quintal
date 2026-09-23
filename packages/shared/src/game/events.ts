@@ -80,6 +80,10 @@ export type ConnectionStatus =
 // signature, so they don't satisfy the emitter's `Record<string, unknown>`.
 export type GameEvents = {
   activity: import('../activity.js').PublicActivity;
+  /** An agent is waiting on its owner before it runs a tool. */
+  approval: import('../approval.js').PublicApprovalRequest;
+  /** That approval stopped waiting; the card must stop offering buttons. */
+  approvalResolved: import('../approval.js').PublicApprovalResolved;
   /** The scene has finished loading the map and is rendering. */
   ready: { mapName: string; width: number; height: number; zones: MapZone[] };
   /** The local player entered or left a zone. Fires only on change. */
