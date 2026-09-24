@@ -1,0 +1,53 @@
+{
+  "deliveryMs": 23,
+  "pass": true,
+  "cardsToOwner": 7,
+  "cardsToMember": 5,
+  "cardsToNonMember": 0,
+  "refusals": [
+    [
+      "invalid_payload",
+      false
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ]
+  ],
+  "decisions": {
+    "alpha": 1,
+    "beta": 1
+  },
+  "resolutions": [
+    [
+      "fb62dd",
+      "allowed"
+    ],
+    [
+      "39b2a6",
+      "interrupted"
+    ],
+    [
+      "931a85",
+      "interrupted"
+    ],
+    [
+      "936dd0",
+      "expired"
+    ]
+  ],
+  "privateCardId": "39b2a6",
+  "expiredCardId": "936dd0"
+}

@@ -6,6 +6,7 @@ import type { Gateway } from '../gateway/client.js';
 import { startBridge, type BridgeHandle, type BridgeHooks } from '../mcp/bridge.js';
 import { pickModel } from '../models.js';
 import { mcpServerArgs } from './mcp-args.js';
+import { askingMode, mayNeverAsk } from './approvals.js';
 import { isThrowawayScope } from './scopes.js';
 import { SessionStore } from './sessions.js';
 
@@ -312,6 +313,7 @@ export class Worker {
     } as schema.NewSessionRequest);
 
     await this.#applyModel(proc, created);
+    await this.#applyPermissionMode(proc, created);
 
     this.sessions.put(scope, created.sessionId);
     // A fresh session has been told nothing yet.
@@ -319,6 +321,51 @@ export class Worker {
     this.#log('info', `new session for "${scope}" (${this.sessions.size} live)`);
 
     return created.sessionId;
+  }
+
+  /**
+   * Make the runtime ask, when the office has not said it may not be asked.
+   *
+   * An agent without the `run` scope is one whose owner wants to be asked
+   * before it runs a tool. That only happens if the runtime is in a mode that
+   * asks — and Claude Code's adapter opens in `auto`, which decides for
+   * itself and never sends `session/request_permission`. Without this the
+   * scope was decorative on the office's primary runtime.
+   *
+   * With `run`, the mode is left alone: the harness answers on the owner's
+   * behalf either way, and changing a runtime's mode to no visible effect is
+   * a surprise for no gain.
+   *
+   * A failure here is logged, not thrown. A session that could not be moved
+   * into an asking mode still works; it just behaves as it did before, and
+   * the log says so rather than the office quietly believing otherwise.
+   */
+  async #applyPermissionMode(proc: AgentProcess, created: schema.NewSessionResponse): Promise<void> {
+    if (this.options.gateway.ready?.scopes?.includes('run')) return;
+    const harness = this.options.config.harness;
+    const modes = (created as { modes?: import('./approvals.js').SessionModes }).modes;
+    const wanted = askingMode(harness, modes);
+    if (!wanted) {
+      if (mayNeverAsk(harness, modes)) {
+        this.#log(
+          'warn',
+          `${harness} decides tool permissions itself (mode "${modes?.currentModeId ?? 'unknown'}"); this agent has no "run" scope, but its runtime may never ask`,
+        );
+      }
+      return;
+    }
+    try {
+      await proc.setSessionMode({
+        sessionId: created.sessionId,
+        modeId: wanted,
+      } as schema.SetSessionModeRequest);
+      this.#log('info', `permission mode set to "${wanted}" — the owner is asked before tools run`);
+    } catch (error: unknown) {
+      this.#log(
+        'warn',
+        `could not set "${wanted}" permission mode: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**

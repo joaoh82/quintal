@@ -10,8 +10,9 @@ import {
 import { activeWorkFor } from '../presence';
 import { NEARBY, channelKey, parseKey, type Conversations } from '../useConversations';
 import { ChatInput } from './ChatInput';
+import { ApprovalCard } from './ApprovalCard';
 import { joinTargets } from './join';
-import { UnreadPill, WorkBadge } from './RowBadges';
+import { ApprovalPill, UnreadPill, WorkBadge } from './RowBadges';
 import { Transcript } from './Transcript';
 import { useNow } from './useNow';
 import { WorkingLine } from './WorkingLine';
@@ -46,7 +47,20 @@ export function ChatPanel({
   onOpenOverlay,
   activityDetailLevel,
 }: ChatPanelProps) {
-  const { channels, active, select, send, transcripts, unread, myZone } = conversations;
+  const {
+    channels,
+    active,
+    select,
+    send,
+    transcripts,
+    unread,
+    myZone,
+    approvals,
+    approvalAttention,
+    ownApprovals,
+    myUserId,
+    decideApproval,
+  } = conversations;
 
   // The clocks on the tabs tick only while there is one to tick.
   const anyWork = roster.some((entry) => entry.kind === 'agent' && entry.workingSince > 0);
@@ -75,6 +89,7 @@ export function ChatPanel({
         >
           nearby
           <WorkBadge work={activeWorkFor(roster, NEARBY, myZone)} now={now} />
+          <ApprovalPill waiting={approvalAttention.has(NEARBY)} />
           <UnreadPill unread={unread[NEARBY]} />
         </button>
         {channels.map((channel) => {
@@ -91,6 +106,7 @@ export function ChatPanel({
             >
               {channelLabel(channel)}
               <WorkBadge work={activeWorkFor(roster, key, myZone)} now={now} />
+              <ApprovalPill waiting={approvalAttention.has(key)} />
               <UnreadPill unread={unread[key]} />
             </button>
           );
@@ -115,6 +131,9 @@ export function ChatPanel({
         onLoadEarlier={() => {}}
         size="compact"
         activityDetailLevel={activityDetailLevel}
+        approvals={approvals}
+        myUserId={myUserId}
+        onDecideApproval={decideApproval}
         emptyText={
           activeChannel?.kind === 'dm'
             ? `Nothing between you and ${activeChannel.name} yet. Only the two of you read this.`
@@ -123,6 +142,31 @@ export function ChatPanel({
               : 'Nothing said nearby. Enter to talk, @name to address someone, ! for agent commands.'
         }
       />
+
+      {/*
+        Questions the office could not put in front of us any other way: our
+        agent asked in a channel we are not in, or from across the office.
+        Nobody else is sent these, and they name the conversation they came
+        from only as far as we could have read it anyway.
+      */}
+      {ownApprovals.length > 0 ? (
+        <div className="border-t border-amber-300/25 px-3 py-1.5" data-private-approvals>
+          <p className="font-mono text-[10px] text-amber-200/80">
+            {ownApprovals.length === 1
+              ? 'Waiting on you, out of sight of this room'
+              : `${ownApprovals.length} waiting on you, out of sight of this room`}
+          </p>
+          {ownApprovals.map((approval) => (
+            <ApprovalCard
+              key={approval.requestId}
+              approval={approval}
+              approvals={approvals}
+              isOwner
+              onDecide={decideApproval}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <WorkingLine roster={roster} active={shown} myZone={conversations.myZone} size="compact" />
 

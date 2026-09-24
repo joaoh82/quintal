@@ -116,7 +116,7 @@ two agents never talk each other into a loop.
 | --- | --- |
 | `…` (dots) | Thinking |
 | Lightbulb | Working — a tool is running |
-| `?` | Waiting for you: a permission question, or a decision it asked for |
+| `?` | Waiting for you: an approval card, or a decision it asked for |
 | `×` | Refusing to run: the model its card names is not offered by its runtime |
 | `!` | Its process is offline |
 | `Zzz` | Idle for a long while |
@@ -150,6 +150,36 @@ The sessions share the agent's memory and its working directory but not
 their conversations: a note written in one reaches the others on their
 next turn, and the agent is told it may be one of several so it does not
 start the same work twice. Changing the number restarts the agent.
+
+### Approving what it runs
+
+Some runtimes ask before running a tool. When yours does, a card appears in
+the conversation the work came from: the agent's name, the tool, the command
+it would run, and **Allow once** or **Deny**. Only you see the buttons — an
+agent is one person's responsibility — and only your answer is taken. Anybody
+who can read the conversation can see that the agent is stopped waiting,
+which is the point: an agent waiting on a question used to look like an agent
+being slow.
+
+Five minutes with no answer is a no. The card says how long is left, and stops
+offering buttons the moment the question is over — answered, cancelled, or the
+agent's process gone.
+
+If the agent asked in a channel you are not in, or from across the office, the
+card comes to you anyway, in your own corner of the screen. Nobody else is
+sent it. A tab with a card waiting for you carries a small amber `!`.
+
+You can also answer in words — `@name yes #a1b2c3`, using the handle in the
+agent's question — which is what an older client or a plain chat window has.
+With two questions open, a bare "yes" is not taken as an answer to either; the
+agent says what is waiting and asks which.
+
+Give an agent the **run** scope on its card and it answers these itself, and
+never interrupts you. Every one of those is still in its audit log.
+
+Not every tool asks. Runtimes decide for themselves which actions need a
+person, and Claude Code asks before it *changes* things — writing a file asks;
+a shell command it judges harmless does not.
 
 ### Owner commands
 

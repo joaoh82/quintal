@@ -1,0 +1,63 @@
+{
+  "allow": {
+    "phase": "allow",
+    "allow": {
+      "seenAfterMs": 2557,
+      "tool": "Write /private/tmp/quin52-verification/workspace/allow.txt",
+      "summary": "/private/tmp/quin52-verification/workspace/allow.txt",
+      "options": [
+        "allow_once",
+        "deny"
+      ],
+      "ownerUserId": "45054b7c-9fa9-4726-b677-7afa59a6d7d1",
+      "turnId": "2",
+      "windowMs": 300000,
+      "turnWentToWaiting": false,
+      "resolution": [
+        "allowed",
+        "card"
+      ],
+      "fileWritten": "quintal-probe-allow",
+      "reply": [
+        "@Approval Owner may I run Write /private/tmp/quin52-verification/workspace/allow.txt (/private/tmp/quin52-verification/workspace/allow.txt)? Use the card, or reply \"@Probe06nu yes #4ffa45\" or \"@Probe0"
+      ],
+      "continuedAfterMs": 2660
+    },
+    "pass": true,
+    "cardsSeen": 1
+  },
+  "deny": {
+    "phase": "deny",
+    "deny": {
+      "seenAfterMs": 4772,
+      "requestId": "0710f4",
+      "tool": "Write /private/tmp/quin52-verification/workspace/deny.txt",
+      "summary": "/private/tmp/quin52-verification/workspace/deny.txt",
+      "resolution": [
+        "denied",
+        "card"
+      ],
+      "reply": [
+        "@Probe06nu create a file called deny.txt in your working directory containing the word quintal-probe-deny, then tell me you did it.",
+        "@Approval Owner may I run Write /private/tmp/quin52-verification/workspace/deny.txt (/private/tmp/quin52-verification/workspace/deny.txt)? Use the card, or reply \"@Probe06nu yes #0710f4\" or \"@Probe06nu no #0710f4\"."
+      ],
+      "fileWritten": false
+    },
+    "pass": true,
+    "cardsSeen": 1
+  },
+  "expire": {
+    "phase": "expire",
+    "expire": {
+      "requestId": "de88bf",
+      "waitedMs": 302161,
+      "resolution": [
+        "expired",
+        "timeout"
+      ],
+      "fileWritten": false
+    },
+    "pass": true,
+    "cardsSeen": 1
+  }
+}

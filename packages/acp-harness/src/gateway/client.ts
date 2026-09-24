@@ -22,6 +22,9 @@ import {
   type MemorySetResult,
   type MessagesGetResult,
   type AgentTeam,
+  type AgentApprovalDecisionEvent,
+  type ApprovalRequest,
+  type ApprovalResolved,
 } from '@quintal/shared';
 import { buildAuthPayload, signAuthPayload } from '@quintal/shared';
 import { Client, type Room } from 'colyseus.js';
@@ -48,6 +51,8 @@ export interface GatewayEvents {
   /** A moment with another idle agent: one line, or nothing. */
   banter: (event: AgentBanterEvent) => void;
   error: (error: AgentErrorPayload) => void;
+  /** The owner answered an approval card. Named by request id, never by tool. */
+  approvalDecision: (decision: AgentApprovalDecisionEvent) => void;
   /** The socket dropped. `code` 4000 means we or the server closed on purpose. */
   closed: (code: number) => void;
 }
@@ -259,6 +264,10 @@ export class GatewayClient {
       this.#roster = roster;
       this.#handlers.roster?.(roster);
     });
+    room.onMessage(
+      AgentServerMessage.ApprovalDecision,
+      (decision: AgentApprovalDecisionEvent) => this.#handlers.approvalDecision?.(decision),
+    );
     room.onMessage(AgentServerMessage.Error, (error: AgentErrorPayload) =>
       this.#handlers.error?.(error),
     );
@@ -298,6 +307,24 @@ export class GatewayClient {
   /** Speak aloud, or — with a channel — post there instead. */
   activity(value: import('@quintal/shared').AgentActivity): void {
     this.#room?.send('agent:activity', value);
+  }
+
+  /**
+   * Ask the owner to approve a tool, as a card rather than a sentence.
+   *
+   * Dropped silently when the socket is down or the office predates approval
+   * cards: the text question goes out on its own path and is still the
+   * answerable one. See `docs/GATEWAY.md`.
+   */
+  approvalRequest(value: ApprovalRequest): void {
+    if (this.#ready?.approvalVersion !== 1) return;
+    this.#room?.send(AgentMessage.ApprovalRequest, value);
+  }
+
+  /** That question stopped waiting. Sent however it stopped, including timeout. */
+  approvalResolved(value: ApprovalResolved): void {
+    if (this.#ready?.approvalVersion !== 1) return;
+    this.#room?.send(AgentMessage.ApprovalResolved, value);
   }
 
   say(text: string, channelId?: string): void {
@@ -463,4 +490,4 @@ export type Gateway = Pick<
   | 'occupants'
   | 'channels'
   | 'on'
-> & Partial<Pick<GatewayClient, 'activity'>>;
+> & Partial<Pick<GatewayClient, 'activity' | 'approvalRequest' | 'approvalResolved'>>;

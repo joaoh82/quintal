@@ -137,6 +137,22 @@ export class AgentProcess {
     return connection.setSessionConfigOption(params);
   }
 
+  /**
+   * Switch a session's mode — how the runtime decides what it may run.
+   *
+   * Standard ACP (`session/set_mode`, from the `modes` a session advertises),
+   * unlike the config-option path above. An adapter that offered modes and
+   * then cannot be asked to pick one is a protocol bug worth naming.
+   */
+  async setSessionMode(params: schema.SetSessionModeRequest): Promise<void> {
+    const connection = this.#requireConnection();
+    if (typeof connection.setSessionMode !== 'function') {
+      throw new Error('this ACP connection does not support session/set_mode');
+    }
+    // The reply carries nothing we act on; what matters is that it resolved.
+    await connection.setSessionMode(params);
+  }
+
   /** Fire-and-forget: ACP cancellation is a notification, not a request. */
   cancel(sessionId: string): void {
     void this.#connection?.cancel({ sessionId }).catch(() => {

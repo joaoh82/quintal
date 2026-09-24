@@ -21,7 +21,8 @@ import {
 } from '../useConversations';
 import { ChatInput } from './ChatInput';
 import { joinTargets } from './join';
-import { UnreadPill, WorkBadge } from './RowBadges';
+import { ApprovalCard } from './ApprovalCard';
+import { ApprovalPill, UnreadPill, WorkBadge } from './RowBadges';
 import { Transcript } from './Transcript';
 import { useNow } from './useNow';
 import { WorkingLine } from './WorkingLine';
@@ -65,6 +66,11 @@ export function CommsOverlay({
     activeTranscript,
     activeChannel,
     unread,
+    approvals,
+    approvalAttention,
+    ownApprovals,
+    myUserId,
+    decideApproval,
   } = conversations;
 
   // The clocks on the rows tick only while there is one to tick.
@@ -154,6 +160,7 @@ export function CommsOverlay({
               <span>nearby</span>
               <span className="ml-auto flex items-baseline gap-1.5">
                 <WorkBadge work={workIn(NEARBY)} now={now} />
+                <ApprovalPill waiting={approvalAttention.has(NEARBY)} />
                 <UnreadPill unread={unread[NEARBY]} />
                 <span className="font-mono text-[10px] text-white/35">earshot</span>
               </span>
@@ -177,6 +184,7 @@ export function CommsOverlay({
                   ) : null}
                   <span className="ml-auto flex items-baseline gap-1.5">
                     <WorkBadge work={workIn(key)} now={now} />
+                    <ApprovalPill waiting={approvalAttention.has(key)} />
                     <UnreadPill unread={unread[key]} />
                     <span className="font-mono text-[10px] text-white/35">
                       {count > 0 ? count : ''}
@@ -208,6 +216,7 @@ export function CommsOverlay({
                     <span className="font-mono">{channelLabel(channel)}</span>
                     <span className="ml-auto flex items-baseline gap-1.5">
                       <WorkBadge work={workIn(key)} now={now} />
+                      <ApprovalPill waiting={approvalAttention.has(key)} />
                       <UnreadPill unread={unread[key]} />
                     </span>
                   </button>
@@ -247,12 +256,33 @@ export function CommsOverlay({
                     <span className="italic">{channel.name}</span>
                     <span className="ml-auto flex items-baseline gap-1.5">
                       <WorkBadge work={workIn(key)} now={now} />
+                      <ApprovalPill waiting={approvalAttention.has(key)} />
                       <UnreadPill unread={unread[key]} />
                     </span>
                   </button>
                 );
               })}
           </Section>
+
+          {/*
+            Our own agents' questions from conversations this panel cannot
+            open. They have nowhere else to go, and a question with nowhere
+            to go is the invisible wait this exists to end.
+          */}
+          {ownApprovals.length > 0 ? (
+            <Section title="Waiting on you">
+              {ownApprovals.map((approval) => (
+                <div key={approval.requestId} className="px-2">
+                  <ApprovalCard
+                    approval={approval}
+                    approvals={approvals}
+                    isOwner
+                    onDecide={decideApproval}
+                  />
+                </div>
+              ))}
+            </Section>
+          ) : null}
 
           <p className="mt-auto px-3 pt-3 font-mono text-[10px] leading-relaxed text-white/30">
             {toggleKey} or Esc closes · /msg · /join · /leave
@@ -292,6 +322,9 @@ export function CommsOverlay({
             onLoadEarlier={() => conversations.loadEarlier(active)}
             size="full"
             activityDetailLevel={activityDetailLevel}
+            approvals={approvals}
+            myUserId={myUserId}
+            onDecideApproval={decideApproval}
             emptyText={
               activeChannel?.kind === 'dm'
                 ? `Nothing between you and ${activeChannel.name} yet.`

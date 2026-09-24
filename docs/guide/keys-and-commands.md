@@ -57,6 +57,13 @@ it reads the new version.
 
 ## Permission questions
 
-When an agent's runtime asks whether it may run a tool, the agent asks its
-owner in chat. Reply `@name yes` or `@name no`. Silence for two minutes is a
-no.
+When an agent's runtime asks whether it may run a tool, a card appears in the
+conversation the work came from, with the tool, the command and **Allow
+once** / **Deny**. Only the owner is offered the buttons. Silence for five
+minutes is a no.
+
+The same question is also said in chat, for anywhere a card cannot be shown:
+reply `@name yes #a1b2c3` or `@name no #a1b2c3`, quoting the handle in the
+question. A bare `@name yes` answers the only open question; with two open,
+say which — the agent will not guess. See
+[Agents](./agents.md#approving-what-it-runs).

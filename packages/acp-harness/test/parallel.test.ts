@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, it } from 'node:test';
 
 import type { Gateway } from '../src/gateway/client.js';
-import { AgentRunner, pickWaiter } from '../src/runner/AgentRunner.js';
+import { AgentRunner } from '../src/runner/AgentRunner.js';
 import { Pool } from '../src/runner/pool.js';
 import type { LatencySample } from '../src/runner/latency.js';
 import type { Worker } from '../src/runner/worker.js';
@@ -497,7 +497,7 @@ describe('answering several conversations at once', () => {
     assert.match(said[0]?.text ?? '', /Forgotten: "be terse"/);
   });
 
-  it('names the tool in every open approval question, so either can be answered by name', async () => {
+  it('gives every open approval question its own handle, so either can be answered', async () => {
     const { handlers, said } = await start(
       { FAKE_PERMISSION: 'Bash', FAKE_DELAY_MS: '300' },
       { parallelism: 2 },
@@ -508,17 +508,26 @@ describe('answering several conversations at once', () => {
 
     const asked = () => said.filter((s) => /may I run/.test(s.text));
     await until(() => asked().length === 2, 'both questions');
-    for (const question of asked()) {
-      assert.match(question.text, /@Bob yes Bash/, `the first question names the tool too: ${question.text}`);
-    }
+    // Both are about `Bash`, so the tool name cannot tell them apart — the
+    // handle can, and it is what each question offers to quote back.
+    const handles = asked().map((question) => /#([0-9a-f]{6})\b/.exec(question.text)?.[1] ?? '');
+    assert.equal(handles.filter(Boolean).length, 2, `both questions carry a handle: ${JSON.stringify(asked().map((q) => q.text))}`);
+    assert.notEqual(handles[0], handles[1], 'and the two handles differ');
     assert.deepEqual(
       asked().map((q) => q.channelId).sort(),
       [ENGINEERING.id, DM.id].sort(),
       'each asked where its turn is',
     );
 
-    aloud(handlers, '@Bob no Bash');
+    // A bare "no" with two open is ambiguous and must settle neither.
     aloud(handlers, '@Bob no');
+    await until(
+      () => said.some((s) => /does not say which/.test(s.text)),
+      'the request for specificity',
+    );
+
+    aloud(handlers, `@Bob no #${handles[0]}`);
+    aloud(handlers, `@Bob no #${handles[1]}`);
     await until(
       () => said.filter((s) => s.text === 'ok').length === 2,
       `both turns to finish: ${JSON.stringify(said.map((s) => s.text))}`,
@@ -565,24 +574,6 @@ describe('answering several conversations at once', () => {
     assert.match(texts[1] ?? '', /\[You\]/, 'the channel turn primes its own session');
     assert.match(texts[2] ?? '', /\[You\]/, 'and the lobby is primed again after the write');
     assert.match(texts[2] ?? '', /be terse/, 'with what was written');
-  });
-});
-
-describe('which approval question an answer names', () => {
-  const open = [{ toolName: 'Bash' }, { toolName: 'Bash: rm -rf build' }, { toolName: 'WebFetch' }];
-
-  it('takes the whole name, then the start of one, then a fragment only one fits', () => {
-    assert.equal(pickWaiter(open, 'bash'), open[0]);
-    assert.equal(pickWaiter(open, 'web'), open[2]);
-    assert.equal(pickWaiter(open, 'fetch'), open[2]);
-  });
-
-  it('answers the oldest question when the name fits several, or none', () => {
-    // "a" is in every name; "ba" starts two. Neither picks one.
-    assert.equal(pickWaiter(open, 'a'), undefined);
-    assert.equal(pickWaiter(open, 'ba'), undefined);
-    assert.equal(pickWaiter(open, ''), undefined);
-    assert.equal(pickWaiter(open, 'python'), undefined);
   });
 });
 

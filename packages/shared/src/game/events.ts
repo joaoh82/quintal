@@ -80,6 +80,10 @@ export type ConnectionStatus =
 // signature, so they don't satisfy the emitter's `Record<string, unknown>`.
 export type GameEvents = {
   activity: import('../activity.js').PublicActivity;
+  /** An agent is waiting on its owner before it runs a tool. */
+  approval: import('../approval.js').PublicApprovalRequest;
+  /** That approval stopped waiting; the card must stop offering buttons. */
+  approvalResolved: import('../approval.js').PublicApprovalResolved;
   /** The scene has finished loading the map and is rendering. */
   ready: { mapName: string; width: number; height: number; zones: MapZone[] };
   /** The local player entered or left a zone. Fires only on change. */
@@ -106,8 +110,11 @@ export type GameEvents = {
   zoneChat: ZoneChatPayload;
   /** Socket state changed. `detail` is safe to show a human. */
   connection: { status: ConnectionStatus; detail?: string };
-  /** The server rejected something — rate limit, bad move. */
-  notice: { code: string; message: string };
+  /**
+   * The server rejected something — rate limit, bad move. `requestId` is set
+   * when the refusal was about one identifiable thing, such as an approval.
+   */
+  notice: { code: string; message: string; requestId?: string };
   /** How far a voice carries in this office. */
   earshot: EarshotPayload;
   /** The voice client changed: socket, mic, who is speaking. */

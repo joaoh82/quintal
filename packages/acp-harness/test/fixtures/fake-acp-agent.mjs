@@ -10,6 +10,9 @@
  *   FAKE_STOP_REASON    end_turn | max_tokens | refusal | cancelled
  *   FAKE_TOOL           emit a tool_call with this name before replying
  *   FAKE_PERMISSION     ask for permission before replying (value = tool name)
+ *   FAKE_PERMISSION_COMMAND  rawInput.command on that request, so the card has an action
+ *   FAKE_PERMISSION_OPTIONS  "allow_once,reject_once" — which option kinds it offers
+ *   FAKE_CRASH_ON_PERMISSION exit(1) right after asking, without waiting for an answer
  *   FAKE_CRASH_AFTER    exit(1) after this many prompts
  *   FAKE_CHUNKS         split the reply into N chunks (default 1)
  *   FAKE_RECORD         append every received request to this file as JSONL
@@ -31,6 +34,11 @@ const tool = process.env.FAKE_TOOL;
 /** A runtime notice, sent as its own message chunk ahead of the reply — codex-acp's shape. */
 const warning = process.env.FAKE_WARNING;
 const permission = process.env.FAKE_PERMISSION;
+const permissionCommand = process.env.FAKE_PERMISSION_COMMAND;
+const permissionOptions = (process.env.FAKE_PERMISSION_OPTIONS ?? 'allow_once,reject_once')
+  .split(',')
+  .map((kind) => kind.trim())
+  .filter(Boolean);
 /**
  * A tool to call during the turn. The real MCP server is a thin forwarder to
  * the harness's loopback bridge (see `mcp/server.ts`); standing in for it here
@@ -229,14 +237,38 @@ async function handle(message) {
         }
       }
 
+      if (permission && process.env.FAKE_CRASH_ON_PERMISSION) {
+        // Ask, then die: the runtime holding the tool is gone, and nothing
+        // an owner clicks could ever reach it.
+        request('session/request_permission', {
+          sessionId,
+          toolCall: {
+            toolCallId: `call-perm-${prompts}`,
+            title: permission,
+            ...(permissionCommand ? { rawInput: { command: permissionCommand } } : {}),
+          },
+          options: permissionOptions.map((kind) => ({
+            optionId: kind,
+            name: kind.startsWith('allow') ? 'Allow' : 'Reject',
+            kind,
+          })),
+        });
+        setTimeout(() => process.exit(1), 50);
+        return;
+      }
       if (permission) {
         const outcome = await request('session/request_permission', {
           sessionId,
-          toolCall: { toolCallId: 'call-perm', title: permission },
-          options: [
-            { optionId: 'yes', name: 'Allow', kind: 'allow_once' },
-            { optionId: 'no', name: 'Reject', kind: 'reject_once' },
-          ],
+          toolCall: {
+            toolCallId: `call-perm-${prompts}`,
+            title: permission,
+            ...(permissionCommand ? { rawInput: { command: permissionCommand } } : {}),
+          },
+          options: permissionOptions.map((kind) => ({
+            optionId: kind,
+            name: kind.startsWith('allow') ? 'Allow' : 'Reject',
+            kind,
+          })),
         });
         notify('_test/permission_outcome', outcome);
       }
