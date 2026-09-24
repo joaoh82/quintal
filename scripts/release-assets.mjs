@@ -64,6 +64,20 @@ export function stage(platform, bundleDir, destination) {
     copyFileSync(matches[0], join(destination, basename(matches[0])));
   }
 }
+/**
+ * The names one asset is published under.
+ *
+ * Installers go out twice: under the versioned filename Tauri produced, which
+ * says what it is, and under a stable name that `releases/latest/download/…`
+ * can point at. Update payloads and signatures get the stable name only.
+ * Tauri v2 names the macOS tarball for the product alone — `Quintal.app.tar.gz`,
+ * no version and no arch — so both architectures produce that one basename and
+ * publishing it would collide. Nothing wants it under that name anyway:
+ * `latest.json` addresses every payload and signature by its stable name.
+ */
+function publishedNames(asset) {
+  return optional(asset) ? [asset.name] : [basename(asset.source), asset.name];
+}
 export function collect(staged, destination) {
   const selected = assets.flatMap((asset) => {
     const matches = files(join(staged, asset.platform)).filter((path) => path.endsWith(asset.extension));
@@ -72,11 +86,11 @@ export function collect(staged, destination) {
     return [{ ...asset, source: matches[0] }];
   });
   // Validate the whole set before writing anything intended for publication.
-  const names = selected.flatMap((asset) => [basename(asset.source), asset.name]);
+  const names = selected.flatMap(publishedNames);
   if (new Set(names).size !== names.length) throw new Error('Installer filenames collide');
   mkdirSync(destination, { recursive: true });
   for (const asset of selected) {
-    for (const name of [basename(asset.source), asset.name]) copyFileSync(asset.source, join(destination, name));
+    for (const name of publishedNames(asset)) copyFileSync(asset.source, join(destination, name));
   }
   const sums = names.sort().map((name) =>
     `${createHash('sha256').update(readFileSync(join(destination, name))).digest('hex')}  ${name}`,

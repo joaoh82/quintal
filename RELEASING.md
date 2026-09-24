@@ -79,7 +79,10 @@ packaged sidecar, and checks the stapled ticket when notarization is enabled.
 
 All builds upload private staging artifacts. Only after all four succeed does
 the publish job create a draft, upload every original installer plus stable
-copies and `SHA256SUMS.txt`, then un-draft as its final step. Notes contain the
+copies and `SHA256SUMS.txt`, then un-draft as its final step. Update payloads
+and signatures go up under their stable name only: Tauri v2 names the macOS
+tarball `Quintal.app.tar.gz` for both architectures, so the original filename
+is not unique and nothing addresses it by that name anyway. Notes contain the
 Git log since the previous reachable version tag and signing/platform details.
 Prereleases are marked as such and do not replace the latest stable download.
 A retry can replace assets in an existing draft; it refuses to modify a public
@@ -206,7 +209,8 @@ URLs have this prefix:
 | `Quintal-windows-x64-setup.exe` |
 | `SHA256SUMS.txt` |
 
-Checksums cover both original filenames and stable copies. For example, download
+Checksums cover both original filenames and stable copies, and the stable-only
+names of the update payloads and signatures. For example, download
 the checksum file and selected installer, then use `sha256sum --ignore-missing -c
 SHA256SUMS.txt` on Linux, or compare `shasum -a 256 <installer>` on macOS. These
 URLs begin resolving once the first stable release has been published.
