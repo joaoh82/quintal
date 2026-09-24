@@ -19,12 +19,15 @@ test('all installers have stable copies and verifiable checksums; incomplete set
   const collect = (out: string) => spawnSync(process.execPath, [script, 'collect', join(dir, 'staged'), join(dir, out)], { encoding: 'utf8' });
   const result = collect('release');
   assert.equal(result.status, 0, result.stderr);
-  // Every asset lands twice — under the name the bundler chose and under the
-  // stable one the download page links — plus the checksum file.
-  assert.equal(readdirSync(join(dir, 'release')).length, assets.length * 2 + 1);
+  // An installer lands twice — under the name the bundler chose and under the
+  // stable one the download page links. An update payload or a signature lands
+  // only under its stable name, which is what `latest.json` addresses it by.
+  const optional = (asset: typeof assets[number]) => Boolean(asset.signs || asset.updaterOnly);
+  const published = assets.reduce((total, asset) => total + (optional(asset) ? 1 : 2), 0);
+  assert.equal(readdirSync(join(dir, 'release')).length, published + 1);
   for (const asset of assets) assert.equal(readFileSync(join(dir, 'release', asset.name), 'utf8'), `binary for ${asset.name}`);
   const sums = readFileSync(join(dir, 'release/SHA256SUMS.txt'), 'utf8').trim().split('\n');
-  assert.equal(sums.length, assets.length * 2);
+  assert.equal(sums.length, published);
   for (const line of sums) {
     const [hash, name] = line.split('  ');
     assert.ok(name);
@@ -32,6 +35,30 @@ test('all installers have stable copies and verifiable checksums; incomplete set
   }
   rmSync(join(dir, 'staged/windows-x64'), { recursive: true });
   assert.notEqual(collect('incomplete').status, 0);
+});
+
+test('the macOS payloads both arrive as Quintal.app.tar.gz and still publish', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'quintal-collide-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  // Tauri v2 names the macOS tarball for the product alone, so arm64 and x64
+  // produce the same basename. v0.4.0 staged four such files and `collect`
+  // refused the whole release; the fixtures above never caught it because they
+  // spell the platform into every filename, which Tauri does not.
+  for (const asset of assets) {
+    const platform = join(dir, 'staged', asset.platform);
+    mkdirSync(platform, { recursive: true });
+    const name = asset.extension.startsWith('.app.tar.gz')
+      ? `Quintal${asset.extension}`
+      : `Quintal_1.2.3_${asset.platform}${asset.extension}`;
+    writeFileSync(join(platform, name), `binary for ${asset.name}`);
+  }
+  const result = spawnSync(process.execPath, [script, 'collect', join(dir, 'staged'), join(dir, 'release')], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  // Each architecture's payload and signature is there, under its own stable
+  // name, carrying its own bytes — never one arch's tarball serving both.
+  for (const asset of assets) assert.equal(readFileSync(join(dir, 'release', asset.name), 'utf8'), `binary for ${asset.name}`);
+  // And the colliding basename is published under no name at all.
+  assert.ok(!readdirSync(join(dir, 'release')).includes('Quintal.app.tar.gz'));
 });
 
 test('staging selects final installers and ignores intermediate images left by failed builds', (t) => {
