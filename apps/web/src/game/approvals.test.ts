@@ -158,3 +158,53 @@ describe('what needs my attention', () => {
     assert.equal(state.requests['req-1']?.summary, 'git push');
   });
 });
+
+/**
+ * The other half of the reconnect bug. The office resumes a card whose agent
+ * dropped and came back, but `approvalStatus` reads `resolved` before
+ * anything else — so without this the owner keeps seeing "Interrupted" and no
+ * buttons on a question that is genuinely waiting for them. The gateway smoke
+ * cannot catch it: it talks to the office directly and never runs this store.
+ */
+describe('a card the office shows again after its agent reconnected', () => {
+  const interrupted = resolved({ resolution: 'interrupted' });
+
+  it('is answerable again once the office re-sends it', () => {
+    let state = receiveApproval(EMPTY_APPROVALS, request());
+    state = receiveResolution(state, interrupted);
+    assert.equal(approvalStatus(state, request(), NOW).kind, 'resolved', 'down while it is gone');
+
+    state = receiveApproval(state, request());
+    assert.deepEqual(approvalStatus(state, request(), NOW), { kind: 'waiting' });
+    assert.equal(state.resolved['req-1'], undefined, 'the interruption is let go of');
+  });
+
+  it('counts towards my attention again', () => {
+    let state = receiveResolution(receiveApproval(EMPTY_APPROVALS, request()), interrupted);
+    assert.equal(attentionKeys(state, ME, NOW).size, 0);
+    state = receiveApproval(state, request());
+    assert.deepEqual([...attentionKeys(state, ME, NOW)], ['channel:ch-1']);
+  });
+
+  it('will not revive one the harness actually answered', () => {
+    for (const resolution of ['allowed', 'denied', 'expired', 'cancelled', 'auto_allowed'] as const) {
+      let state = receiveApproval(EMPTY_APPROVALS, request());
+      state = receiveResolution(state, resolved({ resolution }));
+      state = receiveApproval(state, request());
+      assert.equal(
+        approvalStatus(state, request(), NOW).kind,
+        'resolved',
+        `${resolution} must stay resolved`,
+      );
+      assert.ok(state.resolved['req-1'], `${resolution} is remembered`);
+    }
+  });
+
+  it('does not resurrect one whose deadline passed while it was away', () => {
+    const past = request({ expiresAt: NOW - 1 });
+    let state = receiveResolution(receiveApproval(EMPTY_APPROVALS, past), interrupted);
+    state = receiveApproval(state, past);
+    // The resolution is let go of, but the clock still says it is over.
+    assert.equal(approvalStatus(state, past, NOW).kind, 'resolved');
+  });
+});

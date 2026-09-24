@@ -37,11 +37,29 @@ export function approvalKey(approval: PublicApprovalRequest): ConversationKey | 
   return approval.zoneId ? zoneKey(approval.zoneId) : null;
 }
 
+/**
+ * The office has told us about a card — a new one, or one it is showing again.
+ *
+ * A re-send is how a question comes back after its agent's socket dropped: the
+ * office closed it `interrupted`, the agent reconnected, and the office
+ * resumed it. The client has to let go of that resolution or the card keeps
+ * rendering as over — `approvalStatus` reads `resolved` first, so a stale
+ * entry there outranks the live request and the owner is left looking at
+ * "Interrupted" with no buttons on a question that is waiting for them.
+ *
+ * Only `interrupted` is dropped. A card the harness answered, denied or let
+ * expire is over for good, and no re-send may bring its buttons back.
+ */
 export function receiveApproval(
   state: ApprovalState,
   approval: PublicApprovalRequest,
 ): ApprovalState {
-  return { ...state, requests: { ...state.requests, [approval.requestId]: approval } };
+  const requests = { ...state.requests, [approval.requestId]: approval };
+  if (state.resolved[approval.requestId]?.resolution !== 'interrupted') {
+    return { ...state, requests };
+  }
+  const { [approval.requestId]: _revived, ...resolved } = state.resolved;
+  return { ...state, requests, resolved };
 }
 
 /**

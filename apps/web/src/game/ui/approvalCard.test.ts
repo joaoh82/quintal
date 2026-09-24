@@ -129,6 +129,25 @@ describe('the approval card on screen', () => {
     assert.match(html, /data-approval-private="true"/);
   });
 
+  it('offers its buttons again after its agent dropped and came back', async () => {
+    const interrupted: PublicApprovalResolved = {
+      version: 1, requestId: 'req-1', turnId: 'turn-1', resolution: 'interrupted',
+      via: 'system', resolvedAt: NOW, agentId: 'agent-1', agentName: 'Bob', receivedAt: NOW,
+    };
+    let state = receiveResolution(receiveApproval(EMPTY_APPROVALS, request()), interrupted);
+    const whileGone = await render(request(), state, true);
+    assert.match(whileGone, /Interrupted/);
+    assert.equal(/<button/.test(whileGone), false, 'no buttons at a dead socket');
+
+    // The office re-sends the card once the agent is back.
+    state = receiveApproval(state, request());
+    const back = await render(request(), state, true);
+    assert.match(back, /data-approval-state="waiting"/);
+    assert.match(back, /Allow once/);
+    assert.match(back, /Deny/);
+    assert.equal(/<button[^>]*\sdisabled(=|\s|>)/.test(back), false, 'and they work');
+  });
+
   it('says so plainly when the runtime named no action', async () => {
     const bare = request({ summary: '' });
     const html = await render(bare, receiveApproval(EMPTY_APPROVALS, bare), true);
