@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 
-const assets: { platform: string; extension: string; name: string; directory: string; updater?: string; signs?: string }[] = JSON.parse(readFileSync('scripts/release-assets.json', 'utf8'));
+const assets: { platform: string; extension: string; name: string; directory: string; updater?: string; signs?: string; updaterOnly?: boolean }[] = JSON.parse(readFileSync('scripts/release-assets.json', 'utf8'));
 const script = resolve('scripts/release-assets.mjs');
 test('all installers have stable copies and verifiable checksums; incomplete sets are refused', (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'quintal-assets-'));
@@ -127,7 +127,7 @@ test('an unsigned build still ships installers, and simply carries no update pay
   // What a runner with no signing key produces: every installer, no payloads,
   // no signatures. That must publish — a release without self-update beats no
   // release — while `publish-release.mjs` withholds the manifest.
-  for (const asset of assets.filter((entry) => !entry.updater && !entry.signs)) {
+  for (const asset of assets.filter((entry) => !entry.signs && !entry.updaterOnly)) {
     const platform = join(dir, 'staged', asset.platform);
     mkdirSync(platform, { recursive: true });
     writeFileSync(join(platform, `Quintal_1.2.3_${asset.platform}${asset.extension}`), `binary for ${asset.name}`);
@@ -138,12 +138,38 @@ test('an unsigned build still ships installers, and simply carries no update pay
     { encoding: 'utf8' },
   );
   assert.equal(result.status, 0, result.stderr);
-  const installers = assets.filter((entry) => !entry.updater && !entry.signs);
+  const installers = assets.filter((entry) => !entry.signs && !entry.updaterOnly);
   assert.equal(readdirSync(join(dir, 'release')).length, installers.length * 2 + 1);
-  for (const asset of assets.filter((entry) => entry.updater || entry.signs)) {
+  for (const asset of assets.filter((entry) => entry.signs || entry.updaterOnly)) {
     assert.ok(
       !readdirSync(join(dir, 'release')).includes(asset.name),
       `${asset.name} must not be invented when nothing signed it`,
     );
   }
+});
+
+test('a signing build refuses to stage a platform that produced no update payload', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'quintal-guard-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  // v0.3.0's actual failure: the contract asked for filenames Tauri v2 does
+  // not emit, every lookup missed, and all three platforms went green having
+  // produced nothing to update with. Silence there costs a whole release, so a
+  // build that *was* signing must fail when a payload is absent.
+  const bundle = join(dir, 'bundle');
+  mkdirSync(join(bundle, 'nsis'), { recursive: true });
+  writeFileSync(join(bundle, 'nsis/Quintal_1.2.3_x64-setup.exe'), 'installer');
+
+  const stage = (env: NodeJS.ProcessEnv) =>
+    spawnSync(process.execPath, [script, 'stage', 'windows-x64', bundle, join(dir, 'out')], {
+      encoding: 'utf8',
+      env: { ...process.env, ...env },
+    });
+
+  const unsigned = stage({ TAURI_SIGNING_PRIVATE_KEY: '' });
+  assert.equal(unsigned.status, 0, 'an unsigned build still stages its installer');
+
+  rmSync(join(dir, 'out'), { recursive: true, force: true });
+  const signing = stage({ TAURI_SIGNING_PRIVATE_KEY: 'pretend-key' });
+  assert.notEqual(signing.status, 0, 'a signing build with no .sig must fail');
+  assert.match(signing.stderr, /is a bug, not an unsigned build/);
 });

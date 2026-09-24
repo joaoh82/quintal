@@ -112,12 +112,23 @@ in `tauri.release.conf.json` broke the Linux packaging job, which has no
 business holding the production signing secret — as would any fork PR, and any
 release attempted before the secrets existed.
 
-Each platform then bundles a payload and a `.sig` beside its installer, both
-declared in `scripts/release-assets.json` and shipped under stable names like
-every other asset. They are **optional** all the way through: staging and
-collection skip what is not there, and a build with no signing key publishes
-every installer and simply carries no manifest. The build log and the job
-summary say which of the two happened.
+**Tauri v2 signs the installer itself on Linux and Windows.** There is no
+wrapper archive: the payload for `linux-x86_64` is the AppImage and its
+`.AppImage.sig`, and for `windows-x86_64` the NSIS `.exe` and its `.exe.sig`.
+Only macOS uses an archive, `Quintal.app.tar.gz` plus `.sig`, and that comes
+from the **`app`** bundle target — which is why the macOS matrix asks for
+`app,dmg` and not `dmg`. Asking for `dmg` alone produces no payload at all, and
+says nothing about it.
+
+All of it is declared in `scripts/release-assets.json`. Signatures and the
+macOS archive are optional, because an unsigned build does not produce them;
+the AppImage and the `.exe` are installers first and are always required.
+
+Staging **fails** when `TAURI_SIGNING_PRIVATE_KEY` is set and a payload is
+missing. That guard is not decoration: v0.3.0 asked for filenames Tauri v2 does
+not emit, every lookup missed, all three platforms went green having produced
+nothing to update with, and the only symptom would have been a release quietly
+carrying no manifest. A build that was signing must fail loudly instead.
 
 `publish-release.mjs` writes `latest.json` only when every platform's payload
 and signature is present *and* the release is a stable one that is becoming the
@@ -130,12 +141,12 @@ Two platforms cannot replace themselves, and the app offers a download and an
 explanation instead: a `.deb`, which apt owns, and any copy running from a
 directory it cannot write, such as a macOS app still inside its mounted DMG.
 
-The AppImage needs care. `fix-appimage.sh` repacks it *after* Tauri bundles it,
-so whatever Tauri wrapped and signed is a binary nobody ships — an update built
-from it would hand Linux users back the AppImage without its harness, correctly
-signed, which is worse than failing. The release therefore rebuilds and
-re-signs that payload from the repacked image, and checks the tarball holds
-exactly one member named for it. Keep those steps together if either changes.
+The AppImage needs care. `fix-appimage.sh` repacks it *after* Tauri bundles and
+signs it, so the signature Tauri produced covers a binary nobody ships. The
+release therefore re-signs the repacked image and asserts the `.sig` is there.
+That step must pass the signer an **absolute** path: `pnpm --filter … exec` runs
+in `apps/desktop`, so a repo-root-relative path resolves one level too deep.
+Keep these together if either changes.
 
 When verifying a release, add to the manual pass: install the previous version
 on a clean machine, publish this one, launch the old copy, accept the update,

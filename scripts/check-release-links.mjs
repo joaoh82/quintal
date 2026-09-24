@@ -43,7 +43,10 @@ for (const name of selected) {
 // it. Requiring them here would put four files on the page that only confuse
 // the one decision it exists to help with.
 const downloadable = new Set(
-  assets.filter((asset) => !asset.updater && !asset.signs).map((asset) => asset.name),
+  // Signatures and the macOS tarball are machine-fetched. The AppImage and the
+  // Windows installer are update payloads *and* ordinary downloads, because
+  // Tauri v2 signs the installer itself — so they belong on the page.
+  assets.filter((asset) => !asset.signs && !asset.updaterOnly).map((asset) => asset.name),
 );
 for (const name of downloadable) {
   if (!selected.includes(name)) errors.push(`${pagePath}: missing installer ${name}`);

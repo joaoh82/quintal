@@ -14,12 +14,28 @@ export const assets = JSON.parse(readFileSync(new URL('./release-assets.json', i
  * pointing at a payload that is missing or unsigned.
  */
 export function optional(asset) {
-  return Boolean(asset.updater || asset.signs);
+  // Signatures, and the macOS tarball that exists only when updater artifacts
+  // were asked for. The Linux AppImage and the Windows installer are *also*
+  // update payloads — Tauri v2 signs the installer itself rather than wrapping
+  // it — but they are installers first and must never be treated as skippable.
+  return Boolean(asset.signs || asset.updaterOnly);
+}
+
+/**
+ * Staging must find the update payloads when this build was signing them.
+ *
+ * Without this a platform can go green having produced nothing to update with,
+ * and the only symptom is a release that quietly carries no manifest. That is
+ * exactly what v0.3.0 did on all three platforms at once: the contract asked
+ * for filenames Tauri v2 does not emit, every lookup missed, every job passed.
+ */
+export function requireUpdaterAssets() {
+  return Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY);
 }
 
 /** The stable names every platform's update payload and signature go out under. */
 export function updaterNames() {
-  return assets.filter(optional).map((asset) => asset.name);
+  return assets.filter((asset) => asset.updater || asset.signs).map((asset) => asset.name);
 }
 function files(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
@@ -36,6 +52,11 @@ export function stage(platform, bundleDir, destination) {
       .filter((entry) => entry.isFile() && entry.name.endsWith(asset.extension))
       .map((entry) => join(directory, entry.name));
     if (matches.length === 0 && optional(asset)) {
+      if (requireUpdaterAssets()) {
+        throw new Error(
+          `${asset.name}: this build was signing update payloads, so a missing ${asset.extension} in ${asset.directory}/ is a bug, not an unsigned build`,
+        );
+      }
       console.log(`No ${asset.extension} to stage (unsigned build); skipping`);
       continue;
     }
