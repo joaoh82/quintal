@@ -3,6 +3,7 @@ import {
   APPROVAL_KEEP_RESOLVED_MS,
   type ApprovalDecidePayload,
   type ApprovalOptionId,
+  type ApprovalResolution,
   type PublicApprovalRequest,
 } from '@quintal/shared';
 
@@ -28,6 +29,11 @@ export interface TrackedApproval {
   decidedBy?: string;
   /** Set once the harness said how it ended; the card stops offering buttons. */
   resolvedAt?: number;
+  /**
+   * How it ended, so a replay can tell a question this office closed because
+   * a socket dropped from one that is genuinely over. See `resumableApproval`.
+   */
+  resolution?: ApprovalResolution;
 }
 
 export type DecisionVerdict =
@@ -55,12 +61,11 @@ export function judgeDecision(
   now = Date.now(),
 ): DecisionVerdict {
   if (!tracked) return { ok: false, code: 'not_found', message: 'That request is no longer waiting.' };
+  // Deliberately the same answer as "no such request". Naming the owner to
+  // somebody who guessed a request id tells them whose agent it is and that
+  // it exists; neither is theirs to know.
   if (tracked.value.ownerUserId !== actorUserId) {
-    return {
-      ok: false,
-      code: 'missing_scope',
-      message: `Only ${tracked.value.ownerName} can answer ${tracked.value.agentName}'s requests.`,
-    };
+    return { ok: false, code: 'not_found', message: 'That request is no longer waiting.' };
   }
   if (tracked.resolvedAt !== undefined || tracked.decidedBy !== undefined) {
     return { ok: false, code: 'not_found', message: 'That request has already been answered.' };
@@ -97,6 +102,28 @@ export function canSeeApproval(
   if (tracked.value.channelId) return viewer.inChannel;
   if (viewer.followedZone && viewer.followedZone === tracked.value.zoneId) return true;
   return Math.hypot(viewer.x - tracked.x, viewer.y - tracked.y) <= radius;
+}
+
+/**
+ * Whether a replayed request should bring its card back.
+ *
+ * An agent's socket dropping closes its cards as `interrupted`, because a
+ * button that cannot reach a runtime is worse than no button. But Colyseus
+ * gives a dropped socket a grace period to come back, and the harness replays
+ * every question still open when it does — so `interrupted` has to be a state
+ * a card can return *from*, exactly as `disconnected` is for an activity row.
+ *
+ * Anything the harness itself settled — allowed, denied, cancelled — is over,
+ * and so is a question whose deadline passed while the socket was down. Those
+ * stay closed: a harness must not be able to un-answer a card.
+ */
+export function resumableApproval(
+  tracked: Pick<TrackedApproval, 'resolvedAt' | 'resolution' | 'value'>,
+  now = Date.now(),
+): boolean {
+  if (tracked.resolvedAt === undefined) return true;
+  if (tracked.resolution !== 'interrupted') return false;
+  return now < tracked.value.expiresAt;
 }
 
 /**

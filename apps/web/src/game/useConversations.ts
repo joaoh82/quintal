@@ -430,15 +430,14 @@ export function useConversations(
         setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]));
         setActive(channelKey(channel.id));
       }),
-      gameBridge.on('notice', ({ code, message }) => {
+      gameBridge.on('notice', ({ code, message, requestId }) => {
         setNotice(message);
         // The office refused an answer — already resolved, timed out, or not
-        // ours. Whichever it was, this browser is not waiting on a click any
-        // more, and a card must stop saying it is.
-        if (['not_found', 'missing_scope', 'invalid_payload', 'unroutable'].includes(code)) {
-          setApprovals((state) =>
-            Object.keys(state.sent).reduce((next, requestId) => clearSent(next, requestId), state),
-          );
+        // ours. That card stops saying it is waiting on us. Only that one:
+        // clearing every in-flight click would un-stick cards whose answers
+        // are still perfectly good.
+        if (requestId && ['not_found', 'missing_scope', 'invalid_payload', 'unroutable'].includes(code)) {
+          setApprovals((state) => clearSent(state, requestId));
         }
       }),
       gameBridge.on('connection', ({ status }) => {

@@ -17,7 +17,7 @@ disposable directories under the same temp path.
 | `pnpm typecheck` | Pass — shared, server, web, harness, website |
 | `pnpm build` | Pass — shared, harness, web, server (exit 0) |
 | `pnpm --filter @quintal/shared test` | Pass — **403 tests**, 0 fail (10 new) |
-| `pnpm --filter @quintal/server test` | Pass — **108 tests**, 0 fail (13 new) |
+| `pnpm --filter @quintal/server test` | Pass — **113 tests**, 0 fail (18 new) |
 | `pnpm --filter @quintal/web test` | Pass — **206 tests**, 0 fail (19 new) |
 | `pnpm --filter quintal-acp test` | Pass — **300 tests**, 0 fail (20 new) |
 | `pnpm test:release` | Pass — 10 tests |
@@ -145,6 +145,50 @@ write a file rather than echo.
   installed (already noted in `COMPAT.md`).
 - **Load and performance** beyond the recorded 24 ms card delivery and the
   2.5–4.8 s runtime round trips above.
+
+## Review round 1 (2026-09-24)
+
+Two Hermes reviewers independently found the same real bug, which I had
+missed and my own tests could not have caught.
+
+**Pending cards were closed `interrupted` at the top of the agent's `onLeave`,
+before `allowReconnection`.** The replay guard then refused to bring them back
+on two counts: `resolvedAt` was set, and a reconnect arrives on a new
+`sessionId` so `existing.owner !== client.sessionId`. After *any* agent socket
+drop the owner saw Interrupted, could not click, and the runtime held its tool
+until the five-minute deadline. `#onActivity` has a `!== 'disconnected'`
+carve-out for exactly this; I copied the eager close without it. My harness
+reconnect test passed because it never touches `OfficeRoom` — the reviewers
+said so, and they were right.
+
+Fixed: a replay is matched on the agent's **identity**, and `resumableApproval`
+distinguishes a card the office closed because a socket dropped (comes back)
+from one the harness settled or one whose deadline passed (stays closed). Five
+unit tests in `apps/server/src/rooms/approvals.test.ts`, plus scenario 11 of
+the gateway smoke, which now drops the agent, reconnects, replays the same
+request id and **answers it** — the step that was dead before.
+
+Three suggestions taken:
+
+- The per-agent and per-room caps refused a request silently. They now refuse
+  it with `rate_limited` naming the `requestId`, and the harness denies that
+  question at once instead of holding the tool to the deadline.
+- `judgeDecision` answered a non-owner with `missing_scope` and the owner's
+  name. It now answers `not_found`, the same as a request that does not exist,
+  so a guessed id reveals neither whose agent it is nor that it is real.
+- The client cleared *every* in-flight click on any refusal. Refusals now
+  carry `requestId` (`ErrorPayload`, `AgentErrorPayload`) and only that card is
+  un-stuck.
+
+Left as-is, deliberately: the text fallback's `always` still grants runtime
+standing while a card records `allow_once`. That is documented and belongs to
+QUIN-53; the card does not offer it.
+
+Re-verified after the fixes: 403 / 113 / 206 / 300 tests green, gateway smoke
+13 scenarios green (card in 23 ms, `cardsToNonMember: 0`, refusals
+`invalid_payload` + four `not_found`, all but the unparseable one naming their
+request), and the live runtime again — allow wrote `allow.txt`, deny did not
+write `deny.txt`.
 
 ## Reproducing
 

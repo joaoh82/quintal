@@ -110,8 +110,11 @@ export type GameEvents = {
   zoneChat: ZoneChatPayload;
   /** Socket state changed. `detail` is safe to show a human. */
   connection: { status: ConnectionStatus; detail?: string };
-  /** The server rejected something — rate limit, bad move. */
-  notice: { code: string; message: string };
+  /**
+   * The server rejected something — rate limit, bad move. `requestId` is set
+   * when the refusal was about one identifiable thing, such as an approval.
+   */
+  notice: { code: string; message: string; requestId?: string };
   /** How far a voice carries in this office. */
   earshot: EarshotPayload;
   /** The voice client changed: socket, mic, who is speaking. */

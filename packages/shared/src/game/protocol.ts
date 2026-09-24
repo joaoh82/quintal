@@ -242,6 +242,12 @@ export interface ErrorPayload {
     /** The agent that asked is no longer connected to hear the answer. */
     | 'unroutable';
   message: string;
+  /**
+   * What this refusal was about, when it was about one thing — an approval
+   * card, say. Without it a client can only guess which of its in-flight
+   * actions was refused, and the honest guess is "all of them".
+   */
+  requestId?: string;
 }
 
 export interface NoticePayload {

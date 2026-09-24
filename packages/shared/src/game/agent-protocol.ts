@@ -463,6 +463,12 @@ export interface AgentErrorPayload {
   message: string;
   /** Present on rate_limited: wait this long before retrying. */
   retryAfterMs?: number;
+  /**
+   * The approval request this refusal is about, when it is about one. An
+   * office that cannot take a question must say which, or the runtime holds
+   * its tool until the deadline with no card ever shown for it.
+   */
+  requestId?: string;
 }
 
 // --- query shapes ----------------------------------------------------------

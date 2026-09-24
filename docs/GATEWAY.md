@@ -667,8 +667,26 @@ disconnects or whose deadline passed with nothing said (30 s grace). On
 reconnect the harness resends every question still open and the last 64
 resolutions, so a reopened panel finds what is waiting and never a button that
 would land nowhere. Pending cards are also replayed on an initial `history_get`.
-The server keeps at most 16 open questions per agent and 256 per room, and
-forgets a resolved one after a minute.
+
+A replayed request is matched on the agent's **identity**, not its socket — a
+reconnect arrives on a new session id, so a session match would reject exactly
+the case replay exists for. A card the office closed `interrupted` because
+that socket dropped comes back and is answerable again, the way a
+`disconnected` activity row resumes; one the harness itself settled, or one
+whose deadline passed meanwhile, stays closed. A harness cannot un-answer a
+card.
+
+The server keeps at most 16 open questions per agent and 256 per room. Over
+that it refuses the request with `rate_limited` **naming the `requestId`**, so
+the harness denies it at once rather than leaving the runtime holding a tool
+for five minutes with no card anywhere. A resolved card is forgotten after a
+minute.
+
+Refusals of a decision name the request they refused, so a client can un-stick
+that one card rather than every answer it has in flight. A decision from
+somebody who is not the owner is refused with `not_found`, the same answer as
+a request that does not exist: whoever guessed an id learns neither whose
+agent it is nor that it is real.
 
 **Making the runtime ask.** A card only appears if the runtime asks, and some
 runtimes decide for themselves unless told otherwise.

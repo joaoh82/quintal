@@ -9,6 +9,7 @@ import {
   forgettableApprovals,
   judgeDecision,
   needsPrivateCopy,
+  resumableApproval,
   type TrackedApproval,
 } from './approvals.js';
 
@@ -52,11 +53,14 @@ describe('who may answer an approval', () => {
     assert.deepEqual(verdict, { ok: true, optionId: 'allow_once' });
   });
 
-  it('refuses everybody else, by name of the one who may', () => {
+  it('refuses everybody else, and tells them nothing about it', () => {
     const verdict = judgeDecision(tracked(), { requestId: 'req-1', optionId: 'allow_once' }, 'someone-else', NOW);
     assert.equal(verdict.ok, false);
-    assert.equal(verdict.ok === false && verdict.code, 'missing_scope');
-    assert.match(verdict.ok === false ? verdict.message : '', /Josh/);
+    // Same answer as a request that does not exist: a stranger who guessed an
+    // id learns neither whose agent it is nor that it is real.
+    assert.equal(verdict.ok === false && verdict.code, 'not_found');
+    assert.equal(verdict.ok === false ? verdict.message : '', 'That request is no longer waiting.');
+    assert.equal(/Josh|Bob/.test(verdict.ok === false ? verdict.message : ''), false);
   });
 
   it('refuses a request this office is not holding', () => {
@@ -153,5 +157,40 @@ describe('cards the office takes down itself', () => {
       forgettableApprovals([['req-1', entry]], NOW + APPROVAL_KEEP_RESOLVED_MS + 1),
       ['req-1'],
     );
+  });
+});
+
+/**
+ * A dropped agent socket closes its cards, and Colyseus then gives that socket
+ * a grace period to come back. `interrupted` therefore has to be a state a
+ * card can return *from* — the first cut of this made it terminal, so any blip
+ * left the owner looking at a dead card while the runtime held its tool to the
+ * deadline.
+ */
+describe('a card whose agent dropped and came back', () => {
+  it('comes back when the office was the one that closed it', () => {
+    const entry = tracked({ resolvedAt: NOW, resolution: 'interrupted' });
+    assert.equal(resumableApproval(entry, NOW), true);
+  });
+
+  it('stays closed once the harness itself settled it', () => {
+    for (const resolution of ['allowed', 'denied', 'cancelled', 'auto_allowed'] as const) {
+      const entry = tracked({ resolvedAt: NOW, resolution });
+      assert.equal(resumableApproval(entry, NOW), false, resolution);
+    }
+  });
+
+  it('stays closed if its deadline passed while the socket was down', () => {
+    const entry = tracked({ resolvedAt: NOW, resolution: 'interrupted' });
+    assert.equal(resumableApproval(entry, entry.value.expiresAt), false);
+  });
+
+  it('leaves a card that was never closed alone', () => {
+    assert.equal(resumableApproval(tracked(), NOW), true);
+  });
+
+  it('will not be revived by an expiry', () => {
+    const entry = tracked({ resolvedAt: NOW, resolution: 'expired' });
+    assert.equal(resumableApproval(entry, NOW), false);
   });
 });

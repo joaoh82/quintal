@@ -1,15 +1,30 @@
 {
-  "deliveryMs": 24,
+  "deliveryMs": 23,
   "pass": true,
-  "cardsToOwner": 6,
+  "cardsToOwner": 7,
   "cardsToMember": 5,
   "cardsToNonMember": 0,
   "refusals": [
-    "invalid_payload",
-    "not_found",
-    "not_found",
-    "not_found",
-    "missing_scope"
+    [
+      "invalid_payload",
+      false
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ],
+    [
+      "not_found",
+      true
+    ]
   ],
   "decisions": {
     "alpha": 1,
@@ -17,22 +32,22 @@
   },
   "resolutions": [
     [
-      "121be6",
+      "fb62dd",
       "allowed"
     ],
     [
-      "c411b4",
+      "39b2a6",
       "interrupted"
     ],
     [
-      "6fa873",
+      "931a85",
       "interrupted"
     ],
     [
-      "82828e",
+      "936dd0",
       "expired"
     ]
   ],
-  "privateCardId": "c411b4",
-  "expiredCardId": "82828e"
+  "privateCardId": "39b2a6",
+  "expiredCardId": "936dd0"
 }

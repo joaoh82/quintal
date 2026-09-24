@@ -18,6 +18,7 @@ import {
   forgettableApprovals,
   judgeDecision,
   needsPrivateCopy,
+  resumableApproval,
   type TrackedApproval,
 } from './approvals.js';
 import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
@@ -2065,11 +2066,28 @@ export class OfficeRoom extends Room<OfficeState> {
     if (value.channelId && !this.#channelFor(player.userId, value.channelId)) return;
 
     const existing = this.#approvals.get(value.requestId);
-    // A replay after a reconnect is the same question, not a new one. A
-    // resolved one stays resolved: a harness must not un-answer a card.
+    // A replay after a reconnect is the same question, not a new one.
+    //
+    // Matched on the agent's identity rather than its socket: a reconnect
+    // arrives on a new `sessionId`, so a session match would reject exactly
+    // the case this exists for. A card closed `interrupted` because that
+    // socket dropped comes back and is answerable again; one the harness
+    // itself settled, or one whose deadline passed meanwhile, stays closed —
+    // a harness must not be able to un-answer a card.
     if (existing) {
-      if (existing.owner !== client.sessionId || existing.resolvedAt !== undefined) return;
+      if (existing.value.agentId !== session.identity.id) return;
+      if (!resumableApproval(existing)) return;
       existing.owner = client.sessionId;
+      if (existing.resolvedAt !== undefined) {
+        delete existing.resolvedAt;
+        delete existing.resolution;
+        audit(session.identity.id, 'approval.requested', {
+          requestId: value.requestId,
+          tool: existing.value.toolName,
+          turnId: existing.value.turnId,
+          resumed: true,
+        });
+      }
       this.#publishApproval(existing);
       return;
     }
@@ -2077,7 +2095,15 @@ export class OfficeRoom extends Room<OfficeState> {
       (entry) => entry.owner === client.sessionId && entry.resolvedAt === undefined,
     ).length;
     if (mine >= APPROVAL_MAX_PER_AGENT || this.#approvals.size >= APPROVAL_MAX_PER_ROOM) {
-      logger.warn(`[office] ${session.identity.name} has too many approvals open; dropping one`);
+      logger.warn(`[office] ${session.identity.name} has too many approvals open; refusing one`);
+      // Say which, rather than dropping it on the floor. A refusal the
+      // harness never hears about is a runtime holding a tool for five
+      // minutes with no card anywhere to explain the wait.
+      client.send(AgentServerMessage.Error, {
+        code: 'rate_limited',
+        message: 'Too many approvals are already waiting for this agent.',
+        requestId: value.requestId,
+      } satisfies AgentErrorPayload);
       return;
     }
 
@@ -2139,6 +2165,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #settleApproval(entry: TrackedApproval, resolved: ApprovalResolved, agentId: string): void {
     entry.resolvedAt = Date.now();
+    entry.resolution = resolved.resolution;
     audit(agentId, 'approval.resolved', {
       requestId: resolved.requestId,
       resolution: resolved.resolution,
@@ -2178,12 +2205,12 @@ export class OfficeRoom extends Room<OfficeState> {
     const entry = this.#approvals.get(decide.requestId);
     const verdict = judgeDecision(entry, decide, player.userId);
     if (!verdict.ok) {
-      this.#sendError(client, verdict.code, verdict.message);
+      this.#sendError(client, verdict.code, verdict.message, decide.requestId);
       return;
     }
     const agentClient = this.clients.find((candidate) => candidate.sessionId === entry!.owner);
     if (!agentClient) {
-      this.#sendError(client, 'unroutable', `${entry!.value.agentName} is no longer connected.`);
+      this.#sendError(client, 'unroutable', `${entry!.value.agentName} is no longer connected.`, decide.requestId);
       this.#closeApproval(decide.requestId, 'interrupted');
       return;
     }
@@ -3318,8 +3345,17 @@ export class OfficeRoom extends Room<OfficeState> {
     return Math.hypot(a.x - b.x, a.y - b.y) / this.#map.tileSize;
   }
 
-  #sendError(client: Client, code: ErrorPayload['code'], message: string): void {
-    client.send(ServerMessage.Error, { code, message } satisfies ErrorPayload);
+  #sendError(
+    client: Client,
+    code: ErrorPayload['code'],
+    message: string,
+    requestId?: string,
+  ): void {
+    client.send(ServerMessage.Error, {
+      code,
+      message,
+      ...(requestId ? { requestId } : {}),
+    } satisfies ErrorPayload);
   }
 }
 

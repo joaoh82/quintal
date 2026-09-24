@@ -195,7 +195,11 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     room.onMessage(ServerMessage.Error, (error: ErrorPayload) => {
-      this.#bridge.emit('notice', { code: error.code, message: error.message });
+      this.#bridge.emit('notice', {
+        code: error.code,
+        message: error.message,
+        ...(error.requestId ? { requestId: error.requestId } : {}),
+      });
     });
     // Not a refusal: the line went out, and here is what it could not do.
     room.onMessage(ServerMessage.Notice, (notice: NoticePayload) => {

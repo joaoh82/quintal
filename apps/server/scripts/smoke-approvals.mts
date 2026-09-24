@@ -199,7 +199,14 @@ try {
   // 2. A member who is not the owner cannot answer it.
   colleagueRoom.send(ClientMessage.ApprovalDecide, { requestId: first.requestId, optionId: 'allow_once' });
   await until(() => colleagueSeen.errors.length > 0, 'the colleague refused');
-  assert.equal(colleagueSeen.errors.at(-1)!.code, 'missing_scope');
+  // Same answer as a request that does not exist: somebody who guessed an id
+  // learns neither whose agent it is nor that it is real.
+  assert.equal(colleagueSeen.errors.at(-1)!.code, 'not_found');
+  assert.equal(
+    /Josh|Approval Owner|Bob|Approval Alpha/.test(colleagueSeen.errors.at(-1)!.message),
+    false,
+    'and it names nobody',
+  );
   await sleep(200);
   assert.equal(decisionsA.length, 0, 'and nothing reached the agent');
 
@@ -299,8 +306,37 @@ try {
     'disconnect closed the cards',
   );
 
-  // 11. Reconnect: the harness says the open questions again and they come back.
+  // 11. Reconnect: the harness says the open questions again, and a card the
+  //     office closed because the socket dropped becomes answerable again.
+  //     Not a new question — the same request id, on a new session id.
   aRoom = await connect({ agentKey: agentA.key });
+  const decisionsResumed: AgentApprovalDecisionEvent[] = [];
+  aRoom.onMessage('agent:approval_decision', (v: AgentApprovalDecisionEvent) => decisionsResumed.push(v));
+  const resolvedBefore = ownerSeen.resolved.length;
+  aRoom.send('agent:approval_request', inDm); // the very one closed as interrupted above
+  await until(
+    () => ownerSeen.cards.filter((c) => c.requestId === inDm.requestId).length > 1,
+    'the interrupted card to come back on reconnect',
+  );
+  // And it can be answered — the whole point. Before the fix this was a dead
+  // card: the owner saw Interrupted and the runtime held its tool to the
+  // deadline.
+  human.send(ClientMessage.ApprovalDecide, { requestId: inDm.requestId, optionId: 'allow_once' });
+  await until(() => decisionsResumed.length > 0, 'the resumed card to be answerable');
+  assert.equal(decisionsResumed[0]!.requestId, inDm.requestId);
+  assert.equal(ownerSeen.resolved.length, resolvedBefore, 'and it was not re-resolved behind our backs');
+
+  // A question the harness itself settled stays settled, however often it is
+  // replayed: a harness must not be able to un-answer a card.
+  const replayedErrors = ownerSeen.cards.filter((c) => c.requestId === first.requestId).length;
+  aRoom.send('agent:approval_request', first);
+  await sleep(400);
+  assert.equal(
+    ownerSeen.cards.filter((c) => c.requestId === first.requestId).length,
+    replayedErrors,
+    'an answered card is not revived by a replay',
+  );
+
   const resumed = ask(alpha.id, 'Bash', 'pnpm test');
   aRoom.send('agent:approval_request', resumed);
   await until(() => ownerSeen.cards.some((c) => c.requestId === resumed.requestId), 'a card after reconnect');
@@ -335,7 +371,11 @@ try {
     cardsToOwner: ownerSeen.cards.length,
     cardsToMember: colleagueSeen.cards.length,
     cardsToNonMember: outsiderSeen.cards.length,
-    refusals: ownerSeen.errors.concat(colleagueSeen.errors).map((e) => e.code),
+    // `[code, names the request it refused]`. A decision whose payload will
+    // not parse has no id to name, which is why one pair reads false.
+    refusals: ownerSeen.errors
+      .concat(colleagueSeen.errors)
+      .map((e) => [e.code, !!e.requestId] as const),
     decisions: { alpha: decisionsA.length, beta: decisionsB.length },
     resolutions: ownerSeen.resolved.map((r) => [r.requestId.slice(0, 6), r.resolution]),
     privateCardId: hidden.requestId.slice(0, 6),

@@ -393,6 +393,13 @@ export class AgentRunner {
     this.#gateway.on('approvalDecision', (decision) => this.#onApprovalDecision(decision));
     this.#gateway.on('error', (error) => {
       this.#log('warn', `office refused something: [${error.code}] ${error.message}`);
+      // A refusal that names an approval is that question answered: the
+      // office will never show a card for it, so waiting out the deadline
+      // would hold the runtime's tool for five minutes for nothing.
+      if (error.requestId && this.#approvals.has(error.requestId)) {
+        this.#log('warn', `the office would not take approval #${approvalHandle(error.requestId)} — denying it`);
+        this.#settleApproval(error.requestId, 'deny', 'denied', 'system');
+      }
       if (error.message.toLowerCase().includes('revoked')) void this.stop();
     });
     this.#gateway.on('closed', (code) => {

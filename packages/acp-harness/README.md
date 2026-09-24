@@ -303,7 +303,11 @@ channel, DM or aloud. It arrives as a **card** with the tool named, the
 command it would run, and Allow once / Deny — answered by the request's own
 id, so two turns asking about `Bash` at the same time can never be confused.
 Five minutes of silence is a no, and the turn's idle clock is held for
-exactly as long as the owner is being waited on.
+exactly as long as the owner is being waited on. A card whose agent's socket
+drops is taken down and comes back when it reconnects — the office matches the
+replay on the agent's identity, not its socket. If the office refuses a
+question outright (too many already open) it says which, and the harness
+denies that one immediately rather than holding the tool to the deadline.
 
 For an agent with no `run` scope the harness also puts the runtime into a mode
 that actually asks (`session/set_mode`). Claude Code's adapter otherwise opens
