@@ -1,6 +1,6 @@
 {
   "name": "quintal-acp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bridge ACP agents (Claude Code, Goose, Codex, …) into a Quintal office as first-class members.",
   "license": "AGPL-3.0-only",
   "type": "module",

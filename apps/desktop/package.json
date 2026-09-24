@@ -1,6 +1,6 @@
 {
   "name": "@quintal/desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "The Quintal desktop host: key custody, fleet spawning, and native affordances around the web UI.",
