@@ -11,6 +11,10 @@
  * So: sign in the way the browser does, then GET the pages. A route that throws
  * during render answers 500, and that is the whole test.
  *
+ * One step is not a page: an agent joining the office the way `docs/GATEWAY.md`
+ * documents. That sequence broke for a month with every other check passing —
+ * see `agentJoinsTheOffice` below for why it lives here.
+ *
  *   node scripts/smoke.mjs [baseUrl]
  *   node scripts/smoke.mjs [baseUrl] --save-identity /tmp/identity.json
  *   node scripts/smoke.mjs [baseUrl] --identity /tmp/identity.json
@@ -93,7 +97,10 @@ async function signIn() {
     .map((part) => part.split(';')[0].trim())
     .join('; ');
   if (!cookie) throw new Error('verify set no session cookie');
-  return cookie;
+  // The pubkey travels back with the cookie because the agent step below has
+  // to find the row this sign-in just created, and a key is the only name a
+  // user has here.
+  return { cookie, pubkey };
 }
 
 /**
@@ -202,13 +209,15 @@ await page(`/join/v2.${'A'.repeat(43)}`, null, '/join/[token] (unknown token)');
 
 console.log('\nsigned in');
 let cookie;
+/** Set only when this run minted its own key; null on a restored session. */
+let pubkey = null;
 if (identity) {
   const saved = JSON.parse(readFileSync(identity, 'utf8'));
   cookie = saved.cookie;
   if (!cookie) throw new Error(`${identity} has no cookie`);
   check(true, 'keypair sign-in (restored session)');
 } else {
-  cookie = await signIn();
+  ({ cookie, pubkey } = await signIn());
   check(true, 'keypair sign-in');
   if (saveIdentity) {
     writeFileSync(saveIdentity, JSON.stringify({ cookie }, null, 2));
@@ -231,6 +240,117 @@ for (const [path, marker] of [
 ]) {
   await page(path, cookie, path, marker);
 }
+
+/**
+ * An agent walks in the documented way, and the office lets it.
+ *
+ * This exists because `scripts/demo-agent.ts` — the worked example
+ * `docs/GATEWAY.md` tells people to copy — could not join any office for
+ * nearly a month and nothing noticed. Rooms became one-per-office in
+ * `ee4a7f6`, `onAuth` started refusing a join that names no office, and the
+ * script was never told: it joined with `{ agentKey, mapId }` and died at the
+ * door with `(4215) No office was named in this join.` Typecheck passed. The
+ * unit tests passed. The page smoke above passed. The first thing a stranger
+ * does after reading the protocol doc was the one thing that could not work.
+ *
+ * So the check is the sequence itself, end to end, against the running
+ * server: ask `POST /api/agent/office` who this key belongs to, then join the
+ * room with what it said. Nothing is asserted about what the agent can *do*
+ * once inside — that is the gateway's own tests. This one is about the door.
+ *
+ * It needs to make an agent, and agents are made in the database rather than
+ * over HTTP, so it runs only where the database this server reads is also
+ * reachable from here — a local `pnpm start` or CI, not the compose smoke
+ * against a container, and not a restored session, which has no key of its
+ * own to find its user by. Where it cannot run it says so and skips: a step
+ * that quietly passed when it had done nothing would be worse than no step.
+ */
+async function agentJoinsTheOffice() {
+  if (!pubkey) {
+    console.log('  skip  agent join — restored session, no key to own an agent with');
+    return;
+  }
+
+  let db;
+  let dbModule;
+  let owner;
+  try {
+    dbModule = await import('@quintal/shared/db');
+    dbModule.loadRootEnv();
+    db = dbModule.getDb();
+    // Reaching *a* database is not the same as reaching *this server's*
+    // database. The user this run just signed in as is the proof of both: it
+    // exists only because the server wrote it a moment ago.
+    owner = await dbModule.findUserByPubkey(db, pubkey);
+  } catch (error) {
+    console.log(`  skip  agent join — no database reachable from here (${error.message})`);
+    return;
+  }
+  if (!owner) {
+    console.log("  skip  agent join — this server's database is not the one reachable from here");
+    return;
+  }
+
+  const workspace = await dbModule.ensurePersonalWorkspace(db, {
+    userId: owner.id,
+    name: owner.name,
+    pubkey,
+  });
+  const agent = await dbModule.createAgent(db, {
+    workspaceId: workspace.id,
+    ownerUserId: owner.id,
+    name: `smoke-${Date.now().toString(36)}`,
+    spriteKey: 'slate',
+  });
+
+  try {
+    // Step one of the documented sequence. A client has to name the room
+    // before the server has authenticated anything, so an agent holding only
+    // its key asks here which office it is in.
+    const lookup = await fetch(`${base}/api/agent/office`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${agent.key}` },
+    });
+    const named = lookup.ok ? await lookup.json() : null;
+    const workspaceId = typeof named?.workspaceId === 'string' ? named.workspaceId : '';
+    check(
+      workspaceId === workspace.id,
+      'POST /api/agent/office names the agent\u2019s office',
+      workspaceId ? '' : `HTTP ${lookup.status}`,
+    );
+    if (!workspaceId) return;
+
+    // Step two: join with what it said. Joining at all is the assertion — a
+    // join missing `workspaceId` is refused with 4215, which is the whole bug
+    // this step exists for.
+    const { Client } = await import('colyseus.js');
+    const client = new Client(`${base}/colyseus`);
+    let room = null;
+    try {
+      room = await client.joinOrCreate('office', {
+        agentKey: agent.key,
+        mapId: 'hq',
+        workspaceId,
+      });
+      // The office greets a new agent with `agent:ready` and a roster, and
+      // colyseus.js complains to stderr about every message nothing is
+      // listening for. This step is about the door, not the conversation, so
+      // take delivery of them and say nothing.
+      room.onMessage('*', () => {});
+      check(true, 'an agent joins the office the documented way');
+    } catch (error) {
+      check(false, 'an agent joins the office the documented way', error.message ?? String(error));
+    } finally {
+      await room?.leave();
+    }
+  } finally {
+    // Every run would otherwise leave a live agent in somebody's office.
+    await dbModule.revokeAgent(db, agent.id, owner.id);
+  }
+}
+
+console.log('\nagent join');
+await agentJoinsTheOffice();
 
 console.log('');
 if (failures.length > 0) {

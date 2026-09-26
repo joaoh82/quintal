@@ -8,6 +8,11 @@
  *
  *   AGENT_KEY=qa_… QUINTAL_URL=http://localhost:3000 pnpm demo-agent
  *
+ * It signs in with a `qa_` key — credentials v1 — because that is the shortest
+ * thing to demonstrate. A deployment with `AGENT_LEGACY_KEYS=false` refuses
+ * those outright, and this script with them; the signed-challenge flow it
+ * would need there has its own worked example in `docs/GATEWAY.md`.
+ *
  * What it does: idles in the Agent Bay, rotates a status line so you can see it
  * is alive, answers anyone who speaks near it, and obeys "go to <zone label>".
  * It is deliberately dull. An agent that is interesting to watch is an agent
@@ -75,9 +80,42 @@ function parseGoTo(text: string, labels: Map<string, string>): string | null {
   return null;
 }
 
+/**
+ * Which office to join, asked for with the same key we are about to join with.
+ *
+ * A room has to be named before the server can authenticate anybody — that is
+ * the routing layer, not a policy — so an agent holding only its key has to
+ * ask first. The office proves the same fact again from the same key on join,
+ * and refuses a join that names no office at all.
+ *
+ * This is two lines of the worked example and not a helper hidden in a
+ * library, because the point of this file is that a stranger can read it and
+ * write the same thing in another language.
+ */
+async function office(): Promise<string> {
+  const response = await fetch(new URL('/api/agent/office', url), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${agentKey}` },
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    const reason = typeof body?.error === 'string' ? body.error : `HTTP ${response.status}`;
+    // Said in full rather than left to fail at the door: a 401 here reads as
+    // "that key is not an agent in any office on this deployment", and the
+    // join it would otherwise stumble into reports something else entirely.
+    throw new Error(`could not find this agent's office — ${reason}`);
+  }
+  const body = (await response.json()) as { workspaceId?: unknown };
+  if (typeof body.workspaceId !== 'string' || body.workspaceId.length === 0) {
+    throw new Error('the office did not say which office this agent is in');
+  }
+  return body.workspaceId;
+}
+
 async function main(): Promise<void> {
+  const workspaceId = await office();
   const client = new Client(new URL('/colyseus', url).toString());
-  const room: Room = await client.joinOrCreate('office', { agentKey, mapId });
+  const room: Room = await client.joinOrCreate('office', { agentKey, mapId, workspaceId });
   log(`connected to room ${room.roomId} as session ${room.sessionId}`);
 
   /** Zone label (lowercased) -> zone id, learned from the roster. */
