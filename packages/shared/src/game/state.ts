@@ -53,6 +53,15 @@ export class OfficePlayer extends Schema {
   /** For agents: comma-joined scopes, so the profile card can show them. */
   scopes = '';
   /**
+   * For agents: the runtime the office told a host to launch this one on — a
+   * `RUNTIMES` id, not a label — and the model it was told to use, by the
+   * runtime's own id. Empty for either means the office does not define it:
+   * the schema carries no nulls, so `null` becomes `''` in `createPlayer` and
+   * nowhere else.
+   */
+  runtimeId = '';
+  modelId = '';
+  /**
    * The balloon over the head — an emote id from the catalogue, or empty.
    * Server-owned: an agent asks, the office validates, everybody draws it.
    */
@@ -128,6 +137,8 @@ defineTypes(OfficePlayer, {
   ownerName: 'string',
   ownerUserId: 'string',
   scopes: 'string',
+  runtimeId: 'string',
+  modelId: 'string',
   emote: 'string',
   emoteUntil: 'number',
   workingIn: 'string',
@@ -177,6 +188,8 @@ export interface PlayerInit {
   ownerName?: string;
   ownerUserId?: string;
   scopes?: readonly string[];
+  runtimeId?: string | null;
+  modelId?: string | null;
   isGuest?: boolean;
   description?: string;
   pubkey?: string;
@@ -198,6 +211,8 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.ownerName = init.ownerName ?? '';
   player.ownerUserId = init.ownerUserId ?? '';
   player.scopes = (init.scopes ?? []).join(',');
+  player.runtimeId = init.runtimeId ?? '';
+  player.modelId = init.modelId ?? '';
   player.isGuest = init.isGuest ?? false;
   player.description = init.description ?? '';
   player.pubkey = init.pubkey ?? '';

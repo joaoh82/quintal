@@ -204,6 +204,16 @@ export interface AgentIdentity {
    * default. Served to the harness in `agent:ready` as the effective number.
    */
   maxSessions: number | null;
+  /**
+   * What the office told a host to launch this agent on: a runtime id from the
+   * shared catalogue, and the model by the runtime's own id. Both null for an
+   * agent the office does not define — one launched by hand with its own key.
+   *
+   * Carried on the identity so the room can put them on the agent's card
+   * without a second query per occupant.
+   */
+  runtimeId: string | null;
+  modelId: string | null;
 }
 
 /**
@@ -233,6 +243,8 @@ export async function findAgentByKey(
       scopes: agents.scopes,
       status: agents.status,
       maxSessions: agents.maxSessions,
+      runtimeId: agents.runtimeId,
+      modelId: agents.modelId,
       apiKeyHash: agents.apiKeyHash,
       revokedAt: agents.revokedAt,
     })
@@ -259,6 +271,8 @@ export async function findAgentByKey(
     scopes: parseScopes(row.scopes),
     status: row.status,
     maxSessions: row.maxSessions,
+    runtimeId: row.runtimeId,
+    modelId: row.modelId,
   };
 }
 
@@ -289,6 +303,8 @@ export async function findAgentIdentityById(
       scopes: agents.scopes,
       status: agents.status,
       maxSessions: agents.maxSessions,
+      runtimeId: agents.runtimeId,
+      modelId: agents.modelId,
       revokedAt: agents.revokedAt,
     })
     .from(agents)
@@ -311,6 +327,8 @@ export async function findAgentIdentityById(
     scopes: parseScopes(row.scopes),
     status: row.status,
     maxSessions: row.maxSessions,
+    runtimeId: row.runtimeId,
+    modelId: row.modelId,
   };
 }
 
@@ -353,6 +371,8 @@ export async function findAgentByPubkey(
       scopes: agents.scopes,
       status: agents.status,
       maxSessions: agents.maxSessions,
+      runtimeId: agents.runtimeId,
+      modelId: agents.modelId,
       attestation: agents.attestation,
       revokedAt: agents.revokedAt,
     })
@@ -377,6 +397,8 @@ export async function findAgentByPubkey(
       scopes: parseScopes(row.scopes),
       status: row.status,
       maxSessions: row.maxSessions,
+      runtimeId: row.runtimeId,
+      modelId: row.modelId,
     },
     pubkey: pubkey as string,
     ownerPubkey: row.ownerPubkey,

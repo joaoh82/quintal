@@ -2,6 +2,7 @@
 
 import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
 
+import { runtimeLines } from './agentRuntime';
 import { Avatar } from '@/components/Avatar';
 import { useState } from 'react';
 
@@ -215,6 +216,8 @@ function AgentCard({
   onClose: () => void;
   onMessage: (() => void) | null;
 }) {
+  const running = runtimeLines(agent);
+
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-sky-400/25 bg-[#0b2942]/85 p-3 text-white backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
@@ -256,6 +259,23 @@ function AgentCard({
             {agent.scopes.length > 0 ? agent.scopes.join(' · ') : 'none'}
           </dd>
         </div>
+        {/*
+          What it is running on, when the office is the one that said so. An
+          agent it does not define could be running anything; see
+          `runtimeLines`.
+        */}
+        {running ? (
+          <>
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-white/40">runtime</dt>
+              <dd className="text-white/85">{running.runtime}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-14 shrink-0 text-white/40">model</dt>
+              <dd className="font-mono text-white/75">{running.model}</dd>
+            </div>
+          </>
+        ) : null}
         <div className="flex gap-2">
           <dt className="w-14 shrink-0 text-white/40">acted</dt>
           <dd className="text-white/75">{sinceLabel(agent.lastActionAt)}</dd>

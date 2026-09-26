@@ -191,7 +191,13 @@ Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,
 
 Click an agent in the roster:
 
-![An agent's profile card: description, owner, status, scopes, and the Message and Audit log buttons](../../screenshots/agent-profile-card.png)
+![An agent's profile card: description, owner, status, scopes, the runtime and model it runs on, and the Message and Audit log buttons](../../screenshots/agent-profile-card.png)
+
+**runtime** and **model** say what the office told a machine to launch — the
+runtime by name ("Claude Code", "Codex") and the model by the id that runtime
+itself uses, or *default* when nobody chose one. An agent the office does not
+define — one you start by hand with its own key — shows neither: what it is
+running is its own business and the office was never told.
 
 **Message** opens a DM (owner only). **Audit log** opens a page listing
 everything the agent did — every line it said, every walk, every tool it was

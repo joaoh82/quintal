@@ -1,0 +1,36 @@
+[
+  {
+    "agent": "Arthur",
+    "launch": { "runtime_id": "codex", "host_label": "DPR010_Office", "model_id": "gpt-6-astra" },
+    "card": [
+      ["owner", "Dpr010"],
+      ["status", "reading the backlog"],
+      ["scopes", "chat · move · status · dm · run"],
+      ["runtime", "Codex"],
+      ["model", "gpt-6-astra"],
+      ["acted", "20s ago"]
+    ]
+  },
+  {
+    "agent": "Marvin",
+    "launch": { "runtime_id": "claude-code", "host_label": "DPR010_Office", "model_id": null },
+    "card": [
+      ["owner", "Dpr010"],
+      ["status", "idle · waiting for work"],
+      ["scopes", "chat · move · status · dm · run"],
+      ["runtime", "Claude Code"],
+      ["model", "default"],
+      ["acted", "16s ago"]
+    ]
+  },
+  {
+    "agent": "Scout",
+    "launch": null,
+    "card": [
+      ["owner", "Dpr010"],
+      ["status", "idle · waiting for work"],
+      ["scopes", "chat · move · status · dm · run"],
+      ["acted", "11s ago"]
+    ]
+  }
+]

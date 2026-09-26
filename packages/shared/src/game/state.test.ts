@@ -80,6 +80,34 @@ describe('state sync', () => {
     assert.equal(player?.status, 'running tests');
   });
 
+  it('carries what an agent runs on, and turns an undefined launch into blanks', () => {
+    // The schema has no nulls: "the office does not define this agent" has to
+    // reach the card as an empty string, and the translation happens here.
+    const state = new OfficeState();
+    state.players.set(
+      'agent-1',
+      createPlayer({
+        userId: 'a1',
+        name: 'reviewer',
+        x: 32,
+        y: 32,
+        kind: 'agent',
+        runtimeId: 'claude-code',
+        modelId: 'opus',
+      }),
+    );
+    state.players.set(
+      'agent-2',
+      createPlayer({ userId: 'a2', name: 'byhand', x: 64, y: 64, kind: 'agent', runtimeId: null }),
+    );
+
+    const decoded = roundTrip(state);
+    assert.equal(decoded.players.get('agent-1')?.runtimeId, 'claude-code');
+    assert.equal(decoded.players.get('agent-1')?.modelId, 'opus');
+    assert.equal(decoded.players.get('agent-2')?.runtimeId, '');
+    assert.equal(decoded.players.get('agent-2')?.modelId, '');
+  });
+
   it('propagates a mutation as a patch, not just on full encode', () => {
     const state = new OfficeState();
     state.players.set('abc', createPlayer({ userId: 'u1', name: 'Ada', x: 0, y: 0 }));

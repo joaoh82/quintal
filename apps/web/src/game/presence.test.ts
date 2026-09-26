@@ -21,6 +21,8 @@ function agent(over: Partial<RosterEntry>): RosterEntry {
     ownerName: 'Josh',
     ownerUserId: 'u1',
     scopes: [],
+    runtimeId: '',
+    modelId: '',
     identityId: 'a1',
     lastActionAt: 0,
     avatar: '',
