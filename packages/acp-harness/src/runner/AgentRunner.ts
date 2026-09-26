@@ -61,12 +61,15 @@ import {
 } from './context.js';
 import {
   approvalHandle,
+  chooseRuntimeOption,
+  describeSelection,
   describeApproval,
   pickApproval,
   summariseToolCall,
   supportedOptions,
   type PendingApproval,
   type PermissionDecision,
+  type RuntimeSelection,
 } from './approvals.js';
 import { isHarnessNotice, statusForTool, toBubbles, toPosts } from './outbound.js';
 import { Pool } from './pool.js';
@@ -248,6 +251,16 @@ export class AgentRunner {
    * unambiguously. Never by "the oldest one": see `pickApproval`.
    */
   readonly #approvals = new Map<string, PendingApproval>();
+  /**
+   * Who answered each open question, by request id.
+   *
+   * The audit row is written where the runtime is answered, which is inside
+   * the promise the ask is waiting on — and by then the decision is a word,
+   * not a person. `#settleApproval` puts the actor here on its way past, and
+   * the audit takes it out again; nothing settles without going through
+   * there, so no entry is ever left behind.
+   */
+  readonly #approvalActors = new Map<string, string>();
   /** Recently resolved, oldest first, so a reconnect can take the cards down. */
   readonly #resolvedApprovals: ApprovalResolved[] = [];
 
@@ -1790,6 +1803,14 @@ export class AgentRunner {
    * logged. That is the Buzz-shaped default, where an agent is never blocked
    * on a question nobody is looking at.
    *
+   * What that answer may be is narrower than it was. An automatic approval
+   * nobody sees must authorise the one call it was asked about and leave
+   * nothing behind, so it takes a genuine per-call allow or none at all. It
+   * used to take whichever option carried the kind `allow_always`, which on a
+   * Claude Code plan-exit request is "clear context and use auto mode" — a
+   * standing grant, and a discarded conversation, from a question nobody
+   * read. See QUIN-53 and `docs/RUNTIME-PERMISSIONS.md`.
+   *
    * Without it the question goes to the owner *where the conversation is* —
    * the channel or DM the turn came from, or aloud when it was a walk-up —
    * with the owner mentioned so it reaches them wherever they are. It used to
@@ -1815,19 +1836,46 @@ export class AgentRunner {
     const options = params.options as Array<{ optionId: string; kind?: string }>;
 
     if (ready?.scopes?.includes('run')) {
-      this.#log('info', `permission for ${toolName}: allowed by the run scope`);
-      this.#audit('permission', { tool: toolName, decision: 'allowed by the run scope' });
+      const choice = chooseRuntimeOption(this.config.harness, options, 'once', true);
+      const allowed = choice.optionId !== null;
+      const requestId = randomUUID();
+      const turnId = String(
+        this.#turnBySession.get(sessionKey(worker, params.sessionId))?.id ?? 'unknown',
+      );
+      if (allowed) {
+        this.#log('info', `permission for ${toolName}: allowed by the run scope (${describeSelection(choice)})`);
+      } else {
+        // The documented policy, said out loud rather than widened quietly:
+        // the run scope answers per-call questions, and this runtime offered
+        // no per-call answer we can stand behind.
+        this.#log(
+          'warn',
+          `permission for ${toolName}: the run scope could not answer — ${
+            choice.refusal === 'not_per_call'
+              ? `the narrowest allow ${this.config.harness} offered grants ${describeSelection(choice)}`
+              : `no option ${this.config.harness} offered has an established breadth and lifetime`
+          }; cancelled`,
+        );
+      }
+      this.#auditPermission({
+        requestId,
+        toolName,
+        summary: summariseToolCall(params.toolCall, 120, toolName),
+        actor: 'run_scope',
+        decision: allowed ? 'once' : 'deny',
+        choice,
+      });
       // Nobody is interrupted, but the office still records that something
-      // was approved on the owner's behalf: a resolution with no card.
+      // was decided on the owner's behalf: a resolution with no card.
       this.#publishApprovalResolved({
         version: 1,
-        requestId: randomUUID(),
-        turnId: String(this.#turnBySession.get(sessionKey(worker, params.sessionId))?.id ?? 'unknown'),
-        resolution: 'auto_allowed',
+        requestId,
+        turnId,
+        resolution: allowed ? 'auto_allowed' : 'denied',
         via: 'run_scope',
         resolvedAt: Date.now(),
       });
-      return select(options, 'always');
+      return respondWith(choice);
     }
 
     // Tool-call ids are the runtime's, minted per process: two workers can
@@ -1854,7 +1902,7 @@ export class AgentRunner {
       ...this.#approvalTarget(scope),
       toolName,
       summary: summariseToolCall(params.toolCall, 400, toolName),
-      options: supportedOptions(options),
+      options: supportedOptions(this.config.harness, options),
       askedAt: now,
       expiresAt: now + PERMISSION_TIMEOUT_MS,
     };
@@ -1886,6 +1934,7 @@ export class AgentRunner {
         this.#approvals.set(request.requestId, {
           request,
           callId,
+          options,
           workerIndex: worker.index,
           turnId: turn?.id ?? null,
           scope,
@@ -1901,8 +1950,57 @@ export class AgentRunner {
       if (turn) this.#publicTurns.get(turn.id)?.state('running');
     }
 
-    this.#audit('permission', { tool: toolName, requestId: request.requestId, decision });
-    return select(options, decision);
+    const choice = chooseRuntimeOption(this.config.harness, options, decision);
+    this.#auditPermission({
+      requestId: request.requestId,
+      toolName,
+      summary: request.summary.slice(0, 120),
+      actor: this.#approvalActors.get(request.requestId) ?? 'unknown',
+      decision,
+      choice,
+    });
+    this.#approvalActors.delete(request.requestId);
+    return respondWith(choice);
+  }
+
+  /**
+   * One audit row per authorization decision, with everything needed to argue
+   * with it later: who decided, which question, which of the runtime's own
+   * options was taken, and what that option is established to grant.
+   *
+   * The summary is the same redacted line the card showed — `activityText`
+   * has already stripped keys, bearer tokens and private keys out of it — and
+   * it is kept short here because the audit is a ledger of decisions, not a
+   * second copy of the transcript.
+   */
+  #auditPermission(entry: {
+    requestId: string;
+    toolName: string;
+    summary: string;
+    /** The owner's name, or `run_scope` / `timeout` when nobody was asked. */
+    actor: string;
+    decision: PermissionDecision;
+    choice: RuntimeSelection;
+  }): void {
+    const { choice } = entry;
+    this.#audit('permission', {
+      requestId: entry.requestId,
+      tool: entry.toolName,
+      summary: entry.summary,
+      actor: entry.actor,
+      decision: entry.decision,
+      runtime: this.config.harness,
+      // What the runtime was actually told — its own option id and kind, or
+      // the cancel it got instead. The label the owner saw is derived from
+      // the same two facts, so a mismatch is visible in one row.
+      runtimeOption: choice.optionId ?? 'cancelled',
+      runtimeOptionKind: choice.kind ?? null,
+      breadth: choice.semantics.breadth,
+      lifetime: choice.semantics.lifetime,
+      persistsAt: choice.semantics.persistsAt,
+      ...(choice.refusal ? { refused: choice.refusal } : {}),
+      ...(choice.downgraded ? { downgraded: true } : {}),
+    });
   }
 
   /**
@@ -1931,11 +2029,18 @@ export class AgentRunner {
     decision: PermissionDecision,
     resolution: ApprovalResolution,
     via: ApprovalVia,
+    /** Who answered. Defaults to the mechanism, which is the honest answer
+     *  when nobody did: `timeout`, `system`, `run_scope`. */
+    actor: string = via,
   ): boolean {
     const pending = this.#approvals.get(requestId);
     if (!pending || pending.settled) return false;
     pending.settled = true;
     this.#approvals.delete(requestId);
+    // Read once by the audit row, which is written where the runtime is
+    // answered — inside the promise `pending.resolve` below settles. Set only
+    // on the path that actually resolves, so nothing is left behind.
+    this.#approvalActors.set(requestId, actor);
     this.#publishApprovalResolved({
       version: 1,
       requestId,
@@ -1995,6 +2100,7 @@ export class AgentRunner {
       allowed ? 'once' : 'deny',
       allowed ? 'allowed' : 'denied',
       'card',
+      decision.decidedByName,
     );
   }
 
@@ -2041,14 +2147,30 @@ export class AgentRunner {
       this.#log('warn', `ambiguous permission answer "${which.trim()}" — asked which`);
       return true;
     }
-    // "always" is the text fallback's standing approval, kept as documented
-    // until QUIN-53 establishes what breadth a runtime actually grants. The
-    // card deliberately does not offer it.
+    // "always" used to reach the runtime as whatever carried the kind
+    // `allow_always`, while the office recorded `allow_once` — a standing
+    // grant filed as a single approval. It now takes the same option the card
+    // would, and when that is narrower than the word asked for, the agent
+    // says so rather than letting the owner believe otherwise.
+    const request = match.approval.request;
+    if (decision === 'always') {
+      const choice = chooseRuntimeOption(this.config.harness, match.approval.options, 'always');
+      if (choice.optionId === null || choice.downgraded) {
+        const me = this.#gateway.ready?.name ?? this.name;
+        this.#speak(
+          choice.optionId === null
+            ? `I can't say what "always" would grant on ${this.config.harness}, so I'm not taking it. Reply "@${me} yes #${approvalHandle(request.requestId)}" to allow this one.`
+            : `${this.config.harness} offers no standing grant here, so "always" allows ${describeSelection(choice)} — this one action only.`,
+          scope,
+        );
+      }
+    }
     return this.#settleApproval(
-      match.approval.request.requestId,
+      request.requestId,
       decision,
       decision === 'deny' ? 'denied' : 'allowed',
       'text',
+      this.#gateway.ready?.ownerName ?? 'owner',
     );
   }
 
@@ -2307,29 +2429,20 @@ export function describeSpan(ms: number): string {
 }
 
 /**
- * Pick the runtime's option that matches the decision. `always` falls back
- * to `once` when the runtime offers no standing approval; a denial takes any
- * reject option; a runtime that offers nothing usable gets a cancel, which
- * every ACP agent must accept.
+ * Turn a decided selection into the answer ACP expects.
+ *
+ * The deciding is `chooseRuntimeOption`'s, and deliberately not here: this
+ * used to be the whole policy — first option whose `kind` starts with the
+ * right word — and reading a kind is exactly what cannot tell "allow this
+ * edit" from "bypass permissions". With nothing selectable the runtime gets
+ * `cancelled`, which every ACP agent must accept.
  */
-function select(
-  options: Array<{ optionId: string; kind?: string }>,
-  decision: PermissionDecision,
-): schema.RequestPermissionResponse {
-  const wanted =
-    decision === 'deny'
-      ? ['reject_once', 'reject_always']
-      : decision === 'always'
-        ? ['allow_always', 'allow_once']
-        : ['allow_once', 'allow_always'];
-  const prefix = decision === 'deny' ? 'reject' : 'allow';
-  const option =
-    wanted.map((kind) => options.find((candidate) => candidate.kind === kind)).find(Boolean) ??
-    options.find((candidate) => candidate.kind?.startsWith(prefix));
-
-  if (!option) return { outcome: { outcome: 'cancelled' } } as schema.RequestPermissionResponse;
+function respondWith(selection: RuntimeSelection): schema.RequestPermissionResponse {
+  if (selection.optionId === null) {
+    return { outcome: { outcome: 'cancelled' } } as schema.RequestPermissionResponse;
+  }
   return {
-    outcome: { outcome: 'selected', optionId: option.optionId },
+    outcome: { outcome: 'selected', optionId: selection.optionId },
   } as unknown as schema.RequestPermissionResponse;
 }
 

@@ -4,6 +4,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import {
   AGENT_KEY_BYTES,
+  AGENT_SCOPES,
   AGENT_KEY_PREFIX,
   AGENT_STATUS_MAX_LENGTH,
   DEFAULT_AGENT_SCOPES,
@@ -169,6 +170,50 @@ export async function setAgentProfile(
   });
 
   return next;
+}
+
+/**
+ * Change what an agent is allowed to do, and record who changed it.
+ *
+ * Its own function rather than a field on `setAgentProfile` because a scope
+ * is an authorization, not a description: it gets its own audit row, with
+ * what went and what arrived, so "when did this agent stop being allowed to
+ * run things?" has an answer that does not depend on anyone's memory.
+ *
+ * What it does *not* do is reach into the runtime. Withdrawing `run` stops
+ * Quintal answering the runtime's permission questions; a rule the runtime
+ * keeps for itself is untouched, and the page that calls this says so. See
+ * `RUN_SCOPE_WITHDRAWAL_NOTE` and docs/RUNTIME-PERMISSIONS.md.
+ */
+export async function setAgentScopes(
+  db: Database,
+  agentId: string,
+  scopes: AgentScope[],
+  changedByUserId: string,
+): Promise<AgentScope[]> {
+  const rows = await db
+    .select({ scopes: agents.scopes })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+
+  const before = parseScopes(current.scopes);
+  // Ordered by the canonical list so two equal sets cannot look different in
+  // the log, and duplicates from a crafted form cannot be stored twice.
+  const after = AGENT_SCOPES.filter((scope) => scopes.includes(scope));
+
+  await db.update(agents).set({ scopes: after }).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.scopes_changed', {
+    before,
+    after,
+    added: after.filter((scope) => !before.includes(scope)),
+    removed: before.filter((scope) => !after.includes(scope)),
+    changedByUserId,
+  });
+
+  return after;
 }
 
 export async function revokeAgent(

@@ -15,11 +15,21 @@ place to stand and people to talk to.
   Engineer.");
 - **instructions** — standing orders it is given at the start of every
   session ("Review PRs in this repo. Be terse.");
-- **scopes** — what it may do: `chat`, `move`, `status`, `dm`, and `run`,
-  which lets it run commands without asking you first. Without `run`, every
-  command its runtime is unsure about is put to you in the channel or room
-  you asked from: reply `@name yes`, `@name always` (for the rest of that
-  session) or `@name no`. Five minutes of silence is a no.
+- **scopes** — what it may do: `chat`, `move`, `status`, `dm`, and `run`.
+  `run` means its harness answers the runtime's "may I run this?" questions
+  for it — ongoing, every turn, with nothing shown to you. Without `run`,
+  every command its runtime is unsure about is put to you in the channel or
+  room you asked from, as a card with the tool and the command on it: click
+  Allow once or Deny, or reply `@name yes` or `@name no`. Five minutes of
+  silence is a no.
+
+  You can change an agent's scopes later — open **Scopes** on its row in
+  Settings → Agents. Withdrawing `run` stops Quintal answering for it from its
+  next session; it does **not** remove allow rules the runtime keeps for
+  itself, which live in that runtime's own settings and are removed there. Not
+  every runtime asks at all: Codex and opencode decide for themselves and no
+  card can reach them. See
+  [Runtime permissions](../RUNTIME-PERMISSIONS.md).
 
 ![Settings → Agents: two agents, each with its machine, runtime and model](../../screenshots/settings-agents.png)
 

@@ -20,10 +20,16 @@ import { approvalStatus, type ApprovalState } from '../approvals';
  * person is accountable for it, and the office refuses anybody else's answer
  * anyway — so nobody else is offered a control that would only be refused.
  *
- * There is deliberately no "always". What breadth and lifetime a standing
- * grant actually has differs per runtime and is not yet established
- * (QUIN-53); a button that cannot explain what it grants should not exist.
- * The text fallback keeps its documented `always` until that lands.
+ * There is deliberately no "always". The harness offers the narrowest allow
+ * the runtime actually sent whose breadth and lifetime have been established,
+ * and writes the button's words from those two facts — so "Allow once" means
+ * once, and a runtime whose only allow is an unmeasured "always" gets Deny
+ * alone. A button that cannot explain what it grants should not exist. See
+ * QUIN-53 and docs/RUNTIME-PERMISSIONS.md.
+ *
+ * Which is why the label is the harness's and not this component's: writing
+ * "Allow once" here would put the promise back in the one place that cannot
+ * check it.
  */
 export function ApprovalCard({
   approval,

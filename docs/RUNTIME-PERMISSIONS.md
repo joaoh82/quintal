@@ -1,0 +1,173 @@
+# Runtime permissions: what each option actually grants
+
+An ACP runtime asks "may I run this?" by sending `session/request_permission`
+with a list of options. Each option carries an id, a name it would show a
+human, and an ACP `kind` — `allow_once`, `allow_always`, `reject_once`,
+`reject_always`.
+
+Quintal used to read the kind and nothing else: an automatic approval took
+whichever option said `allow_always`, and the question in chat called that
+"for the rest of this session". Both halves were guesses.
+
+`allow_always` is a kind, not a promise. Measured against the runtimes people
+actually have installed, the same kind means:
+
+- "allow all edits in this directory during this session" (Claude Code, on a
+  file edit),
+- "allow anything this tool does, this session" (Oh My Pi, on a shell command),
+- and, on a Claude Code plan-exit request, **"use auto mode"**, **"clear
+  context and use auto mode"** and **"bypass permissions"** — three options of
+  that one kind, none of them a grant for the tool being asked about.
+
+So the office does not read kinds. It reads a catalogue of facts established
+against real runtimes — `packages/shared/src/runtime-permissions.ts` — and
+`unknown` is a first-class answer there. An option nobody has measured is
+never offered to a person, never taken automatically, and never described.
+
+## The rules that follow from it
+
+1. **A label may never promise less authority, or a shorter life, than the
+   option it takes.** The button's words and the option sent back to the
+   runtime come from one function (`pickAllow`), so they cannot drift apart.
+2. **The narrowest explainable allow wins** — not the first of a kind.
+3. **Unknown is not offered.** A runtime whose only allow option is an
+   unmeasured "always" gets a card with Deny and no allow button at all.
+4. **The `run` scope may only take a genuine per-call allow.** An automatic
+   approval nobody sees must leave nothing behind. Where no per-call allow is
+   offered, the runtime is answered `cancelled` and the audit row says which
+   of the two reasons applied. This is the documented policy, not a fallback.
+5. **A denial denies this call only.** A runtime that offers "Always reject"
+   is offering a standing refusal; taking it would refuse requests the owner
+   was never shown, which is the same failure pointed the other way. With no
+   `reject_once` the runtime gets `cancelled`, which every ACP agent must
+   accept.
+6. **Quintal creates no persistent grants.** Nothing in the app writes an
+   allow rule into a runtime's settings, so there is no list of app-created
+   grants to show and no revocation path to offer. Grants that exist in a
+   runtime are that runtime's, and are removed with that runtime's own tools —
+   see *Grants Quintal cannot revoke* below.
+
+`allow_once` and `reject_once` do have a default for a runtime nobody has
+catalogued, and it is read from the protocol rather than guessed from the
+name: ACP defines them as permitting or refusing *this* operation. That is
+what keeps a newly released CLI usable. `allow_always` gets no default,
+because there is no honest one to give.
+
+## What was found
+
+Probed on macOS 26.5.2 (Darwin 25.5.0), Node 24.13.0, Apple Silicon, on
+2026-09-24, with `packages/acp-harness/scripts/probe-permissions.mts` (which
+answers every request `cancelled`, so nothing runs and no grant is created)
+and `probe-grant-lifetime.mts` (which takes one standing grant in a disposable
+workspace and then measures how far it reaches). Full output:
+[docs/verification/QUIN-53](verification/QUIN-53/).
+
+### Claude Code — `@agentclientprotocol/claude-agent-acp` 0.81.2
+
+Asks only in the `default` mode, which it calls **Manual — "Always ask before
+making changes"**. In `auto` (its default), `acceptEdits` and
+`bypassPermissions` it never sends a request at all. The harness moves a
+session without the `run` scope into `default` for exactly this reason.
+
+Manual asks before *changes*: a file edit asks, and a shell command it judges
+safe does not.
+
+| Request | Options offered |
+| --- | --- |
+| File edit | `allow-once` "Yes" · `allow-with-updates` "Yes, allow all edits in `<dir>`/ during this session" · `reject` "No" |
+| Shell command | `allow-once` "Yes" · `reject` "No" — **no standing option at all** |
+| Plan exit (`toolCall.kind: switch_mode`) | `exit-plan-default` "Yes, manually approve edits" · `exit-plan-clear-auto` "Yes, clear context and use auto mode" · `exit-plan-auto` "Yes, and use auto mode" · `exit-plan-bypass` "Yes, and bypass permissions" · `reject` |
+
+`allow-with-updates` names its own breadth and lifetime, and the measurement
+agrees with the name: after taking it, the same edit and a *different* edit in
+that session were not asked about again; a new session asked again, and so did
+a restarted process; no runtime settings file changed.
+
+The plan-exit row is the one that matters most. Its first `allow_always` is
+`exit-plan-clear-auto` — so the old "take the first `allow_always`" rule would
+have answered a plan approval by putting the session into auto mode *and*
+discarding the conversation, from a question nobody ever read.
+
+### Oh My Pi (`omp`) — `oh-my-pi` 18.2.6
+
+Asks before shell commands in its `default` mode; it did not ask before
+writing a file in the working directory. In `plan` mode it asked before a
+shell command that reached outside the workspace.
+
+Options: `allow_once` "Allow once" · `allow_always` **"Always allow"** ·
+`reject_once` "Reject" · `reject_always` "Always reject".
+
+"Always allow" says nothing about breadth or lifetime, so it was measured.
+After taking it: the same command was not asked about again, **a different
+shell command in that session was not asked about either**, a new session
+asked again, and a restart asked again. Nothing under `~/.omp` changed but
+session transcripts, logs and model caches. So: the whole shell category, for
+this session, not written down.
+
+### Codex — `@agentclientprotocol/codex-acp` 1.13.1
+
+**Never sent `session/request_permission`** — not for a file write, not for a
+shell command, and not for a write outside the working directory, in any of
+its three modes (`agent`, `read-only`, `agent-full-access`).
+
+In `read-only`, the mode it describes as *"Always ask to edit external
+files"*, it created a file outside its working directory without asking.
+
+Quintal's approval cards cannot reach this runtime. An agent running on Codex
+is governed by Codex's own approval policy and sandbox settings, and nothing
+in Quintal changes that — with or without the `run` scope.
+
+### opencode 1.4.3
+
+Never sent `session/request_permission` in either mode (`build`, `plan`), for
+any of the three probes. Its own `permission` configuration decides.
+
+### Gemini CLI 0.46.0
+
+Not established. `session/new` failed on the probe machine with "Gemini API key
+is missing or not configured", so nothing could be asked. It stays `unknown`,
+which means its options would not be offered on a card.
+
+### Goose
+
+Not established — not installed on any machine probed so far.
+
+## Grants Quintal cannot revoke
+
+Quintal never creates a persistent grant, so it has none to list or remove.
+What it can do is be honest about the ones it does not control:
+
+- **Claude Code** keeps allow rules in `~/.claude/settings.json` and a
+  project's `.claude/settings.local.json`. Quintal neither reads nor writes
+  them; they are managed with the `claude` CLI.
+- **Codex** decides from its own approval policy and sandbox settings
+  (`~/.codex/config.toml`).
+- **opencode** decides from its own `permission` configuration.
+
+This is why withdrawing an agent's `run` scope says what it says. Turning
+`run` off stops *Quintal* answering the runtime's questions from that agent's
+next session. It does not reach inside the runtime, and a rule kept there is
+still in force. Reporting that as "revoked" would be the same false promise
+this document exists to remove, pointed the other way.
+
+## Re-establishing it
+
+The catalogue is data with a date against every entry. When an adapter
+changes, re-record rather than reason:
+
+```sh
+pnpm exec tsx packages/acp-harness/scripts/probe-permissions.mts             # all runtimes
+pnpm exec tsx packages/acp-harness/scripts/probe-permissions.mts claude-code # one
+pnpm exec tsx packages/acp-harness/scripts/probe-grant-lifetime.mts omp - shell
+pnpm exec tsx packages/acp-harness/scripts/probe-grant-lifetime.mts claude-code default write
+```
+
+The first never answers anything but `cancelled`. The second **does** take one
+standing grant, in a disposable workspace, and reports every runtime config
+path whose fingerprint moved while it ran — that is how "where does this
+persist?" gets an answer. Back those paths up before running it.
+
+Then update `packages/shared/src/runtime-permissions.ts`, re-record
+`packages/acp-harness/test/fixtures/runtime-options.json` from the probe
+output, and update this page. The tests read the fixtures, so an adapter that
+renames an option id fails them loudly rather than quietly widening a grant.

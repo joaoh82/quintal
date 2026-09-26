@@ -1,0 +1,55 @@
+{
+  "_comment": "Real `session/request_permission` option arrays, recorded verbatim by packages/acp-harness/scripts/probe-permissions.mts on 2026-09-24. Directory paths are the probe's temp workspace. Do not hand-edit: re-record instead, so the catalogue and the tests keep arguing with the same evidence.",
+  "claude-code": {
+    "_agent": "@agentclientprotocol/claude-agent-acp 0.81.2",
+    "edit-in-manual-mode": {
+      "mode": "default",
+      "toolCall": { "title": "Write /tmp/quin53/probe.txt", "kind": "edit" },
+      "options": [
+        { "optionId": "allow-once", "name": "Yes", "kind": "allow_once" },
+        {
+          "optionId": "allow-with-updates",
+          "name": "Yes, allow all edits in quin53/ during this session",
+          "kind": "allow_always"
+        },
+        { "optionId": "reject", "name": "No", "kind": "reject_once" }
+      ]
+    },
+    "shell-in-manual-mode": {
+      "mode": "default",
+      "toolCall": { "title": "touch probe.txt && ls -l probe.txt", "kind": "execute" },
+      "options": [
+        { "optionId": "allow-once", "name": "Yes", "kind": "allow_once" },
+        { "optionId": "reject", "name": "No", "kind": "reject_once" }
+      ]
+    },
+    "exit-plan-mode": {
+      "mode": "plan",
+      "toolCall": { "title": "Approve Plan", "kind": "switch_mode" },
+      "options": [
+        { "optionId": "exit-plan-default", "name": "Yes, manually approve edits", "kind": "allow_once" },
+        {
+          "optionId": "exit-plan-clear-auto",
+          "name": "Yes, clear context (4% used) and use auto mode",
+          "kind": "allow_always"
+        },
+        { "optionId": "exit-plan-auto", "name": "Yes, and use auto mode", "kind": "allow_always" },
+        { "optionId": "exit-plan-bypass", "name": "Yes, and bypass permissions", "kind": "allow_always" },
+        { "optionId": "reject", "name": "No, keep planning", "kind": "reject_once" }
+      ]
+    }
+  },
+  "omp": {
+    "_agent": "oh-my-pi 18.2.6",
+    "shell": {
+      "mode": "default",
+      "toolCall": { "title": "touch probe.txt", "kind": "execute" },
+      "options": [
+        { "optionId": "allow_once", "name": "Allow once", "kind": "allow_once" },
+        { "optionId": "allow_always", "name": "Always allow", "kind": "allow_always" },
+        { "optionId": "reject_once", "name": "Reject", "kind": "reject_once" },
+        { "optionId": "reject_always", "name": "Always reject", "kind": "reject_always" }
+      ]
+    }
+  }
+}

@@ -30,6 +30,7 @@ import {
   setAgentLaunch,
   setAgentMaxSessions,
   setAgentProfile,
+  setAgentScopes,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -249,6 +250,57 @@ export async function saveAgentProfileAction(
   // now; a running agent is restarted by its host on the next fleet poll.
   revalidatePath('/office');
   return { ok: true, agentId };
+}
+
+/**
+ * An owner changing what one of their agents is allowed to do.
+ *
+ * Its own action rather than a field on the profile form, for the reason the
+ * database gives it its own audit row: a scope is an authorization, and the
+ * one most worth changing after the fact — `run` — is also the one whose
+ * withdrawal is most easily misread. The result says plainly what stopped and
+ * what did not, because "revoked" on its own would not be true: a rule the
+ * runtime keeps for itself is outside Quintal and stays in force.
+ */
+export interface SaveAgentScopesState {
+  ok: boolean;
+  error?: string;
+  agentId?: string;
+  /** Shown after a save that took `run` away. Never invented on any other. */
+  withdrewRun?: boolean;
+}
+
+export async function saveAgentScopesAction(
+  _previous: SaveAgentScopesState,
+  formData: FormData,
+): Promise<SaveAgentScopesState> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) return { ok: false, error: 'No such agent.', agentId };
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    return { ok: false, error: 'That is not your agent to change.', agentId };
+  }
+
+  // Only names from the list. A crafted form naming a scope that does not
+  // exist gets it dropped, not stored and puzzled over later.
+  const scopes = formData
+    .getAll('scopes')
+    .map(String)
+    .filter((scope): scope is AgentScope => isAgentScope(scope));
+
+  const before = agent.scopes;
+  const after = await setAgentScopes(db, agentId, scopes, session.user.id);
+
+  revalidatePath('/settings/agents');
+  revalidatePath('/office');
+  return {
+    ok: true,
+    agentId,
+    withdrewRun: before.includes('run') && !after.includes('run'),
+  };
 }
 
 export interface SaveAgentMemoryState {

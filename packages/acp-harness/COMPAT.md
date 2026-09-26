@@ -103,11 +103,23 @@ does not. A user's `~/.claude/settings.json` `permissions.defaultMode` and
 `allow` list also feed into this.
 
 Of the option `kind`s a runtime may offer — `allow_once`, `allow_always`,
-`reject_once`, `reject_always` — an approval card surfaces only `allow_once`
-and `deny`, and only when the request actually offered one of that shape.
-What an `allow_always` really grants, and for how long, differs per runtime
-and is not yet established (QUIN-53), so no button claims it. The text
-fallback's `always` still maps to `allow_always` where offered.
+`reject_once`, `reject_always` — the kind is **not** what the harness reads.
+It differs per runtime, and on a Claude Code plan-exit request three options
+carry `allow_always` meaning "use auto mode", "clear context and use auto
+mode" and "bypass permissions". The harness selects from a catalogue of
+measured facts instead, takes the narrowest allow whose breadth and lifetime
+are established, and names the button for what taking it does. See
+[docs/RUNTIME-PERMISSIONS.md](../../docs/RUNTIME-PERMISSIONS.md).
+
+### 8. Codex and opencode never ask over ACP
+
+`@agentclientprotocol/codex-acp` 1.13.1 sent no `session/request_permission`
+in any of its three modes — including `read-only`, which it describes as
+"Always ask to edit external files", where it created a file **outside** its
+working directory without asking. opencode 1.4.3 likewise never asked, in
+either mode, for a write, a shell command or a write outside the workspace.
+Verified 2026-09-24. Quintal's approval cards cannot reach either runtime;
+their own settings are the only control.
 
 ### 6. Goose is unverified
 
