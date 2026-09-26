@@ -9,7 +9,6 @@ import {
   AGENT_PARALLELISM_MIN,
   AGENT_SCOPE_NOTES,
   AGENT_SCOPES,
-  RUN_SCOPE_WITHDRAWAL_NOTE,
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
@@ -29,6 +28,7 @@ import { useActionState, useState } from 'react';
 import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { askingCaveat, runWithdrawalNote } from '@/lib/runtime-asking';
 
 import {
   assignAgentAction,
@@ -510,6 +510,12 @@ function AgentRow({
         </span>
       ) : null}
 
+      {/* Whether this runtime has ever been seen to ask Quintal anything. On
+          the row because the row is where an owner scans their agents and
+          decides which one to open — "never asks" is the fact that decides it,
+          and it was only ever in the harness's stdout. */}
+      {agent.hostLabel !== null ? <AsksBadge runtimeId={agent.runtimeId} /> : null}
+
       {/* What it can reach on disk, for the same reason its owner's name is
           here: the answer should not require reading a file on another machine. */}
       <WorkspaceBadge path={agent.workspacePath} />
@@ -750,6 +756,46 @@ function AgentProfileForm({
 }
 
 /**
+ * That this runtime has never been seen to ask, in two or three words.
+ *
+ * A plain label and not a warning colour: an agent on Codex is a perfectly
+ * legitimate thing to run, and the ticket is about informing the owner's
+ * choice rather than discouraging it. The title carries the sentence.
+ */
+function AsksBadge({ runtimeId }: { runtimeId: string | null }) {
+  const caveat = askingCaveat(runtimeId);
+  if (!caveat) return null;
+  return (
+    <span
+      className="text-muted-foreground border-muted-foreground/30 rounded border border-dashed px-1.5 py-0.5 text-[11px]"
+      title={caveat.headline}
+    >
+      {caveat.badge}
+    </span>
+  );
+}
+
+/**
+ * The limit, said where the `run` checkbox is.
+ *
+ * Above the save button rather than beside the checkbox, because it is true
+ * whether or not `run` is ticked: the owner who leaves it off is the one most
+ * likely to believe Quintal will ask them, and on a `never_observed` runtime
+ * it never will. `externalGrants` is printed with it because it names the file
+ * that does decide — the only control there is.
+ */
+function AskingCaveatNotice({ runtimeId }: { runtimeId: string | null }) {
+  const caveat = askingCaveat(runtimeId);
+  if (!caveat) return null;
+  return (
+    <p className="text-muted-foreground border-muted-foreground/25 rounded border border-dashed px-2 py-1.5 text-xs">
+      <span className="text-foreground font-medium">{caveat.badge}.</span> {caveat.headline}
+      {caveat.externalGrants ? ` ${caveat.externalGrants}` : ''}
+    </p>
+  );
+}
+
+/**
  * What this agent is allowed to do, changeable after the fact.
  *
  * Scopes used to be set once, at creation, and never again — so an owner who
@@ -794,6 +840,7 @@ function AgentScopesForm({ agent }: { agent: AgentListEntry }) {
           ))}
         </div>
       </fieldset>
+      <AskingCaveatNotice runtimeId={agent.runtimeId} />
       <div className="flex items-center gap-3">
         <Button type="submit" size="sm" variant="outline" disabled={pending}>
           {pending ? 'Saving…' : 'Save scopes'}
@@ -810,7 +857,7 @@ function AgentScopesForm({ agent }: { agent: AgentListEntry }) {
       {mine && state.ok && state.withdrewRun ? (
         <p className="rounded border border-amber-300/40 bg-amber-300/[0.07] px-2 py-1.5 text-xs">
           <span className="font-medium">Withdrew {agent.name}&rsquo;s run scope.</span>{' '}
-          {RUN_SCOPE_WITHDRAWAL_NOTE}
+          {runWithdrawalNote(agent.runtimeId)}
         </p>
       ) : null}
     </form>

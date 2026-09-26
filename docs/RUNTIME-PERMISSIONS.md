@@ -177,6 +177,38 @@ next session. It does not reach inside the runtime, and a rule kept there is
 still in force. Reporting that as "revoked" would be the same false promise
 this document exists to remove, pointed the other way.
 
+## Saying it on the screen
+
+Two of the runtimes above never ask, and the person who needs to know that is
+the owner setting scopes in a browser — not the harness's stdout, which is
+where the fact used to stop. So `asks` is surfaced wherever an owner makes a
+decision that depends on being asked:
+
+- the scopes editor in **Settings → Agents**, under the `run` checkbox,
+- the agent's row in that list, as a short `never asks` label,
+- and the agent's card in the office, on an `asking` row.
+
+One helper decides the words: `apps/web/src/lib/runtime-asking.ts`. It reads
+the catalogue by `runtimeId` and returns nothing at all for a `verified`
+runtime, for an agent the office does not define, and for an id it has never
+heard of — a warning about an unmeasured runtime would be its own unfounded
+claim.
+
+`never_observed` and `unknown` read differently on purpose. "We drove it end to
+end and it never asked" is a fact an owner must act on; "we have not
+established this" is not. Gemini and Goose are `unknown` today, and they get
+the weaker line.
+
+The withdrawal notice says it too. Taking `run` away from an agent on Codex
+changes nothing observable — there was never a question routed through Quintal
+to stop answering — so that case gets
+`RUN_SCOPE_WITHDRAWAL_NOTE_NEVER_ASKS` and every other case keeps the general
+wording, `unknown` included.
+
+None of this blocks or hides anything. An owner may run an agent on a runtime
+that never asks; they simply should not be able to believe Quintal is gating
+it. Quintal cannot make Codex ask, and does not pretend to.
+
 ## Re-establishing it
 
 The catalogue is data with a date against every entry. When an adapter
