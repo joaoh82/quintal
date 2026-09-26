@@ -595,6 +595,8 @@ export class OfficeScene extends Phaser.Scene {
         ownerName: player.ownerName,
         ownerUserId: player.ownerUserId,
         scopes: player.scopes ? player.scopes.split(',') : [],
+        runtimeId: player.runtimeId,
+        modelId: player.modelId,
         identityId: player.userId,
         lastActionAt: this.#lastAction.get(sessionId) ?? 0,
         zoneId:

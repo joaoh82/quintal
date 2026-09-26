@@ -53,6 +53,19 @@ export class OfficePlayer extends Schema {
   /** For agents: comma-joined scopes, so the profile card can show them. */
   scopes = '';
   /**
+   * For agents: the runtime the office told a host to launch this one on — a
+   * `RUNTIMES` id, not a label — and the model it was told to use, by the
+   * runtime's own id.
+   *
+   * The schema carries no nulls, so `null` becomes `''` in `createPlayer` and
+   * nowhere else. The two blanks do not mean the same thing: an empty
+   * `runtimeId` is an agent the office does not define, and an empty `modelId`
+   * alongside a runtime is that runtime's own default — a real answer, which
+   * the card prints as `default`.
+   */
+  runtimeId = '';
+  modelId = '';
+  /**
    * The balloon over the head — an emote id from the catalogue, or empty.
    * Server-owned: an agent asks, the office validates, everybody draws it.
    */
@@ -137,6 +150,15 @@ defineTypes(OfficePlayer, {
   description: 'string',
   pubkey: 'string',
   avatar: 'string',
+  // Appended rather than slotted in beside `scopes`, where they would read
+  // better: this list is the wire order, and inserting shifts the index of
+  // every field after it. The browser decodes with its *own* copy of this
+  // class — `connection.ts` hands `OfficeState` to `joinOrCreate` rather than
+  // taking the server's reflection — and a tab that was loaded before an
+  // upgrade rejoins without reloading when its socket drops. Appending is the
+  // one shape that cannot make that tab read somebody's avatar as a runtime.
+  runtimeId: 'string',
+  modelId: 'string',
 });
 
 /** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */
@@ -177,6 +199,8 @@ export interface PlayerInit {
   ownerName?: string;
   ownerUserId?: string;
   scopes?: readonly string[];
+  runtimeId?: string | null;
+  modelId?: string | null;
   isGuest?: boolean;
   description?: string;
   pubkey?: string;
@@ -198,6 +222,8 @@ export function createPlayer(init: PlayerInit): OfficePlayer {
   player.ownerName = init.ownerName ?? '';
   player.ownerUserId = init.ownerUserId ?? '';
   player.scopes = (init.scopes ?? []).join(',');
+  player.runtimeId = init.runtimeId ?? '';
+  player.modelId = init.modelId ?? '';
   player.isGuest = init.isGuest ?? false;
   player.description = init.description ?? '';
   player.pubkey = init.pubkey ?? '';

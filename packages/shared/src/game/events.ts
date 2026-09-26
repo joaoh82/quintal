@@ -25,6 +25,17 @@ export interface RosterEntry {
   /** Agents: what it is allowed to do. */
   scopes: string[];
   /**
+   * Agents: the runtime the office told a host to launch this one on, as a
+   * `RUNTIMES` id — render it with `runtimeById`. Empty when the office does
+   * not define this agent, and always empty for humans.
+   */
+  runtimeId: string;
+  /**
+   * Agents: the model it was told to use, by the runtime's own id. Empty means
+   * the runtime's own default — a real answer, not a missing one.
+   */
+  modelId: string;
+  /**
    * Agents: `agents.id`, which is also the key of its audit log page. Humans
    * carry their user id here; the UI only ever links agents.
    */

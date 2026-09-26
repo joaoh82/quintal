@@ -11,7 +11,7 @@ worse than no screenshot.
 | `office-agent-bay.png` | Two agents and their owner in the Agent Bay; roster and the corner chat box with its tabs | guide: features |
 | `agent-thinking.png` | An agent addressed with `@name`, thinking: the balloon over its head, the status line, and the working line in the chat box | README, guide: agents |
 | `agent-speech-bubble.png` | The same agent answering out loud, in a speech bubble | guide: agents |
-| `agent-profile-card.png` | An agent's profile card from the roster: owner, status, scopes, Message and Audit log | guide: agents |
+| `agent-profile-card.png` | An agent's profile card from the roster: owner, status, scopes, the runtime and model it runs on, Message and Audit log | guide: agents |
 | `conversations-panel-channel-review.png` | The conversations panel open on `#engineering`, with an agent's full pull-request review posted whole | README, guide: channels |
 | `settings-office.png` | Settings → Office: office name, server name, earshot, walk-up distance, reply reach | guide: features |
 | `settings-agents.png` | Settings → Agents: two agents with runtime, model, machine and repo | guide: agents |

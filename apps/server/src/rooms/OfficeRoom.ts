@@ -757,6 +757,8 @@ export class OfficeRoom extends Room<OfficeState> {
         ownerName: identity.ownerName,
         ownerUserId: identity.ownerUserId,
         scopes: identity.scopes,
+        runtimeId: identity.runtimeId,
+        modelId: identity.modelId,
       }),
     );
 
