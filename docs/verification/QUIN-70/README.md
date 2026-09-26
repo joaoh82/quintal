@@ -78,10 +78,72 @@ the size the guide renders it, and within the "roughly 1600px wide" rule in
 `screenshots/README.md`, but it is not as sharp as the old asset. Worth
 re-taking by hand on a retina display the next time somebody is in front of one.
 
+## Review round — 2026-09-26
+
+Three points came back on [PR #121](https://github.com/joaoh82/quintal/pull/121)
+(two Hermes reviews, both approving, and a human P2 inline). All three are
+fixed in the follow-up commit; the fourth suggestion was declined on purpose.
+
+### P2: a long model id left the card
+
+`setAgentLaunch` truncates a model id to 128 characters and does not validate
+it — the value is whatever a runtime calls its own models. The `<dd>` was a
+flex item with no `min-w-0` and no break rule, so a long unbroken id ran out
+past the edge of the card.
+
+Measured in the live office, same card, 128 characters with no break
+opportunity (`getBoundingClientRect().right`, card right edge at **1703**,
+viewport 1728):
+
+| | value's right edge | lines |
+| --- | --- | --- |
+| Without `min-w-0 break-all` | **2388** — 685px past the card, off the viewport | 1 |
+| With them | **1690** — inside the card | 6 |
+
+Then with a real id rather than a synthetic one: Arthur's model was set through
+`setAgentLaunch` to a 136-character provider-qualified id, stored truncated to
+128, and the agent reconnected. The card wraps it over six lines and keeps its
+width; neither the roster nor the document scrolls sideways
+([card-long-model.png](card-long-model.png)).
+
+The `runtime` row above it needs none of this: that id is refused on write
+unless it is in the catalogue (`Unknown runtime "…"`, `settings/agents/actions.ts:152`),
+and every label in the catalogue is one or two words.
+
+### The `OfficePlayer` comment said something untrue
+
+Both reviews caught the same line: the schema comment claimed an empty
+`runtimeId` *or* `modelId` meant the office does not define the agent. Only
+`runtimeId` means that. An empty `modelId` beside a runtime is that runtime's
+default, and the card prints `default` — which is the whole point of the
+distinction. The comment now says so, and no longer fights `runtimeLines`.
+
+### Field order on the wire
+
+`defineTypes` had the two new fields beside `scopes`, where they read best,
+which shifted the index of every field after them. The browser decodes with
+its *own* copy of `OfficeState` — `net/connection.ts:83` passes the class to
+`joinOrCreate` rather than taking the server's reflection — and `net/recovery.ts`
+rejoins a dropped socket without reloading the page, so a tab that was open
+across an office upgrade would decode with the old layout. Both fields are now
+appended, with the reason written down.
+
+(The harness is unaffected either way: `packages/acp-harness/src/gateway/client.ts:110`
+joins without a schema class and never reads room state — it works off
+`agent:*` messages.)
+
+### Declined: refreshing an open card on a settings save
+
+Suggested, and deliberately not done. Runtime and model land on the next
+connect, exactly as `instructions` do; pushing a mid-session update means a new
+fact on the wire and a card that disagrees with the process actually running.
+Called out in the ticket's "not in this ticket" and unchanged here.
+
 ## What was not verified, and why
 
-- **The desktop app.** It embeds the same web UI; nothing here touches the
-  shell or the sidecar.
+- **The desktop app.** It loads the office page from the server over HTTP
+  (`docs/DESKTOP.md`, "The app needs a server to connect to"), so it runs the
+  very code checked above; nothing here touches the shell or the sidecar.
 - **Real runtimes actually spawning.** The card shows what the office recorded,
   not what a process is doing, so the agent sockets were the reference demo
   agent rather than Claude Code or Codex. Booting real CLIs would have
@@ -102,4 +164,6 @@ the `workspaceId` it returns); the script was not updated when rooms became
 one-per-office.
 
 This verification ran against a local copy of the script with those four lines
-added. The fix belongs in its own ticket, not smuggled into this one.
+added. The fix belongs in its own ticket, not smuggled into this one — filed as
+**QUIN issue #1**, "The reference agent can't join an office — demo-agent never
+sends workspaceId".

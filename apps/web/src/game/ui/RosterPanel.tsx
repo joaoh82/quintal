@@ -272,7 +272,16 @@ function AgentCard({
             </div>
             <div className="flex gap-2">
               <dt className="w-14 shrink-0 text-white/40">model</dt>
-              <dd className="font-mono text-white/75">{running.model}</dd>
+              {/*
+                A model id is whatever a runtime calls its own models, kept to
+                128 characters and nothing else — `setAgentLaunch` truncates,
+                it does not validate. A long provider-qualified one has nowhere
+                to break, so say it may break anywhere and may shrink; without
+                both it runs out past the edge of the card. The runtime above
+                needs neither: that id is refused unless it is in the
+                catalogue, and every label there is one or two words.
+              */}
+              <dd className="min-w-0 font-mono break-all text-white/75">{running.model}</dd>
             </div>
           </>
         ) : null}
