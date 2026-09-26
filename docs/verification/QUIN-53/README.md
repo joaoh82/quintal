@@ -246,6 +246,18 @@ QUIN53_SEED=seed.json pnpm exec tsx apps/server/scripts/live-withdraw-run.mts
 For the card path, seed without `QUIN_SCOPES`, boot on `claude-code`, and run
 `apps/server/scripts/live-approval-probe.mts` with `QUIN52_PHASE=allow|deny`.
 
+For the **fleet** path — the one that matters, because it is the shape almost
+every agent has:
+
+```sh
+QUIN53_RUNTIME=omp pnpm exec tsx apps/server/scripts/seed-live-fleet.mts > fleet.json
+# then, with the qh_ token and host label it printed:
+QUINTAL_HOST_TOKEN=<qh_…> QUINTAL_URL=http://127.0.0.1:3057   QUINTAL_CONFIG_DIR=/tmp/…/config QUINTAL_NEST_DIR=/tmp/…/nest   node packages/acp-harness/dist/cli.js up --host <label>     --url http://127.0.0.1:3057 --log-dir /tmp/…/logs
+```
+
+Set `QUINTAL_CONFIG_DIR` and `QUINTAL_NEST_DIR`, or the fleet works in the real
+`~/.quintal` and writes a host token into the real host file.
+
 To re-establish the catalogue itself, see *Re-establishing it* in
 [docs/RUNTIME-PERMISSIONS.md](../../RUNTIME-PERMISSIONS.md). Do not run any of
 this against real office data.
@@ -337,10 +349,48 @@ bug: `runtimeIdOf` against a host-shaped config, and an integration test
 asserting the audit row names `omp` rather than `custom` for an agent built the
 way `host.ts` builds them.
 
-**Not re-run live.** The live probes above still describe the shipped behaviour
-for the shapes they covered, and the three fixes are covered by unit and
-integration tests against recorded payloads. What is *not* verified live is the
-fleet path itself — a real office-defined agent launched by `host.ts` with a
-host token — because that needs a registered machine and a fleet file rather
-than a hand-run harness. That gap is exactly what let the bug through the first
-time, and it is worth closing with a fixture or a live fleet probe of its own.
+### The fleet path, verified live
+
+The gap that let this through was that no probe had ever booted an agent the
+way almost every agent is booted. So that shape now has one of its own —
+`apps/server/scripts/seed-live-fleet.mts`, which seeds an agent with a launch
+definition (runtime + machine) and a `qh_` host token, driven by
+`quintal-acp up --host <label>`. Full output: [live-fleet.json](live-fleet.json).
+
+The harness ran with `QUINTAL_CONFIG_DIR` and `QUINTAL_NEST_DIR` pointed under
+`/tmp`, so the real `~/.quintal` was never written to; it was checked
+afterwards and had not been touched.
+
+**Run scope on, omp.** The office listed the agent's harness as `custom` —
+confirming the shape under test — and the audit rows name the runtime the
+semantics actually came from:
+
+```json
+{ "tool": "touch fleet-one.txt", "actor": "run_scope", "decision": "once",
+  "runtime": "omp", "runtimeOption": "allow_once",
+  "breadth": "this_call", "lifetime": "this_call" }
+```
+
+Before the fix that row read `"runtime": "custom"` and the option was chosen by
+ACP-kind defaults. Both distinct actions were asked about again
+(`askedAboutEveryAction: true`), so no standing grant was left behind.
+
+**No run scope, claude-code.** This is the half that had been dead since
+QUIN-52, because `askingMode('custom', …)` never matched:
+
+```
+fleet: 1 agent(s) assigned to "probe-…" by Approval Owner
+Fleetg8gi · @agentclientprotocol/claude-agent-acp ready (ACP v1)
+Fleetg8gi · permission mode set to "default" — the owner is asked before tools run
+```
+
+The session is switched to Manual, a card arrives in **7.7 s** offering
+`allow_once` / `deny`, allowing it writes the file, and the row records
+`actor: "Approval Owner"`, `runtime: "claude-code"`,
+`runtimeOption: "allow-once"`. Before the fix this agent stayed in `auto` and
+approved its own tools with no card anywhere.
+
+**Still not verified live:** the refusal paths (`unexplained_allow`,
+`not_per_call`) and the Deny-only text answer, because no installed runtime
+produces them — all covered by tests against recorded payloads. The UI pass
+remains outstanding (QUIN-72).
