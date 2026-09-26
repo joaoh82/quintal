@@ -4,6 +4,7 @@ import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/sh
 
 import { runtimeLines } from './agentRuntime';
 import { Avatar } from '@/components/Avatar';
+import { askingCaveat } from '@/lib/runtime-asking';
 import { useState } from 'react';
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
@@ -217,6 +218,7 @@ function AgentCard({
   onMessage: (() => void) | null;
 }) {
   const running = runtimeLines(agent);
+  const caveat = askingCaveat(agent.runtimeId);
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-sky-400/25 bg-[#0b2942]/85 p-3 text-white backdrop-blur-sm">
@@ -283,6 +285,22 @@ function AgentCard({
               */}
               <dd className="min-w-0 font-mono break-all text-white/75">{running.model}</dd>
             </div>
+            {/*
+              Whether that runtime has ever been seen to ask Quintal anything.
+              The scopes row above lists `run` or leaves it out, and a reader
+              takes the absence to mean they will be asked instead — on Codex
+              and opencode nobody ever is. Said on the card because the card is
+              where the scopes are read; see `askingCaveat`.
+            */}
+            {caveat ? (
+              <div className="flex gap-2">
+                <dt className="w-14 shrink-0 text-white/40">asking</dt>
+                <dd className="min-w-0 text-white/75" title={caveat.headline}>
+                  {caveat.badge}
+                  <span className="block text-white/50">{caveat.summary}</span>
+                </dd>
+              </div>
+            ) : null}
           </>
         ) : null}
         <div className="flex gap-2">
