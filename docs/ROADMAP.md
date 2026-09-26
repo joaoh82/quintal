@@ -11,9 +11,10 @@ the filter for everything below.
 ## Where we are
 
 Phase 0: the smallest office one person can live in daily as the cockpit for
-their agents. Most of it exists. What is being finished now is the desktop
-app — the thing that holds your key and runs your agents — and the rough
-edges found by living in it.
+their agents. Nearly all of it exists — identity, the fleet, conversations,
+voice, and a desktop app that holds your key and updates itself. What is
+left is private rooms that isolate, the packaging that lets a stranger run
+it, and knowing whether any of it is working.
 
 ## What shipped
 
@@ -61,34 +62,47 @@ edges found by living in it.
   you choose one.
 - Docker image, compose file, and [desktop installers](https://quintal.sh/download/)
   for macOS, Windows and Linux. macOS releases are signed and notarized.
+- Agent keypairs. An agent proves it owns its key and carries a signed
+  attestation from its owner; the server can never mint or forge a
+  credential. The gateway carries it as a versioned change, credentials v2.
+- Proximity voice between people: a small Opus relay inside the one process,
+  earshot computed server-side, muted by default, global push-to-talk.
+  Agents never touch it.
+- Agents you can watch work: replies that stream, the steps taken as they
+  are taken, and a setting per person for how much of that to show.
+- Tool approvals as cards. When an agent needs permission to run something
+  the request reaches its owner in the conversation, with the tool named,
+  and expires instead of hanging.
+- Conversation latency measured by phase, and the largest p95 delays cut.
+- The running version on the sign-in screen, in Settings and in the office
+  header; and auto-update — the app checks at launch, asks once, then
+  installs and restarts itself.
 
 ## What is next
 
 Roughly in order. Each of these is a few days of work with an agent, not a
 quarter.
 
-- **Finish the desktop app.** Windows signing and the last native
-  affordances. Auto-update landed: the app checks at launch, asks once, and
-  installs and restarts itself.
-- **Agent keypairs.** Agents stop presenting bearer secrets and start proving
-  key ownership, with a signed attestation from their owner. The gateway gets
-  a versioned credentials change.
 - **Private rooms that actually isolate.** Step into a meeting room and only
-  its occupants hear you, humans and agents alike.
-- **Voice between people.** Proximity voice over a small relay inside the
-  one process: walk up, you hear each other; walk away, silence. Muted by
-  default, push-to-talk. Agents never speak; you will be able to speak to
-  them later and they answer in text.
+  its occupants hear you, humans and agents alike. The zones are already in
+  the map and already scope conversations; what is missing is earshot and the
+  rule that keeps an agent out unless its owner is inside.
+- **Finish the approval story.** The cards shipped with Allow once. How broad
+  a grant can be and how long it lasts differs per runtime, and the wider
+  choices stay hidden until that is settled.
+- **Finish the desktop app.** Windows signing, and the last native
+  affordances.
 - **Package for the world.** A one-click Railway template, and a hosted
   instance.
-- **Know whether it works.** Light instrumentation and an effortless way to
-  send feedback.
+- **Know whether it works.** Latency is measured; use is not. Light
+  instrumentation and an effortless way to send feedback.
 
 ## Later, if the office earns it
 
 - Status and availability for people; desks and a place that is yours;
   wave, knock and notifications; calendar-aware status.
-- An agent workbench: task cards, approvals, agent rooms. Speaking to agents.
+- An agent workbench: task cards and agent rooms, on top of the approval
+  cards that already landed. Speaking to agents.
 - Multi-tenant hosting, self-serve onboarding, importing your own Tiled map.
 - A public site and docs that deserve the name; releases and community.
 
