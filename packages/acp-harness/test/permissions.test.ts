@@ -111,13 +111,17 @@ function fakeGateway(
   } as unknown as Gateway;
 }
 
-function config(cwd: string): AgentConfig {
+function config(cwd: string, runtimeId?: string): AgentConfig {
   return {
     name: 'Bob',
     key: 'agent-key',
     hostToken: '',
     agentId: '',
+    // What `host.ts` builds for every office-defined agent: the command comes
+    // from the catalogue, so the spawn carries no harness id and the real
+    // runtime rides in `runtimeId`.
     harness: 'custom',
+    ...(runtimeId ? { runtimeId } : {}),
     command: [process.execPath, FAKE],
     cwd,
     url: 'http://localhost:0',
@@ -191,14 +195,14 @@ describe('the runtime asks before running a tool', () => {
     else process.env.FAKE_PERMISSION_COMMAND = previousCommand;
   });
 
-  async function run(scopes: string[]) {
+  async function run(scopes: string[], runtimeId?: string) {
     await stopCurrent();
     const handlers: Handlers = {};
     const said: Array<[string, string | undefined]> = [];
     const cards: Cards = { requested: [], resolved: [] };
     const logDir = mkdtempSync(join(tmpdir(), 'perm-log-'));
     const runner = new AgentRunner(
-      config(mkdtempSync(join(tmpdir(), 'perm-cwd-'))),
+      config(mkdtempSync(join(tmpdir(), 'perm-cwd-')), runtimeId),
       logDir,
       fakeGateway(handlers, said, scopes, cards),
     );
@@ -292,6 +296,17 @@ describe('the runtime asks before running a tool', () => {
     }
   });
 
+  it('audits an office-defined agent under its real runtime, not "custom"', async () => {
+    // `host.ts` gives every office-defined agent `harness: 'custom'`. Keyed on
+    // that, the permission catalogue is bypassed for almost every agent in
+    // existence — so the row has to name the runtime the semantics came from,
+    // or the audit cannot be checked against the catalogue at all.
+    const { handlers, rows } = await run(['chat', 'run'], 'omp');
+    handlers.channelChat?.(inChannel('@Bob check the build'));
+    await until(() => rows().length > 0, 'the decision to be logged');
+    assert.equal(rows()[0]!.runtime, 'omp');
+  });
+
   it('names the mechanism, not a person, when nobody answered', async () => {
     const { handlers, rows, said, runner } = await run(['chat']);
     handlers.channelChat?.(inChannel('@Bob check the build'));
@@ -314,6 +329,47 @@ describe('the runtime asks before running a tool', () => {
       assert.deepEqual(cards.requested[0]!.options, [{ id: 'deny', label: 'Deny' }]);
     } finally {
       process.env.FAKE_PERMISSION_OPTIONS = 'allow_once,reject_once';
+    }
+  });
+
+  it('does not record an approval it could not make, for either affirmative word', async () => {
+    // A Deny-only card: the runtime offered nothing whose breadth we can
+    // state. Both "yes" and "always" used to settle it `allowed` while the
+    // runtime was sent `cancelled` — an approval in the office that never
+    // happened anywhere else.
+    for (const word of ['yes', 'always']) {
+      process.env.FAKE_PERMISSION_OPTIONS = 'allow_always,reject_once';
+      try {
+        const { handlers, rows, cards, said } = await run(['chat']);
+        handlers.channelChat?.(inChannel('@Bob check the build'));
+        await until(() => cards.requested.length > 0, `the card for "${word}"`);
+        assert.deepEqual(cards.requested[0]!.options, [{ id: 'deny', label: 'Deny' }]);
+
+        handlers.channelChat?.(inChannel(`@Bob ${word}`));
+        await until(() => rows().length > 0, `the answer to "${word}" to land`);
+
+        // The runtime is refused, so the office must say denied — not
+        // allowed, and not an optionId nobody could take.
+        assert.equal(rows()[0]!.decision, 'deny', word);
+        assert.equal(rows()[0]!.runtimeOption, 'reject_once', word);
+        assert.deepEqual(
+          cards.resolved.map((value) => [value.resolution, value.optionId ?? null]),
+          [['denied', 'deny']],
+          word,
+        );
+        // And it says why, without inviting a follow-up that cannot work.
+        await until(
+          () => said.some(([text]) => /no allow I can stand behind/.test(text)),
+          `the explanation for "${word}"`,
+        );
+        assert.equal(
+          said.some(([text]) => /yes #/.test(text) && /can't allow/.test(text)),
+          false,
+          'no dead handle is offered',
+        );
+      } finally {
+        process.env.FAKE_PERMISSION_OPTIONS = 'allow_once,reject_once';
+      }
     }
   });
 

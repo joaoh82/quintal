@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type * as schema from '@agentclientprotocol/sdk';
 import {
   AGENT_CHAT_INTERVAL_MS,
+  describeGrant,
   latencyRequestId,
   FLOOR_ZONE_ID,
   AGENT_PARALLELISM_MAX,
@@ -32,7 +33,7 @@ import {
   type ApprovalVia,
 } from '@quintal/shared';
 
-import { nestRoot, type AgentConfig } from '../config.js';
+import { nestRoot, runtimeIdOf, type AgentConfig } from '../config.js';
 import { writeGuide } from '../nest.js';
 import { hostLabel } from '../runtimes.js';
 import { workspaceReport, type WorkspaceReport } from './workspace.js';
@@ -299,6 +300,16 @@ export class AgentRunner {
 
   get harness(): string {
     return this.config.harness;
+  }
+
+  /**
+   * The runtime this agent is really on, for anything keyed by runtime.
+   *
+   * Not `harness`: an office-defined agent carries `harness: 'custom'` and its
+   * real runtime in `runtimeId`. See `runtimeIdOf`.
+   */
+  get #runtimeId(): string {
+    return runtimeIdOf(this.config);
   }
 
   get connected(): boolean {
@@ -673,7 +684,7 @@ export class AgentRunner {
       identity: {
         agent: ready?.name ?? this.name,
         owner: ready?.ownerName ?? 'not known to this machine',
-        runtime: this.config.runtimeId ?? this.config.harness,
+        runtime: this.#runtimeId,
         model: this.config.modelId ?? null,
         machine: this.#host?.label ?? hostLabel(),
       },
@@ -1821,7 +1832,8 @@ export class AgentRunner {
    *
    * With several turns in flight, several questions may be open at once, so
    * the tool is named and the answer may name it back: "@bob yes Bash". A
-   * bare answer goes to the oldest question.
+   * bare answer settles the only open question and nothing else — with two
+   * open it settles neither and the agent asks which. See `pickApproval`.
    */
   async #onPermissionRequest(
     worker: Worker,
@@ -1836,7 +1848,7 @@ export class AgentRunner {
     const options = params.options as Array<{ optionId: string; kind?: string }>;
 
     if (ready?.scopes?.includes('run')) {
-      const choice = chooseRuntimeOption(this.config.harness, options, 'once', true);
+      const choice = chooseRuntimeOption(this.#runtimeId, options, 'once', true);
       const allowed = choice.optionId !== null;
       const requestId = randomUUID();
       const turnId = String(
@@ -1852,8 +1864,8 @@ export class AgentRunner {
           'warn',
           `permission for ${toolName}: the run scope could not answer — ${
             choice.refusal === 'not_per_call'
-              ? `the narrowest allow ${this.config.harness} offered grants ${describeSelection(choice)}`
-              : `no option ${this.config.harness} offered has an established breadth and lifetime`
+              ? `the narrowest allow ${this.#runtimeId} offered grants ${describeGrant(choice.semantics)}`
+              : `no option ${this.#runtimeId} offered has an established breadth and lifetime`
           }; cancelled`,
         );
       }
@@ -1902,7 +1914,7 @@ export class AgentRunner {
       ...this.#approvalTarget(scope),
       toolName,
       summary: summariseToolCall(params.toolCall, 400, toolName),
-      options: supportedOptions(this.config.harness, options),
+      options: supportedOptions(this.#runtimeId, options),
       askedAt: now,
       expiresAt: now + PERMISSION_TIMEOUT_MS,
     };
@@ -1950,7 +1962,7 @@ export class AgentRunner {
       if (turn) this.#publicTurns.get(turn.id)?.state('running');
     }
 
-    const choice = chooseRuntimeOption(this.config.harness, options, decision);
+    const choice = chooseRuntimeOption(this.#runtimeId, options, decision);
     this.#auditPermission({
       requestId: request.requestId,
       toolName,
@@ -1989,7 +2001,7 @@ export class AgentRunner {
       summary: entry.summary,
       actor: entry.actor,
       decision: entry.decision,
-      runtime: this.config.harness,
+      runtime: this.#runtimeId,
       // What the runtime was actually told — its own option id and kind, or
       // the cancel it got instead. The label the owner saw is derived from
       // the same two facts, so a mismatch is visible in one row.
@@ -2090,7 +2102,15 @@ export class AgentRunner {
     // The office authenticated the owner and checked the option against the
     // request. We check the one thing only we know: that it is still ours.
     if (!pending.request.options.some((option) => option.id === decision.optionId)) return;
-    const allowed = decision.optionId === 'allow_once';
+    let allowed = decision.optionId === 'allow_once';
+    // The card only carries an allow when one was selectable, and it was built
+    // from the options kept here — so this should never fire. Checked anyway:
+    // the alternative is a resolution reading `allowed` while the runtime is
+    // told `cancelled`, which is the exact mismatch the text path had.
+    if (allowed && chooseRuntimeOption(this.#runtimeId, pending.options, 'once').optionId === null) {
+      this.#log('warn', `allow for ${pending.request.toolName} has no selectable option — denying`);
+      allowed = false;
+    }
     this.#log(
       'info',
       `${decision.decidedByName} ${allowed ? 'allowed' : 'denied'} ${pending.request.toolName} (#${approvalHandle(decision.requestId)})`,
@@ -2147,20 +2167,36 @@ export class AgentRunner {
       this.#log('warn', `ambiguous permission answer "${which.trim()}" — asked which`);
       return true;
     }
+    // An affirmative word only settles as an approval if there is something
+    // to approve *with*.
+    //
     // "always" used to reach the runtime as whatever carried the kind
-    // `allow_always`, while the office recorded `allow_once` — a standing
-    // grant filed as a single approval. It now takes the same option the card
-    // would, and when that is narrower than the word asked for, the agent
-    // says so rather than letting the owner believe otherwise.
+    // `allow_always` while the office recorded `allow_once` — a standing grant
+    // filed as a single approval. Fixing that left a subtler version of the
+    // same dishonesty: where nothing the runtime offered can be taken, `yes`
+    // and `always` both settled the card `allowed` and the runtime was then
+    // sent `cancelled`. The office showed an approval that happened nowhere
+    // else, and "always" went further and invited a follow-up `yes` on a
+    // handle it had just removed — a reply that could not land, and could not
+    // have helped if it had. So the option is chosen before the card closes.
     const request = match.approval.request;
-    if (decision === 'always') {
-      const choice = chooseRuntimeOption(this.config.harness, match.approval.options, 'always');
-      if (choice.optionId === null || choice.downgraded) {
-        const me = this.#gateway.ready?.name ?? this.name;
+    const owner = this.#gateway.ready?.ownerName ?? 'owner';
+    if (decision !== 'deny') {
+      const choice = chooseRuntimeOption(this.#runtimeId, match.approval.options, decision);
+      if (choice.optionId === null) {
         this.#speak(
-          choice.optionId === null
-            ? `I can't say what "always" would grant on ${this.config.harness}, so I'm not taking it. Reply "@${me} yes #${approvalHandle(request.requestId)}" to allow this one.`
-            : `${this.config.harness} offers no standing grant here, so "always" allows ${describeSelection(choice)} — this one action only.`,
+          `I can't allow that: nothing ${this.#runtimeId} offered for it can be explained, so there is no allow I can stand behind. Denying it — which is why the card offered only Deny.`,
+          scope,
+        );
+        this.#log(
+          'warn',
+          `text "${decision}" for ${request.toolName} had no selectable allow — denying`,
+        );
+        return this.#settleApproval(request.requestId, 'deny', 'denied', 'text', owner);
+      }
+      if (decision === 'always' && choice.downgraded) {
+        this.#speak(
+          `${this.#runtimeId} offers no standing grant here, so "always" allows ${describeSelection(choice)} — this one action only.`,
           scope,
         );
       }
@@ -2170,7 +2206,7 @@ export class AgentRunner {
       decision,
       decision === 'deny' ? 'denied' : 'allowed',
       'text',
-      this.#gateway.ready?.ownerName ?? 'owner',
+      owner,
     );
   }
 

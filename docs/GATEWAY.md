@@ -638,8 +638,11 @@ written from what the chosen option is established to grant, and the harness
 picks the *narrowest* allow the runtime sent whose breadth and lifetime are
 known — never the first one carrying a given ACP `kind`. A runtime whose only
 allow is an unmeasured "always" gets `deny` alone: a button that cannot say
-what it grants should not exist. A runtime that offers no reject option still
-gets `deny` — every ACP agent must accept a `cancelled` outcome.
+what it grants should not exist. Nor is an option that buys *less asking
+later* ever offered, however narrow — clicking one button on one request
+answers that request, and "and stop asking me" is not a rider that came with
+it. A runtime that offers no reject option still gets `deny` — every ACP agent
+must accept a `cancelled` outcome.
 
 The label and the option sent back to the runtime come from one function, so a
 card can never promise less authority, or a shorter life, than what it takes.
@@ -742,3 +745,8 @@ asked for the agent says so out loud rather than letting the owner believe
 otherwise. It used to reach the runtime as whatever carried `allow_always`
 while the office filed the result as `allow_once` — a standing grant recorded
 as a single approval.
+
+Where nothing offered can be taken at all, an affirmative word resolves
+`denied` rather than `allowed`. The runtime is sent `cancelled`, so a card
+reading "allowed" would describe an approval that happened nowhere — and the
+agent says why instead of inviting a follow-up that cannot land.

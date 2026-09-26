@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
+import { runtimeIdOf } from '../src/config.js';
 import {
   approvalHandle,
   askingMode,
@@ -87,18 +88,6 @@ describe('which options a card may offer', () => {
     assert.deepEqual(supportedOptions('claude-code', []), [{ id: 'deny', label: 'Deny' }]);
   });
 
-  it('labels a broader grant with its breadth rather than as "once"', () => {
-    // Claude Code's shell request minus its per-call allow: the only thing
-    // left is the directory-wide, session-long one, and the button says so.
-    const options = [
-      { optionId: 'allow-with-updates', kind: 'allow_always' },
-      { optionId: 'reject', kind: 'reject_once' },
-    ];
-    assert.deepEqual(supportedOptions('claude-code', options), [
-      { id: 'allow_once', label: 'Allow here, this session' },
-      { id: 'deny', label: 'Deny' },
-    ]);
-  });
 });
 
 describe('which runtime option an answer actually takes', () => {
@@ -184,6 +173,105 @@ describe('which runtime option an answer actually takes', () => {
         }
       }
     }
+  });
+});
+
+describe('which runtime the semantics are looked up under', () => {
+  it('reads an office-defined agent\'s real runtime, not its harness id', () => {
+    // `host.ts` builds every office-defined agent with `harness: 'custom'` —
+    // the command comes from the catalogue, so the spawn needs no harness id —
+    // and the real runtime in `runtimeId`. Keyed on 'custom' the catalogue is
+    // silently bypassed, which is the primary path for almost every agent.
+    assert.equal(runtimeIdOf({ harness: 'custom', runtimeId: 'claude-code' }), 'claude-code');
+    // A hand-run `--agent claude-code` carries it the other way round.
+    assert.equal(runtimeIdOf({ harness: 'claude-code' }), 'claude-code');
+  });
+
+  it('keeps the plan-exit safeguard for a host-shaped config', () => {
+    const plan = offered('claude-code', 'exit-plan-mode');
+    const host = { harness: 'custom' as const, runtimeId: 'claude-code' };
+
+    // The bug: under 'custom', `exit-plan-default` resolves through the ACP
+    // kind default to this_call/this_call, so the run scope takes a session
+    // policy change automatically and the card labels it "Allow once".
+    const bypassed = chooseRuntimeOption('custom', plan, 'once', true);
+    assert.equal(bypassed.optionId, 'exit-plan-default');
+    assert.deepEqual(supportedOptions('custom', plan), [
+      { id: 'allow_once', label: 'Allow once' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+
+    // Resolved properly: the run scope refuses, because approving a policy
+    // change on the owner's behalf is not what the scope is for…
+    const fixed = chooseRuntimeOption(runtimeIdOf(host), plan, 'once', true);
+    assert.equal(fixed.optionId, null);
+    assert.equal(fixed.refusal, 'not_per_call');
+    // …while a person still gets the safe exit, named for what it leaves
+    // behind rather than passed off as a single allow.
+    assert.deepEqual(supportedOptions(runtimeIdOf(host), plan), [
+      { id: 'allow_once', label: 'Allow, and keep asking' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+  });
+});
+
+describe('an option that buys less asking later', () => {
+  it('is never chosen by payload order', () => {
+    // Every plan-exit allow is session_policy + session, so breadth and
+    // lifetime tie and the old sort fell back to whatever order the runtime
+    // sent. Each permutation must land on the same safe option.
+    const plan = offered('claude-code', 'exit-plan-mode');
+    const rotations = plan.map((_, index) => [...plan.slice(index), ...plan.slice(0, index)]);
+    for (const order of rotations) {
+      assert.equal(
+        chooseRuntimeOption('claude-code', order, 'once').optionId,
+        'exit-plan-default',
+        `order starting ${order[0]!.optionId}`,
+      );
+    }
+    // Including the worst case explicitly: bypass listed first.
+    const bypassFirst = [...plan].sort((a, b) =>
+      a.optionId === 'exit-plan-bypass' ? -1 : b.optionId === 'exit-plan-bypass' ? 1 : 0,
+    );
+    assert.equal(bypassFirst[0]!.optionId, 'exit-plan-bypass');
+    assert.equal(chooseRuntimeOption('claude-code', bypassFirst, 'once').optionId, 'exit-plan-default');
+  });
+
+  it('is not offered at all when it is the only allow', () => {
+    // "Yes, and bypass permissions" alone. There is no honest allow button
+    // here, so there is none — Deny is the whole choice.
+    const options = [
+      { optionId: 'exit-plan-bypass', kind: 'allow_always' },
+      { optionId: 'reject', kind: 'reject_once' },
+    ];
+    assert.deepEqual(supportedOptions('claude-code', options), [{ id: 'deny', label: 'Deny' }]);
+    assert.equal(chooseRuntimeOption('claude-code', options, 'always').optionId, null);
+  });
+
+  it('never labels the offerable session-policy exit as a plain "once"', () => {
+    const options = [
+      { optionId: 'exit-plan-default', kind: 'allow_once' },
+      { optionId: 'reject', kind: 'reject_once' },
+    ];
+    assert.deepEqual(supportedOptions('claude-code', options), [
+      { id: 'allow_once', label: 'Allow, and keep asking' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+  });
+
+  it('drops a directory-wide grant from the card rather than ranking it last', () => {
+    // Claude Code's `allow-with-updates` suppresses later asks in that
+    // directory for the session. Explainable, but not something one click on
+    // one request should buy, so the card offers the per-call allow only.
+    assert.deepEqual(supportedOptions('claude-code', offered('claude-code', 'edit-in-manual-mode')), [
+      { id: 'allow_once', label: 'Allow once' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+    const editOnly = [
+      { optionId: 'allow-with-updates', kind: 'allow_always' },
+      { optionId: 'reject', kind: 'reject_once' },
+    ];
+    assert.deepEqual(supportedOptions('claude-code', editOnly), [{ id: 'deny', label: 'Deny' }]);
   });
 });
 

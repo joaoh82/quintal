@@ -249,3 +249,98 @@ For the card path, seed without `QUIN_SCOPES`, boot on `claude-code`, and run
 To re-establish the catalogue itself, see *Re-establishing it* in
 [docs/RUNTIME-PERMISSIONS.md](../../RUNTIME-PERMISSIONS.md). Do not run any of
 this against real office data.
+
+## Review round 1 (2026-09-26)
+
+Three reviewers — two Hermes agents and the owner — converged on three real
+findings. All three are fixed; two of them were things my own live verification
+structurally could not have caught, and it is worth saying why.
+
+### The catalogue was bypassed for almost every agent
+
+`host.ts:417` builds **every office-defined agent** with `harness: 'custom'`
+and the real runtime in `runtimeId` — the command comes from the catalogue, so
+the spawn needs no harness id. Permission lookup was keyed on `harness`, so on
+the fleet path every measured fact was silently lost, including the plan-exit
+safeguard this whole ticket is about: under `'custom'`, `exit-plan-default`
+resolves through the ACP-kind default to `this_call`/`this_call`, so the run
+scope would take a session-policy change automatically and the card would
+label it "Allow once".
+
+My live probes used `--agent omp` and `--agent claude-code`, which put the real
+runtime in `harness` — so they exercised the one shape where the bug is
+invisible. The tests passed for the same reason.
+
+The same root cause had already killed QUIN-52's fix on the same path:
+`askingMode(harness, modes)` never matched `'custom'`, so a fleet-managed
+Claude Code agent with no `run` scope was left in `auto`, answering its own
+permission questions. Fixed too — one resolver, `runtimeIdOf(config)`, used by
+the catalogue lookup, card generation, text handling, the audit row and the
+asking-mode allowlist.
+
+### Ordering decided which destructive option was taken
+
+Claude Code's four plan-exit allows are *all* `session_policy` + `session`, so
+`compareGrants` tied them and `pickAllow` fell back to offer order. The
+recorded payload happens to list the safe one first, which is why the tests
+looked right; reordering the fixture selects "clear context and use auto mode"
+or "bypass permissions" under an identically-worded button.
+
+Breadth and lifetime cannot express this, so a third fact does:
+`loosensFuturePermission`, stated per option, ranked *before* breadth, and
+`grantIsOfferable` refuses a loosening option outright rather than ranking it
+last. Clicking one button on one request answers that request; "and stop asking
+me" is not a rider that came with it. `exit-plan-default` is the only offerable
+plan-exit option and its button now reads **"Allow, and keep asking"**.
+
+This also removed `allow-with-updates` and omp's "Always allow" from cards
+entirely. They were explainable and correctly labelled, but they are still
+purchases of less asking later, and the narrower option was already being
+preferred in every recorded payload.
+
+Covered by permutation tests over all five rotations of the recorded plan-exit
+payload plus the bypass-first worst case.
+
+### An affirmative answer settled as an approval that happened nowhere
+
+On a Deny-only card, `yes` and `always` both settled the request `allowed`
+while `respondWith` sent the runtime `cancelled`. The office showed an approval
+that existed nowhere else. `always` went further and invited a follow-up
+`yes #handle` on a waiter it had just removed — a reply that could not land and
+could not have helped if it had.
+
+The option is now chosen *before* the card closes: nothing selectable means
+`denied`, with the reason said out loud and no dead handle offered. The card
+path got the same guard — unreachable by construction, but the alternative is
+reasoning about two places instead of one.
+
+### Also taken
+
+- `describeSelection` on a refusal produced "the narrowest allow grants nothing
+  the runtime offered could be explained". The run-scope warning now uses
+  `describeGrant(choice.semantics)`; `refusal` already carries which case it is.
+- A local `UNKNOWN` in `approvals.ts` duplicated `UNKNOWN_SEMANTICS`. The
+  compiler caught the drift when the new field landed; it now imports the one
+  in `shared`.
+- A stale comment on `#onPermissionRequest` still said a bare answer goes to
+  the oldest question. `pickApproval` has refused ambiguous bare answers since
+  QUIN-52.
+
+### Re-verified
+
+`pnpm typecheck` and `pnpm build` clean. **418** shared (+5), **113** server,
+**216** web, **321** harness (+7), 12 release; `git diff --check` and the
+NUL/binary scan clean.
+
+Two of the new harness tests are the ones that would have caught the headline
+bug: `runtimeIdOf` against a host-shaped config, and an integration test
+asserting the audit row names `omp` rather than `custom` for an agent built the
+way `host.ts` builds them.
+
+**Not re-run live.** The live probes above still describe the shipped behaviour
+for the shapes they covered, and the three fixes are covered by unit and
+integration tests against recorded payloads. What is *not* verified live is the
+fleet path itself — a real office-defined agent launched by `host.ts` with a
+host token — because that needs a registered machine and a fleet file rather
+than a hand-run harness. That gap is exactly what let the bug through the first
+time, and it is worth closing with a fixture or a live fleet probe of its own.

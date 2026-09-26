@@ -53,6 +53,21 @@ export interface RuntimeOptionSemantics {
   lifetime: GrantLifetime;
   /** Where a grant is written, when it is written anywhere. Null when nothing is. */
   persistsAt: string | null;
+  /**
+   * Whether taking this reduces how much the runtime will ask in future.
+   *
+   * Breadth and lifetime do not capture this on their own, and the gap had
+   * teeth: Claude Code's four plan-exit options are *all* `session_policy` +
+   * `session`, so they ranked equal and the choice fell to whatever order the
+   * runtime happened to send. "Yes, manually approve edits" and "Yes, and
+   * bypass permissions" are not interchangeable, and nothing about how far a
+   * grant reaches says which is which — only which direction it moves the
+   * next question in.
+   *
+   * So this is ranked before breadth, and an option that loosens future
+   * permission is never offered on a card as a mere allow.
+   */
+  loosensFuturePermission: boolean;
   /** How this was established. Shown in the docs, not in the UI. */
   evidence: string;
 }
@@ -95,6 +110,9 @@ export const UNKNOWN_SEMANTICS: RuntimeOptionSemantics = {
   breadth: 'unknown',
   lifetime: 'unknown',
   persistsAt: null,
+  // Unestablished is assumed to loosen: it is never offered or auto-taken
+  // anyway, and the conservative reading is the right default.
+  loosensFuturePermission: true,
   evidence: 'Not established.',
 };
 
@@ -110,6 +128,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'this_call',
       lifetime: 'this_call',
       persistsAt: null,
+      loosensFuturePermission: false,
       evidence: 'Named "Yes". QUIN-52\'s live probe saw the next request asked again.',
     },
     {
@@ -118,6 +137,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'directory',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence:
         'Names itself "Yes, allow all edits in <dir>/ during this session". Measured: after taking it, the same edit and a different edit in that session were not asked again; a new session asked again, and so did a restart; no runtime settings file changed.',
     },
@@ -127,6 +147,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'this_call',
       lifetime: 'this_call',
       persistsAt: null,
+      loosensFuturePermission: false,
       evidence: 'Named "No".',
     },
     // The plan-exit request is not a tool permission at all. Its `toolCall`
@@ -141,6 +162,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'session_policy',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: false,
       evidence: '"Yes, manually approve edits" — leaves plan mode for Manual. Observed 2026-09-24.',
     },
     {
@@ -149,6 +171,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'session_policy',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence: '"Yes, and use auto mode" — the session stops asking. Observed 2026-09-24.',
     },
     {
@@ -157,6 +180,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'session_policy',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence:
         '"Yes, clear context and use auto mode" — the session stops asking *and* the conversation is discarded. Observed 2026-09-24.',
     },
@@ -166,6 +190,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
       breadth: 'session_policy',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence: '"Yes, and bypass permissions". Observed 2026-09-24.',
     },
   ],
@@ -186,6 +211,7 @@ const OMP: RuntimePermissionProfile = {
       breadth: 'this_call',
       lifetime: 'this_call',
       persistsAt: null,
+      loosensFuturePermission: false,
       evidence: 'Named "Allow once". The next command asked again.',
     },
     {
@@ -194,6 +220,7 @@ const OMP: RuntimePermissionProfile = {
       breadth: 'tool_category',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence:
         'Named only "Always allow", which says nothing, so it was measured: after taking it, the same command and a *different* shell command in that session were not asked again; a new session asked again, and so did a restart. Nothing under ~/.omp changed but session transcripts, logs and model caches.',
     },
@@ -203,6 +230,7 @@ const OMP: RuntimePermissionProfile = {
       breadth: 'this_call',
       lifetime: 'this_call',
       persistsAt: null,
+      loosensFuturePermission: false,
       evidence: 'Named "Reject".',
     },
     {
@@ -211,6 +239,7 @@ const OMP: RuntimePermissionProfile = {
       breadth: 'tool_category',
       lifetime: 'session',
       persistsAt: null,
+      loosensFuturePermission: true,
       evidence:
         'Named "Always reject". Catalogued as the mirror of "Always allow"; never selected, because a standing refusal denies requests the owner was never shown.',
     },
@@ -299,12 +328,14 @@ const SPEC_DEFAULTS: Readonly<Record<string, RuntimeOptionSemantics>> = {
     breadth: 'this_call',
     lifetime: 'this_call',
     persistsAt: null,
+    loosensFuturePermission: false,
     evidence: 'ACP defines `allow_once` as permitting this operation only.',
   },
   reject_once: {
     breadth: 'this_call',
     lifetime: 'this_call',
     persistsAt: null,
+    loosensFuturePermission: false,
     evidence: 'ACP defines `reject_once` as refusing this operation only.',
   },
 };
@@ -365,12 +396,37 @@ const LIFETIME_RANK: Record<GrantLifetime, number> = {
   unknown: 3,
 };
 
-/** Negative when `a` authorises strictly less than `b`. Narrowest first. */
+/**
+ * Negative when `a` authorises strictly less than `b`. Narrowest first.
+ *
+ * Whether it loosens future permission is compared *before* breadth, because
+ * breadth and lifetime tie on exactly the case where the difference matters
+ * most: Claude Code's plan-exit options are all `session_policy` + `session`,
+ * so without this term "manually approve edits" and "bypass permissions" rank
+ * equal and the winner is whichever the runtime listed first. A sort whose
+ * result depends on payload order is not a policy.
+ */
 export function compareGrants(a: RuntimeOptionSemantics, b: RuntimeOptionSemantics): number {
   return (
+    Number(a.loosensFuturePermission) - Number(b.loosensFuturePermission) ||
     BREADTH_RANK[a.breadth] - BREADTH_RANK[b.breadth] ||
     LIFETIME_RANK[a.lifetime] - LIFETIME_RANK[b.lifetime]
   );
+}
+
+/**
+ * Whether this may be put on a card as an allow at all.
+ *
+ * Two conditions, and both are about what a person can be held to. It has to
+ * be explainable, and it must not quietly buy less asking in future — an
+ * owner clicking one button on one request is answering *that* request, and
+ * "and stop asking me" is not a rider they consented to. So a loosening
+ * option is never offered, even when it is the only allow the runtime sent;
+ * the card then carries Deny alone, which is honest about the choice
+ * available rather than inventing one.
+ */
+export function grantIsOfferable(semantics: RuntimeOptionSemantics): boolean {
+  return grantIsExplainable(semantics) && !semantics.loosensFuturePermission;
 }
 
 const BREADTH_WORDS: Record<GrantBreadth, string> = {
@@ -401,7 +457,10 @@ export function grantLabel(semantics: RuntimeOptionSemantics): string {
     case 'tool_category':
       return semantics.lifetime === 'session' ? 'Allow this tool, this session' : 'Allow this tool';
     case 'session_policy':
-      return 'Change session policy';
+      // The only offerable one is the non-loosening exit — Claude Code's
+      // "manually approve edits". Say what it leaves behind, because "change
+      // session policy" is true of the bypass option too.
+      return 'Allow, and keep asking';
     default:
       // Unknown never reaches a button; a label for it would be the very
       // claim this module exists to stop.

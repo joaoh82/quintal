@@ -32,6 +32,21 @@ never offered to a person, never taken automatically, and never described.
 2. **The narrowest explainable allow wins** — not the first of a kind.
 3. **Unknown is not offered.** A runtime whose only allow option is an
    unmeasured "always" gets a card with Deny and no allow button at all.
+3a. **Neither is anything that buys less asking later.** Breadth and lifetime
+   do not capture that on their own, and the gap had teeth: Claude Code's four
+   plan-exit options are *all* `session_policy` + `session`, so they ranked
+   equal and the choice fell to whatever order the runtime happened to send —
+   "Yes, manually approve edits" and "Yes, and bypass permissions" were
+   interchangeable. So each option states `loosensFuturePermission`
+   separately, it is ranked *before* breadth, and a loosening option is never
+   offered as an allow at all. Clicking one button on one request answers that
+   request; "and stop asking me" is not a rider the owner agreed to.
+3b. **The runtime is resolved from `runtimeId`, not `harness`.** An
+   office-defined agent is built by `host.ts` with `harness: 'custom'` and its
+   real runtime in `runtimeId`, so keying the catalogue on `harness` bypassed
+   every measured fact on the path almost every agent takes — including the
+   plan-exit safeguard. One resolver, `runtimeIdOf`, and the asking-mode
+   allowlist goes through it too.
 4. **The `run` scope may only take a genuine per-call allow.** An automatic
    approval nobody sees must leave nothing behind. Where no per-call allow is
    offered, the runtime is answered `cancelled` and the audit row says which
@@ -41,7 +56,12 @@ never offered to a person, never taken automatically, and never described.
    was never shown, which is the same failure pointed the other way. With no
    `reject_once` the runtime gets `cancelled`, which every ACP agent must
    accept.
-6. **Quintal creates no persistent grants.** Nothing in the app writes an
+6. **An affirmative answer that cannot be honoured is a denial, not an
+   approval.** Where nothing offered can be taken, `yes` and `always` settle
+   the card `denied` — because `cancelled` is what the runtime is told, and a
+   resolution reading `allowed` would describe an approval that happened
+   nowhere.
+7. **Quintal creates no persistent grants.** Nothing in the app writes an
    allow rule into a runtime's settings, so there is no list of app-created
    grants to show and no revocation path to offer. Grants that exist in a
    runtime are that runtime's, and are removed with that runtime's own tools —
@@ -77,6 +97,13 @@ safe does not.
 | File edit | `allow-once` "Yes" · `allow-with-updates` "Yes, allow all edits in `<dir>`/ during this session" · `reject` "No" |
 | Shell command | `allow-once` "Yes" · `reject` "No" — **no standing option at all** |
 | Plan exit (`toolCall.kind: switch_mode`) | `exit-plan-default` "Yes, manually approve edits" · `exit-plan-clear-auto` "Yes, clear context and use auto mode" · `exit-plan-auto` "Yes, and use auto mode" · `exit-plan-bypass` "Yes, and bypass permissions" · `reject` |
+
+Of the plan-exit options only `exit-plan-default` is offerable: it leaves plan
+mode for Manual, so the session goes on asking. Its button says **"Allow, and
+keep asking"** rather than "Allow once" — it is a policy change, not a single
+allow. The other three stop the session asking and one of them discards the
+conversation, so no card offers them and the `run` scope refuses the request
+outright.
 
 `allow-with-updates` names its own breadth and lifetime, and the measurement
 agrees with the name: after taking it, the same edit and a *different* edit in

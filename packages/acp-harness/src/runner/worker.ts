@@ -1,7 +1,7 @@
 import type * as schema from '@agentclientprotocol/sdk';
 
 import { AgentProcess } from '../acp/agent-process.js';
-import type { AgentConfig } from '../config.js';
+import { runtimeIdOf, type AgentConfig } from '../config.js';
 import type { Gateway } from '../gateway/client.js';
 import { startBridge, type BridgeHandle, type BridgeHooks } from '../mcp/bridge.js';
 import { pickModel } from '../models.js';
@@ -342,7 +342,12 @@ export class Worker {
    */
   async #applyPermissionMode(proc: AgentProcess, created: schema.NewSessionResponse): Promise<void> {
     if (this.options.gateway.ready?.scopes?.includes('run')) return;
-    const harness = this.options.config.harness;
+    // The catalogue id, not `harness`: an office-defined agent carries
+    // `harness: 'custom'`, and keyed on that this allowlist never matched — so
+    // a fleet-managed Claude Code agent with no `run` scope was left in `auto`,
+    // answering its own permission questions. Exactly the bug QUIN-52 fixed,
+    // still live on the path almost every agent takes. See `runtimeIdOf`.
+    const harness = runtimeIdOf(this.options.config);
     const modes = (created as { modes?: import('./approvals.js').SessionModes }).modes;
     const wanted = askingMode(harness, modes);
     if (!wanted) {

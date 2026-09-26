@@ -3,10 +3,11 @@ import {
   activityText,
   compareGrants,
   describeGrant,
-  grantIsExplainable,
+  grantIsOfferable,
   grantIsPerCall,
   grantLabel,
   optionSemantics,
+  UNKNOWN_SEMANTICS,
 } from '@quintal/shared';
 
 /**
@@ -22,14 +23,6 @@ import {
  * meant. Here an answer that cannot be pinned to exactly one question is
  * refused, and the agent asks again with handles to quote back.
  */
-
-/** Everything not established, under a shorter name for use below. */
-const UNKNOWN: RuntimeOptionSemantics = {
-  breadth: 'unknown',
-  lifetime: 'unknown',
-  persistsAt: null,
-  evidence: 'Not established.',
-};
 
 /** What the owner said, or what silence means. */
 export type PermissionDecision = 'once' | 'always' | 'deny';
@@ -118,7 +111,12 @@ export function pickAllow(runtimeId: string, options: unknown): AllowChoice | nu
       kind: kindOf(option),
       semantics: optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind }),
     }))
-    .filter((candidate) => grantIsExplainable(candidate.semantics));
+    // Explainable *and* not a quiet purchase of less asking later. A
+    // loosening option is dropped here rather than ranked last, so no
+    // ordering accident can promote it: Claude Code's plan exit offers three
+    // that would stop the session asking, one of which also throws the
+    // conversation away, and all four of its options tie on breadth.
+    .filter((candidate) => grantIsOfferable(candidate.semantics));
   if (candidates.length === 0) return null;
   return candidates.sort((a, b) => compareGrants(a.semantics, b.semantics))[0]!;
 }
@@ -204,7 +202,7 @@ export function chooseRuntimeOption(
     return {
       optionId: reject?.optionId ?? null,
       kind: reject?.kind ?? null,
-      semantics: reject?.semantics ?? UNKNOWN,
+      semantics: reject?.semantics ?? UNKNOWN_SEMANTICS,
       refusal: null,
       downgraded: false,
     };
@@ -212,7 +210,13 @@ export function chooseRuntimeOption(
 
   const allow = pickAllow(runtimeId, options);
   if (!allow) {
-    return { optionId: null, kind: null, semantics: UNKNOWN, refusal: 'unexplained_allow', downgraded: false };
+    return {
+      optionId: null,
+      kind: null,
+      semantics: UNKNOWN_SEMANTICS,
+      refusal: 'unexplained_allow',
+      downgraded: false,
+    };
   }
   if (automatic && !grantIsPerCall(allow.semantics)) {
     return { optionId: null, kind: null, semantics: allow.semantics, refusal: 'not_per_call', downgraded: false };
@@ -226,9 +230,17 @@ export function chooseRuntimeOption(
   };
 }
 
-/** The sentence an audit line and a chat reply both use. */
+/**
+ * The sentence an audit line and a chat reply both use.
+ *
+ * Only ever called about a selection that was made. A refusal has its own
+ * words at each call site, because "nothing could be explained" and "the
+ * narrowest allow was still too broad" are different facts and `refusal`
+ * already says which — running both through one string produced the sentence
+ * "the narrowest allow grants nothing the runtime offered could be explained".
+ */
 export function describeSelection(selection: RuntimeSelection): string {
-  if (selection.optionId === null) return 'nothing the runtime offered could be explained';
+  if (selection.optionId === null) return 'nothing it offered could be taken';
   return describeGrant(selection.semantics);
 }
 

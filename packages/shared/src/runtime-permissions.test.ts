@@ -9,6 +9,7 @@ import {
   compareGrants,
   describeGrant,
   grantIsExplainable,
+  grantIsOfferable,
   grantIsPerCall,
   grantLabel,
   optionSemantics,
@@ -87,6 +88,51 @@ describe('ranking one grant against another', () => {
     assert.ok(compareGrants(category, perCall) > 0);
     assert.equal(compareGrants(perCall, perCall), 0);
   });
+
+  it('separates the plan-exit options that breadth alone ties', () => {
+    // All four are session_policy + session. Without the loosening term they
+    // rank equal and the winner is whatever order the runtime sent — so
+    // "manually approve edits" and "bypass permissions" were interchangeable.
+    const exit = (optionId: string) => optionSemantics('claude-code', { optionId, kind: 'allow_always' });
+    const manual = optionSemantics('claude-code', { optionId: 'exit-plan-default', kind: 'allow_once' });
+    for (const id of ['exit-plan-auto', 'exit-plan-clear-auto', 'exit-plan-bypass']) {
+      assert.equal(exit(id).breadth, manual.breadth, `${id} breadth ties, by design`);
+      assert.equal(exit(id).lifetime, manual.lifetime, `${id} lifetime ties, by design`);
+      assert.ok(compareGrants(manual, exit(id)) < 0, `${id} must rank after the manual exit`);
+    }
+  });
+});
+
+describe('which grants may be put on a card at all', () => {
+  it('refuses an option that buys less asking later, however narrow', () => {
+    // The card is answering *this* request. "And stop asking me" is not a
+    // rider the owner agreed to by clicking one button.
+    for (const [runtime, optionId] of [
+      ['claude-code', 'allow-with-updates'],
+      ['claude-code', 'exit-plan-bypass'],
+      ['claude-code', 'exit-plan-auto'],
+      ['claude-code', 'exit-plan-clear-auto'],
+      ['omp', 'allow_always'],
+    ] as const) {
+      const semantics = optionSemantics(runtime, { optionId, kind: 'allow_always' });
+      assert.equal(grantIsExplainable(semantics), true, `${optionId} is explainable`);
+      assert.equal(grantIsOfferable(semantics), false, `${optionId} must not be offerable`);
+    }
+  });
+
+  it('allows the per-call ones, and the plan exit that keeps asking', () => {
+    assert.equal(grantIsOfferable(optionSemantics('omp', { optionId: 'allow_once', kind: 'allow_once' })), true);
+    assert.equal(
+      grantIsOfferable(optionSemantics('claude-code', { optionId: 'exit-plan-default', kind: 'allow_once' })),
+      true,
+    );
+  });
+
+  it('refuses anything unestablished, which is assumed to loosen', () => {
+    const unknown = optionSemantics('nobody-probed-this', { optionId: 'x', kind: 'allow_always' });
+    assert.equal(unknown.loosensFuturePermission, true);
+    assert.equal(grantIsOfferable(unknown), false);
+  });
 });
 
 describe('what a person is told', () => {
@@ -95,6 +141,21 @@ describe('what a person is told', () => {
       for (const option of profile.options) {
         if (grantIsPerCall(option)) continue;
         assert.notEqual(grantLabel(option), 'Allow once', `${profile.runtimeId}/${option.optionId}`);
+      }
+    }
+  });
+
+  it('gives every offerable option a label short enough to survive the wire', () => {
+    // `parseApprovalRequest` truncates a label to 40 characters. One clipped
+    // from "Allow here, this session" to "Allow here" would read narrower than
+    // it is, which is the failure this whole module exists to prevent.
+    for (const profile of RUNTIME_PERMISSIONS) {
+      for (const option of profile.options) {
+        if (!grantIsOfferable(option)) continue;
+        assert.ok(
+          grantLabel(option).length <= 40,
+          `${profile.runtimeId}/${option.optionId}: ${grantLabel(option)}`,
+        );
       }
     }
   });
@@ -132,6 +193,13 @@ describe('the catalogue itself', () => {
         // Anything claimed to outlive the process has to say where it lives,
         // or nobody can be told how to revoke it.
         if (option.lifetime === 'persisted') assert.ok(option.persistsAt);
+        // Stated per option rather than derived: the whole point is that
+        // breadth and lifetime do not imply it.
+        assert.equal(typeof option.loosensFuturePermission, 'boolean');
+        // A per-call allow that loosens future permission is a contradiction.
+        if (grantIsPerCall(option)) {
+          assert.equal(option.loosensFuturePermission, false, `${profile.runtimeId}/${option.optionId}`);
+        }
       }
     }
   });
