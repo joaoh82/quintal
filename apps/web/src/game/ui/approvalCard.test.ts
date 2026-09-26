@@ -88,6 +88,28 @@ describe('the approval card on screen', () => {
     assert.equal(/always/i.test(html), false);
   });
 
+  it('says what the harness said the button grants, not "once" regardless', async () => {
+    // The harness writes the label from the breadth and lifetime it has
+    // established for the option it will actually take. A card that printed
+    // its own "Allow once" would put the false promise back (QUIN-53).
+    const broad = request({
+      options: [
+        { id: 'allow_once', label: 'Allow here, this session' },
+        { id: 'deny', label: 'Deny' },
+      ],
+    });
+    const html = await render(broad, receiveApproval(EMPTY_APPROVALS, broad), true);
+    assert.match(html, /Allow here, this session/);
+    assert.equal(/Allow once/.test(html), false);
+  });
+
+  it('offers Deny alone when the harness could not explain any allow', async () => {
+    const denyOnly = request({ options: [{ id: 'deny', label: 'Deny' }] });
+    const html = await render(denyOnly, receiveApproval(EMPTY_APPROVALS, denyOnly), true);
+    assert.match(html, /Deny/);
+    assert.equal(/Allow/.test(html), false, 'no allow button at all');
+  });
+
   it('shows everyone else that the agent is waiting, with no controls', async () => {
     const html = await render(request(), receiveApproval(EMPTY_APPROVALS, request()), false);
     assert.match(html, /Waiting for Josh/);

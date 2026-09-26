@@ -7,7 +7,9 @@ import {
   AGENT_INSTRUCTIONS_MAX_LENGTH,
   AGENT_PARALLELISM_MAX,
   AGENT_PARALLELISM_MIN,
+  AGENT_SCOPE_NOTES,
   AGENT_SCOPES,
+  RUN_SCOPE_WITHDRAWAL_NOTE,
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
@@ -34,8 +36,10 @@ import {
   revokeAgentAction,
   saveAgentMemoryAction,
   saveAgentProfileAction,
+  saveAgentScopesAction,
   type SaveAgentMemoryState,
   type SaveAgentProfileState,
+  type SaveAgentScopesState,
   setAgentEnabledAction,
   type CreateAgentState,
 } from './actions';
@@ -236,17 +240,25 @@ export function AgentsManager({
 
           <fieldset className="flex flex-col gap-1">
             <legend className="text-xs font-medium">Scopes</legend>
-            <div className="flex h-9 items-center gap-3">
+            {/* Named and explained, not just named. `run` is the one that
+                decides whether a person is ever asked about a tool, and a
+                bare checkbox reading "run" was the only thing saying so. */}
+            <div className="flex flex-col gap-1.5 py-1">
               {AGENT_SCOPES.map((scope) => (
-                <label key={scope} className="flex items-center gap-1.5 text-xs">
+                <label key={scope} className="flex items-start gap-1.5 text-xs">
                   <input
                     type="checkbox"
                     name="scopes"
                     value={scope}
                     defaultChecked={DEFAULT_AGENT_SCOPES.includes(scope as AgentScope)}
-                    className="size-3.5"
+                    className="mt-0.5 size-3.5"
                   />
-                  {scope}
+                  <span>
+                    <span className="font-mono">{scope}</span>{' '}
+                    <span className="text-muted-foreground">
+                      {AGENT_SCOPE_NOTES[scope as AgentScope]}
+                    </span>
+                  </span>
                 </label>
               ))}
             </div>
@@ -614,6 +626,18 @@ function AgentRow({
         </details>
       ) : null}
 
+      {/* Separate from the profile, and summarised in the trigger, because
+          this is the one an owner opens to answer a question they already
+          have: "is this thing still allowed to run commands without me?" */}
+      {canRevoke && agent.revokedAt === null ? (
+        <details className="w-full pt-1">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            Scopes — <span className="font-mono">{agent.scopes.join(', ') || 'none'}</span>
+          </summary>
+          <AgentScopesForm agent={agent} />
+        </details>
+      ) : null}
+
       {/* What `!remember` put there, and what the agent wrote itself: read it,
           change it, or take a line out. The chat box has `!forget` for the
           quick case; this is for seeing the whole thing. */}
@@ -720,6 +744,74 @@ function AgentProfileForm({
           Applied by restarting the agent, so anything it was in the middle of is
           dropped.
         </span>
+      ) : null}
+    </form>
+  );
+}
+
+/**
+ * What this agent is allowed to do, changeable after the fact.
+ *
+ * Scopes used to be set once, at creation, and never again — so an owner who
+ * decided their agent should stop running commands unasked had no way to say
+ * so short of revoking it and starting over. That is the wrong shape for an
+ * authorization: granting one has to be undoable.
+ *
+ * The withdrawal notice is the point of the form as much as the checkbox is.
+ * Turning `run` off stops Quintal answering the runtime's permission
+ * questions; it does not reach into the runtime, where an allow rule added
+ * with that CLI's own settings is still in force. Reporting that as "revoked"
+ * would be a false promise of exactly the kind this ticket removed from the
+ * approval card — a claim of less authority than is really in play.
+ */
+function AgentScopesForm({ agent }: { agent: AgentListEntry }) {
+  const [state, formAction, pending] = useActionState(saveAgentScopesAction, {
+    ok: false,
+  } as SaveAgentScopesState);
+  const mine = state.agentId === agent.id;
+
+  return (
+    <form action={formAction} className="mt-2 flex flex-col gap-2">
+      <input type="hidden" name="agentId" value={agent.id} />
+      <fieldset className="flex flex-col gap-1">
+        <legend className="text-xs font-medium">Scopes</legend>
+        <div className="flex flex-col gap-1.5 py-1">
+          {AGENT_SCOPES.map((scope) => (
+            <label key={scope} className="flex items-start gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                name="scopes"
+                value={scope}
+                defaultChecked={agent.scopes.includes(scope)}
+                disabled={pending}
+                className="mt-0.5 size-3.5"
+              />
+              <span>
+                <span className="font-mono">{scope}</span>{' '}
+                <span className="text-muted-foreground">{AGENT_SCOPE_NOTES[scope]}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex items-center gap-3">
+        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+          {pending ? 'Saving…' : 'Save scopes'}
+        </Button>
+        {mine && state.ok && !state.withdrewRun ? (
+          <span className="text-xs text-emerald-600">Saved.</span>
+        ) : null}
+        {mine && state.error ? (
+          <span className="text-destructive text-xs" role="alert">
+            {state.error}
+          </span>
+        ) : null}
+      </div>
+      {mine && state.ok && state.withdrewRun ? (
+        <p className="rounded border border-amber-300/40 bg-amber-300/[0.07] px-2 py-1.5 text-xs">
+          <span className="font-medium">Withdrew {agent.name}&rsquo;s run scope.</span>{' '}
+          {RUN_SCOPE_WITHDRAWAL_NOTE}
+        </p>
       ) : null}
     </form>
   );

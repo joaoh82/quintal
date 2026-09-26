@@ -1,0 +1,181 @@
+{
+  "ranAt": "2026-09-26T20:32:37.927Z",
+  "what": "The fleet path: an office-defined agent launched by host token, which host.ts builds with harness:'custom' and the real runtime in runtimeId. Never exercised before QUIN-53 review round 1 — the shape both bypassed defects lived on.",
+  "office": "production build on 127.0.0.1:3057, isolated DATABASE_URL + storage; the harness ran with QUINTAL_CONFIG_DIR and QUINTAL_NEST_DIR under /tmp so the real ~/.quintal was untouched",
+  "runScope": {
+    "seed": {
+      "agentName": "Fleetdn55",
+      "scopes": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "runtimeId": "omp",
+      "hostLabel": "probe-muiudn55"
+    },
+    "note": "omp, run scope on. The office listed HARNESS as 'custom', confirming the shape under test.",
+    "probe": {
+      "agent": "Fleetdn55",
+      "scopes": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "actions": [
+        {
+          "action": "fleet-one.txt",
+          "asked": 1,
+          "askedOwner": false,
+          "cardOptions": [],
+          "rows": [
+            {
+              "at": "2026-09-26T20:29:43.866Z",
+              "kind": "permission",
+              "requestId": "95da5cae-3786-4200-a15d-8e92b9ae4e9d",
+              "tool": "touch fleet-one.txt",
+              "summary": "touch fleet-one.txt",
+              "actor": "run_scope",
+              "decision": "once",
+              "runtime": "omp",
+              "runtimeOption": "allow_once",
+              "runtimeOptionKind": "allow_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        },
+        {
+          "action": "fleet-two.txt",
+          "asked": 1,
+          "askedOwner": false,
+          "cardOptions": [],
+          "rows": [
+            {
+              "at": "2026-09-26T20:29:51.443Z",
+              "kind": "permission",
+              "requestId": "055d0100-3b6d-4505-9f6e-12a97a2e5f98",
+              "tool": "touch fleet-two.txt",
+              "summary": "touch fleet-two.txt",
+              "actor": "run_scope",
+              "decision": "once",
+              "runtime": "omp",
+              "runtimeOption": "allow_once",
+              "runtimeOptionKind": "allow_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        }
+      ],
+      "askedAboutEveryAction": true,
+      "everyAnswerPerCall": true,
+      "optionsTaken": [
+        "allow_once:allow_once"
+      ],
+      "actors": [
+        "run_scope"
+      ],
+      "cardsSeen": 0,
+      "replies": []
+    },
+    "auditRows": [
+      {
+        "at": "2026-09-26T20:29:43.866Z",
+        "kind": "permission",
+        "requestId": "95da5cae-3786-4200-a15d-8e92b9ae4e9d",
+        "tool": "touch fleet-one.txt",
+        "summary": "touch fleet-one.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      },
+      {
+        "at": "2026-09-26T20:29:51.443Z",
+        "kind": "permission",
+        "requestId": "055d0100-3b6d-4505-9f6e-12a97a2e5f98",
+        "tool": "touch fleet-two.txt",
+        "summary": "touch fleet-two.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      }
+    ]
+  },
+  "askingMode": {
+    "seed": {
+      "agentName": "Fleetg8gi",
+      "scopes": [
+        "chat",
+        "status",
+        "dm"
+      ],
+      "runtimeId": "claude-code",
+      "hostLabel": "probe-muiug8gi"
+    },
+    "note": "claude-code, no run scope. Before the fix askingMode('custom') returned null, so the session stayed in auto and self-approved with no card at all.",
+    "harnessLog": [
+      "fleet: 1 agent(s) assigned to \"probe-muiug8gi\" by Approval Owner",
+      "20:30:28 Fleetg8gi    · @agentclientprotocol/claude-agent-acp ready (ACP v1)",
+      "20:30:29 Fleetg8gi    · permission mode set to \"default\" — the owner is asked before tools run",
+      "20:31:20 Fleetg8gi    · permission mode set to \"default\" — the owner is asked before tools run"
+    ],
+    "card": {
+      "phase": "allow",
+      "allow": {
+        "seenAfterMs": 7710,
+        "tool": "printf 'quintal-probe-allow\\n' > /tmp/quin53-verification/fleet2/nest/allow.txt && cat /tmp/quin53-verification/fleet2/n",
+        "summary": "printf 'quintal-probe-allow\\n' > /tmp/quin53-verification/fleet2/nest/allow.txt && cat /tmp/quin53-verification/fleet2/nest/allow.txt",
+        "options": [
+          "allow_once",
+          "deny"
+        ],
+        "ownerUserId": "f2de4d38-f941-47bc-93e7-fb685c414cc9",
+        "turnId": "1",
+        "windowMs": 300000,
+        "turnWentToWaiting": false,
+        "resolution": [
+          "allowed",
+          "card"
+        ],
+        "fileWritten": "quintal-probe-allow",
+        "reply": [
+          "@Approval Owner may I run printf 'quintal-probe-allow\\n' > /tmp/quin53-verification/fleet2/nest/allow.txt && cat /tmp/quin53-verification/fleet2/nest/allow.txt (printf 'quintal-probe-allow\\n' > /tmp/q"
+        ],
+        "continuedAfterMs": 9540
+      },
+      "pass": true,
+      "cardsSeen": 1
+    },
+    "auditRows": [
+      {
+        "at": "2026-09-26T20:31:26.841Z",
+        "kind": "permission",
+        "requestId": "233c57ac-3a52-413c-934c-5711ea4aac21",
+        "tool": "printf 'quintal-probe-allow\\n' > /tmp/quin53-verification/fleet2/nest/allow.txt && cat /tmp/quin53-verification/fleet2/nest/allow.txt",
+        "summary": "printf 'quintal-probe-allow\\n' > /tmp/quin53-verification/fleet2/nest/allow.txt && cat /tmp/quin53-verification/fleet2/n",
+        "actor": "Approval Owner",
+        "decision": "once",
+        "runtime": "claude-code",
+        "runtimeOption": "allow-once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      }
+    ]
+  }
+}

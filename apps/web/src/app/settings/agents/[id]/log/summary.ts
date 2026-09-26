@@ -41,6 +41,14 @@ export function describe(kind: string, payload: unknown): string {
       return `${data.reconnected === true ? 'reconnected' : `at ${describeTile(data.tile)}`}${describeCredential(data.credential)}`;
     case 'agent.memory_edited':
       return `${String(data.slug ?? '?')} · ${data.cleared === true ? 'cleared' : `${String(data.bytes ?? '?')} bytes`} · by its owner`;
+    case 'agent.scopes_changed': {
+      // What moved, not what it ended as: a log is read to find the change.
+      const moved = [
+        ...asList(data.added).map((scope) => `+${scope}`),
+        ...asList(data.removed).map((scope) => `-${scope}`),
+      ];
+      return moved.length > 0 ? moved.join(' ') : 'no change';
+    }
     case 'agent.credential_registered':
       return `${shortKey(data.pubkey)}${describeRegistrar(data.via)}`;
     case 'session.revoked':
@@ -48,6 +56,11 @@ export function describe(kind: string, payload: unknown): string {
     default:
       return JSON.stringify(payload).slice(0, 120);
   }
+}
+
+/** The scope names in a row, ignoring anything that is not one. */
+function asList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
 /** `· own key` / `· host token` / `· agent key`, or nothing for a row from before doors were recorded. */

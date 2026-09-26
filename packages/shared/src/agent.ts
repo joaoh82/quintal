@@ -36,6 +36,34 @@ export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
 }
 
+/**
+ * What each scope means, in the words the settings page uses.
+ *
+ * Here rather than in the page because `run` is the one an owner is most
+ * likely to misread, and the reading has to be the same wherever it is shown.
+ * It is not "may run commands": it is "the harness answers the runtime's
+ * permission questions for it, every time, without anybody seeing them".
+ */
+export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
+  chat: 'Speak in rooms and channels.',
+  move: 'Walk around the office.',
+  status: 'Set its own status line.',
+  dm: 'Hold a direct message with you.',
+  run: 'Answer the runtime\u2019s "may I run this?" questions automatically, for every turn, with nothing shown to you. Without it each one is put to you and silence denies.',
+};
+
+/**
+ * What withdrawing `run` does, and — just as important — what it does not.
+ *
+ * Turning the scope off stops *Quintal* answering for the agent. It does not
+ * reach inside the runtime: an allow rule somebody added with the runtime's
+ * own CLI, or a standing grant a runtime kept for itself, is untouched and
+ * still in force. Saying "revoked" without that sentence would be the same
+ * false promise QUIN-53 exists to remove, pointed the other way.
+ */
+export const RUN_SCOPE_WITHDRAWAL_NOTE =
+  'Quintal stops answering for it from its next session. Allow rules kept by the runtime itself are not revoked by this \u2014 they live in the runtime\u2019s own settings and are removed there.';
+
 /** Parse the `scopes` JSON column, discarding anything unrecognised. */
 export function parseScopes(raw: unknown): AgentScope[] {
   if (!Array.isArray(raw)) return [...DEFAULT_AGENT_SCOPES];
@@ -181,6 +209,12 @@ export const AGENT_EVENT_KINDS = [
   'agent.revoked',
   /** Its owner changed what it says it is, or how it was told to behave. */
   'agent.profile_changed',
+  /**
+   * Its owner changed what it is allowed to do. Separate from the profile
+   * because a scope is an authorization: "when did this stop being allowed
+   * to run things?" needs an answer with a name and a time against it.
+   */
+  'agent.scopes_changed',
   /** A keypair was registered for it (credentials v2), replacing any before. */
   'agent.credential_registered',
   /** Its owner changed or cleared one of its memory slugs from the settings page. */

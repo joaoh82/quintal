@@ -1,5 +1,14 @@
-import type { ApprovalOption, ApprovalRequest } from '@quintal/shared';
-import { activityText } from '@quintal/shared';
+import type { ApprovalOption, ApprovalRequest, RuntimeOptionSemantics } from '@quintal/shared';
+import {
+  activityText,
+  compareGrants,
+  describeGrant,
+  grantIsOfferable,
+  grantIsPerCall,
+  grantLabel,
+  optionSemantics,
+  UNKNOWN_SEMANTICS,
+} from '@quintal/shared';
 
 /**
  * The bookkeeping behind "may I run this?".
@@ -24,6 +33,14 @@ export interface PendingApproval {
   request: ApprovalRequest;
   /** `worker:toolCallId` — how a crash or a cancel finds its questions. */
   callId: string;
+  /**
+   * The options the runtime offered, verbatim.
+   *
+   * Kept because the answer is selected long after the ask: the card is
+   * built now and clicked minutes later, and the option sent back must come
+   * from this list rather than from anything reconstructed.
+   */
+  options: unknown;
   workerIndex: number;
   /** The runner's turn, when the question belongs to one. */
   turnId: number | null;
@@ -43,23 +60,188 @@ export function approvalHandle(requestId: string): string {
   return requestId.replace(/-/g, '').slice(0, 6);
 }
 
+/** One option exactly as the runtime sent it. Nothing here is ever invented. */
+export interface OfferedOption {
+  optionId?: unknown;
+  kind?: unknown;
+  name?: unknown;
+}
+
+/** An allow we are prepared to take, and what taking it would mean. */
+export interface AllowChoice {
+  /** The runtime's own option id, verbatim. */
+  optionId: string;
+  kind: string | null;
+  semantics: RuntimeOptionSemantics;
+}
+
+/** Only the entries that are shaped like an option at all. */
+function offered(options: unknown): OfferedOption[] {
+  if (!Array.isArray(options)) return [];
+  return (options as unknown[]).filter(
+    (option): option is OfferedOption =>
+      typeof option === 'object' && option !== null && typeof (option as OfferedOption).optionId === 'string',
+  );
+}
+
+function kindOf(option: OfferedOption): string | null {
+  return typeof option.kind === 'string' ? option.kind : null;
+}
+
 /**
- * Which runtime options we can honestly put on a card.
+ * The narrowest allow this runtime offered whose breadth and lifetime we can
+ * state — and nothing at all when we cannot state either.
  *
- * Only what this request actually offered, and only the two whose breadth we
- * can explain. A standing grant's real lifetime differs per runtime and is
- * QUIN-53's to establish; until then no button claims one. A runtime that
- * offers no reject option still gets a Deny — every ACP agent must accept a
- * cancelled outcome, which is a refusal by another name.
+ * Narrowest, not first. `allow_always` is a kind, and Claude Code's plan-exit
+ * request carries three of them: "use auto mode", "clear context and use auto
+ * mode", and "bypass permissions". Reading the kind and taking the first
+ * match is how an office ends up clearing a conversation it meant to approve
+ * a file write in.
+ *
+ * Unknown is refused rather than ranked last. An option nobody has measured
+ * cannot be labelled, and an unlabelable option must not be offered — which
+ * is the same rule as "no button promises what it cannot explain", applied
+ * one layer down.
  */
-export function supportedOptions(
-  options: ReadonlyArray<{ optionId?: string; kind?: string; name?: string }>,
-): ApprovalOption[] {
-  const allow = options.some((option) => option.kind?.startsWith('allow'));
+export function pickAllow(runtimeId: string, options: unknown): AllowChoice | null {
+  const candidates = offered(options)
+    .filter((option) => kindOf(option)?.startsWith('allow') === true)
+    .map((option) => ({
+      optionId: option.optionId as string,
+      kind: kindOf(option),
+      semantics: optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind }),
+    }))
+    // Explainable *and* not a quiet purchase of less asking later. A
+    // loosening option is dropped here rather than ranked last, so no
+    // ordering accident can promote it: Claude Code's plan exit offers three
+    // that would stop the session asking, one of which also throws the
+    // conversation away, and all four of its options tie on breadth.
+    .filter((candidate) => grantIsOfferable(candidate.semantics));
+  if (candidates.length === 0) return null;
+  return candidates.sort((a, b) => compareGrants(a.semantics, b.semantics))[0]!;
+}
+
+/**
+ * The refusal that denies this call and nothing else.
+ *
+ * Deliberately `reject_once` or nothing. A runtime that also offers "Always
+ * reject" is offering a standing refusal, and taking one would deny requests
+ * the owner was never shown — the mirror image of the standing grant this
+ * whole module exists to stop. With no per-call refusal we answer
+ * `cancelled`, which every ACP agent must accept.
+ */
+export function pickReject(runtimeId: string, options: unknown): AllowChoice | null {
+  for (const option of offered(options)) {
+    if (kindOf(option) !== 'reject_once') continue;
+    const semantics = optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind });
+    // An unmeasured `reject_once` is still a refusal of this one call: that
+    // is what the kind means in ACP, and refusing less is the safe direction.
+    return { optionId: option.optionId as string, kind: 'reject_once', semantics };
+  }
+  return null;
+}
+
+/**
+ * Which options a card may offer, and what its buttons say.
+ *
+ * Built from the *same* `pickAllow` the answer is later selected with, so the
+ * words on the button and the option sent to the runtime cannot drift apart.
+ * That is the whole acceptance condition of QUIN-53: no label may promise
+ * less authority, or a shorter life, than the option it takes.
+ *
+ * A runtime whose allow options are all unmeasured gets Deny alone — "we
+ * cannot tell you what Allow would do here" is a real answer, and a better
+ * one than a button that guesses. A runtime that offers no reject still gets
+ * Deny: a cancelled outcome is a refusal by another name.
+ */
+export function supportedOptions(runtimeId: string, options: unknown): ApprovalOption[] {
+  const allow = pickAllow(runtimeId, options);
   return [
-    ...(allow ? [{ id: 'allow_once' as const, label: 'Allow once' }] : []),
+    ...(allow ? [{ id: 'allow_once' as const, label: grantLabel(allow.semantics) }] : []),
     { id: 'deny' as const, label: 'Deny' },
   ];
+}
+
+/** Why no option could be taken, when none could. */
+export type SelectionRefusal =
+  /** Nothing offered whose breadth and lifetime are established. */
+  | 'unexplained_allow'
+  /** The run scope may only take a per-call allow, and none was offered. */
+  | 'not_per_call';
+
+/** What the runtime will be told, and what we believe that means. */
+export interface RuntimeSelection {
+  /** The runtime's own option id, or null to answer `cancelled`. */
+  optionId: string | null;
+  kind: string | null;
+  semantics: RuntimeOptionSemantics;
+  refusal: SelectionRefusal | null;
+  /** Asked for a standing grant and got a per-call one instead. */
+  downgraded: boolean;
+}
+
+/**
+ * The option to send back, decided from what was established rather than from
+ * what the kinds are called.
+ *
+ * `automatic` is the `run` scope answering on the owner's behalf. It may take
+ * a genuine per-call allow and nothing else: an automatic answer nobody sees
+ * must not leave a standing grant behind, and an option whose breadth is
+ * unknown certainly must not. When there is no per-call allow the runtime is
+ * told `cancelled` and the refusal is named — an explicit, documented policy
+ * rather than a quiet widening.
+ */
+export function chooseRuntimeOption(
+  runtimeId: string,
+  options: unknown,
+  decision: PermissionDecision,
+  automatic = false,
+): RuntimeSelection {
+  if (decision === 'deny') {
+    const reject = pickReject(runtimeId, options);
+    return {
+      optionId: reject?.optionId ?? null,
+      kind: reject?.kind ?? null,
+      semantics: reject?.semantics ?? UNKNOWN_SEMANTICS,
+      refusal: null,
+      downgraded: false,
+    };
+  }
+
+  const allow = pickAllow(runtimeId, options);
+  if (!allow) {
+    return {
+      optionId: null,
+      kind: null,
+      semantics: UNKNOWN_SEMANTICS,
+      refusal: 'unexplained_allow',
+      downgraded: false,
+    };
+  }
+  if (automatic && !grantIsPerCall(allow.semantics)) {
+    return { optionId: null, kind: null, semantics: allow.semantics, refusal: 'not_per_call', downgraded: false };
+  }
+  return {
+    optionId: allow.optionId,
+    kind: allow.kind,
+    semantics: allow.semantics,
+    refusal: null,
+    downgraded: decision === 'always' && grantIsPerCall(allow.semantics),
+  };
+}
+
+/**
+ * The sentence an audit line and a chat reply both use.
+ *
+ * Only ever called about a selection that was made. A refusal has its own
+ * words at each call site, because "nothing could be explained" and "the
+ * narrowest allow was still too broad" are different facts and `refusal`
+ * already says which — running both through one string produced the sentence
+ * "the narrowest allow grants nothing the runtime offered could be explained".
+ */
+export function describeSelection(selection: RuntimeSelection): string {
+  if (selection.optionId === null) return 'nothing it offered could be taken';
+  return describeGrant(selection.semantics);
 }
 
 /**

@@ -205,10 +205,17 @@ so the harness answers them locally and sends nothing.
 
 `run` is different from the others: the office never checks it. It tells the
 harness whether it may answer the runtime's own "may I run this tool?"
-question (ACP `session/request_permission`) on the owner's behalf. Without it
-the harness puts the question to the owner where the conversation is, as a
-card (see [Tool approvals](#tool-approvals-version-1)), and silence denies
-after five minutes.
+question (ACP `session/request_permission`) on the owner's behalf — ongoing,
+automatic handling of every such question, for every turn, with nothing shown
+to anybody. Without it the harness puts the question to the owner where the
+conversation is, as a card (see
+[Tool approvals](#tool-approvals-version-1)), and silence denies after five
+minutes.
+
+It is not an allowlist and does not interact with one. A runtime's own allow
+rules are the runtime's, in force whether or not this scope is set, and
+withdrawing the scope does not revoke them — see
+[docs/RUNTIME-PERMISSIONS.md](RUNTIME-PERMISSIONS.md).
 
 ---
 
@@ -626,11 +633,21 @@ and nothing else, which is how two turns asking about the same tool in
 different conversations stay separate.
 
 `options` are only what the runtime actually offered, narrowed to what can be
-explained: `allow_once` and `deny`. There is deliberately no standing-grant
-option. What breadth and lifetime `allow_always` really has differs per
-runtime and is QUIN-53's to establish; a button that cannot say what it grants
-should not exist. A runtime that offers no reject option still gets `deny` —
-every ACP agent must accept a `cancelled` outcome.
+explained. The wire ids stay `allow_once` and `deny`, but the **label** is
+written from what the chosen option is established to grant, and the harness
+picks the *narrowest* allow the runtime sent whose breadth and lifetime are
+known — never the first one carrying a given ACP `kind`. A runtime whose only
+allow is an unmeasured "always" gets `deny` alone: a button that cannot say
+what it grants should not exist. Nor is an option that buys *less asking
+later* ever offered, however narrow — clicking one button on one request
+answers that request, and "and stop asking me" is not a rider that came with
+it. A runtime that offers no reject option still gets `deny` — every ACP agent
+must accept a `cancelled` outcome.
+
+The label and the option sent back to the runtime come from one function, so a
+card can never promise less authority, or a shorter life, than what it takes.
+What each runtime's options actually grant, and how that was measured, is
+[docs/RUNTIME-PERMISSIONS.md](RUNTIME-PERMISSIONS.md).
 
 A human answers with `approval_decide` (`requestId`, `optionId`). The server
 checks, in order: that the request exists, that the sender is its
@@ -646,7 +663,11 @@ advertised. Hiding a button in a browser is not a check; a crafted
 scope), with `via` one of `card`, `text`, `timeout`, `run_scope` or `system`.
 The harness sends one for every ask it settles, including the `run`-scope path
 that never showed a card — an automatic approval interrupts nobody but is
-still an authorization decision, so it is still on the record. Three audit
+still an authorization decision, so it is still on the record. That path may
+take a genuine per-call allow and nothing else; where the runtime offers none,
+it answers `cancelled` and resolves `denied` / `run_scope` rather than
+widening. It used to take whichever option carried the kind `allow_always`,
+which on a Claude Code plan-exit request is "clear context and use auto mode". Three audit
 rows join by `requestId`: `approval.requested`, `approval.decided` and
 `approval.resolved`.
 
@@ -698,9 +719,15 @@ getting the same silent self-approval as one with it. When the agent has no
 with `session/set_mode` (`default`, "Manual", for Claude Code). This is a
 short verified allowlist, not a guess: a mode id means what its adapter says
 it means, and runtimes whose modes have not been established keep what they
-open with while the harness logs that it may never ask. Establishing the rest
-is QUIN-53's. Note that Claude Code's "Manual" asks before *changes* — a file
-write asks; a shell `echo` it judges safe does not.
+open with while the harness logs that it may never ask. Note that Claude
+Code's "Manual" asks before *changes* — a file write asks; a shell `echo` it
+judges safe does not.
+
+Some runtimes never ask in *any* mode. Codex 1.13.1 and opencode 1.4.3 were
+driven end to end and sent no `session/request_permission` at all — Codex
+wrote a file outside its working directory while in the mode it calls "Ask for
+approval". No approval card can reach those runtimes, with or without the
+`run` scope; see [docs/RUNTIME-PERMISSIONS.md](RUNTIME-PERMISSIONS.md).
 
 **Text fallback.** The sentence is still said alongside the card, so a client
 that predates cards is not left silent, and it is still answerable:
@@ -710,6 +737,16 @@ the question. A bare `yes` answers the only open question. With more than one
 open, an answer that could mean more than one — including a bare `yes`, or a
 tool name two questions share — settles none of them: the agent says what is
 waiting and asks again. It used to answer the oldest, which meant a "yes"
-meant for one turn could authorise another. `always` remains the fallback's
-standing approval, unchanged and documented, until QUIN-53 settles what a
-runtime actually grants.
+meant for one turn could authorise another.
+
+`always` is still accepted as a word, but it no longer buys anything the card
+would not: it takes the same option, and when that is narrower than the word
+asked for the agent says so out loud rather than letting the owner believe
+otherwise. It used to reach the runtime as whatever carried `allow_always`
+while the office filed the result as `allow_once` — a standing grant recorded
+as a single approval.
+
+Where nothing offered can be taken at all, an affirmative word resolves
+`denied` rather than `allowed`. The runtime is sent `cancelled`, so a card
+reading "allowed" would describe an approval that happened nowhere — and the
+agent says why instead of inviting a follow-up that cannot land.

@@ -298,10 +298,22 @@ agent with the `run` scope on its card gets those answered by the harness —
 allowed, and written to its audit log and the office's — so it is never left
 waiting on a question nobody is looking at.
 
+That automatic answer may take a **genuine per-call allow and nothing else**.
+An approval nobody reads must not leave a standing grant behind, so where the
+runtime offers no per-call option the harness answers `cancelled` and says
+which of the two reasons applied. It used to take whichever option carried the
+ACP kind `allow_always` — which on a Claude Code plan-exit request means
+"clear context and use auto mode". See
+[docs/RUNTIME-PERMISSIONS.md](../../docs/RUNTIME-PERMISSIONS.md).
+
 Without `run`, the question goes to the owner where the conversation is:
 channel, DM or aloud. It arrives as a **card** with the tool named, the
 command it would run, and Allow once / Deny — answered by the request's own
 id, so two turns asking about `Bash` at the same time can never be confused.
+The allow button is the narrowest option the runtime actually sent whose
+breadth and lifetime have been established, and it is *named* for what taking
+it does, so the words can never promise less than the option grants. A runtime
+whose only allow is an unmeasured "always" gets Deny alone.
 Five minutes of silence is a no, and the turn's idle clock is held for
 exactly as long as the owner is being waited on. A card whose agent's socket
 drops is taken down and comes back when it reconnects — the office matches the
@@ -314,21 +326,31 @@ that actually asks (`session/set_mode`). Claude Code's adapter otherwise opens
 in `auto` and answers its own permission questions, which made the scope
 decorative. Its asking mode is "Manual", which asks before *changes* — a file
 write asks, a shell `echo` it considers safe does not. Runtimes whose modes
-are not yet established are left alone and the log says so.
+are not yet established are left alone and the log says so. Codex and opencode
+never ask in *any* mode, so no card can reach them at all.
 
 The same question is also said in words, for clients that predate cards:
-`@reviewer yes #a1b2c3`, `@reviewer always #a1b2c3` (for the rest of that
-session) or `@reviewer no #a1b2c3`, where the handle is in the question. A
-bare `yes` answers the only open question; with more than one open, an
-ambiguous answer settles none of them and the agent asks which. Cards do not
-offer `always`: what a runtime's standing grant actually covers is not yet
-established (QUIN-53). See [the gateway](../../docs/GATEWAY.md#tool-approvals-version-1).
+`@reviewer yes #a1b2c3`, `@reviewer always #a1b2c3` or `@reviewer no #a1b2c3`,
+where the handle is in the question. A bare `yes` answers the only open
+question; with more than one open, an ambiguous answer settles none of them
+and the agent asks which. `always` is still accepted but buys nothing the card
+would not: it takes the same option, and when that is narrower than the word
+the agent says so rather than leaving the wrong impression. See
+[the gateway](../../docs/GATEWAY.md#tool-approvals-version-1).
 
 ## Auditing
 
 `--log-dir <dir>` writes every prompt and every response to
 `<dir>/<agent>.jsonl` — your own copy, separate from the server-side audit log
 at `/settings/agents/<id>/log`.
+
+Every authorization decision is one `permission` row there, carrying what is
+needed to argue with it later: the `requestId`, the tool, the same redacted
+one-line summary the card showed, the `actor` (the owner's name, or
+`run_scope` / `timeout` when nobody was asked), the decision, and — the part
+that was missing — the runtime's **own** option id and kind that was actually
+selected, with the `breadth`, `lifetime` and `persistsAt` established for it.
+A row where the label and the option disagree is visible in one line.
 
 ## Latency measurement
 

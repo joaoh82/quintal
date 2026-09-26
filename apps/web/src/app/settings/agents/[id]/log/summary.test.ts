@@ -48,3 +48,32 @@ suite('what a registration row says', () => {
     assert.equal(describe('agent.credential_registered', {}), '?');
   });
 });
+
+suite('a scope being granted or withdrawn', () => {
+  it('says what moved, so the log answers "when did this stop"', () => {
+    assert.equal(
+      describe('agent.scopes_changed', {
+        before: ['chat', 'run'],
+        after: ['chat'],
+        added: [],
+        removed: ['run'],
+      }),
+      '-run',
+    );
+    assert.equal(
+      describe('agent.scopes_changed', { added: ['dm'], removed: ['run'] }),
+      '+dm -run',
+    );
+  });
+
+  it('says so plainly when a save changed nothing', () => {
+    assert.equal(describe('agent.scopes_changed', { added: [], removed: [] }), 'no change');
+  });
+
+  it('ignores anything in the row that is not a scope name', () => {
+    assert.equal(
+      describe('agent.scopes_changed', { added: [1, null, 'dm'], removed: 'run' }),
+      '+dm',
+    );
+  });
+});

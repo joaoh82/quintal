@@ -1,0 +1,130 @@
+{
+  "probedAt": "2026-09-24",
+  "note": "Took one `allow_always` in a disposable workspace, then measured how far it reached. `same`/`sibling`/`newSession`/`afterRestart` are how many times the runtime asked again at that step: 0 means the grant still covered it.",
+  "measurements": [
+    {
+      "id": "claude-code",
+      "modeId": "default",
+      "action": "write",
+      "command": [
+        "npx",
+        "-y",
+        "@agentclientprotocol/claude-agent-acp"
+      ],
+      "probedAt": "2026-09-24T21:52:01.509Z",
+      "grant": {
+        "askedOnFirst": 1,
+        "optionTaken": "allow-with-updates (Yes, allow all edits in quin53-grant-claude-code-s16FJ9/ during this session)"
+      },
+      "same": 0,
+      "sibling": 0,
+      "newSession": 1,
+      "afterRestart": 1,
+      "configChanged": [
+        ".claude.json"
+      ],
+      "asks": [
+        {
+          "title": "Write /private/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin53-grant-claude-code-s16FJ9/grant.txt",
+          "options": [
+            "allow-once:allow_once",
+            "allow-with-updates:allow_always",
+            "reject:reject_once"
+          ]
+        },
+        {
+          "title": "Write /private/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin53-grant-claude-code-s16FJ9/session.txt",
+          "options": [
+            "allow-once:allow_once",
+            "allow-with-updates:allow_always",
+            "reject:reject_once"
+          ]
+        },
+        {
+          "title": "Write /private/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quin53-grant-claude-code-s16FJ9/restart.txt",
+          "options": [
+            "allow-once:allow_once",
+            "allow-with-updates:allow_always",
+            "reject:reject_once"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "omp",
+      "modeId": null,
+      "command": [
+        "omp",
+        "acp"
+      ],
+      "probedAt": "2026-09-24T21:50:35.257Z",
+      "grant": {
+        "askedOnFirst": 1,
+        "optionTaken": "allow_always (Always allow)"
+      },
+      "same": 0,
+      "sibling": 0,
+      "newSession": 3,
+      "afterRestart": 2,
+      "configChanged": [
+        ".omp"
+      ],
+      "asks": [
+        {
+          "title": "touch grant.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        },
+        {
+          "title": "touch session.txt && ls -la session.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        },
+        {
+          "title": "touch session.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        },
+        {
+          "title": "stat -f '%N %z bytes' session.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        },
+        {
+          "title": "touch restart.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        },
+        {
+          "title": "touch restart.txt && stat -f '%N %z bytes' restart.txt",
+          "options": [
+            "allow_once:allow_once",
+            "allow_always:allow_always",
+            "reject_once:reject_once",
+            "reject_always:reject_always"
+          ]
+        }
+      ]
+    }
+  ]
+}

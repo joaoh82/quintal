@@ -39,6 +39,23 @@ const OWNER = 'owner-1';
 const ENGINEERING = { id: 'ch-1', kind: 'channel', name: 'Engineering', slug: 'engineering' };
 const DESIGN = { id: 'ch-2', kind: 'channel', name: 'Design', slug: 'design' };
 
+/** One `permission` line of the harness's own audit log. */
+interface AuditRow {
+  kind: string;
+  tool?: string;
+  decision?: string;
+  actor?: string;
+  runtime?: string;
+  runtimeOption?: string;
+  runtimeOptionKind?: string | null;
+  breadth?: string;
+  lifetime?: string;
+  persistsAt?: string | null;
+  refused?: string;
+  summary?: string;
+  requestId?: string;
+}
+
 /** What the office was told about approvals, in the order it was told. */
 interface Cards {
   requested: ApprovalRequest[];
@@ -94,13 +111,17 @@ function fakeGateway(
   } as unknown as Gateway;
 }
 
-function config(cwd: string): AgentConfig {
+function config(cwd: string, runtimeId?: string): AgentConfig {
   return {
     name: 'Bob',
     key: 'agent-key',
     hostToken: '',
     agentId: '',
+    // What `host.ts` builds for every office-defined agent: the command comes
+    // from the catalogue, so the spawn carries no harness id and the real
+    // runtime rides in `runtimeId`.
     harness: 'custom',
+    ...(runtimeId ? { runtimeId } : {}),
     command: [process.execPath, FAKE],
     cwd,
     url: 'http://localhost:0',
@@ -174,14 +195,14 @@ describe('the runtime asks before running a tool', () => {
     else process.env.FAKE_PERMISSION_COMMAND = previousCommand;
   });
 
-  async function run(scopes: string[]) {
+  async function run(scopes: string[], runtimeId?: string) {
     await stopCurrent();
     const handlers: Handlers = {};
     const said: Array<[string, string | undefined]> = [];
     const cards: Cards = { requested: [], resolved: [] };
     const logDir = mkdtempSync(join(tmpdir(), 'perm-log-'));
     const runner = new AgentRunner(
-      config(mkdtempSync(join(tmpdir(), 'perm-cwd-'))),
+      config(mkdtempSync(join(tmpdir(), 'perm-cwd-')), runtimeId),
       logDir,
       fakeGateway(handlers, said, scopes, cards),
     );
@@ -193,9 +214,19 @@ describe('the runtime asks before running a tool', () => {
       return readFileSync(path, 'utf8')
         .split('\n')
         .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line) as { kind: string; tool?: string; decision?: string })
+        .map((line) => JSON.parse(line) as AuditRow)
         .filter((entry) => entry.kind === 'permission')
         .map((entry) => ({ tool: entry.tool ?? '', decision: entry.decision ?? '' }));
+    };
+    /** The whole permission row, for the facts the audit now has to carry. */
+    const rows = () => {
+      const path = join(logDir, 'Bob.jsonl');
+      if (!existsSync(path)) return [] as AuditRow[];
+      return readFileSync(path, 'utf8')
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line) as AuditRow)
+        .filter((entry) => entry.kind === 'permission');
     };
     const asked = () => said.filter(([text]) => /may I run/.test(text));
     const decideCard = (requestId: string, optionId: 'allow_once' | 'deny') =>
@@ -205,16 +236,16 @@ describe('the runtime asks before running a tool', () => {
         decidedByUserId: OWNER,
         decidedByName: 'Josh',
       });
-    return { handlers, said, decisions, asked, cards, decideCard, runner };
+    return { handlers, said, decisions, rows, asked, cards, decideCard, runner };
   }
 
   it('is answered by the harness when the agent has the run scope, and logged', async () => {
-    const { handlers, decisions, asked, said, cards } = await run(['chat', 'run']);
+    const { handlers, decisions, rows, asked, said, cards } = await run(['chat', 'run']);
 
     handlers.channelChat?.(inChannel('@Bob check the build'));
     await until(() => decisions().length > 0, 'the decision to be logged');
 
-    assert.deepEqual(decisions(), [{ tool: 'Bash', decision: 'allowed by the run scope' }]);
+    assert.deepEqual(decisions(), [{ tool: 'Bash', decision: 'once' }]);
     assert.equal(asked().length, 0, 'nobody was asked');
     assert.equal(cards.requested.length, 0, 'no card interrupts anybody');
     // It is still an authorization decision, so the office still hears about
@@ -223,7 +254,145 @@ describe('the runtime asks before running a tool', () => {
       cards.resolved.map((value) => [value.resolution, value.via]),
       [['auto_allowed', 'run_scope']],
     );
+
+    // An automatic approval is the one nobody reads, so the row has to hold
+    // everything needed to argue with it later — including that what the
+    // runtime was actually told authorises this call and nothing after it.
+    const row = rows()[0]!;
+    assert.equal(row.actor, 'run_scope');
+    assert.equal(row.runtime, 'custom');
+    assert.equal(row.runtimeOption, 'allow_once');
+    assert.equal(row.runtimeOptionKind, 'allow_once');
+    assert.equal(row.breadth, 'this_call');
+    assert.equal(row.lifetime, 'this_call');
+    assert.equal(row.persistsAt, null);
+    assert.equal(row.summary, 'pnpm build');
+    assert.ok(typeof row.requestId === 'string' && row.requestId.length > 0);
     await until(() => said.some(([text]) => text === 'ok'), 'the turn to finish');
+  });
+
+  it('will not answer automatically with a grant it cannot explain', async () => {
+    // The runtime offers only a standing grant, and nothing has established
+    // what one grants here. The documented policy is to cancel and say why —
+    // not to take it because the word "allow" is in the kind.
+    process.env.FAKE_PERMISSION_OPTIONS = 'allow_always,reject_once';
+    try {
+      const { handlers, rows, cards } = await run(['chat', 'run']);
+      handlers.channelChat?.(inChannel('@Bob check the build'));
+      await until(() => rows().length > 0, 'the decision to be logged');
+
+      const row = rows()[0]!;
+      assert.equal(row.decision, 'deny');
+      assert.equal(row.actor, 'run_scope');
+      assert.equal(row.runtimeOption, 'cancelled');
+      assert.equal(row.refused, 'unexplained_allow');
+      assert.equal(row.breadth, 'unknown');
+      assert.deepEqual(
+        cards.resolved.map((value) => [value.resolution, value.via]),
+        [['denied', 'run_scope']],
+      );
+    } finally {
+      process.env.FAKE_PERMISSION_OPTIONS = 'allow_once,reject_once';
+    }
+  });
+
+  it('audits an office-defined agent under its real runtime, not "custom"', async () => {
+    // `host.ts` gives every office-defined agent `harness: 'custom'`. Keyed on
+    // that, the permission catalogue is bypassed for almost every agent in
+    // existence — so the row has to name the runtime the semantics came from,
+    // or the audit cannot be checked against the catalogue at all.
+    const { handlers, rows } = await run(['chat', 'run'], 'omp');
+    handlers.channelChat?.(inChannel('@Bob check the build'));
+    await until(() => rows().length > 0, 'the decision to be logged');
+    assert.equal(rows()[0]!.runtime, 'omp');
+  });
+
+  it('names the mechanism, not a person, when nobody answered', async () => {
+    const { handlers, rows, said, runner } = await run(['chat']);
+    handlers.channelChat?.(inChannel('@Bob check the build'));
+    await until(() => said.some(([text]) => /may I run/.test(text)), 'the question');
+
+    // Shutdown sweeps the open questions. The row has to say `system`, not
+    // guess at a timeout and not name an owner who never saw it.
+    await runner.stop();
+    await until(() => rows().length > 0, 'the swept decision to be logged');
+    assert.equal(rows()[0]!.actor, 'system');
+    assert.equal(rows()[0]!.decision, 'deny');
+  });
+
+  it('offers no allow at all when the runtime offers only an unmeasured "always"', async () => {
+    process.env.FAKE_PERMISSION_OPTIONS = 'allow_always,reject_once';
+    try {
+      const { handlers, cards } = await run(['chat']);
+      handlers.channelChat?.(inChannel('@Bob check the build'));
+      await until(() => cards.requested.length > 0, 'the card');
+      assert.deepEqual(cards.requested[0]!.options, [{ id: 'deny', label: 'Deny' }]);
+    } finally {
+      process.env.FAKE_PERMISSION_OPTIONS = 'allow_once,reject_once';
+    }
+  });
+
+  it('does not record an approval it could not make, for either affirmative word', async () => {
+    // A Deny-only card: the runtime offered nothing whose breadth we can
+    // state. Both "yes" and "always" used to settle it `allowed` while the
+    // runtime was sent `cancelled` — an approval in the office that never
+    // happened anywhere else.
+    for (const word of ['yes', 'always']) {
+      process.env.FAKE_PERMISSION_OPTIONS = 'allow_always,reject_once';
+      try {
+        const { handlers, rows, cards, said } = await run(['chat']);
+        handlers.channelChat?.(inChannel('@Bob check the build'));
+        await until(() => cards.requested.length > 0, `the card for "${word}"`);
+        assert.deepEqual(cards.requested[0]!.options, [{ id: 'deny', label: 'Deny' }]);
+
+        handlers.channelChat?.(inChannel(`@Bob ${word}`));
+        await until(() => rows().length > 0, `the answer to "${word}" to land`);
+
+        // The runtime is refused, so the office must say denied — not
+        // allowed, and not an optionId nobody could take.
+        assert.equal(rows()[0]!.decision, 'deny', word);
+        assert.equal(rows()[0]!.runtimeOption, 'reject_once', word);
+        assert.deepEqual(
+          cards.resolved.map((value) => [value.resolution, value.optionId ?? null]),
+          [['denied', 'deny']],
+          word,
+        );
+        // And it says why, without inviting a follow-up that cannot work.
+        await until(
+          () => said.some(([text]) => /no allow I can stand behind/.test(text)),
+          `the explanation for "${word}"`,
+        );
+        assert.equal(
+          said.some(([text]) => /yes #/.test(text) && /can't allow/.test(text)),
+          false,
+          'no dead handle is offered',
+        );
+      } finally {
+        process.env.FAKE_PERMISSION_OPTIONS = 'allow_once,reject_once';
+      }
+    }
+  });
+
+  it('answers "always" with the one-call allow, and says that is what it did', async () => {
+    const { handlers, rows, said } = await run(['chat']);
+    handlers.channelChat?.(inChannel('@Bob check the build'));
+    await until(() => said.some(([text]) => /may I run/.test(text)), 'the question');
+
+    handlers.channelChat?.(inChannel('@Bob always'));
+    await until(() => rows().length > 0, 'the answer to land');
+
+    const row = rows()[0]!;
+    assert.equal(row.decision, 'always');
+    assert.equal(row.actor, 'Josh');
+    // The word asked for a standing grant; the runtime offered none, and the
+    // runtime was told the per-call option rather than something broader.
+    assert.equal(row.runtimeOption, 'allow_once');
+    assert.equal(row.breadth, 'this_call');
+    // Said a beat later than the answer lands: outbound lines are spaced.
+    await until(
+      () => said.some(([text]) => /no standing grant here/.test(text)),
+      'the owner to be told the word did not buy what it sounds like',
+    );
   });
 
   it('goes to the owner in the channel the turn came from, and takes yes from there', async () => {
@@ -418,13 +587,15 @@ describe('the runtime asks before running a tool', () => {
     assert.equal(cards.resolved[0]!.resolution, 'cancelled');
   });
 
-  it('takes "always" as a standing approval — the documented text fallback', async () => {
+  it('still accepts the documented "always" word as an answer', async () => {
     const { handlers, decisions, asked } = await run(['chat']);
 
     handlers.channelChat?.(inChannel('@Bob check the build'));
     await until(() => asked().length > 0, 'the question');
     handlers.channelChat?.(inChannel('@Bob always'));
     await until(() => decisions().length > 0, 'the answer to land');
+    // What the owner said is recorded as said. What it *bought* is the
+    // narrower thing, and the row beside it says which option was taken.
     assert.deepEqual(decisions(), [{ tool: 'Bash', decision: 'always' }]);
   });
 

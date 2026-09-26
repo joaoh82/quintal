@@ -1,0 +1,412 @@
+{
+  "ranAt": "2026-09-26T11:31:22.890Z",
+  "office": "production build on 127.0.0.1:3057, DATABASE_URL=file:/tmp/quin53-verification/office.db, local storage",
+  "gateway": {
+    "deliveryMs": 22,
+    "pass": true,
+    "cardsToOwner": 7,
+    "cardsToMember": 5,
+    "cardsToNonMember": 0,
+    "refusals": [
+      [
+        "invalid_payload",
+        false
+      ],
+      [
+        "not_found",
+        true
+      ],
+      [
+        "not_found",
+        true
+      ],
+      [
+        "not_found",
+        true
+      ],
+      [
+        "not_found",
+        true
+      ]
+    ],
+    "decisions": {
+      "alpha": 1,
+      "beta": 1
+    },
+    "resolutions": [
+      [
+        "d9ed6c",
+        "allowed"
+      ],
+      [
+        "1b69ba",
+        "interrupted"
+      ],
+      [
+        "07d806",
+        "interrupted"
+      ],
+      [
+        "3e0eb9",
+        "expired"
+      ]
+    ],
+    "privateCardId": "1b69ba",
+    "expiredCardId": "3e0eb9"
+  },
+  "runScope": {
+    "description": "omp, agent scopes chat/status/dm/run. Two distinct shell actions in one session, then a restart.",
+    "sameSession": {
+      "agent": "Probeoxzu",
+      "scopes": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "actions": [
+        {
+          "action": "two.txt",
+          "asked": 1,
+          "rows": [
+            {
+              "at": "2026-09-26T11:25:15.104Z",
+              "kind": "permission",
+              "requestId": "928815a7-5741-40c6-a87f-c449fb9ce659",
+              "tool": "touch two.txt && ls -l two.txt",
+              "summary": "touch two.txt && ls -l two.txt",
+              "actor": "run_scope",
+              "decision": "once",
+              "runtime": "omp",
+              "runtimeOption": "allow_once",
+              "runtimeOptionKind": "allow_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        },
+        {
+          "action": "three.txt",
+          "asked": 1,
+          "rows": [
+            {
+              "at": "2026-09-26T11:25:21.442Z",
+              "kind": "permission",
+              "requestId": "450ebe22-66ab-466c-9ff9-e523934c7167",
+              "tool": "touch three.txt && ls -l three.txt",
+              "summary": "touch three.txt && ls -l three.txt",
+              "actor": "run_scope",
+              "decision": "once",
+              "runtime": "omp",
+              "runtimeOption": "allow_once",
+              "runtimeOptionKind": "allow_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        }
+      ],
+      "askedAboutEveryAction": true,
+      "everyAnswerPerCall": true,
+      "optionsTaken": [
+        "allow_once:allow_once"
+      ],
+      "actors": [
+        "run_scope"
+      ],
+      "replies": []
+    },
+    "afterRestart": {
+      "agent": "Probeoxzu",
+      "scopes": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "actions": [
+        {
+          "action": "after-restart.txt",
+          "asked": 1,
+          "rows": [
+            {
+              "at": "2026-09-26T11:26:32.319Z",
+              "kind": "permission",
+              "requestId": "4a2612b7-f6e6-4c7e-856d-8757b0eea47f",
+              "tool": "touch after-restart.txt",
+              "summary": "touch after-restart.txt",
+              "actor": "run_scope",
+              "decision": "once",
+              "runtime": "omp",
+              "runtimeOption": "allow_once",
+              "runtimeOptionKind": "allow_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        }
+      ],
+      "askedAboutEveryAction": true,
+      "everyAnswerPerCall": true,
+      "optionsTaken": [
+        "allow_once:allow_once"
+      ],
+      "actors": [
+        "run_scope"
+      ],
+      "replies": []
+    },
+    "auditRows": [
+      {
+        "at": "2026-09-26T11:21:44.870Z",
+        "kind": "permission",
+        "requestId": "14b85826-c6e4-423f-a94f-e04589789e9d",
+        "tool": "touch one.txt && ls -l one.txt",
+        "summary": "touch one.txt && ls -l one.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      },
+      {
+        "at": "2026-09-26T11:25:15.104Z",
+        "kind": "permission",
+        "requestId": "928815a7-5741-40c6-a87f-c449fb9ce659",
+        "tool": "touch two.txt && ls -l two.txt",
+        "summary": "touch two.txt && ls -l two.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      },
+      {
+        "at": "2026-09-26T11:25:21.442Z",
+        "kind": "permission",
+        "requestId": "450ebe22-66ab-466c-9ff9-e523934c7167",
+        "tool": "touch three.txt && ls -l three.txt",
+        "summary": "touch three.txt && ls -l three.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      },
+      {
+        "at": "2026-09-26T11:26:32.319Z",
+        "kind": "permission",
+        "requestId": "4a2612b7-f6e6-4c7e-856d-8757b0eea47f",
+        "tool": "touch after-restart.txt",
+        "summary": "touch after-restart.txt",
+        "actor": "run_scope",
+        "decision": "once",
+        "runtime": "omp",
+        "runtimeOption": "allow_once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      }
+    ]
+  },
+  "card": {
+    "description": "claude-code in Manual mode, agent scopes chat/status/dm. The edit request offers allow-once AND allow-with-updates.",
+    "allow": {
+      "phase": "allow",
+      "allow": {
+        "seenAfterMs": 4984,
+        "tool": "Write allow.txt",
+        "summary": "/tmp/quin53-verification/workspace/allow.txt",
+        "options": [
+          "allow_once",
+          "deny"
+        ],
+        "ownerUserId": "f2de4d38-f941-47bc-93e7-fb685c414cc9",
+        "turnId": "1",
+        "windowMs": 300000,
+        "turnWentToWaiting": false,
+        "resolution": [
+          "allowed",
+          "card"
+        ],
+        "fileWritten": "quintal-probe-allow",
+        "reply": [
+          "@Approval Owner may I run Write allow.txt (/tmp/quin53-verification/workspace/allow.txt)? Use the card, or reply \"@Probe1cwd yes #1aaac9\" or \"@Probe1cwd no #1aaac9\"."
+        ],
+        "continuedAfterMs": 5085
+      },
+      "pass": true,
+      "cardsSeen": 1
+    },
+    "deny": {
+      "phase": "deny",
+      "deny": {
+        "seenAfterMs": 4972,
+        "requestId": "643388",
+        "tool": "Write deny.txt",
+        "summary": "/tmp/quin53-verification/workspace/deny.txt",
+        "resolution": [
+          "denied",
+          "card"
+        ],
+        "reply": [
+          "@Probe1cwd create a file called deny.txt in your working directory containing the word quintal-probe-deny, then tell me you did it.",
+          "@Approval Owner may I run Write deny.txt (/tmp/quin53-verification/workspace/deny.txt)? Use the card, or reply \"@Probe1cwd yes #643388\" or \"@Probe1cwd no #643388\"."
+        ],
+        "fileWritten": false
+      },
+      "pass": true,
+      "cardsSeen": 1
+    },
+    "auditRows": [
+      {
+        "at": "2026-09-26T11:27:39.297Z",
+        "kind": "permission",
+        "requestId": "1aaac975-67ad-4495-ab49-d0e05bc4ced7",
+        "tool": "Write allow.txt",
+        "summary": "/tmp/quin53-verification/workspace/allow.txt",
+        "actor": "Approval Owner",
+        "decision": "once",
+        "runtime": "claude-code",
+        "runtimeOption": "allow-once",
+        "runtimeOptionKind": "allow_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      },
+      {
+        "at": "2026-09-26T11:28:15.735Z",
+        "kind": "permission",
+        "requestId": "643388ec-437f-4d4a-acf5-4d09862eeb2c",
+        "tool": "Write deny.txt",
+        "summary": "/tmp/quin53-verification/workspace/deny.txt",
+        "actor": "Approval Owner",
+        "decision": "deny",
+        "runtime": "claude-code",
+        "runtimeOption": "reject",
+        "runtimeOptionKind": "reject_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      }
+    ]
+  },
+  "withdrawal": {
+    "data": {
+      "agent": "Probeoxzu",
+      "scopesBefore": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "scopesAfter": [
+        "chat",
+        "status",
+        "dm"
+      ],
+      "audited": {
+        "kind": "agent.scopes_changed",
+        "removed": [
+          "run"
+        ],
+        "added": []
+      },
+      "notice": "Quintal stops answering for it from its next session. Allow rules kept by the runtime itself are not revoked by this — they live in the runtime’s own settings and are removed there.",
+      "appCreatedPersistentGrants": 0,
+      "externallyManaged": {
+        "claude-code": "Claude Code keeps its own allow rules in ~/.claude/settings.json (and a project .claude/settings.local.json). Quintal neither writes nor reads them; they are managed with the `claude` CLI.",
+        "codex": "Codex decides in-process from its own approval policy and sandbox settings (~/.codex/config.toml). Nothing about those decisions reaches Quintal, and Quintal cannot change or revoke them.",
+        "opencode": "opencode decides from its own `permission` configuration. Quintal neither sees nor changes it."
+      },
+      "pass": true
+    },
+    "behaviour": {
+      "agent": "Probeoxzu",
+      "scopes": [
+        "chat",
+        "status",
+        "dm",
+        "run"
+      ],
+      "actions": [
+        {
+          "action": "withdrawn.txt",
+          "asked": 1,
+          "askedOwner": true,
+          "cardOptions": [
+            [
+              {
+                "id": "allow_once",
+                "label": "Allow once"
+              },
+              {
+                "id": "deny",
+                "label": "Deny"
+              }
+            ]
+          ],
+          "rows": [
+            {
+              "at": "2026-09-26T11:30:59.696Z",
+              "kind": "permission",
+              "requestId": "28cd9b1c-2a20-4fff-aac1-a482358a5ec2",
+              "tool": "touch withdrawn.txt",
+              "summary": "touch withdrawn.txt",
+              "actor": "Approval Owner",
+              "decision": "deny",
+              "runtime": "omp",
+              "runtimeOption": "reject_once",
+              "runtimeOptionKind": "reject_once",
+              "breadth": "this_call",
+              "lifetime": "this_call",
+              "persistsAt": null
+            }
+          ]
+        }
+      ],
+      "askedAboutEveryAction": true,
+      "everyAnswerPerCall": true,
+      "optionsTaken": [
+        "reject_once:reject_once"
+      ],
+      "actors": [
+        "Approval Owner"
+      ],
+      "cardsSeen": 1,
+      "replies": [
+        "@Approval Owner may I run touch withdrawn.txt (touch withdrawn.txt)? Use the card, or reply \"@Probeoxzu yes #28cd9b\" or \"@Probeoxzu no #28cd9b\"."
+      ]
+    },
+    "auditRows": [
+      {
+        "at": "2026-09-26T11:30:59.696Z",
+        "kind": "permission",
+        "requestId": "28cd9b1c-2a20-4fff-aac1-a482358a5ec2",
+        "tool": "touch withdrawn.txt",
+        "summary": "touch withdrawn.txt",
+        "actor": "Approval Owner",
+        "decision": "deny",
+        "runtime": "omp",
+        "runtimeOption": "reject_once",
+        "runtimeOptionKind": "reject_once",
+        "breadth": "this_call",
+        "lifetime": "this_call",
+        "persistsAt": null
+      }
+    ]
+  }
+}

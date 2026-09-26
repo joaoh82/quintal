@@ -79,9 +79,9 @@ export interface AgentConfig {
    */
   cwd: string;
   /**
-   * The catalogue id of the runtime an office-defined agent runs on, for the
-   * roster the nest's `AGENTS.md` shows. Undefined when the fleet file named
-   * the harness itself; `harness` is the answer then.
+   * The catalogue id of the runtime an office-defined agent runs on.
+   * Undefined when the fleet file named the harness itself; `harness` is the
+   * answer then. Read it through `runtimeIdOf`, never directly — see there.
    */
   runtimeId?: string;
   url: string;
@@ -222,6 +222,27 @@ export class ConfigError extends Error {
  * published for exactly this purpose, which is why these are `npx` lines rather
  * than the bare binaries. Goose speaks ACP itself.
  */
+/**
+ * Which runtime this agent is *actually* on.
+ *
+ * `harness` is not that answer, and assuming it was is how two permission
+ * safeguards came to be dead on the path almost everybody uses. An
+ * office-defined agent is built by `host.ts` with `harness: 'custom'` — the
+ * command comes from the catalogue, so the spawn needs no harness id — and the
+ * real runtime in `runtimeId`. Only a hand-run `--agent claude-code` puts it in
+ * `harness`.
+ *
+ * So anything keyed by runtime must come through here: the permission-option
+ * catalogue (`@quintal/shared`'s `optionSemantics`) and the asking-mode
+ * allowlist both are. Keyed on `'custom'`, the first silently loses every
+ * measured fact — including that Claude Code's plan-exit options are session
+ * policy changes and not per-call allows — and the second silently stops
+ * switching Claude Code into the mode that asks at all.
+ */
+export function runtimeIdOf(config: Pick<AgentConfig, 'harness' | 'runtimeId'>): string {
+  return config.runtimeId ?? config.harness;
+}
+
 export function defaultCommandFor(harness: Harness): string[] {
   if (harness === CUSTOM_HARNESS) {
     throw new ConfigError('agent "custom" requires an explicit cmd');
