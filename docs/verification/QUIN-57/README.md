@@ -63,7 +63,9 @@ Nothing about the server or the web app was reimplemented.
 | `git diff --check`, NUL-byte scan of every changed file | Pass |
 | `node scripts/build-personal-payload.mjs` (host triple) | Pass — see measurements; boots on the bundled Node, answers `/health`, `/login` 200, `/api/office` `personal: true`, challenge bound to its origin, no runtime download, no write into the payload, stops on stdin EOF |
 | `node scripts/fetch-node-runtime.mjs` | Pass — SHA-256 verified, `--version` answers `v22.23.3` with only `/usr/bin:/bin` on PATH |
-| `node scripts/desktop-ipc-check.mjs` (debug build, remote origin) | Pass — 46 commands answer as expected, signature verifies with @noble/curves; the three new personal commands are refused from a server origin by the ACL |
+| `node scripts/desktop-ipc-check.mjs` (debug build, remote origin) | Pass — 47 commands answer as expected, signature verifies with @noble/curves; the four new personal commands are refused from a server origin by the ACL |
+| Packaging workflow, `linux` job (CI, ubuntu-22.04, head `2195d8c`) | Pass — Node 22.23.3 for `x86_64-unknown-linux-gnu` verified; payload 24,710 files / 421MB; **booted on the Linux Node in 1.5s**, `/login` 200, personal office, challenge bound, RSS 180MB, stopped on stdin EOF; AppImage and deb bundled; the AppImage first-launch smoke rendered the first screen and found the harness, the Node runtime and the payload inside the AppDir |
+| Packaging workflow, `windows` job (CI) | Pass — harness sidecar and lookup regression only; the Windows payload is not built there yet (QUIN-76) |
 
 Every row above ran twice: once as the implementation settled, and once more
 as the formal pass on the committed tree after the plan was approved. Both
@@ -131,11 +133,14 @@ is the number that needs a decision before a broad release.
 
 ## What was not verified
 
-- **Any platform but macOS arm64.** Linux (AppImage, .deb) and Windows are
-  wired — the runtime fetch, the payload's native-module swap, the AppImage
-  repack — and none of it has run. The native swap for a cross-target has
-  only been exercised by unit-level reasoning about the lockfile, not by
-  building an Intel payload and running it under Rosetta.
+- **Windows, and Intel macOS.** Linux is further along than first written:
+  the packaging job built the Linux payload, booted it on the Linux Node, and
+  packaged it into an AppImage whose first-launch smoke found every part.
+  Nobody has yet clicked "Create a personal office" on Linux, so the host's
+  supervisor on that platform is unproven. Windows has built nothing of the
+  personal office in CI. The native-module swap for a cross-target has only
+  been exercised by reasoning about the lockfile, not by building an Intel
+  payload and running it under Rosetta. All of this is QUIN-76.
 - **A Developer ID signed, notarized bundle** with the payload. Ad-hoc
   signing plus the library-validation entitlement is what ran here. That
   notarization accepts the re-signed payload is expected, not shown.
@@ -149,11 +154,28 @@ is the number that needs a decision before a broad release.
 - **The website** (`apps/website`) still describes the Docker-first flow;
   it documents the shipped release and should change with the release.
 
-## Follow-ups worth filing
+## Review findings, and what happened to them
 
-1. Trace-based payload pruning (`.next/**/*.nft.json`) — `phaser` and
-   `lucide-react` are client bundles the server never loads; likely ~180MB.
-2. Run `personal-office-smoke.mjs` in the release workflow on macOS (it needs
-   a display; the runner has one) and a Linux variant under xvfb.
-3. Stage 2: guided agent install/auth inside the app.
-4. Close-to-tray / background office, once wanted.
+Two automated reviews on the PR. Changed here: `retry_personal_office` added
+to the IPC check's refusals; replacing a too-short `auth-secret` now resets
+its mode to 0600; a stale comment in `capability()`; and the Linux packaging
+job, which was red because it ran the release script without first building
+a payload — then red again because linuxdeploy's `ldd` exits 1 on one of the
+payload's native modules, fixed the way the harness was, by keeping the
+payload out of the AppImage bundle and copying it in during the repack.
+Ticketed: scoping `disable-library-validation` and notarization (QUIN-76), a
+one-click restore (QUIN-77), Windows graceful stop (QUIN-78).
+
+## Follow-ups filed
+
+- QUIN-74 — prune the payload with Next's file traces (`phaser`,
+  `lucide-react`; likely ~180MB).
+- QUIN-75 — run `personal-office-smoke.mjs` in the release and packaging
+  workflows.
+- QUIN-76 — verify Linux, Windows and Intel macOS with a notarized build;
+  scope `disable-library-validation`.
+- QUIN-77 — restore a personal office from its backup when a migration fails.
+- QUIN-78 — stop the server gracefully on Windows.
+- QUIN-79 — website getting-started and download copy, with the release.
+- QUIN-80 — Stage 2: install and sign into one agent harness from inside the
+  app.
