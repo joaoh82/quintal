@@ -5,9 +5,11 @@
   The bootstrap page, and the only markup this app owns.
 
   `apps/web` is the UI, and this does not compete with it. It is the one screen
-  that *cannot* live in the office: choosing which server to join, at a moment
-  when there may be no server to load a page from. Everything else belongs in
-  the web app, where a browser can see it too.
+  that *cannot* live in the office: choosing where the office comes from, at a
+  moment when there may be no office to load a page from. Two answers —
+  create a personal office here, or connect to a server somebody runs — and
+  the progress of the first while its server comes up. Everything else belongs
+  in the web app, where a browser can see it too.
 -->
 <style>
   :root { color-scheme: dark; }
@@ -15,7 +17,7 @@
     margin: 0; min-height: 100vh; display: grid; place-items: center;
     font: 14px/1.55 system-ui, sans-serif; background: #0b0b0c; color: #e4e4e7;
   }
-  main { width: min(30rem, 90vw); }
+  main { width: min(32rem, 90vw); }
   h1 { font-size: 15px; margin: 0 0 .25rem; }
   p.lede { margin: 0 0 1.25rem; color: #a1a1aa; font-size: 13px; }
   ul { list-style: none; margin: 0 0 1rem; padding: 0; }
@@ -34,7 +36,10 @@
     border: 1px solid #3f3f46; background: #18181b; color: #e4e4e7; cursor: pointer;
   }
   button:hover { background: #27272a; }
+  button.primary { border-color: #4d7c0f; background: #365314; }
+  button.primary:hover { background: #3f6212; }
   button.link { border: 0; background: 0; color: #a1a1aa; padding: .35rem .2rem; }
+  button[disabled] { opacity: .5; cursor: default; }
   form { display: flex; gap: .5rem; }
   input {
     flex: 1; font: inherit; padding: .45rem .6rem; border-radius: .4rem;
@@ -44,6 +49,22 @@
   #status { color: #a1a1aa; text-align: center; }
   #version { color: #52525b; text-align: center; font-size: 12px;
     font-family: ui-monospace, monospace; margin: 1.25rem 0 0; }
+  .choice {
+    display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin: 0 0 1.25rem;
+  }
+  .choice > section {
+    border: 1px solid #27272a; border-radius: .6rem; padding: .9rem;
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+  .choice h2 { font-size: 14px; margin: 0; }
+  .choice p { margin: 0; color: #a1a1aa; font-size: 12.5px; flex: 1; }
+  .divider { border-top: 1px solid #27272a; margin: 1rem 0; }
+  #office { text-align: center; }
+  #office .detail { color: #71717a; font-size: 12px; margin: .5rem 0 0;
+    font-family: ui-monospace, monospace; white-space: pre-wrap; text-align: left;
+    max-height: 9rem; overflow: auto; background: #09090b; border-radius: .4rem;
+    padding: .5rem .6rem; }
+  #office .actions { display: flex; gap: .5rem; justify-content: center; margin-top: .9rem; }
 </style>
 
 <main>
@@ -52,13 +73,47 @@
     <button class="link" id="elsewhere">Choose a different server</button>
   </p>
 
+  <!--
+    The personal office coming up. `personal_status` says which of four
+    things is true — starting, ready, failed, stopped — and the page says
+    the same, in words. A failure shows the server's last lines, because a
+    "something went wrong" with nothing to read is how bugs stay unreported.
+  -->
+  <section id="office" hidden>
+    <p id="office-status">Starting your personal office…</p>
+    <p class="detail" id="office-detail" hidden></p>
+    <div class="actions" id="office-actions" hidden>
+      <button id="retry">Try again</button>
+      <button class="link" id="office-elsewhere">Connect to a server instead</button>
+    </div>
+  </section>
+
   <section id="picker" hidden>
-    <h1>Which server?</h1>
+    <h1>Where is your office?</h1>
     <p class="lede">
-      A server is a Quintal deployment with an office on it — its own people,
-      its own agents. They do not talk to each other, and you can have as many
-      as you like.
+      Quintal is a room your agents work in. It can run privately on this
+      computer, or you can join a server that somebody — maybe you — is running.
     </p>
+
+    <div class="choice">
+      <section>
+        <h2>A personal office</h2>
+        <p>
+          Runs inside the app, on this computer only. Nothing to install, no
+          address to type. Your agents run here too; the models they call are
+          wherever they always were.
+        </p>
+        <button class="primary" id="personal">Create a personal office</button>
+        <p class="problem" id="personal-problem" hidden></p>
+      </section>
+      <section>
+        <h2>Connect to a server</h2>
+        <p>
+          A Quintal deployment with an office on it — its own people, its own
+          agents, guests by invitation. Add it by address below.
+        </p>
+      </section>
+    </div>
 
     <ul id="list"></ul>
 
@@ -94,8 +149,8 @@
       .catch(() => {});
   }
 
-  function fail(message) {
-    const problem = el('problem');
+  function fail(message, where = 'problem') {
+    const problem = el(where);
     problem.textContent = message;
     problem.hidden = false;
   }
@@ -106,6 +161,16 @@
       listed = await invoke('list_servers');
     } catch (error) {
       fail(String(error));
+      return;
+    }
+
+    // The personal office is what this launch opens: show its progress
+    // rather than a picker, and keep showing it until it is ready — at
+    // which point the host navigates away from this page on its own.
+    if (listed.active === 'personal' && el('picker').hidden) {
+      el('status').hidden = true;
+      el('office').hidden = false;
+      void followOffice();
       return;
     }
 
@@ -160,6 +225,80 @@
       }),
     );
   }
+
+  // --- the personal office, while it comes up -------------------------------
+
+  const PHRASES = {
+    starting: 'Starting your personal office…',
+    ready: 'Your office is ready. Opening it…',
+    failed: 'Your personal office could not start.',
+    stopped: 'Your personal office is not running.',
+  };
+
+  async function followOffice() {
+    for (;;) {
+      let status;
+      try {
+        status = await invoke('personal_status');
+      } catch (error) {
+        el('office-status').textContent = String(error);
+        return;
+      }
+      const line = PHRASES[status.phase] ?? status.phase;
+      el('office-status').textContent =
+        status.restarts > 0 && status.phase === 'starting'
+          ? `${line} (it stopped on its own; starting it again, ${status.restarts} so far)`
+          : line;
+
+      const detail = el('office-detail');
+      if (status.phase === 'failed' || status.phase === 'stopped') {
+        const lines = [];
+        if (status.message) lines.push(status.message);
+        if (status.backup) lines.push(`A backup was taken first: ${status.backup}`);
+        lines.push(`Your data is in ${status.dataDir}`);
+        // The server's own last words, from the host's bounded log. What
+        // a bug report needs, and what "could not start" alone never says.
+        try {
+          const logs = await invoke('personal_logs');
+          const tail = logs.slice(-12).map((l) => `${l.stream === 'host' ? '· ' : ''}${l.text}`);
+          if (tail.length) lines.push('', ...tail);
+        } catch {}
+        detail.textContent = lines.join('\n');
+        detail.hidden = false;
+        el('office-actions').hidden = false;
+        return;
+      }
+      detail.hidden = true;
+      el('office-actions').hidden = true;
+      if (status.phase === 'ready') return;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+
+  el('retry').onclick = () => {
+    void invoke('retry_personal_office').catch((error) => fail(String(error), 'office-detail'));
+  };
+  el('office-elsewhere').onclick = () => {
+    void invoke('open_server_picker').catch((error) => fail(String(error), 'office-detail'));
+  };
+
+  // --- choosing -------------------------------------------------------------
+
+  el('personal').onclick = async () => {
+    el('personal-problem').hidden = true;
+    // Said out loud rather than done quietly, the same as switching servers:
+    // the window vanishing is alarming if nobody warned you. Except when
+    // there is nothing to leave.
+    const hadServer = (await invoke('list_servers')).active !== null;
+    if (hadServer && !confirm('Open your personal office?\n\nQuintal will restart.')) return;
+    try {
+      el('personal').disabled = true;
+      await invoke('choose_personal_office');
+    } catch (error) {
+      el('personal').disabled = false;
+      fail(error?.message ?? String(error), 'personal-problem');
+    }
+  };
 
   async function switchTo(url, { leaving = true } = {}) {
     // Switching restarts, so the app comes up granting IPC to exactly one

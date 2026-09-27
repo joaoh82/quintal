@@ -44,6 +44,9 @@ export function WhichServer({ className }: { className?: string }) {
         : await host
             ?.listServers()
             .then((listed) => {
+              // A personal office has no entry in the list and no name of
+              // its own yet; the app knows what it is.
+              if (listed.active === 'personal') return listed.personal?.label ?? 'Personal office';
               const active = listed.servers.find((server) => server.url === listed.active);
               return active?.label ?? null;
             })

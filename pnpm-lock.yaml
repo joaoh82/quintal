@@ -40,6 +40,15 @@ importers:
         specifier: ^2.9.2
         version: 2.11.4
 
+  apps/personal-payload:
+    dependencies:
+      '@quintal/server':
+        specifier: workspace:*
+        version: link:../server
+      '@quintal/web':
+        specifier: workspace:*
+        version: link:../web
+
   apps/server:
     dependencies:
       '@colyseus/core':

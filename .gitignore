@@ -44,8 +44,14 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/schemas/
 
 # The harness compiled into the desktop bundle. Built per target triple by
-# scripts/build-harness-sidecar.mjs; not something to keep in git.
+# scripts/build-harness-sidecar.mjs; not something to keep in git. The pinned
+# Node runtime (scripts/fetch-node-runtime.mjs) lands here too.
 apps/desktop/src-tauri/binaries/
+
+# The personal office's production payload: the server, the web app and
+# their runtime closure, assembled by scripts/build-personal-payload.mjs and
+# shipped as a bundle resource. Reproducible from the lockfile; never committed.
+apps/desktop/personal-payload/
 
 # Raw asset packs dropped at the repo root for derivation — see apps/web/public/assets/CREDITS.md
 /assets/

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-personal-status"
+description = "Enables the personal_status command without any pre-configured scope."
+commands.allow = ["personal_status"]
+
+[[permission]]
+identifier = "deny-personal-status"
+description = "Denies the personal_status command without any pre-configured scope."
+commands.deny = ["personal_status"]

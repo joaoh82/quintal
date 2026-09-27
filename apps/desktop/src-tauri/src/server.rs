@@ -72,6 +72,41 @@ fn server_url_from_env() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// What this launch is a window onto.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Choice {
+    /// The office this app runs itself — see `personal.rs`.
+    Personal,
+    /// A server somebody is running, by URL.
+    Server(String),
+    /// Nothing yet: the picker's reason to exist.
+    Nothing,
+}
+
+/// Which server, or the personal office, this launch should open.
+///
+/// `QUINTAL_SERVER_URL=personal` names the personal office from the
+/// environment, the way a URL there names a server.
+pub fn active_choice(dir: &Path) -> Choice {
+    if let Some(from_env) = server_url_from_env() {
+        if from_env == crate::personal::PERSONAL {
+            return Choice::Personal;
+        }
+        return match active_server_url(dir) {
+            Some(url) => Choice::Server(url),
+            None => Choice::Nothing,
+        };
+    }
+    let servers = load_servers(dir);
+    if servers.personal_active() {
+        return Choice::Personal;
+    }
+    match active_server_url(dir) {
+        Some(url) => Choice::Server(url),
+        None => Choice::Nothing,
+    }
+}
+
 /// The configured server URL, normalised to an origin with no trailing slash.
 ///
 /// Anything unusable falls back to the default rather than being trusted: a
@@ -137,6 +172,13 @@ pub fn server_path(dir: &Path) -> PathBuf {
 /// So the grant is built at startup from the configured server and nothing
 /// else. Changing servers means restarting, which is the right price.
 pub fn capability_for(server: Option<&str>) -> String {
+    capability(server, false)
+}
+
+/// `capability_for`, with the personal office's commands added when this
+/// launch is one. Separate so every existing caller and test keeps its
+/// meaning; the personal grants are an addition, never a substitution.
+pub fn capability(server: Option<&str>, personal: bool) -> String {
     // No server yet means a first run, and the only page there is the picker
     // this app ships. It still needs to call commands — that is how a server
     // gets added — so the capability exists with nothing remote in it.
@@ -237,7 +279,24 @@ pub fn capability_for(server: Option<&str>) -> String {
     // which Tauri classifies as local, so local-only would grant these to the
     // dev server too.
     if server.is_none() {
-        permissions.extend(["allow-add-server", "allow-remove-server"]);
+        permissions.extend([
+            "allow-add-server",
+            "allow-remove-server",
+            // Choosing the personal office is the picker's job for the same
+            // reason adding a server is: it changes what the next boot loads.
+            "allow-choose-personal-office",
+        ]);
+    }
+    // The personal office's own commands. Granted to the picker too, which is
+    // the page showing while the server comes up: it reads the status to
+    // show progress, and the logs to show what went wrong. Nothing here
+    // moves a credential — `retry_personal_office` only restarts the app.
+    if personal || server.is_none() {
+        permissions.extend([
+            "allow-personal-status",
+            "allow-personal-logs",
+            "allow-retry-personal-office",
+        ]);
     }
 
     serde_json::json!({
@@ -380,6 +439,51 @@ mod servers_tests {
         assert_eq!(active_server_url(dir.path()), None, "back to the picker");
     }
 
+    /// The personal office is chosen by word, survives the URL filter, and
+    /// leaves the servers where they were for coming back.
+    #[test]
+    fn choosing_the_personal_office_keeps_the_servers_for_later() {
+        let dir = dir();
+        add_server(dir.path(), A, None).expect("added");
+        switch_server(dir.path(), A).expect("switched");
+
+        choose_personal(dir.path()).expect("chosen");
+        assert_eq!(active_choice(dir.path()), Choice::Personal);
+        assert_eq!(
+            active_server_url(dir.path()),
+            None,
+            "no URL is granted anything"
+        );
+        assert_eq!(load_servers(dir.path()).servers.len(), 1, "still yours");
+
+        switch_server(dir.path(), A).expect("back");
+        assert_eq!(active_choice(dir.path()), Choice::Server(A.into()));
+
+        clear_active(dir.path()).expect("cleared");
+        assert_eq!(active_choice(dir.path()), Choice::Nothing);
+    }
+
+    #[test]
+    fn the_personal_office_may_only_be_chosen_from_the_picker() {
+        let with_server = capability(Some("https://server.example.com"), false);
+        assert!(!with_server.contains("allow-choose-personal-office"));
+        assert!(!with_server.contains("allow-personal-status"));
+
+        let picker = capability(None, false);
+        assert!(picker.contains("allow-choose-personal-office"));
+        assert!(
+            picker.contains("allow-personal-status"),
+            "the picker shows progress"
+        );
+
+        let personal = capability(Some("http://127.0.0.1:43117"), true);
+        assert!(personal.contains("allow-personal-status"));
+        assert!(personal.contains("allow-personal-logs"));
+        assert!(personal.contains("allow-retry-personal-office"));
+        assert!(!personal.contains("allow-choose-personal-office"));
+        assert!(!personal.contains("allow-add-server"));
+    }
+
     #[test]
     fn clearing_the_active_server_keeps_the_list() {
         let dir = dir();
@@ -520,9 +624,10 @@ mod tests {
         // — see `capability_for` — but a command granted in *neither* is one
         // nothing can ever call.
         let granted = format!(
-            "{}{}",
+            "{}{}{}",
             capability_for(Some("https://server.example.com")),
             capability_for(None),
+            capability(Some("http://127.0.0.1:43117"), true),
         );
 
         let mut checked = 0;
@@ -726,6 +831,12 @@ impl Servers {
         self.servers.iter().find(|server| server.url == active)
     }
 
+    /// Is the personal office what this app opens? It is not in the list —
+    /// it has no URL until it is running — so `active` names it by word.
+    pub fn personal_active(&self) -> bool {
+        self.active.as_deref() == Some(crate::personal::PERSONAL)
+    }
+
     fn contains(&self, url: &str) -> bool {
         self.servers.iter().any(|server| server.url == url)
     }
@@ -756,7 +867,7 @@ pub fn load_servers(dir: &Path) -> Servers {
                 .servers
                 .retain(|server| is_usable_server(&server.url));
             if let Some(active) = servers.active.clone() {
-                if !servers.contains(&active) {
+                if !servers.contains(&active) && active != crate::personal::PERSONAL {
                     servers.active = None;
                 }
             }
@@ -835,6 +946,16 @@ pub fn remove_server(dir: &Path, url: &str) -> Result<(String, Servers), String>
     // Forgetting `https://server/` while the slot says `https://server` leaves a
     // machine token behind for a server that is gone.
     Ok((url, servers))
+}
+
+/// Make the personal office what the next boot opens. The caller restarts.
+///
+/// The list of servers is untouched: a personal office is not one of them,
+/// and going back to a server later must find it still there.
+pub fn choose_personal(dir: &Path) -> Result<(), String> {
+    let mut servers = load_servers(dir);
+    servers.active = Some(crate::personal::PERSONAL.to_string());
+    save_servers(dir, &servers).map_err(|error| error.to_string())
 }
 
 /// Leave every server known but none active, so the next boot shows the

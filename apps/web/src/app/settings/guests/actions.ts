@@ -1,5 +1,6 @@
 'use server';
 
+import { PERSONAL_REFUSALS, personalMode } from '@quintal/shared';
 import {
   INVITE_MAX_USES_LIMIT,
   createInviteLink,
@@ -41,6 +42,11 @@ export async function createGuestLinkAction(
   formData: FormData,
 ): Promise<CreateGuestLinkResult> {
   try {
+    // Refused here as well as at the door: a personal office has no guests,
+    // and a link that could never be redeemed is a promise the form should
+    // not make.
+    if (personalMode()) return { ok: false, error: PERSONAL_REFUSALS.noGuests };
+
     const { db, workspace, userId } = await workspaceForCaller();
 
     const hours = Number(formData.get('hours') ?? 72);

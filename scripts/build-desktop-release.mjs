@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { signPayload } from './sign-payload.mjs';
 
 const [target, bundles, platform] = process.argv.slice(2);
 if (!target || !bundles || !platform) throw new Error('Expected target, bundles, platform');
@@ -50,12 +52,35 @@ if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `## ${platf
 // per job rather than always, so release logs stay readable.
 const verbose = env.QUINTAL_TAURI_VERBOSE === '1' ? ['--verbose'] : [];
 
+// The personal office's payload must exist before anything is bundled: it is
+// a resource of every bundle, and a release without it is an app whose
+// first-launch "Create a personal office" button cannot work. Built by
+// scripts/build-personal-payload.mjs, which also boots it once as proof.
+const payloadManifest = 'apps/desktop/personal-payload/payload.json';
+if (!existsSync(payloadManifest)) {
+  throw new Error(`No personal office payload at ${payloadManifest}. Run: node scripts/build-personal-payload.mjs ${target}`);
+}
+const payload = JSON.parse(readFileSync(payloadManifest, 'utf8'));
+if (payload.target !== target) {
+  throw new Error(`The payload at ${payloadManifest} was built for ${payload.target}, not ${target}`);
+}
+if (payload.smoke !== 'passed' && payload.smoke !== 'skipped') {
+  throw new Error(`The payload at ${payloadManifest} did not pass its smoke (${payload.smoke})`);
+}
+writeFileSync('stage/payload.txt', `${payload.files} files, ${(payload.bytes / 1024 / 1024).toFixed(0)}MB, Node ${payload.node}, smoke ${payload.smoke}\n`);
+
+// On macOS the payload's native modules are signed with the app's identity
+// before Tauri copies them into Resources: the hardened runtime will not let
+// quintal-node load them otherwise, and notarization will not accept them.
+if (process.platform === 'darwin') signPayload(env.APPLE_SIGNING_IDENTITY);
+
 // `sidecar` decides whether externalBin is applied to this bundle.
 function build(bundleArg, sidecar) {
   execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
     '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
     '--bundles', bundleArg,
     ...(sidecar ? ['--config', 'src-tauri/tauri.bundle.conf.json'] : []),
+    '--config', 'src-tauri/tauri.personal.conf.json',
     '--config', 'src-tauri/tauri.release.conf.json',
     ...updaterConfig, '--', '--locked',
   ], { env, stdio: 'inherit', shell: process.platform === 'win32' });
@@ -95,10 +120,20 @@ if (process.platform === 'darwin') {
     execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
     const proof = execFileSync(sidecar, ['--help'], { encoding: 'utf8', env: { ...env, PATH: '/usr/bin:/bin' } });
     if (!proof.includes('quintal-acp')) throw new Error('Signed sidecar did not start');
+    // The personal office's two halves, as packaged: the runtime beside the
+    // executable answers, and the payload landed under Resources with the
+    // server entry the manifest names.
+    const node = join(app, 'Contents/MacOS/quintal-node');
+    const nodeVersion = execFileSync(node, ['--version'], { encoding: 'utf8', env: { ...env, PATH: '/usr/bin:/bin' } }).trim();
+    if (nodeVersion !== `v${payload.node}`) throw new Error(`Packaged Node reports ${nodeVersion}, payload expects v${payload.node}`);
+    const packagedPayload = join(app, 'Contents/Resources/personal');
+    for (const file of ['payload.json', payload.entry, `${payload.webDir}/.next/BUILD_ID`]) {
+      if (!existsSync(join(packagedPayload, file))) throw new Error(`Packaged payload is missing ${file}`);
+    }
     if (signing === 'Developer ID signed and notarized') {
       execFileSync('xcrun', ['stapler', 'validate', app], { stdio: 'inherit' });
     }
-    console.log('PASS: DMG app signature verifies; packaged sidecar retains allow-jit and answers --help');
+    console.log(`PASS: DMG app signature verifies; packaged sidecar retains allow-jit and answers --help; packaged Node is ${nodeVersion} and the personal payload is in Resources`);
   } finally {
     if (mounted) execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' });
     rmSync(mount, { recursive: true, force: true });

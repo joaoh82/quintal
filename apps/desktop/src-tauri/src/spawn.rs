@@ -307,13 +307,16 @@ pub struct LogLine {
 }
 
 /// A bounded window onto what the harness has been saying.
+///
+/// Shared with the personal office's supervisor, which has the same two
+/// pipes to read and the same reason to keep only the tail.
 #[derive(Default)]
-struct LogBuffer {
+pub(crate) struct LogBuffer {
     lines: Mutex<VecDeque<LogLine>>,
 }
 
 impl LogBuffer {
-    fn push(&self, stream: &str, text: String) {
+    pub(crate) fn push(&self, stream: &str, text: String) {
         let mut lines = self.lines.lock().expect("log lock");
         if lines.len() == LOG_LINES {
             lines.pop_front();
@@ -324,7 +327,7 @@ impl LogBuffer {
         });
     }
 
-    fn snapshot(&self) -> Vec<LogLine> {
+    pub(crate) fn snapshot(&self) -> Vec<LogLine> {
         self.lines
             .lock()
             .expect("log lock")
@@ -519,7 +522,11 @@ impl Fleet {
 /// Lossy by design on invalid UTF-8: a log line is for a human to read, and
 /// refusing to show the other 499 because one had a stray byte would be a
 /// strange trade.
-fn drain<R: std::io::Read + Send + 'static>(pipe: R, stream: &'static str, logs: Arc<LogBuffer>) {
+pub(crate) fn drain<R: std::io::Read + Send + 'static>(
+    pipe: R,
+    stream: &'static str,
+    logs: Arc<LogBuffer>,
+) {
     std::thread::spawn(move || {
         for line in BufReader::new(pipe).lines() {
             match line {

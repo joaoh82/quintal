@@ -156,7 +156,7 @@ fn switch_server(app: &AppHandle) {
         eprintln!("[quintal] tray: {error}");
         return;
     }
-    let _ = state.fleet.stop();
+    state.stop_everything();
     app.restart();
 }
 

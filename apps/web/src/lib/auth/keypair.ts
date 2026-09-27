@@ -10,8 +10,11 @@ import {
   isPubkeyHex,
   isSignatureHex,
   parseAuthPayload,
+  PERSONAL_REFUSALS,
+  personalMode,
   verifyAuthSignature,
   normaliseDisplayName,
+  type PersonalMode,
 } from '@quintal/shared';
 import {
   ensurePersonalWorkspace,
@@ -111,10 +114,17 @@ export interface KeypairAuthOptions {
    * are looking at the same rows.
    */
   db?: Database;
+  /**
+   * Whether this server is one person's private office, and whose. Defaults
+   * to what the environment says — see `personalMode` — so a test can hand in
+   * an owner without setting a process-wide variable.
+   */
+  personal?: PersonalMode | null;
 }
 
 export const keypairAuth = (options: KeypairAuthOptions = {}) => {
   const database = () => options.db ?? getDb();
+  const personal = () => (options.personal === undefined ? personalMode() : options.personal);
 
   return {
     id: 'keypair',
@@ -249,6 +259,22 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
           }
 
           // --- the caller is who they say they are, from here on ---
+
+          // A personal office has one person in it. Loopback is where the
+          // desktop app puts it, and loopback is reachable by every process
+          // on the machine, so "first key in becomes the admin" would let
+          // whatever asked first claim somebody's office. The owner is named
+          // before the server starts, and nobody else gets an account — not
+          // even as a guest, because there is no door for one to come in by.
+          const mode = personal();
+          if (mode) {
+            if (inviteToken !== undefined) {
+              throw new APIError('FORBIDDEN', { message: PERSONAL_REFUSALS.noGuests });
+            }
+            if (pubkey !== mode.owner) {
+              throw new APIError('FORBIDDEN', { message: PERSONAL_REFUSALS.notOwner });
+            }
+          }
 
           const db = database();
           const existing = await ctx.context.adapter.findOne<{

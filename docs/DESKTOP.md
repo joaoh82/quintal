@@ -26,13 +26,39 @@ Anything that needs the app is feature-detected through one bridge — never by
 sniffing the user agent, which would be a guess about a capability we can simply
 ask about.
 
+## Two ways to have an office
+
+The first screen asks where your office is, and there are two answers.
+
+**A personal office** runs inside the app, on this computer only. The app
+carries a private copy of the Quintal server and starts it for you; there is
+nothing to install, no terminal, no address to type. Choose **Create a
+personal office** and you are on the sign-in page a few seconds later. It is
+yours alone: nobody else can be let in, and it has no address to send a guest
+to. See [The personal office](#the-personal-office) for what runs, where the
+data lives, and what happens when things go wrong.
+
+**Connect to a server** is the app as a window onto a Quintal deployment
+somebody — maybe you — is running: [Docker on this machine](../SELF_HOSTING.md#docker),
+or a host somewhere. That is where other people and guests come in. Add it
+by URL in the same picker.
+
+Everything past that screen is the same office in both. You can keep both:
+switching servers leaves the personal office where it was, and coming back
+finds it as you left it.
+
+"Local" means Quintal and your agents run on this computer. The models they
+call are wherever they always were — a cloud-backed agent still needs its
+account and an internet connection. Neither mode promises offline AI.
+
 ## Installing a release
 
-[Download Quintal](https://quintal.sh/download/) for your operating system.
-First [start a server with Docker](../SELF_HOSTING.md#docker), then launch the app
-and add `http://localhost:3000` in the server picker. If you changed `QUINTAL_PORT`,
-use that port instead. Every installer carries its own compiled harness, so Node
-and Bun are not required.
+[Download Quintal](https://quintal.sh/download/) for your operating system,
+launch it, and choose **Create a personal office** — or, to join a server,
+[start one with Docker](../SELF_HOSTING.md#docker) first and add
+`http://localhost:3000` in the picker (or whichever port you gave
+`QUINTAL_PORT`). Every installer carries its own compiled harness, its own
+Node runtime and its own copy of the server, so nothing else is required.
 
 ### macOS
 
@@ -124,9 +150,12 @@ Your **identity is one key**, used everywhere. Each server knows you as its
 own user; isolation comes from the server, not from carrying separate keys.
 
 On first launch there is no server, and the app shows a picker rather than
-guessing. Add one by URL — `http://localhost:3000` for a local Docker office or while developing, or
+guessing. Create a personal office there, or add a server by URL —
+`http://localhost:3000` for a local Docker office or while developing, or
 wherever yours is deployed. "Add or switch server…" in Settings, and "Switch
-server…" in the menu bar, come back to it later.
+server…" in the menu bar, come back to it later. The personal office is
+chosen from the picker for the same reason a server is added there and
+nowhere else: it decides what the next launch loads.
 
 **A server cannot introduce a new server.** Adding and forgetting are granted
 only while *no* server is loaded — that is, while the picker is what you are
@@ -179,16 +208,123 @@ under the sign-in card, and **Choose a different server** while it waits for
 one to answer. Both land on the picker, as does **Switch server…** in the menu
 bar.
 
-## The app needs a server to connect to
+## The personal office
 
-The app is a client. It loads an office from a server over HTTP — by default
-`http://localhost:3000` — and if nothing is answering there it has nothing to
-show. It will say so and keep looking, then go straight in the moment the server
-appears, so starting the app first is a fine order to do things in.
+The same server a Docker deployment runs — `apps/server`, Next.js and
+Colyseus in one Node process — started by the app, as a child of the app, and
+stopped with it. Nothing about it is a second implementation: the payload in
+the bundle is the production build of this repository, assembled by
+`scripts/build-personal-payload.mjs` from the same lockfile the Docker image
+installs from, and the Node it runs on is the official build pinned in
+`scripts/fetch-node-runtime.mjs`. The host side is `src-tauri/src/personal.rs`.
 
-The installed app starts only itself. Run the server with
-[Docker Compose](../SELF_HOSTING.md#docker), or connect to an existing deployment.
-For source development, `pnpm desktop` starts both the server and app.
+### What happens when you choose it
+
+1. The app makes sure you have an identity — a first run creates one in the
+   keychain — and tells the server whose office this is. Only that key can
+   sign in; every other key is refused, and guest links can be neither made
+   nor redeemed. This is not politeness: loopback is reachable by every
+   process on the machine, and a fresh database would otherwise make its
+   first account the admin.
+2. It picks a loopback port. The one it used last time if that is free, so
+   the address stays put; otherwise whatever the OS hands out. Never port
+   3000, and never anything but `127.0.0.1` — the server's own default is
+   `0.0.0.0`, which is right for a deployment and wrong here.
+3. It takes an exclusive lock on the data directory, so two copies of the app
+   cannot race over one database. A second launch of the app hands itself to
+   the first and exits anyway.
+4. If the app version has changed since the server last ran, the database is
+   copied to `backups/` first — migrations run on the server's first boot,
+   and a migration that fails halfway is the one failure with no way back
+   unless this happened. The last five backups are kept.
+5. It starts the server with a curated environment — nothing from your shell
+   about where a database lives can reach it — and waits for `/health`. The
+   first screen shows progress meanwhile, and the office opens the moment
+   the server answers. A cold start is a few seconds.
+
+### Where your data is
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Data directory | `~/Library/Application Support/sh.quintal.desktop/personal/` | `~/.local/share/sh.quintal.desktop/personal/` | `%APPDATA%\sh.quintal.desktop\personal\` |
+
+Inside it: `quintal.db` (the office, one SQLite file), `objects/` (avatars
+and attachments), `auth-secret` (the session-signing secret, `0600`, so a
+restart does not sign you out), `office.json` (a stable id for the office,
+the port it last used, the version that last ran), `backups/`, and
+`office.lock`. Nothing is written inside the installed app; the payload it
+ships is read-only and stays that way.
+
+Your identity, this machine's registration with the office, and your agents'
+keys are in the keychain like everything else — filed under the word
+`personal` rather than under a URL, because the URL is whichever port was
+free and the office is the same office whatever port it is on. Sessions
+survive a port change for the same reason: cookies are bound to the host,
+not the port.
+
+### When it goes wrong
+
+The first screen says so, in words, with the server's last lines underneath,
+**Try again** (which relaunches the app: fresh port, fresh keychain read,
+fresh grant) and **Connect to a server instead**.
+
+A server that exits on its own is started again, up to three times in five
+minutes. After that the app stops trying and reports the exit code and the
+last thing the server wrote to stderr. If that was a failed migration, the
+backup taken before the upgrade is named on the same screen; restoring is
+copying its `quintal.db` (and `-wal`, `-shm` if present) back over the live
+ones with the app closed. A restart with no backup and no error is a server
+that took longer than ninety seconds to answer, which is reported as such.
+
+If the keychain will not open, the office cannot start — it has to know
+whose it is — and the screen says that rather than creating a new identity
+over yours.
+
+### What it does not do
+
+No guests, no LAN or public hosting, no sync with a server. The personal
+office is one person's; hosting people is what connecting to a server is for.
+Moving an office's history onto a server later will be an explicit feature
+when it exists, not something that happens by pointing the app elsewhere.
+
+### Lifecycle
+
+Closing the window quits the app, and quitting stops the server and the
+fleet by the same path. There is no background mode yet: an office nobody has
+a window on is not running. The server holds a pipe from the app open, so a
+crash or a force-quit that runs no handler still ends it — the same mechanism
+the fleet uses, described under [Leaving](#leaving).
+
+Sleep does not stop the server; it pauses with everything else and resumes
+with it. Agents cannot work while the computer sleeps, and anything they
+were doing picks up or fails when it wakes, the same as any process.
+
+### Developing against it
+
+The personal office only exists in a bundled app — under `tauri dev` the
+window goes straight to `devUrl`. To try it from a checkout:
+
+```bash
+pnpm desktop:payload       # fetches the pinned Node, assembles and boots the payload once
+pnpm desktop:bundle        # a signed local Quintal.app with the payload inside
+```
+
+Or point a debug binary at a payload directly: `QUINTAL_PERSONAL_PAYLOAD=apps/desktop/personal-payload`
+and `QUINTAL_NODE_BIN=apps/desktop/src-tauri/binaries/quintal-node-<triple>`
+override where the host looks, and `QUINTAL_SERVER_URL=personal` chooses the
+personal office the way a URL there chooses a server.
+
+## Connecting to a server
+
+In this mode the app is a client. It loads an office from a server over
+HTTP — `http://localhost:3000` for a local Docker office — and if nothing is
+answering there it has nothing to show. It will say so and keep looking, then
+go straight in the moment the server appears, so starting the app first is a
+fine order to do things in.
+
+Run the server with [Docker Compose](../SELF_HOSTING.md#docker), or connect
+to an existing deployment. For source development, `pnpm desktop` starts both
+the server and app.
 
 Add it in the picker. The app grants IPC to the active server's origin and no
 other, so changing it is a deliberate act rather than something a page can do to
@@ -331,6 +467,35 @@ else about the app changes.
 
 ## What ships inside the app
 
+Three things a browser cannot bring: the harness that runs your agents, and —
+for the personal office — a Node runtime and the server itself.
+
+### The personal office's payload
+
+`Contents/Resources/personal/` on macOS (the resource directory elsewhere)
+holds the production build of `apps/server` and `apps/web` and their runtime
+dependency closure: what `pnpm install --prod` leaves behind in the Docker
+image, as one flat tree with no symlinks and one copy of every module, minus
+anything only a build needs. `payload.json` beside it records the version,
+the Node it was built for, the target, its size, and whether it booted once
+at build time — a payload that did not is not shipped. `next.config.ts` is
+compiled to `next.config.mjs` at build so the server needs neither TypeScript
+nor SWC at runtime; both would otherwise be downloaded by Next on first
+launch, which a bundled app must never do. Details and the pruning rules are
+in `scripts/build-personal-payload.mjs`.
+
+Beside the app's own executable sits `quintal-node`: the official Node build
+for the target, pinned to one version and one checksum per platform in
+`scripts/fetch-node-runtime.mjs`. The host looks for it there, or at
+`QUINTAL_NODE_BIN`, and nowhere else — a personal office running on whichever
+Node happens to be installed is one that changes when Homebrew does.
+
+Native modules — libSQL, sharp, msgpackr — are the target's, swapped in from
+the registry at the version and integrity the lockfile pins when the build
+machine is not the target (Intel macOS is built on Apple Silicon).
+
+### The harness
+
 The app spawns a harness — `quintal-acp` — to run your agents, and the bundle
 carries its own copy. It has to: an app launched from Finder has neither a repo
 checkout's `node_modules/.bin` nor, on a stock macOS, a PATH containing anything
@@ -362,6 +527,17 @@ Ran out of executable memory while allocating 128 bytes.
 Nothing in that message says "entitlement", so it is written down in
 `entitlements.plist` next to the keys that fix it.
 
+The personal office adds a second one, `disable-library-validation`, for the
+bundled Node. The hardened runtime lets a process load only code signed by
+Apple or by its own team, and the native modules in the payload — libSQL,
+sharp, msgpackr — arrive signed by their publishers or by nobody. Without the
+key the server dies on its first `dlopen` with "mapping process and mapped
+file have different Team IDs". `scripts/sign-payload.mjs` also re-signs every
+Mach-O in the payload with the app's identity before bundling, which is what
+notarization requires of anything under `Resources/` and what makes a release
+pass validation on its own; the key stays so an ad-hoc development bundle,
+where nothing has a team, runs too.
+
 ## Where your agents run
 
 The app runs one harness process for this computer, and that harness asks the
@@ -382,8 +558,9 @@ makes the nest and keeps its `AGENTS.md` current when the fleet starts.
 
 ## Leaving
 
-Closing the window stops the harness, and quitting from the tray does the same
-by the same path.
+Closing the window stops the harness — and the personal office's server, when
+this launch is one — and quitting from the tray does the same by the same
+path.
 
 That covers a tidy exit and nothing else. An app that crashes, is force-quit or
 is killed runs no handler at all, and what survives is not an idle process — it

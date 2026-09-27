@@ -56,17 +56,40 @@ an explicit Bun target and Rosetta to run its `--help` proof on Apple Silicon.
 All Intel/x64 builds use Bun's baseline target, including under Rosetta. The app needs no installed
 Node or Bun. macOS requires 13.0 or later because of the embedded Bun runtime.
 
+Each build also carries the **personal office**: `scripts/fetch-node-runtime.mjs`
+fetches the pinned official Node build for the target (one version and one
+SHA-256 per platform, in the script) as the `quintal-node` external binary,
+and `scripts/build-personal-payload.mjs` assembles the production server and
+web app with their runtime closure into `apps/desktop/personal-payload/`,
+swaps native modules for the target's from the registry at the lockfile's
+pinned integrity, and boots the result once on that Node as proof — the
+manifest records the outcome, and `build-desktop-release.mjs` refuses a
+payload that was built for another target or failed its boot. A target the
+runner cannot execute (none in the current matrix; Intel macOS runs under
+Rosetta) records `skipped`. The payload rides as a bundle resource via
+`tauri.personal.conf.json`; the Node binary rides with the harness in
+`tauri.bundle.conf.json`, and `fix-appimage.sh` installs it into the AppImage
+the same way. The macOS DMG check runs the packaged Node and looks for the
+payload under `Contents/Resources/personal`. The job summary reports the
+payload's size. On macOS `scripts/sign-payload.mjs` re-signs every Mach-O in
+the payload with the release identity before Tauri copies it into
+`Resources/` — notarization rejects unsigned native modules wherever they sit,
+and the hardened runtime would refuse to load them; see the entitlements file
+for the second half of that.
+
 Compiling for a target Bun is not itself running makes it fetch that runtime and
 unpack it, and on Windows the unpacking fails outright. So the Windows job
 installs the baseline build *as* its Bun, through `bun-download-url`, and asks it
 for the target it is already running. Keep that URL's version in step with
 `bun-version` on the other platforms.
 
-The build applies `tauri.bundle.conf.json` for the sidecar,
+The build applies `tauri.bundle.conf.json` for the sidecars,
+`tauri.personal.conf.json` for the personal office payload,
 `tauri.release.conf.json` for release settings, and `tauri.updater.conf.json`
 only when there is an updater signing key, on top of the base Tauri config.
-Keep the latter a delta: never duplicate `bundle.externalBin` there, because
-JSON merge-patch replaces arrays. The AppImage is the exception: it is bundled
+Keep the latter deltas: never duplicate `bundle.externalBin` there, because
+JSON merge-patch replaces arrays — both sidecars live in the one list in
+`tauri.bundle.conf.json`. The AppImage is the exception: it is bundled
 *without* `tauri.bundle.conf.json`, so linuxdeploy never sees the harness. Given
 one, it runs `ldd` over it, and the non-zero exit reaches linuxdeploy as an
 uncaught exception that aborts the whole bundle. `fix-appimage.sh` installs the

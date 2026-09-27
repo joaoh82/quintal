@@ -15,6 +15,9 @@ on:
       - 'packages/shared/src/identity.ts'
       - 'scripts/desktop-ipc-check.mjs'
       - 'scripts/check-icons.mjs'
+      - 'scripts/build-personal-payload.mjs'
+      - 'scripts/fetch-node-runtime.mjs'
+      - 'scripts/sign-payload.mjs'
       - '.github/workflows/desktop.yml'
   push:
     branches: [main]

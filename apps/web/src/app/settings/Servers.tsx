@@ -70,6 +70,22 @@ export function Servers() {
       </p>
 
       <ul className="mt-3 flex flex-col gap-px">
+        {/*
+          The personal office, when this is one. Shown first and marked as
+          here; there is no Open button for it from elsewhere, because going
+          to it — like adding a server — is the picker's job.
+        */}
+        {listed?.personal && listed.active === 'personal' ? (
+          <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 last:border-b-0">
+            <span className="text-sm font-medium">{listed.personal.label}</span>
+            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
+              you are here
+            </span>
+            <span className="text-muted-foreground ml-auto text-[11px]">
+              runs inside the app, on this computer
+            </span>
+          </li>
+        ) : null}
         {(listed?.servers ?? []).map((server) => {
           const here = server.url === listed?.active;
           return (
@@ -101,7 +117,7 @@ export function Servers() {
         })}
       </ul>
 
-      {listed !== null && listed.servers.length === 0 ? (
+      {listed !== null && listed.servers.length === 0 && !listed.personal ? (
         <p className="text-muted-foreground mt-2 text-xs">
           Only this one so far.
         </p>
@@ -117,6 +133,10 @@ export function Servers() {
       >
         Add or switch server…
       </Button>
+      <p className="text-muted-foreground mt-2 text-xs">
+        The picker is also where a personal office lives: one that runs inside
+        the app on this computer, with no server to run.
+      </p>
     </section>
   );
 }

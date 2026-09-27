@@ -1,3 +1,4 @@
+import { personalMode } from '@quintal/shared';
 import { checkInviteLink, getDb, type InviteRejection } from '@quintal/shared/db';
 import Link from 'next/link';
 
@@ -14,7 +15,8 @@ import { GuestEntry } from './GuestEntry';
 // A link's validity is a fact about right now; never prerender it.
 export const dynamic = 'force-dynamic';
 
-const REFUSALS: Record<InviteRejection, string> = {
+const REFUSALS: Record<InviteRejection | 'personal', string> = {
+  personal: 'This is a personal office. It has no guests.',
   unknown: 'This link is not one of ours, or it has been deleted.',
   revoked: 'This link was revoked by whoever created it.',
   expired: 'This link has expired. Ask for a fresh one.',
@@ -27,7 +29,11 @@ export default async function JoinPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const check = await checkInviteLink(getDb(), token);
+  // A personal office has no guests, so no link into it can be valid — and
+  // the door says so rather than looking the token up and calling it unknown.
+  const check = personalMode()
+    ? ({ ok: false, reason: 'personal' } as const)
+    : await checkInviteLink(getDb(), token);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
