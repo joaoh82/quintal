@@ -1,4 +1,10 @@
 import type * as schema from '@agentclientprotocol/sdk';
+import {
+  ADAPTER_IDENTITY_MAX_LENGTH,
+  permissionProfile,
+  profileStaleness,
+  type AdapterIdentity,
+} from '@quintal/shared';
 
 import { AgentProcess } from '../acp/agent-process.js';
 import { runtimeIdOf, type AgentConfig } from '../config.js';
@@ -125,6 +131,15 @@ export class Worker {
   /** Crashes survived. The second one is the one worth telling a human about. */
   restarts = 0;
   runtimeVersion: string | null = null;
+  /**
+   * The adapter as it named itself at `initialize`, name and version both.
+   *
+   * `runtimeVersion` above is the same number for latency traces, which
+   * compare runs on one machine and do not care who said it. This pair is
+   * checked against what the permission catalogue was measured against, and
+   * a rename matters there as much as a bump — so both halves are kept.
+   */
+  adapter: AdapterIdentity | null = null;
   /** Given up on: it will not be claimed again and counts against the pool. */
   dead = false;
 
@@ -238,6 +253,14 @@ export class Worker {
     this.#process = proc;
     const info = await proc.start();
     this.runtimeVersion = info.agentInfo?.version?.slice(0, 100) ?? null;
+    this.adapter =
+      info.agentInfo?.name && info.agentInfo.version
+        ? {
+            name: info.agentInfo.name.slice(0, ADAPTER_IDENTITY_MAX_LENGTH),
+            version: info.agentInfo.version.slice(0, ADAPTER_IDENTITY_MAX_LENGTH),
+          }
+        : null;
+    this.#warnIfAdapterMoved();
     if (this.#stopping) {
       proc.stop();
       throw new Error('worker stopped while initializing');
@@ -248,6 +271,32 @@ export class Worker {
     this.#log(
       'info',
       `${info.agentInfo?.name ?? this.options.config.harness} ready (ACP v${String(info.protocolVersion)})`,
+    );
+  }
+
+  /**
+   * Say when the runtime stopped being the one the catalogue measured.
+   *
+   * Warned, not thrown. The office still works: `optionSemantics` has already
+   * dropped the stale profile and fallen back to what ACP itself defines, so
+   * `allow_once` still resolves and `allow_always` is refused as unexplained.
+   * What an owner loses is the wider button they used to have, and losing it
+   * without being told is the part worth fixing — the audit row would say
+   * `refused: unexplained_allow` and name no cause.
+   *
+   * The fix is a re-probe, so the message says so and names the runbook.
+   */
+  #warnIfAdapterMoved(): void {
+    const runtimeId = runtimeIdOf(this.options.config);
+    const profile = permissionProfile(runtimeId);
+    if (!profile) return;
+    const stale = profileStaleness(profile, this.adapter);
+    if (!stale) return;
+    this.#log(
+      'warn',
+      stale.reason === 'version_moved'
+        ? `${runtimeId} is running ${stale.observed}, but its permission catalogue was measured against ${stale.catalogued}. Standing grants are no longer offered for it until it is re-probed — see docs/RUNTIME-PERMISSIONS.md ("Re-establishing it").`
+        : `${runtimeId}'s permission catalogue was last established on ${stale.catalogued} and is past its verification window; re-probe it — see docs/RUNTIME-PERMISSIONS.md ("Re-establishing it").`,
     );
   }
 

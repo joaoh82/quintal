@@ -12,13 +12,30 @@
  * `@quintal/shared` is written from it by hand with a date against each entry.
  *
  *   pnpm exec tsx packages/acp-harness/scripts/probe-permissions.mts [id...]
+ *
+ * Two flags, both about the step *after* the probe:
+ *
+ *   --check           Compare what each runtime said it is against what the
+ *                     permission catalogue was measured against, and exit
+ *                     non-zero when they differ. The cheap trigger: run it
+ *                     and find out whether anything needs re-establishing at
+ *                     all, without reading a page of JSON.
+ *   --write-fixture   Write the recorded option arrays, fixture-shaped and
+ *                     with `_agent` filled in from the handshake, to
+ *                     test/fixtures/runtime-options.recorded.json.
+ *
+ * `--write-fixture` writes a *sidecar*, deliberately not the fixture itself.
+ * The names in runtime-options.json ("edit-in-manual-mode") are curated —
+ * they say what the probe was for, which `write-in-default` does not — and
+ * the tests quote them. So this removes the transcription, and leaves the
+ * judgement: diff the sidecar against the fixture and carry over what moved.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
-import { RUNTIMES, acpCommandFor } from '@quintal/shared';
+import { RUNTIMES, acpCommandFor, permissionProfile } from '@quintal/shared';
 
 import { AgentProcess } from '../src/acp/agent-process.js';
 
@@ -184,11 +201,99 @@ async function probe(id: string): Promise<unknown> {
   return out;
 }
 
-const wanted = process.argv.slice(2);
+/** What a runtime called itself at `initialize`, as "name version". */
+function agentString(entry: Record<string, unknown>): string | null {
+  const agent = entry.agent as { name?: unknown; version?: unknown } | null | undefined;
+  if (!agent || typeof agent.name !== 'string' || typeof agent.version !== 'string') return null;
+  return `${agent.name} ${agent.version}`;
+}
+
+/**
+ * Whether what was just probed is still what the catalogue describes.
+ *
+ * Printed rather than thrown: a maintainer wants the whole picture in one
+ * run, not the first disagreement. The exit code carries the verdict.
+ */
+function checkAgainstCatalogue(report: Array<Record<string, unknown>>): boolean {
+  let moved = false;
+  for (const entry of report) {
+    const id = String(entry.id);
+    const profile = permissionProfile(id);
+    const observed = agentString(entry);
+    if (!profile?.verifiedAgainst) {
+      process.stderr.write(`  ${id}: nothing catalogued to check against\n`);
+      continue;
+    }
+    const catalogued = `${profile.verifiedAgainst.name} ${profile.verifiedAgainst.version}`;
+    if (observed === null) {
+      process.stderr.write(`  ${id}: did not say what it is (catalogue: ${catalogued})\n`);
+      continue;
+    }
+    if (observed === catalogued) {
+      process.stderr.write(`  ${id}: unchanged (${catalogued})\n`);
+      continue;
+    }
+    moved = true;
+    process.stderr.write(
+      `  ${id}: MOVED — running ${observed}, catalogued against ${catalogued}\n` +
+        `      Standing grants are no longer offered for it. Re-establish the entry:\n` +
+        `      docs/RUNTIME-PERMISSIONS.md, "Re-establishing it".\n`,
+    );
+  }
+  return moved;
+}
+
+/** The recorded option arrays, in the shape the fixture keeps them in. */
+function asFixture(report: Array<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    _comment:
+      'Recorded by probe-permissions.mts --write-fixture. A sidecar, not the fixture: diff it against runtime-options.json and carry over what moved, keeping the curated probe names.',
+  };
+  for (const entry of report) {
+    const probes = Array.isArray(entry.probes) ? (entry.probes as ModeProbe[]) : [];
+    const runtime: Record<string, unknown> = {};
+    const agent = agentString(entry);
+    if (agent) runtime._agent = agent;
+    for (const probeEntry of probes) {
+      for (const request of probeEntry.requests) {
+        // One key per distinct option set: two probes that produced the same
+        // question are one piece of evidence, not two.
+        const name = `${probeEntry.action}-in-${probeEntry.modeId ?? 'default'}`;
+        if (name in runtime) continue;
+        runtime[name] = {
+          mode: probeEntry.modeId,
+          toolCall: { title: request.toolCall?.title, kind: request.toolCall?.kind },
+          options: request.options,
+        };
+      }
+    }
+    if (Object.keys(runtime).length > 0) out[String(entry.id)] = runtime;
+  }
+  return out;
+}
+
+const argv = process.argv.slice(2);
+const check = argv.includes('--check');
+const writeFixture = argv.includes('--write-fixture');
+const wanted = argv.filter((arg) => !arg.startsWith('--'));
 const ids = wanted.length > 0 ? wanted : RUNTIMES.map((runtime) => runtime.id);
-const report: unknown[] = [];
+const report: Array<Record<string, unknown>> = [];
 for (const id of ids) {
   process.stderr.write(`probing ${id}…\n`);
-  report.push(await probe(id));
+  report.push((await probe(id)) as Record<string, unknown>);
 }
+
+if (writeFixture) {
+  const path = new URL('../test/fixtures/runtime-options.recorded.json', import.meta.url);
+  writeFileSync(path, `${JSON.stringify(asFixture(report), null, 2)}\n`);
+  process.stderr.write(`wrote ${path.pathname}\n`);
+}
+
+if (check) {
+  process.stderr.write('\nagainst the permission catalogue:\n');
+  const moved = checkAgainstCatalogue(report);
+  if (!writeFixture) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  process.exit(moved ? 1 : 0);
+}
+
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

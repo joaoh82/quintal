@@ -28,6 +28,11 @@
  * wrong entry can be argued with rather than guessed at.
  */
 
+import {
+  ADAPTER_IDENTITY_MAX_LENGTH,
+  type AdapterIdentity,
+} from './runtime-permissions.js';
+
 export type AcpSupport =
   | { kind: 'native'; args: string[] }
   | { kind: 'adapter'; package: string }
@@ -176,6 +181,16 @@ export interface RuntimeStatus {
    * that is not installed). Null: asked, and it offers no choice.
    */
   models?: RuntimeModels | null;
+  /**
+   * The adapter this machine actually spawns, as it named itself.
+   *
+   * Absent when nobody asked — the PATH scan deliberately does not run the
+   * binary, so this only appears on the later report, after the model probe
+   * has opened a session anyway. Compared against the permission catalogue's
+   * `verifiedAgainst` so an owner can see that the thing being catalogued and
+   * the thing being run have parted company.
+   */
+  adapter?: AdapterIdentity | null;
 }
 
 /**
@@ -216,6 +231,7 @@ export const HOST_REPORT_LIMITS = {
   maxModels: 64,
   modelIdMaxLength: 128,
   modelLabelMaxLength: 128,
+  adapterMaxLength: ADAPTER_IDENTITY_MAX_LENGTH,
 } as const;
 
 /** Bring a reported model list into bounds, or say there is none. */
@@ -245,6 +261,22 @@ function normaliseModels(raw: unknown): RuntimeModels | null | undefined {
   const current =
     typeof input.current === 'string' && seen.has(input.current) ? input.current : null;
   return { configId, current, choices };
+}
+
+/**
+ * Bring a reported adapter identity into bounds, or say there is none.
+ *
+ * Same three-way distinction as the model list: undefined is "not asked" and
+ * leaves what is stored alone, null is "asked, and it did not say".
+ */
+function normaliseAdapter(raw: unknown): AdapterIdentity | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object') return null;
+  const input = raw as Partial<AdapterIdentity>;
+  const name = String(input.name ?? '').trim().slice(0, HOST_REPORT_LIMITS.adapterMaxLength);
+  const version = String(input.version ?? '').trim().slice(0, HOST_REPORT_LIMITS.adapterMaxLength);
+  if (name.length === 0 || version.length === 0) return null;
+  return { name, version };
 }
 
 /** The choice a runtime offers under this id, if it does. */
@@ -288,11 +320,13 @@ export function normaliseHostReport(raw: unknown): HostReport | null {
     seen.add(id);
     const path = (entry as RuntimeStatus)?.path;
     const models = normaliseModels((entry as RuntimeStatus)?.models);
+    const adapter = normaliseAdapter((entry as RuntimeStatus)?.adapter);
     runtimes.push({
       id,
       installed: Boolean((entry as RuntimeStatus)?.installed),
       path: typeof path === 'string' ? path.slice(0, HOST_REPORT_LIMITS.pathMaxLength) : null,
       ...(models !== undefined ? { models } : {}),
+      ...(adapter !== undefined ? { adapter } : {}),
     });
   }
 

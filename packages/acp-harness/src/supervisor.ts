@@ -2,7 +2,7 @@ import { acpCommandFor, isUsable, runtimeById, type RuntimeStatus } from '@quint
 import { redactSecrets } from './secrets.js';
 
 import type { AgentConfig } from './config.js';
-import { probeModels } from './models.js';
+import { probeRuntime } from './models.js';
 import { AgentRunner, type RunnerState } from './runner/AgentRunner.js';
 import { detectRuntimes, hostLabel } from './runtimes.js';
 
@@ -181,10 +181,14 @@ export class Supervisor {
           const spec = runtimeById(status.id);
           const command = spec ? acpCommandFor(spec) : null;
           if (!command) return status;
-          const models = await probeModels(command);
+          const { models, adapter } = await probeRuntime(command);
           // A probe that never answered leaves the key off: "not asked" is
           // what the office should show, not "offers no choice".
-          return models === undefined ? status : { ...status, models };
+          return {
+            ...status,
+            ...(models !== undefined ? { models } : {}),
+            ...(adapter !== null ? { adapter } : {}),
+          };
         }),
       );
       const stillLive = runners.find((runner) => runner.connected);

@@ -61,3 +61,7 @@ packages/acp-harness/src/nest-agents.text.ts
 # of apps/desktop/src-tauri/icons/, which is generated *and* committed.
 apps/desktop/src-tauri/icons/android/
 apps/desktop/src-tauri/icons/ios/
+
+# The probe sidecar: recorded evidence to diff against the curated fixture,
+# never itself the fixture. See probe-permissions.mts --write-fixture.
+packages/acp-harness/test/fixtures/runtime-options.recorded.json

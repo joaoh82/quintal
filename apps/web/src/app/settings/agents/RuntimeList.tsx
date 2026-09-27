@@ -1,4 +1,11 @@
-import { RUNTIMES, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
+import {
+  RUNTIMES,
+  isUsable,
+  permissionProfile,
+  profileStaleness,
+  runtimeById,
+  type RuntimeStatus,
+} from '@quintal/shared';
 
 import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
@@ -92,6 +99,33 @@ export function WorkspaceBadge({ path }: { path: string }) {
   );
 }
 
+/**
+ * Said out loud when the runtime here is not the one that was measured.
+ *
+ * The permission catalogue's entries are facts about an exact adapter
+ * version, and the adapters move on their own — Claude Code's is fetched by
+ * `npx -y` on demand, so it can change between two boots of the same fleet.
+ * When it does, Quintal stops trusting the measured semantics and falls back
+ * to what ACP itself defines, which means an owner loses the wider Allow
+ * button they used to have. That is the safe direction, and losing it without
+ * being told is the part worth fixing: otherwise the only trace is an audit
+ * row reading `refused: unexplained_allow` with no cause named.
+ */
+function AdapterDrift({ status }: { status: RuntimeStatus }) {
+  const profile = permissionProfile(status.id);
+  if (!profile || !status.adapter) return null;
+  const stale = profileStaleness(profile, status.adapter);
+  if (stale?.reason !== 'version_moved') return null;
+
+  return (
+    <p className="w-full text-[11px] text-amber-700 dark:text-amber-300">
+      Running <span className="font-mono">{stale.observed}</span>; its permission
+      semantics were measured against <span className="font-mono">{stale.catalogued}</span>.
+      Only per-call approvals are offered for it until it is re-probed.
+    </p>
+  );
+}
+
 export function runtimeLabel(id: string): string {
   return runtimeById(id)?.label ?? id;
 }
@@ -169,6 +203,8 @@ export function RuntimeRows({ runtimes }: { runtimes: RuntimeStatus[] }) {
                       </>
                     )}
                   </p>
+
+                  <AdapterDrift status={status} />
                 </li>
               );
             })}

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
+import { permissionProfile } from '@quintal/shared';
+
 import { runtimeIdOf } from '../src/config.js';
 import {
   approvalHandle,
@@ -396,5 +398,56 @@ describe('making a runtime ask at all', () => {
       askingMode('claude-code', { currentModeId: 'auto', availableModes: [{ id: 'auto' }] }),
       null,
     );
+  });
+});
+
+describe('the recorded evidence and the catalogue name the same adapter', () => {
+  // The fixture's `_agent` is the adapter the options were recorded from;
+  // the catalogue's `verifiedAgainst` is the adapter its semantics were
+  // measured against. They are two halves of one probe run, and if they can
+  // drift apart then "re-record the fixture" stops implying "re-check the
+  // catalogue" — which is the whole trigger QUIN-73 adds.
+  //
+  // Sabotage: bump `_agent` in runtime-options.json without touching
+  // runtime-permissions.ts and this fails, naming both sides.
+  it('ties each fixture back to the profile it was measured with', () => {
+    for (const [runtimeId, probes] of Object.entries(FIXTURES)) {
+      if (runtimeId.startsWith('_')) continue;
+      const recorded = (probes as { _agent?: string })._agent;
+      if (!recorded) continue;
+      const profile = permissionProfile(runtimeId);
+      assert.ok(profile?.verifiedAgainst, `${runtimeId} has a fixture but no catalogued adapter`);
+      assert.equal(
+        recorded,
+        `${profile!.verifiedAgainst!.name} ${profile!.verifiedAgainst!.version}`,
+        `${runtimeId}: the fixture was recorded from "${recorded}" but the catalogue was measured against "${profile!.verifiedAgainst!.name} ${profile!.verifiedAgainst!.version}" — re-probe rather than editing one to match the other`,
+      );
+    }
+  });
+
+  it('degrades the fixture\'s own options when the adapter has moved', () => {
+    // End to end on real recorded payloads: the same option arrays that
+    // yield a catalogued answer today yield the uncatalogued one against an
+    // adapter nobody measured — and Deny survives, so the card still works.
+    const moved = { name: '@agentclientprotocol/claude-agent-acp', version: '0.99.0' };
+    const edit = offered('claude-code', 'edit-in-manual-mode');
+
+    assert.deepEqual(supportedOptions('claude-code', edit), [
+      { id: 'allow_once', label: 'Allow once' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+    // `allow-once` still resolves through the ACP spec default…
+    assert.deepEqual(supportedOptions('claude-code', edit, moved), [
+      { id: 'allow_once', label: 'Allow once' },
+      { id: 'deny', label: 'Deny' },
+    ]);
+    // …but the run scope's automatic path must not take the plan exit any
+    // more, because `exit-plan-default` is only safe by measurement.
+    const plan = offered('claude-code', 'exit-plan-mode');
+    assert.equal(chooseRuntimeOption('claude-code', plan, 'once', false).optionId, 'exit-plan-default');
+    const stale = chooseRuntimeOption('claude-code', plan, 'once', false, moved);
+    assert.equal(stale.optionId, null);
+    assert.equal(stale.refusal, 'unexplained_allow');
+    assert.deepEqual(supportedOptions('claude-code', plan, moved), [{ id: 'deny', label: 'Deny' }]);
   });
 });
