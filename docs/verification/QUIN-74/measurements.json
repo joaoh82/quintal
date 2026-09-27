@@ -1,0 +1,13 @@
+{
+  "appFiles": 15424,
+  "appBytes": 410272305,
+  "binaries": {
+    "quintal-desktop": 17559152,
+    "quintal-node": 112270560,
+    "quintal-acp": 60537680
+  },
+  "payloadBytes": 214382566,
+  "payloadFiles": 15417,
+  "payloadMiB": 204.45,
+  "appMiB": 391.27
+}
