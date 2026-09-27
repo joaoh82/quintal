@@ -7,7 +7,9 @@ import {
   generateSecretKey,
   getPublicKeyHex,
   npubEncode,
+  PERSONAL_REFUSALS,
   signAuthPayload,
+  type PersonalMode,
 } from '@quintal/shared';
 import {
   createInviteLink,
@@ -37,7 +39,7 @@ import { keypairAuth } from './keypair';
 
 const ORIGIN = 'https://office.example.test';
 
-function buildAuth(db: Database) {
+function buildAuth(db: Database, personal: PersonalMode | null = null) {
   return betterAuth({
     appName: 'Quintal test',
     baseURL: ORIGIN,
@@ -50,13 +52,16 @@ function buildAuth(db: Database) {
       usePlural: true,
     }),
     emailAndPassword: { enabled: false },
-    plugins: [keypairAuth({ db })],
+    // Explicit rather than read from the environment, so a developer with a
+    // personal office configured in their shell does not get a different test
+    // suite from CI.
+    plugins: [keypairAuth({ db, personal })],
   });
 }
 
-async function setup() {
+async function setup(personal: PersonalMode | null = null) {
   const db = await createTestDb();
-  return { db, auth: buildAuth(db) };
+  return { db, auth: buildAuth(db, personal) };
 }
 
 function keypair() {
@@ -698,5 +703,77 @@ describe('guest links', () => {
       inviteToken: 'v2.definitely-not-a-real-token',
     });
     assert.match(message, /not valid/i);
+  });
+});
+
+describe('a personal office', () => {
+  /** Sign a fresh challenge for this key, the way the app does. */
+  async function attempt(
+    auth: ReturnType<typeof buildAuth>,
+    who: ReturnType<typeof keypair>,
+    inviteToken?: string,
+  ) {
+    const nonce = await challenge(auth, who.pubkey);
+    const payload = buildAuthPayload({ origin: ORIGIN, nonce, timestamp: nowSeconds() });
+    return {
+      pubkey: who.pubkey,
+      sig: signAuthPayload(who.secretKey, payload),
+      payload,
+      ...(inviteToken !== undefined ? { inviteToken } : {}),
+    };
+  }
+
+  it('lets the named owner in, as the instance admin', async () => {
+    const owner = keypair();
+    const { db, auth } = await setup({ owner: owner.pubkey });
+
+    const result = (await verify(auth, await attempt(auth, owner))) as { isGuest: boolean };
+    assert.equal(result.isGuest, false);
+
+    const [row] = await db.select().from(users).where(eq(users.pubkey, owner.pubkey));
+    assert.equal(row?.instanceAdmin, true, 'the owner runs the place');
+  });
+
+  /// The whole reason the owner is named up front. On loopback every local
+  /// process can reach the server, and on a fresh database the first account
+  /// is the admin — so without this, whatever asked first would own the office.
+  it('refuses every other key, even on an empty database', async () => {
+    const owner = keypair();
+    const { db, auth } = await setup({ owner: owner.pubkey });
+
+    const stranger = keypair();
+    const message = await verifyFails(auth, await attempt(auth, stranger));
+    assert.equal(message, PERSONAL_REFUSALS.notOwner);
+
+    const rows = await db.select().from(users).where(eq(users.pubkey, stranger.pubkey));
+    assert.equal(rows.length, 0, 'no account was created for the refusal');
+
+    // And the owner still gets in afterwards, as the first and only admin.
+    await verify(auth, await attempt(auth, owner));
+    const [row] = await db.select().from(users).where(eq(users.pubkey, owner.pubkey));
+    assert.equal(row?.instanceAdmin, true);
+  });
+
+  it('refuses a guest link, even a valid one', async () => {
+    const owner = keypair();
+    const { db, auth } = await setup({ owner: owner.pubkey });
+    const host = await createTestUser(db, 'Host');
+    const { token } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+    });
+
+    const message = await verifyFails(auth, await attempt(auth, keypair(), token));
+    assert.equal(message, PERSONAL_REFUSALS.noGuests);
+
+    // The owner arriving *through* a guest link is refused too: there is no
+    // guest to be, and a link is not how the owner of a place comes home.
+    assert.equal(await verifyFails(auth, await attempt(auth, owner, token)), PERSONAL_REFUSALS.noGuests);
+  });
+
+  it('is only ever refusing when an owner is named', async () => {
+    const { auth } = await setup(null);
+    await verify(auth, await attempt(auth, keypair()));
+    await verify(auth, await attempt(auth, keypair()));
   });
 });

@@ -94,28 +94,38 @@ The server image is available at `ghcr.io/joaoh82/quintal`; the
 
 ## Try it in five minutes
 
-1. **Start the server.** Install Docker with Compose 2.24 or newer, start Docker,
-   and run these commands in an empty folder (Git Bash or WSL on Windows):
+1. **[Download and install Quintal](https://quintal.sh/download/).** The app
+   includes everything it runs: its agent harness, a Node runtime and a
+   private copy of the server. No Docker, no Node, no terminal.
 
-   ```bash
-   curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
-   docker compose up -d
-   ```
-
-   If port 3000 is taken, put `QUINTAL_PORT=8080` in a `.env` file beside
-   `compose.yml` before starting, and use that port in the app. Data lives in a
-   Docker volume; migrations run on boot. See [Self-hosting](./SELF_HOSTING.md#docker)
-   for configuration and backups.
-
-2. **[Download and install Quintal](https://quintal.sh/download/).** Launch the app
-   and add `http://localhost:3000` in the server picker (or your chosen port).
-   The app includes its harness; no Node or pnpm needed.
+2. **Choose where your office is.** The first screen offers two answers.
+   **Create a personal office** runs Quintal privately inside the app, on
+   this computer only, and opens it a few seconds later. **Connect to a
+   server** joins a deployment somebody is running — see the Docker path
+   below for one on this machine — and is where other people and guests
+   come in. You can have both and move between them.
 
    ![Quintal’s first-launch server picker, where you add your office URL](./screenshots/release-smoke/macos-arm64-server-picker.png)
 
 3. **Create your identity.** Choose **Create identity**, save your secret key in a
    password manager — there is no reset — and enter your office. The app can
    keep the key in your operating system’s keychain and make an encrypted backup.
+   A personal office belongs to that key: nobody else can sign into it.
+
+To run a server instead — for other people, for guests, or on another
+machine — install Docker with Compose 2.24 or newer and run these commands
+in an empty folder (Git Bash or WSL on Windows):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml
+docker compose up -d
+```
+
+Then add `http://localhost:3000` in the app's picker. If port 3000 is taken,
+put `QUINTAL_PORT=8080` in a `.env` file beside `compose.yml` before starting,
+and use that port instead. Data lives in a Docker volume; migrations run on
+boot. See [Self-hosting](./SELF_HOSTING.md#docker) for configuration and
+backups.
 
 To put an agent in the room, install and authenticate a supported agent runtime,
 open **Settings → Agents**, create one, and run it with the desktop app or
@@ -150,7 +160,8 @@ office and app together. See [Contributing](./CONTRIBUTING.md#getting-set-up).
 | `pnpm build` / `pnpm start` | Production build; **one** process serving web + game server on one port |
 | `docker compose up --build` | Prod-like local run in Docker; office at :3000, data on a volume |
 | `pnpm test` / `pnpm typecheck` | The test suites; every package typechecked |
-| `pnpm desktop:bundle` | A local macOS development `Quintal.app` — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
+| `pnpm desktop:bundle` | A local macOS development `Quintal.app`, personal office included — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
+| `pnpm desktop:payload` | Fetch the pinned Node and assemble the personal office's server payload, booting it once as proof |
 
 There is a [`justfile`](./justfile) with the same recipes if you prefer `just`.
 
@@ -167,9 +178,11 @@ process on your computer.
 | Durable key custody (OS keychain), encrypted backups | — | ✓ |
 | Detecting which agent runtimes you have | — | ✓ |
 | Running your agents | list, assign, enable, disable | ✓ |
+| A personal office with no server to run | — | ✓ |
 
 Every social feature ships to the browser first; the app adds capability,
-never screens.
+never screens. A personal office is the server running inside the app, not a
+different office — see [docs/DESKTOP.md](./docs/DESKTOP.md#the-personal-office).
 
 ## Documentation
 

@@ -20,6 +20,18 @@ sidecar=$(find squashfs-root -type f -name quintal-acp -print -quit)
 [[ -n "$sidecar" ]]
 env PATH=/usr/bin:/bin "$sidecar" --help > "$evidence/sidecar.log"
 grep -q quintal-acp "$evidence/sidecar.log"
+# The personal office's two halves travel with the AppImage too: the Node
+# runtime fix-appimage.sh installed beside the harness, and the payload Tauri
+# placed among the resources. Both are checked here, before the window, so a
+# missing one is named rather than found by the first person to click
+# "Create a personal office".
+node_runtime=$(find squashfs-root -type f -name quintal-node -print -quit)
+[[ -n "$node_runtime" ]]
+env PATH=/usr/bin:/bin "$node_runtime" --version > "$evidence/node.log"
+grep -q '^v' "$evidence/node.log"
+payload=$(find squashfs-root -type f -path '*/personal/payload.json' -print -quit)
+[[ -n "$payload" ]]
+[[ -f "$(dirname "$payload")/node_modules/@quintal/server/dist/index.js" ]]
 # AppImage intentionally depends on the host's D-Bus library.
 if find squashfs-root -name 'libdbus-1.so*' | grep -q .; then
   echo 'AppImage unexpectedly bundles libdbus' >&2
@@ -42,8 +54,10 @@ for _ in $(seq 1 45); do
   import -window root "$evidence/server-picker.png"
   "$magick" "$evidence/server-picker.png" -colorspace Gray -negate -resize 200% "$scratch/ocr.png"
   tesseract "$scratch/ocr.png" "$evidence/server-picker" 2>/dev/null
-  if grep -qi 'Which server' "$evidence/server-picker.txt"; then
-    echo 'PASS: packaged AppImage rendered Which server?; bundled sidecar answered --help'
+  # The first screen's heading, and the personal-office button under it.
+  # Either is proof the picker rendered; OCR does not always get both.
+  if grep -qiE 'your office|personal office' "$evidence/server-picker.txt"; then
+    echo 'PASS: packaged AppImage rendered the first screen; bundled sidecar and Node runtime answered; payload present'
     exit 0
   fi
   sleep 2

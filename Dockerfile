@@ -27,6 +27,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/personal-payload/package.json apps/personal-payload/
 COPY apps/website/package.json apps/website/
 COPY packages/shared/package.json packages/shared/
 COPY packages/acp-harness/package.json packages/acp-harness/

@@ -274,8 +274,17 @@ export interface Server {
 
 export interface ServerList {
   servers: Server[];
-  /** Null on a first run, and whenever the picker is showing. */
+  /**
+   * A server's URL, the word `personal` when this launch is the personal
+   * office, or null on a first run and whenever the picker is showing.
+   */
   active: string | null;
+  /**
+   * The personal office, when the app is running one: the loopback origin it
+   * happens to be on and what to call it. Not in `servers` — it is not
+   * something you add or forget, and its port is not an address to keep.
+   */
+  personal?: { url: string; label: string } | null;
 }
 
 export interface LogLine {

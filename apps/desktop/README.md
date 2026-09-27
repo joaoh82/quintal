@@ -1,13 +1,19 @@
 # The Quintal desktop host
 
 A window onto your office that can do the things a browser cannot: hold your
-key in the OS keychain, and — in later slices — spawn your fleet and take a
-global push-to-talk hotkey.
+key in the OS keychain, spawn your fleet, take a global push-to-talk hotkey,
+update itself — and run the office itself, privately, when there is no server
+to connect to.
 
 **This is not a second client.** The window loads `apps/web`, the same UI a
 browser loads. Everything native is offered to that UI through one narrow
 bridge (`apps/web/src/lib/host.ts`), and a screen that exists only in the app
-is a bug rather than a feature.
+is a bug rather than a feature. The one exception is `bootstrap/index.html`:
+the screen that chooses where the office comes from, at a moment when there
+may be no office to load a page from.
+
+The code is the reference for what works; the user-facing account is
+[docs/DESKTOP.md](../docs/DESKTOP.md).
 
 ## Running it
 
@@ -22,9 +28,31 @@ pnpm desktop             # the app, in another terminal
 
 | Variable | What it does |
 | --- | --- |
-| `QUINTAL_SERVER_URL` | Which server to open — a Quintal deployment, with an office on it. Default `http://localhost:3000`. `QUINTAL_OFFICE_URL` still works. |
+| `QUINTAL_SERVER_URL` | Which server to open — a Quintal deployment, with an office on it — or the word `personal` for the personal office. Otherwise the picker's stored choice. `QUINTAL_OFFICE_URL` still works. |
 | `QUINTAL_SECRETS_BACKEND` | `file` to skip the OS keychain — for CI and for a dev box you would rather not prompt. Detected automatically otherwise. |
 | `QUINTAL_PRIVATE_KEY` | Sign with this key (hex or `nsec`) instead of the stored one. Used in memory, never written down. |
+| `QUINTAL_PERSONAL_PAYLOAD` | Where the personal office's server payload is, instead of `personal/` under the bundle's resources. Built by `scripts/build-personal-payload.mjs`. |
+| `QUINTAL_NODE_BIN` | The Node to run that payload on, instead of `quintal-node` beside the executable. Fetched by `scripts/fetch-node-runtime.mjs`. |
+| `QUINTAL_ACP_BIN` | The harness to spawn, instead of `quintal-acp` beside the executable or on PATH. |
+
+## The personal office
+
+`src/personal.rs`. The production server — the same one Docker runs — started
+as a child of this process on a loopback port, with its database under the
+app data directory, for one person. The host chooses the port (never 3000),
+names the owner so the server refuses every other key, holds a lock so two
+copies cannot share one database, backs the database up before a new version
+runs migrations, restarts a crashed server a bounded number of times, and
+stops it on the way out. What it runs is assembled by
+`scripts/build-personal-payload.mjs` and pinned by
+`scripts/fetch-node-runtime.mjs`; it is a resource of the bundle, never
+written to.
+
+The personal office is a *choice* in the servers file (`offices.json`,
+`active: "personal"`), not an entry in the list: it has no URL until it is
+running. Everything the app files per server — the machine registration, the
+agents' keys — is filed under the word `personal` for it, so the port can move
+between launches and the office is still the same office.
 
 ## The icons
 
@@ -97,7 +125,8 @@ perfectly good one.
 ## Only your server may call the bridge
 
 Each command is declared in `build.rs` and granted, by name, to exactly one
-origin built at startup from the configured server URL. Both halves matter:
+origin built at startup from the configured server URL — or, for a personal
+office, from the loopback origin the host chose before the window existed. Both halves matter:
 without the app manifest, Tauri takes its "all application commands are
 allowed" branch, and since the office is a *remote* origin the runtime then
 refuses every call — the app looks alive and nothing works. With it, the grant
@@ -153,9 +182,12 @@ Wiping is refused until you have exported *and* confirmed you stored it. A blob
 rendered on screen and never written down is not a backup, and this is the one
 button here that cannot be taken back.
 
-## What works so far
+## What works
 
-Identity: create on first run, sign in, import, back up, restore, wipe. Runtime
-detection, fleet spawning and the native affordances land in later slices; the
-bridge deliberately does not declare them yet, because a method the host does
-not answer is worse than an absent one.
+Identity: create on first run, sign in, import, back up, restore, wipe.
+Runtime detection. Machine registration and per-agent keys. Spawning and
+supervising the fleet. Several servers, and switching between them. The
+personal office. Push-to-talk as a global chord. The menu-bar item. Self-update.
+The bridge declares exactly what the host answers, because a method the host
+does not answer is worse than an absent one — `host.test.ts` and `build.rs`
+are kept in step by `server::tests::every_declared_command_is_granted`.

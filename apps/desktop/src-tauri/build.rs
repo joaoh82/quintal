@@ -42,6 +42,10 @@ fn main() {
             "switch_server",
             "remove_server",
             "open_server_picker",
+            "choose_personal_office",
+            "personal_status",
+            "personal_logs",
+            "retry_personal_office",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");

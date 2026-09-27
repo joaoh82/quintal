@@ -13,6 +13,7 @@
  */
 import { execFileSync } from 'node:child_process';
 
+import { signPayload } from './sign-payload.mjs';
 import { resolveIdentity } from './signing-identity.mjs';
 
 if (process.platform !== 'darwin') {
@@ -27,6 +28,9 @@ if (problem) {
 }
 
 console.log(`Signing as ${identity}`);
+// The payload's native modules must carry the same identity as the app that
+// loads them — see sign-payload.mjs — and Tauri copies them as they are.
+signPayload(identity);
 execFileSync(
   'pnpm',
   [
@@ -39,6 +43,11 @@ execFileSync(
     'app',
     '--config',
     'src-tauri/tauri.bundle.conf.json',
+    // The personal office's payload, as a bundle resource. Built first by
+    // `pnpm desktop:bundle`; absent, Tauri fails on the missing directory
+    // rather than shipping an app whose "Create a personal office" cannot.
+    '--config',
+    'src-tauri/tauri.personal.conf.json',
   ],
   { stdio: 'inherit', env: { ...process.env, APPLE_SIGNING_IDENTITY: identity } },
 );

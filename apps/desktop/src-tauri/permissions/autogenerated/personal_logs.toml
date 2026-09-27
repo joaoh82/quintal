@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-personal-logs"
+description = "Enables the personal_logs command without any pre-configured scope."
+commands.allow = ["personal_logs"]
+
+[[permission]]
+identifier = "deny-personal-logs"
+description = "Denies the personal_logs command without any pre-configured scope."
+commands.deny = ["personal_logs"]

@@ -7,6 +7,7 @@ import {
   COLYSEUS_PATH,
   devWebPort,
   HEALTH_PATH,
+  personalMode,
   ROOM_OFFICE,
   VOICE_PATH,
 } from '@quintal/shared';
@@ -42,6 +43,13 @@ await runMigrations();
 const storage = resolveStorage();
 assertStorageFitForProduction(storage);
 logger.info(`[storage] ${describeStorage(storage)}`);
+
+// Read once at boot so a malformed owner key stops the process here, with the
+// variable named, rather than at the first sign-in. The key itself is not
+// logged: it is public, but a log line is not where anybody should learn it.
+if (personalMode()) {
+  logger.info('[quintal] personal office: sign-in is restricted to its owner and there are no guest links');
+}
 
 const nextHandler: NextRequestHandler | undefined = config.isProduction
   ? await createNextHandler(config.webDir)
@@ -163,13 +171,37 @@ logger.info(
     : `[quintal] game server on http://${config.host}:${config.port} — web app at http://localhost:${devWebPort()}`,
 );
 
+let shuttingDown = false;
+function shutdown(reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`[quintal] ${reason}, shutting down`);
+  voiceRelay.close();
+  gameServer
+    .gracefullyShutdown(false)
+    .catch((error: unknown) => logger.error('[quintal] shutdown failed', error))
+    .finally(() => closeDb());
+}
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
-    logger.info(`[quintal] ${signal} received, shutting down`);
-    voiceRelay.close();
-    gameServer
-      .gracefullyShutdown(false)
-      .catch((error: unknown) => logger.error('[quintal] shutdown failed', error))
-      .finally(() => closeDb());
-  });
+  process.once(signal, () => shutdown(`${signal} received`));
+}
+
+// Die with the process that started us, when asked to.
+//
+// The desktop app runs this server for a personal office and holds the write
+// end of its stdin for as long as the app lives. A tidy quit sends SIGTERM;
+// a crash, a force-quit or a `kill -9` of the app runs no handler at all, and
+// what would survive is a server on a loopback port holding the office's
+// database open, with nothing left that knows to stop it. The kernel closes
+// the pipe however the parent died, so EOF on stdin is the one notification
+// that arrives in every case — the same contract quintal-acp follows.
+//
+// Opt-in, and only by the app: a server started from a terminal, or under
+// Docker with no stdin attached, must not stop because stdin happens to be
+// closed or absent.
+if (process.env.QUINTAL_EXIT_WITH_PARENT === '1') {
+  process.stdin.on('end', () => shutdown('the process that started this server has gone'));
+  process.stdin.on('error', () => shutdown('the process that started this server has gone'));
+  process.stdin.resume();
 }

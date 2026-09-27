@@ -2,10 +2,12 @@
 # Keep libdbus on the host for the sync-secret-service backend, and install the
 # harness the AppImage was deliberately bundled without.
 set -euo pipefail
-[[ $# -eq 3 ]] || { echo 'Usage: fix-appimage.sh <AppImage> <appimagetool> <sidecar>' >&2; exit 1; }
+[[ $# -ge 3 && $# -le 5 ]] || { echo 'Usage: fix-appimage.sh <AppImage> <appimagetool> <sidecar> [node-runtime] [payload-dir]' >&2; exit 1; }
 appimage=$(realpath "$1")
 appimagetool=$(realpath "$2")
 sidecar=$(realpath "$3")
+node_runtime=${4:+$(realpath "$4")}
+payload_dir=${5:+$(realpath "$5")}
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 chmod +x "$appimage"
@@ -21,6 +23,22 @@ find squashfs-root -name 'libdbus-1.so*' -print -delete
 # executable that spawns it.
 [[ ! -e squashfs-root/usr/bin/quintal-acp ]] || { echo 'Harness already in the AppDir; linuxdeploy has seen it' >&2; exit 1; }
 install -m 755 "$sidecar" squashfs-root/usr/bin/quintal-acp
+# The personal office's Node runtime travels the same way, for the same
+# reason: it is an external binary the AppImage was bundled without.
+if [[ -n "$node_runtime" ]]; then
+  [[ ! -e squashfs-root/usr/bin/quintal-node ]] || { echo 'Node runtime already in the AppDir; linuxdeploy has seen it' >&2; exit 1; }
+  install -m 755 "$node_runtime" squashfs-root/usr/bin/quintal-node
+fi
+# And the payload: its native modules are ELF files too, and linuxdeploy's
+# `ldd` over one of them exits 1 and aborts the bundle exactly as it does for
+# the harness. So the AppImage is bundled without the payload resource and it
+# is copied in here, to where Tauri's resource_dir() looks inside an AppDir.
+if [[ -n "$payload_dir" ]]; then
+  [[ -f "$payload_dir/payload.json" ]] || { echo "No payload manifest in $payload_dir" >&2; exit 1; }
+  [[ ! -e squashfs-root/usr/lib/Quintal/personal ]] || { echo 'Payload already in the AppDir; linuxdeploy has seen it' >&2; exit 1; }
+  mkdir -p squashfs-root/usr/lib/Quintal
+  cp -R "$payload_dir" squashfs-root/usr/lib/Quintal/personal
+fi
 APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "$appimagetool" \
   --runtime-file "$scratch/runtime" "$scratch/squashfs-root" "$scratch/fixed.AppImage"
 chmod +x fixed.AppImage

@@ -21,6 +21,24 @@
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
   <!--
+    The personal office's server runs on the bundled Node and loads native
+    modules out of the payload under Resources: libSQL, sharp, msgpackr.
+    Under the hardened runtime, library validation lets a process load only
+    code signed by Apple or by its own team, and those modules arrive signed
+    by their publishers or by nobody. Without this key the server dies on
+    its first `dlopen` with
+
+        mapping process and mapped file (non-platform) have different Team IDs
+
+    scripts/sign-payload.mjs re-signs the payload with the app's identity
+    before bundling, which is what notarization requires anyway and what
+    makes a release pass validation with or without this key. The key stays
+    so that an ad-hoc development bundle — where nothing has a team — runs
+    too. Applied to every binary Tauri signs; only `quintal-node` needs it.
+  -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!--
     The hardened runtime that signing applies forbids audio input unless the
     app asks for it. Together with NSMicrophoneUsageDescription in Info.plist
     this is what lets the webview's getUserMedia reach the microphone; the

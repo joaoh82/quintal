@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-choose-personal-office"
+description = "Enables the choose_personal_office command without any pre-configured scope."
+commands.allow = ["choose_personal_office"]
+
+[[permission]]
+identifier = "deny-choose-personal-office"
+description = "Denies the choose_personal_office command without any pre-configured scope."
+commands.deny = ["choose_personal_office"]

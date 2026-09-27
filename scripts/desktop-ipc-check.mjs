@@ -117,6 +117,14 @@ const page = `<!doctype html><meta charset="utf-8"><title>ipc check</title>
     await run('add_server', 'add_server', { url: 'https://server.example.com' });
     await run('switch_server (not yours)', 'switch_server', { url: 'https://elsewhere.example.com' });
     await run('remove_server', 'remove_server', { url: 'https://server.example.com' });
+    // The personal office, from a server: choosing it changes what the next
+    // boot loads, so like add_server it is the picker's alone. Its status and
+    // logs are granted only while the office is what is loaded, or while the
+    // picker is.
+    await run('choose_personal_office (from a server)', 'choose_personal_office', {});
+    await run('personal_status (from a server)', 'personal_status', {});
+    await run('personal_logs (from a server)', 'personal_logs', {});
+    await run('retry_personal_office (from a server)', 'retry_personal_office', {});
     // pick_repos_dir is deliberately not called: it opens a native folder
     // dialog and would wait forever for a click nobody is there to make. Its
     // grant is covered instead by the Rust test every_declared_command_is_granted,
@@ -359,6 +367,14 @@ const EXPECTED = {
   // on the list, so the worst it does is move you somewhere you added yourself.
   // Refused here by our own check, because this URL is not one of them.
   'switch_server (not yours)': { ok: false },
+  // All four refused by the ACL: a server is neither the picker nor the
+  // personal office, and the grants say so.
+  'choose_personal_office (from a server)': { ok: false },
+  'personal_status (from a server)': { ok: false },
+  'personal_logs (from a server)': { ok: false },
+  // Refused too, and worth pinning separately: it restarts the app, which
+  // would end this check mid-run if the ACL ever let a server call it.
+  'retry_personal_office (from a server)': { ok: false },
   'stop_fleet (nothing running)': { ok: false },
   // The token was just forgotten, so this must refuse rather than start a
   // harness with no credential — which would fail later and less clearly.

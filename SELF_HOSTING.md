@@ -179,13 +179,21 @@ the one the office was configured with, so it will be refused.
 
 ## The desktop app
 
-The app is a client, not a second server. It loads whatever office you point it
-at — `http://localhost:3000`, your deployment, or somebody else's — so a
-self-hosted instance needs nothing extra to support it.
+You do not need to self-host to use Quintal alone. The app can run a
+**personal office** — this same server, started privately inside the app on
+loopback, with its data in the app's data directory — with nothing installed.
+Self-hosting is for the other case: an office other people join, guests walk
+into, or that lives on another machine. See
+[docs/DESKTOP.md](./docs/DESKTOP.md#two-ways-to-have-an-office).
 
-The office URL is stored per machine and defaults to localhost; the app grants
-IPC to that one origin and no other, so pointing it somewhere new is a
-deliberate act rather than a redirect.
+Connected to a server, the app is a client, not a second server. It loads
+whatever office you point it at — `http://localhost:3000`, your deployment,
+or somebody else's — so a self-hosted instance needs nothing extra to support
+it. Switching between a server and the personal office keeps both intact.
+
+The office URL is stored per machine; the app grants IPC to that one origin
+and no other, so pointing it somewhere new is a deliberate act rather than a
+redirect.
 
 Everything social works in a plain browser tab against the same instance. What
 the app adds is key custody and the ability to run agents on the computer it is

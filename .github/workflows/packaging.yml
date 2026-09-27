@@ -16,6 +16,9 @@ on:
       - 'packages/acp-harness/**'
       - 'scripts/build-harness-sidecar.mjs'
       - 'scripts/build-desktop-release.mjs'
+      - 'scripts/build-personal-payload.mjs'
+      - 'scripts/fetch-node-runtime.mjs'
+      - 'scripts/sign-payload.mjs'
       - 'scripts/release-assets.mjs'
       - 'scripts/release-assets.json'
       - 'scripts/fix-appimage.sh'
@@ -29,6 +32,9 @@ on:
       - 'packages/acp-harness/**'
       - 'scripts/build-harness-sidecar.mjs'
       - 'scripts/build-desktop-release.mjs'
+      - 'scripts/build-personal-payload.mjs'
+      - 'scripts/fetch-node-runtime.mjs'
+      - 'scripts/sign-payload.mjs'
       - 'scripts/release-assets.mjs'
       - 'scripts/release-assets.json'
       - 'scripts/fix-appimage.sh'
@@ -79,6 +85,15 @@ jobs:
           pnpm --filter quintal-acp build
           node scripts/build-harness-sidecar.mjs x86_64-unknown-linux-gnu
 
+      # The same steps the release job runs, and the one place the Linux
+      # payload is proven before a tag: the runner is the target, so the
+      # payload boots on the pinned Linux Node and its native modules here.
+      - name: Build the personal office payload
+        run: |
+          pnpm build
+          node scripts/fetch-node-runtime.mjs x86_64-unknown-linux-gnu
+          node scripts/build-personal-payload.mjs x86_64-unknown-linux-gnu
+
       - name: Build installers
         # Tauri reports only `failed to run linuxdeploy` and drops the tool's own
         # stderr, which is the half that says what went wrong. Verbose here, not
@@ -88,12 +103,12 @@ jobs:
           QUINTAL_TAURI_VERBOSE: '1'
         run: node scripts/build-desktop-release.mjs x86_64-unknown-linux-gnu appimage,deb linux-x64
 
-      - name: Keep AppImage libdbus on the host and install the harness
+      - name: Keep AppImage libdbus on the host and install the harness, Node runtime and payload
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c
           chmod +x "$RUNNER_TEMP/appimagetool"
-          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu
+          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu apps/desktop/src-tauri/binaries/quintal-node-x86_64-unknown-linux-gnu apps/desktop/personal-payload
 
       - name: Stage installers from the shared asset contract
         run: node scripts/release-assets.mjs stage linux-x64 apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle stage

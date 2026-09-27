@@ -5,6 +5,8 @@
 //! or for a signature over a payload it supplies, so a bug in the page cannot
 //! leak an identity the page never held.
 
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::State;
 
@@ -12,6 +14,7 @@ use crate::agent_keys;
 use crate::identity::{self, IdentityError, IdentityState};
 use crate::machine;
 use crate::nip49::Nip49Error;
+use crate::personal;
 use crate::runtimes::{self, RuntimeStatus};
 use crate::secrets::{SecretStore, SecretsError};
 use crate::spawn::{self, Fleet, FleetState, LogLine, Repo, SpawnError};
@@ -27,6 +30,9 @@ pub struct HostState {
     /// office — but the credential's destination deserves the same treatment as
     /// the command line: chosen here, not accepted from there.
     pub server: Option<String>,
+    /// The office this app is running itself, when this launch is the
+    /// personal office. `server` is then its loopback origin.
+    pub personal: Option<Arc<personal::Office>>,
     /// The harness this machine is running, if any.
     pub fleet: Fleet,
     /// Token handed out by the last `export_backup`, spent by `confirm_backup`.
@@ -36,6 +42,32 @@ pub struct HostState {
     /// nobody ever saw and then wipe the key. In memory only — a confirmation
     /// should not survive a restart the export did not.
     pub pending_export: std::sync::Mutex<Option<String>>,
+}
+
+impl HostState {
+    /// The name every per-server secret is filed under.
+    ///
+    /// A server's URL, for a server. For the personal office, the word
+    /// `personal`: its URL is whichever loopback port was free, and a machine
+    /// registration or an agent key filed under a port would be lost the day
+    /// the port moved. The office is the same office; the key says so.
+    pub fn slot(&self) -> Option<&str> {
+        if self.personal.is_some() {
+            Some(personal::PERSONAL)
+        } else {
+            self.server.as_deref()
+        }
+    }
+
+    /// Stop every child this app started: the fleet, and the personal
+    /// office's server if this launch is one. The one teardown, called from
+    /// every exit path.
+    pub fn stop_everything(&self) {
+        let _ = self.fleet.stop();
+        if let Some(office) = &self.personal {
+            office.stop();
+        }
+    }
 }
 
 /// An error the UI can branch on rather than only display.
@@ -242,16 +274,16 @@ pub fn host_status(state: State<'_, HostState>) -> Result<HostStatus, HostError>
     // to the first would quietly stop booting.
     // Per server: the same laptop is registered separately in each, so "is
     // this machine registered" is only a question you can ask about one.
-    let Some(server) = state.server.as_deref() else {
+    let Some(slot) = state.slot() else {
         return Ok(HostStatus {
             label: machine::label(),
             registered: false,
         });
     };
-    let registered = machine::registered_label(&state.store, server)?;
+    let registered = machine::registered_label(&state.store, slot)?;
     Ok(HostStatus {
         label: registered.unwrap_or_else(machine::label),
-        registered: machine::token(&state.store, server)?.is_some(),
+        registered: machine::token(&state.store, slot)?.is_some(),
     })
 }
 
@@ -269,16 +301,16 @@ pub fn remember_host_token(
     token: String,
     label: String,
 ) -> Result<(), HostError> {
-    let server = state.server.as_deref().ok_or(SpawnError::NoServer)?;
-    machine::remember(&state.store, server, &token, &label)?;
+    let slot = state.slot().ok_or(SpawnError::NoServer)?;
+    machine::remember(&state.store, slot, &token, &label)?;
     Ok(())
 }
 
 /// Drop this machine's host token, so the next launch registers again.
 #[tauri::command]
 pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
-    let server = state.server.as_deref().ok_or(SpawnError::NoServer)?;
-    machine::forget_for(&state.store, server)?;
+    let slot = state.slot().ok_or(SpawnError::NoServer)?;
+    machine::forget_for(&state.store, slot)?;
     Ok(())
 }
 
@@ -305,7 +337,10 @@ pub fn start_fleet(
 /// credential is sent.
 pub fn start_fleet_here(state: &HostState) -> Result<FleetState, HostError> {
     let server = state.server.as_deref().ok_or(SpawnError::NoServer)?;
-    let token = machine::token(&state.store, server)?.ok_or(SpawnError::NotRegistered)?;
+    // Where the credentials are filed; the URL is where they are sent. The
+    // two differ for the personal office, whose port can move.
+    let slot = state.slot().ok_or(SpawnError::NoServer)?;
+    let token = machine::token(&state.store, slot)?.ok_or(SpawnError::NotRegistered)?;
     let dir = spawn::repos_dir(&state.dir);
 
     // Every agent assigned here gets a key of its own before the harness is
@@ -314,13 +349,13 @@ pub fn start_fleet_here(state: &HostState) -> Result<FleetState, HostError> {
     // map in its environment. An agent the office would not take a key for
     // is reported and boots on the host token while legacy credentials last.
     let office = agent_keys::HttpOffice::new(server, &token);
-    let provisioned = match agent_keys::provision(&state.store, server, &office) {
+    let provisioned = match agent_keys::provision(&state.store, slot, &office) {
         Ok(provisioned) => provisioned,
         Err(IdentityError::StaleHostToken) => {
             // Drop it so the next status check reports unregistered and the
             // UI offers to register with *this* office, rather than retrying
             // a token this office has already refused.
-            let _ = machine::forget_for(&state.store, server);
+            let _ = machine::forget_for(&state.store, slot);
             return Err(IdentityError::StaleHostToken.into());
         }
         Err(error) => return Err(error.into()),
@@ -446,20 +481,36 @@ pub fn set_opens_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), Ho
 #[serde(rename_all = "camelCase")]
 pub struct ServerList {
     pub servers: Vec<crate::server::Server>,
+    /// A server's URL, the word `personal`, or nothing on a first run.
     pub active: Option<String>,
+    /// The personal office, when this launch is one: where it is, for the
+    /// pages that show which place you are in. Not in `servers` — it is not
+    /// somewhere you add or forget, and its address is not one to keep.
+    pub personal: Option<PersonalEntry>,
 }
 
-fn listed(dir: &std::path::Path) -> ServerList {
-    let stored = crate::server::load_servers(dir);
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalEntry {
+    pub url: String,
+    pub label: String,
+}
+
+fn listed(state: &HostState) -> ServerList {
+    let stored = crate::server::load_servers(&state.dir);
     ServerList {
         servers: stored.servers,
         active: stored.active,
+        personal: state.personal.as_ref().map(|office| PersonalEntry {
+            url: office.origin(),
+            label: "Personal office".into(),
+        }),
     }
 }
 
 #[tauri::command]
 pub fn list_servers(state: State<'_, HostState>) -> ServerList {
-    listed(&state.dir)
+    listed(&state)
 }
 
 #[tauri::command]
@@ -472,7 +523,7 @@ pub fn add_server(
         code: "bad_server".into(),
         message,
     })?;
-    Ok(listed(&state.dir))
+    Ok(listed(&state))
 }
 
 /// Make a server the live one, and restart into it.
@@ -494,8 +545,9 @@ pub fn switch_server(
     })?;
 
     // Stop the fleet before going: these agents belong to the server being
-    // left, and the next one will start its own.
-    let _ = state.fleet.stop();
+    // left, and the next one will start its own. The personal office's
+    // server goes too, if this launch was one.
+    state.stop_everything();
     app.restart();
 }
 
@@ -510,7 +562,7 @@ pub fn remove_server(state: State<'_, HostState>, url: String) -> Result<ServerL
     // machine in a server this app no longer has. Keyed on the *normalised*
     // URL, which is what the slot was written under.
     let _ = machine::forget_for(&state.store, &removed);
-    Ok(listed(&state.dir))
+    Ok(listed(&state))
 }
 
 /// Go back to the server picker, restarting into it.
@@ -523,7 +575,75 @@ pub fn open_server_picker(
         code: "bad_server".into(),
         message,
     })?;
-    let _ = state.fleet.stop();
+    state.stop_everything();
+    app.restart();
+}
+
+// --- the personal office ------------------------------------------------------
+
+/// Make the personal office what the app opens, and restart into it.
+///
+/// The picker's other button. Restarts for the same reason switching servers
+/// does: the office's origin is granted IPC at startup and nowhere else.
+#[tauri::command]
+pub fn choose_personal_office(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+) -> Result<(), HostError> {
+    crate::server::choose_personal(&state.dir).map_err(|message| HostError {
+        code: "bad_server".into(),
+        message,
+    })?;
+    state.stop_everything();
+    app.restart();
+}
+
+/// What the personal office is doing: starting, ready, failed or stopped.
+///
+/// The page shown while it comes up polls this to say something truthful —
+/// "starting", "backing up", "it crashed and here is why" — instead of a
+/// blank window. Answers a stopped state when this launch is not a personal
+/// office at all.
+#[tauri::command]
+pub fn personal_status(state: State<'_, HostState>) -> personal::Status {
+    match &state.personal {
+        Some(office) => office.status(),
+        None => personal::Status {
+            phase: "stopped".into(),
+            origin: None,
+            message: None,
+            restarts: 0,
+            pid: None,
+            data_dir: personal::Layout::under(&state.dir)
+                .root()
+                .display()
+                .to_string(),
+            backup: None,
+        },
+    }
+}
+
+/// What the office's server has said recently, for the page and for a bug
+/// report. Bounded like the fleet's.
+#[tauri::command]
+pub fn personal_logs(state: State<'_, HostState>) -> Vec<LogLine> {
+    state
+        .personal
+        .as_ref()
+        .map(|office| office.logs())
+        .unwrap_or_default()
+}
+
+/// Try again, from the top.
+///
+/// A failed office — a crash loop, a locked keychain, a port that was
+/// taken — is fixed by a fresh launch, which re-chooses the port, re-reads
+/// the keychain and re-grants the origin. That is what this does, and all it
+/// does: it changes no setting, so a page that called it through XSS could
+/// only make the app come back up as it was.
+#[tauri::command]
+pub fn retry_personal_office(app: tauri::AppHandle, state: State<'_, HostState>) {
+    state.stop_everything();
     app.restart();
 }
 
