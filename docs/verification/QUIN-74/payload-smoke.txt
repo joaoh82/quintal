@@ -1,0 +1,29 @@
+$ node scripts/fetch-node-runtime.mjs && node scripts/build-personal-payload.mjs
+Node 22.23.3 for aarch64-apple-darwin already at <worktree>/apps/desktop/src-tauri/binaries/quintal-node-aarch64-apple-darwin
+<worktree>/apps/desktop/src-tauri/binaries/quintal-node-aarch64-apple-darwin answers --version with v22.23.3 and no PATH to lean on.
+[payload] deploying @quintal/personal-payload into apps/desktop/personal-payload
+Packages are cloned from the content-addressable store to the virtual store.
+  Content-addressable store is at: /Users/joaoh82/Library/pnpm/store/v11
+  Virtual store is at:             apps/desktop/personal-payload/node_modules/.pnpm
+apps/desktop/personal-payload            | +131 +++++++++++++
+apps/desktop/personal-payload            | Progress: resolved 0, reused 1, downloaded 0, added 0
+apps/desktop/personal-payload            | Progress: resolved 0, reused 131, downloaded 0, added 45
+apps/desktop/personal-payload            | Progress: resolved 0, reused 131, downloaded 0, added 129
+apps/desktop/personal-payload            | Progress: resolved 0, reused 131, downloaded 0, added 131, done
+.../personal-payload/node_modules/sharp install$ node install/check.js || npm run build
+.../personal-payload/node_modules/sharp install: Done
+[payload] pruning sources, build tooling and caches
+[payload] Next traces removed 9018 files, 266.9MB
+[payload] 15417 files, 204MB for aarch64-apple-darwin
+[payload]    133.3MB  next
+[payload]     15.3MB  @img/sharp-libvips-darwin-arm64
+[payload]      9.9MB  drizzle-orm
+[payload]      8.4MB  @quintal/web
+[payload]      7.5MB  @libsql/darwin-arm64
+[payload]        7MB  react-dom
+[payload]        3MB  @colyseus/schema
+[payload]      2.3MB  @quintal/shared
+[payload] booting the payload on http://127.0.0.1:53276 with apps/desktop/src-tauri/binaries/quintal-node-aarch64-apple-darwin
+[payload] /settings/profile 200 with brand icon and avatar; icon 200; /api/avatar 201; avatar object 200 (bytes match)
+[payload] ready in 1778ms; /login 200; personal office; challenge bound to http://127.0.0.1:53276; RSS 184MB idle; stopped on stdin EOF
+[payload] wrote apps/desktop/personal-payload/payload.json (passed)

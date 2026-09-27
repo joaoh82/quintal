@@ -1,0 +1,4 @@
+[payload] booting the payload on http://127.0.0.1:53723 with apps/desktop/src-tauri/binaries/quintal-node-aarch64-apple-darwin
+[payload] /settings/profile 200 with brand icon and avatar; icon 200; /api/avatar 201; avatar object 200 (bytes match)
+[payload] ready in 1345ms; /login 200; personal office; challenge bound to http://127.0.0.1:53723; RSS 186MB idle; stopped on stdin EOF
+[payload] existing payload proof passed (payload not rebuilt or modified)

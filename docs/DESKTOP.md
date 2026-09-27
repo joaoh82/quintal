@@ -484,6 +484,37 @@ nor SWC at runtime; both would otherwise be downloaded by Next on first
 launch, which a bundled app must never do. Details and the pruning rules are
 in `scripts/build-personal-payload.mjs`.
 
+After swapping native packages, the builder uses Next's `next-server.js.nft.json`,
+the route traces under `.next/server`, and `required-server-files.json` to prune
+web-only dependencies file by file. Trace paths are resolved from their own
+manifest, then matched by package name and version to the deployed tree; pnpm
+store paths are not copied into the app. Untraced client packages such as
+Phaser and Lucide can disappear while their built assets stay in `.next/static`.
+The custom server is not traced: its production dependency closure, including
+Next itself, stays whole, as do the target's native packages. Missing traces or
+unmappable package files fail the build before the trace pass deletes anything.
+`payload.json` records the final file/byte counts and largest packages, plus
+`pruning` with the trace count, removed files/bytes and packages retained whole.
+Deployment uses a dedicated lockfile with workspace injection enabled only for
+that command. The legacy hoisted deploy ignores the lockfile, which can install
+versions different from those used to generate the traces; it is no longer used.
+
+The boot proof signs in as a temporary owner, uploads an avatar, requests the
+profile page with its brand icon and avatar, fetches the icon, and checks the
+avatar object's bytes. It also keeps the health, login, personal mode, challenge,
+runtime-download, read-only payload and stdin-EOF checks. The current web app
+does not import Lucide; the icon check exercises the existing brand mark.
+To repeat the proof against an existing payload without rebuilding it (including
+for a missing-native sabotage check), run:
+
+```bash
+node scripts/build-personal-payload.mjs --smoke-only
+```
+
+The proof uses disposable data and does not update the existing manifest.
+See [QUIN-74 verification](./verification/QUIN-74/README.md) for the test plan
+and the [QUIN-57 baseline](./verification/QUIN-57/README.md#measurements).
+
 Beside the app's own executable sits `quintal-node`: the official Node build
 for the target, pinned to one version and one checksum per platform in
 `scripts/fetch-node-runtime.mjs`. The host looks for it there, or at

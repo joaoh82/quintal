@@ -2,7 +2,7 @@
  * Assemble the personal office's payload: the production server, the built web
  * app, and everything either needs at runtime, as one relocatable directory.
  *
- *   node scripts/build-personal-payload.mjs [target-triple] [--skip-smoke]
+ *   node scripts/build-personal-payload.mjs [target-triple] [--skip-smoke | --smoke-only]
  *
  * The desktop app starts a private copy of the existing server for a personal
  * office — no Docker, no terminal, no server address. That server is a Node
@@ -35,8 +35,9 @@
  *   is fetched from the registry at the version and integrity the lockfile
  *   pins, so a cross-build carries exactly what a native install would.
  *
- * - Sources, build configuration and dev leftovers are pruned. The payload is
- *   an artefact, not a checkout.
+ * - Sources, build configuration and dev leftovers are pruned, then Next's
+ *   file traces retain only the web dependencies used at runtime. The custom
+ *   server's untraced dependency closure (including Next) stays whole.
  *
  * - The result is booted once, on the bundled Node, and asked for its health,
  *   its login page and a sign-in challenge. A payload that does not start
@@ -45,10 +46,10 @@
  *   hand. The smoke also checks the tree was not written to, because the
  *   app installs it read-only and a signed bundle must not change.
  *
- * `pnpm deploy --prod` has a side effect worth knowing about: it flips the
- * workspace's own install state to production-only, and the next `pnpm run`
- * would then prune every devDependency. The workspace is restored at the end
- * for that reason; it is not optional.
+ * Deployment uses pnpm's dedicated lockfile mode. Its legacy hoisted mode
+ * ignores the lockfile and can install versions different from the build's
+ * traces. Injection is enabled for this command only; workspace config and
+ * the workspace's installed dependencies are not changed.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -65,9 +66,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { NODE_VERSION, hostTriple, runtimePath } from './fetch-node-runtime.mjs';
+import { pruneFromTraces } from './prune-personal-payload.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const PAYLOAD_DIR = join(root, 'apps/desktop/personal-payload');
@@ -78,6 +80,8 @@ const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 const args = process.argv.slice(2);
 const skipSmoke = args.includes('--skip-smoke');
+const smokeOnly = args.includes('--smoke-only');
+if (skipSmoke && smokeOnly) throw new Error('--skip-smoke and --smoke-only are mutually exclusive');
 const triple = args.find((arg) => !arg.startsWith('--')) ?? hostTriple();
 
 /**
@@ -162,7 +166,7 @@ function deploy() {
       '--filter',
       '@quintal/personal-payload',
       'deploy',
-      '--legacy',
+      '--config.inject-workspace-packages=true',
       '--prod',
       '--config.node-linker=hoisted',
       PAYLOAD_DIR,
@@ -171,15 +175,6 @@ function deploy() {
     // in CI; there is nobody at a terminal to answer.
     { env: { ...process.env, CI: 'true' } },
   );
-}
-
-/** Put the workspace back the way `pnpm install` left it. See the header. */
-function restoreWorkspace() {
-  log('restoring the workspace install state pnpm deploy flipped');
-  run(PNPM, ['install', '--frozen-lockfile', '--offline'], {
-    env: { ...process.env, CI: 'true' },
-    stdio: 'pipe',
-  });
 }
 
 // --- 2. natives for the target ---------------------------------------------
@@ -286,17 +281,22 @@ function compileNextConfig() {
 function prune() {
   log('pruning sources, build tooling and caches');
 
+  // The dedicated deploy lockfile and manifest contain absolute workspace
+  // paths. They are build bookkeeping; restore the portable package manifest.
+  keepOnly(PAYLOAD_DIR, ['node_modules', 'package.json']);
+  cpSync(join(root, 'apps/personal-payload/package.json'), join(PAYLOAD_DIR, 'package.json'));
+
   // The web app: its build output and public assets, and nothing that made
   // them. `.next/cache` is the build's own scratch space — a third of a
   // gigabyte of webpack state the production server never reads.
   requireBuilt(join(WEB, '.next/BUILD_ID'), 'pnpm build');
   compileNextConfig();
-  keepOnly(WEB, ['.next', 'public', 'package.json', 'next.config.mjs']);
+  keepOnly(WEB, ['.next', 'public', 'package.json', 'next.config.mjs', 'node_modules']);
   rmSync(join(WEB, '.next/cache'), { recursive: true, force: true });
 
   // The server: compiled output only.
   requireBuilt(join(SERVER, 'dist/index.js'), 'pnpm build');
-  keepOnly(SERVER, ['dist', 'package.json']);
+  keepOnly(SERVER, ['dist', 'package.json', 'node_modules']);
 
   // Build-time only, given the compiled config above. Both would otherwise
   // be re-downloaded by Next at runtime if absent, which the smoke below
@@ -356,7 +356,7 @@ function measure() {
   return { files, bytes, largest };
 }
 
-function writeManifest(size) {
+function writeManifest(size, pruning) {
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
   const manifest = {
     version,
@@ -367,6 +367,7 @@ function writeManifest(size) {
     files: size.files,
     bytes: size.bytes,
     largest: size.largest,
+    pruning,
     builtAt: new Date().toISOString(),
   };
   writeFileSync(join(PAYLOAD_DIR, 'payload.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -411,9 +412,13 @@ async function smoke(manifest) {
   }
   const node = nodeBinaryFor(triple);
   const port = await freePort();
-  const data = mkdtempSync(join(tmpdir(), 'quintal-payload-smoke-'));
   const origin = `http://127.0.0.1:${port}`;
+  const { buildAuthPayload, generateSecretKey, getPublicKeyHex, signAuthPayload } =
+    await import(pathToFileURL(join(root, 'packages/shared/dist/index.js')).href);
+  const ownerKey = generateSecretKey();
+  const pubkey = getPublicKeyHex(ownerKey);
   const before = snapshot();
+  const data = mkdtempSync(join(tmpdir(), 'quintal-payload-smoke-'));
 
   log(`booting the payload on ${origin} with ${relative(root, node) || node}`);
   const child = spawn(node, [join(PAYLOAD_DIR, manifest.entry)], {
@@ -437,7 +442,7 @@ async function smoke(manifest) {
       BETTER_AUTH_URL: origin,
       BETTER_AUTH_SECRET: 'smoke-only-secret-that-is-at-least-thirty-two-characters',
       QUINTAL_WEB_DIR: join(PAYLOAD_DIR, manifest.webDir),
-      QUINTAL_PERSONAL_OWNER: 'ab'.repeat(32),
+      QUINTAL_PERSONAL_OWNER: pubkey,
       // The app holds the server's stdin open and expects it to stop when
       // the pipe closes. Proven below by closing it, instead of a signal.
       QUINTAL_EXIT_WITH_PARENT: '1',
@@ -467,16 +472,52 @@ async function smoke(manifest) {
     const challenge = await fetch(`${origin}/api/auth/challenge`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ pubkey: 'ab'.repeat(32) }),
+      body: JSON.stringify({ pubkey }),
     }).then((r) => r.json());
     if (challenge.origin !== origin) throw new Error(`challenge bound to ${challenge.origin}, not ${origin}`);
+
+    const authPayload = buildAuthPayload({ origin, nonce: challenge.nonce, timestamp: Math.floor(Date.now() / 1000) });
+    const signedIn = await fetch(`${origin}/api/auth/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pubkey, sig: signAuthPayload(ownerKey, authPayload), payload: authPayload }),
+    });
+    const cookie = signedIn.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
+    if (signedIn.status !== 200 || !cookie) throw new Error(`owner sign-in failed: HTTP ${signedIn.status}`);
+
+    // A real 128×128 PNG: exercise storage and the user row through the same
+    // upload/read routes as the profile screen, not an unauthenticated 401.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABL0lEQVR4nO3SIQEAIBDAwI9DJiJSEmIgduL8xGadfema3wEYAANgAAyAATAABsAAGAADYAAMgAEwAAbAABgAA2AADIABMAAGwAAYAANgAAyAATAABsAAGAADYAAMgAEwAAbAABgAA2CAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxD0HTyBdO7xLBAAAAAElFTkSuQmCC',
+      'base64',
+    );
+    const upload = await fetch(`${origin}/api/avatar`, {
+      method: 'POST', headers: { cookie, 'content-type': 'image/png' }, body: png,
+    });
+    const avatar = await upload.json();
+    if (upload.status !== 201 || !avatar.url?.startsWith('/api/objects/avatars/')) {
+      throw new Error(`avatar upload failed: HTTP ${upload.status}: ${JSON.stringify(avatar)}`);
+    }
+    const profile = await fetch(`${origin}/settings/profile`, { headers: { cookie }, redirect: 'manual' });
+    const html = await profile.text();
+    if (profile.status !== 200 || !html.includes('brand-mark') || !html.includes(avatar.url)) {
+      throw new Error(`profile did not render its icon and avatar: HTTP ${profile.status}`);
+    }
+    const icon = await fetch(`${origin}/brand/quintal-mark-small.png`);
+    if (icon.status !== 200 || icon.headers.get('content-type') !== 'image/png' || (await icon.arrayBuffer()).byteLength === 0) {
+      throw new Error(`brand icon failed: HTTP ${icon.status}`);
+    }
+    const object = await fetch(`${origin}${avatar.url}`, { headers: { cookie } });
+    if (object.status !== 200 || object.headers.get('content-type') !== 'image/png' || !Buffer.from(await object.arrayBuffer()).equals(png)) {
+      throw new Error(`avatar object did not round-trip: HTTP ${object.status}`);
+    }
+    log('/settings/profile 200 with brand icon and avatar; icon 200; /api/avatar 201; avatar object 200 (bytes match)');
 
     if (/Downloading|Installing/.test(output)) {
       throw new Error(`the server tried to fetch something at runtime:\n${output}`);
     }
 
     const rss = process.platform === 'win32' ? null : Number(execFileSync('ps', ['-o', 'rss=', '-p', String(child.pid)], { encoding: 'utf8' }).trim());
-    log(`ready in ${readyMs}ms; /login 200; personal office; challenge bound to ${origin}` + (rss ? `; RSS ${(rss / 1024).toFixed(0)}MB idle` : '') + '; stopped on stdin EOF');
 
     // Not a signal: the pipe. This is how the server learns the app has
     // gone when the app died without running a handler, so it is the exit
@@ -496,12 +537,13 @@ async function smoke(manifest) {
 
     const after = snapshot();
     const changed = [...after.entries()].filter(([path, stamp]) => before.get(path) !== stamp);
-    const added = [...after.keys()].filter((path) => !before.has(path));
-    if (changed.length > 0 || added.length > 0) {
+    const deleted = [...before.keys()].filter((path) => !after.has(path));
+    if (changed.length > 0 || deleted.length > 0) {
       throw new Error(
-        `the server wrote into its own payload, which ships read-only:\n${[...changed.map(([p]) => p), ...added].slice(0, 20).join('\n')}`,
+        `the server wrote into its own payload, which ships read-only:\n${[...changed.map(([p]) => p), ...deleted].slice(0, 20).join('\n')}`,
       );
     }
+    log(`ready in ${readyMs}ms; /login 200; personal office; challenge bound to ${origin}` + (rss ? `; RSS ${(rss / 1024).toFixed(0)}MB idle` : '') + '; stopped on stdin EOF');
     return { smoke: 'passed', readyMs, rssMb: rss ? Number((rss / 1024).toFixed(0)) : null };
   } catch (error) {
     if (child.exitCode === null) child.kill('SIGKILL');
@@ -524,19 +566,30 @@ function snapshot() {
 
 // --- main ---------------------------------------------------------------------
 
+if (smokeOnly) {
+  const manifest = JSON.parse(readFileSync(join(PAYLOAD_DIR, 'payload.json'), 'utf8'));
+  if (manifest.target !== triple || !canRunHere(triple)) throw new Error('Smoke target must match the payload and be runnable on this host');
+  await smoke(manifest);
+  log('existing payload proof passed (payload not rebuilt or modified)');
+  process.exit(0);
+}
+
 requireBuilt(join(root, 'apps/web/.next/BUILD_ID'), 'pnpm build');
 requireBuilt(join(root, 'apps/server/dist/index.js'), 'pnpm build');
 requireBuilt(join(root, 'packages/shared/dist/index.js'), 'pnpm build');
 
-try {
-  deploy();
-} finally {
-  restoreWorkspace();
-}
+deploy();
 await swapNatives();
 prune();
+const pruning = pruneFromTraces({
+  webSource: join(root, 'apps/web'),
+  modules: MODULES,
+  nativePackages: NATIVE_FAMILIES.flatMap((family) =>
+    Object.values(family.flavours).map((flavour) => `${family.scope}/${family.prefix}${flavour}`)),
+});
+log(`Next traces removed ${pruning.removedFiles} files, ${(pruning.removedBytes / 1024 / 1024).toFixed(1)}MB`);
 const size = measure();
-const manifest = writeManifest(size);
+const manifest = writeManifest(size, pruning);
 log(`${size.files} files, ${(size.bytes / 1024 / 1024).toFixed(0)}MB for ${triple}`);
 for (const { name, mb } of size.largest) log(`  ${mb.toString().padStart(6)}MB  ${name}`);
 

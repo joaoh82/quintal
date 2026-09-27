@@ -1,0 +1,27 @@
+
+Personal office smoke against apps/desktop/src-tauri/target/release/bundle/macos/Quintal.app/Contents/MacOS/quintal-desktop
+HOME=/var/folders/mg/1lvl4h6s2yz09qk354_n4mr40000gn/T/quintal-personal-smoke-V3RXW0
+
+  ok   the office comes up on a loopback port — http://127.0.0.1:53652 in 4130ms
+  ok   the port is not 3000 — 53652
+  ok   the server listens on 127.0.0.1 only — 127.0.0.1:53652
+  ok   the server knows it is a personal office — {"name":"","personal":true}
+  ok   the login page renders — HTTP 200
+  ok   a stranger is refused, even on an empty database — HTTP 403: This is a personal office. Only its owner can sign in here.
+  ok   the owner signs in — HTTP 200
+  ok   a guest link is refused at the door — the join page says so
+  ok   the database, objects, secret and lock live in the data directory — auth-secret, office.json, office.lock, quintal.db, quintal.db-shm, quintal.db-wal
+  ok   the session secret is private — mode 600
+  info measured: cold start 4130ms; RSS app 139MB, server 191MB
+  ok   a second launch exits and leaves the first alone — second exited with 0
+  ok   a killed server is restarted on the same port — new pid 50164 after 1573ms
+  ok   the owner is still the owner after the restart
+  ok   a force-quit app takes its server with it — app exited after 200ms; server gone 60ms later
+  ok   the lock is released
+  ok   the next launch keeps the port — http://127.0.0.1:53652 in 1226ms
+  ok   the office id is stable
+  ok   the owner comes back to the same account — user 875b8112-fb69-402d-bde7-396f58a2fc9e
+  ok   no backup is taken when the version has not changed — 0 backups
+  info measured: warm start 1226ms
+
+PASSED: 19/19 checks

@@ -1,0 +1,131 @@
+{
+  "version": "0.5.0",
+  "node": "22.23.3",
+  "target": "aarch64-apple-darwin",
+  "entry": "node_modules/@quintal/server/dist/index.js",
+  "webDir": "node_modules/@quintal/web",
+  "files": 15417,
+  "bytes": 214382566,
+  "largest": [
+    {
+      "name": "next",
+      "mb": 133.3
+    },
+    {
+      "name": "@img/sharp-libvips-darwin-arm64",
+      "mb": 15.3
+    },
+    {
+      "name": "drizzle-orm",
+      "mb": 9.9
+    },
+    {
+      "name": "@quintal/web",
+      "mb": 8.4
+    },
+    {
+      "name": "@libsql/darwin-arm64",
+      "mb": 7.5
+    },
+    {
+      "name": "react-dom",
+      "mb": 7
+    },
+    {
+      "name": "@colyseus/schema",
+      "mb": 3
+    },
+    {
+      "name": "@quintal/shared",
+      "mb": 2.3
+    }
+  ],
+  "pruning": {
+    "traces": 30,
+    "removedFiles": 9018,
+    "removedBytes": 279847076,
+    "wholePackages": [
+      "@colyseus/clock",
+      "@colyseus/core",
+      "@colyseus/greeting-banner",
+      "@colyseus/msgpackr",
+      "@colyseus/schema",
+      "@colyseus/timer",
+      "@colyseus/ws-transport",
+      "@img/colour",
+      "@img/sharp-darwin-arm64",
+      "@img/sharp-libvips-darwin-arm64",
+      "@libsql/client",
+      "@libsql/core",
+      "@libsql/darwin-arm64",
+      "@libsql/hrana-client",
+      "@libsql/isomorphic-ws",
+      "@msgpackr-extract/msgpackr-extract-darwin-arm64",
+      "@neon-rs/load",
+      "@next/env",
+      "@noble/curves",
+      "@noble/hashes",
+      "@pm2/io",
+      "@pm2/io/node_modules/debug",
+      "@pm2/io/node_modules/tslib",
+      "@quintal/server",
+      "@quintal/shared",
+      "@quintal/web",
+      "@scure/base",
+      "@swc/helpers",
+      "@types/node",
+      "@types/ws",
+      "async",
+      "aws4fetch",
+      "caniuse-lite",
+      "client-only",
+      "debug",
+      "detect-libc",
+      "dotenv",
+      "drizzle-orm",
+      "es-errors",
+      "eventemitter2",
+      "function-bind",
+      "hasown",
+      "is-core-module",
+      "js-base64",
+      "kysely",
+      "libsql",
+      "libsql/node_modules/detect-libc",
+      "lodash",
+      "lru-cache",
+      "module-details-from-path",
+      "ms",
+      "msgpackr-extract",
+      "nanoid",
+      "next",
+      "node-gyp-build-optional-packages",
+      "path-parse",
+      "picocolors",
+      "postcss",
+      "postcss/node_modules/nanoid",
+      "promise-limit",
+      "react",
+      "react-dom",
+      "require-in-the-middle",
+      "resolve",
+      "scheduler",
+      "semver",
+      "sharp",
+      "sharp/node_modules/semver",
+      "shimmer",
+      "signal-exit",
+      "source-map-js",
+      "styled-jsx",
+      "supports-preserve-symlinks-flag",
+      "tslib",
+      "undici-types",
+      "ws",
+      "yallist"
+    ]
+  },
+  "builtAt": "2026-09-27T20:48:03.312Z",
+  "smoke": "passed",
+  "readyMs": 1778,
+  "rssMb": 184
+}

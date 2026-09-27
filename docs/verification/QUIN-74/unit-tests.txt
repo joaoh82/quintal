@@ -1,0 +1,17 @@
+$ node --test scripts/prune-personal-payload.test.mjs
+✔ prunes only untraced web files; retains server closure, peers and target natives (33.506208ms)
+✔ matches versions and retains nested runtime dependencies without retaining unrelated nested packages (17.032167ms)
+✔ fails before deleting files on missing trace (11.492125ms)
+✔ fails before deleting files on malformed trace (12.619792ms)
+✔ fails before deleting files on missing file (12.498875ms)
+✔ fails before deleting files on wrong version (13.49675ms)
+✔ fails before deleting files on missing server dependency (12.834041ms)
+✔ fails before deleting files on no route traces (12.6085ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 178.051583
