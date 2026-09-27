@@ -343,6 +343,14 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
+    // `mode` applies only when the file is created. A stub that already
+    // existed with looser permissions — a short secret being replaced —
+    // would keep them, so they are set explicitly as well.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
     file.write_all(bytes)?;
     Ok(())
 }
@@ -1050,11 +1058,28 @@ mod tests {
     }
 
     #[test]
-    fn a_too_short_secret_on_disk_is_replaced() {
+    fn a_too_short_secret_on_disk_is_replaced_and_made_private() {
         let (_dir, layout) = layout();
         std::fs::create_dir_all(layout.root()).unwrap();
         std::fs::write(layout.auth_secret(), "short\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // A stub anybody on the machine could read. Replacing its contents
+            // must not leave its permissions behind.
+            std::fs::set_permissions(layout.auth_secret(), std::fs::Permissions::from_mode(0o644))
+                .unwrap();
+        }
         assert!(ensure_auth_secret(&layout).unwrap().len() >= 32);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(layout.auth_secret())
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
     }
 
     #[test]

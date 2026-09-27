@@ -311,9 +311,10 @@ pub fn capability(server: Option<&str>, personal: bool) -> String {
         //
         //   has_identity not allowed on window "main", URL: local
         //
-        // The only other local page is the bootstrap file this app ships,
-        // which renders one paragraph and calls nothing. Excluding local buys
-        // nothing and costs the whole development build.
+        // The only other local page is the bootstrap file this app ships:
+        // the picker, which is exactly what the picker-only grants above are
+        // for, and the personal office's progress screen. Excluding local
+        // would refuse both and cost the whole development build besides.
         "remote": { "urls": remote },
         "permissions": permissions
     })
