@@ -283,7 +283,12 @@ async function agentJoinsTheOffice() {
     // exists only because the server wrote it a moment ago.
     owner = await dbModule.findUserByPubkey(db, pubkey);
   } catch (error) {
-    console.log(`  skip  agent join — no database reachable from here (${error.message})`);
+    // `?? String(error)` because a throw is not necessarily an Error, and a
+    // skip line reading `undefined` would hide why the step did not run. First
+    // line only: a driver error here arrives with the whole failed statement
+    // and its parameters attached, and a skip is not the place for it.
+    const why = (error?.message ?? String(error)).split('\n')[0];
+    console.log(`  skip  agent join — no database reachable from here (${why})`);
     return;
   }
   if (!owner) {
@@ -313,12 +318,17 @@ async function agentJoinsTheOffice() {
     });
     const named = lookup.ok ? await lookup.json() : null;
     const workspaceId = typeof named?.workspaceId === 'string' ? named.workspaceId : '';
+    const namesThisOffice = workspaceId === workspace.id;
     check(
-      workspaceId === workspace.id,
+      namesThisOffice,
       'POST /api/agent/office names the agent\u2019s office',
       workspaceId ? '' : `HTTP ${lookup.status}`,
     );
-    if (!workspaceId) return;
+    // Stop on any answer but this agent's own office. Joining with an id the
+    // lookup got wrong would open a session the assertion below is no longer
+    // about — the run already fails, and a second failure from a room we
+    // should never have asked for explains nothing.
+    if (!namesThisOffice) return;
 
     // Step two: join with what it said. Joining at all is the assertion — a
     // join missing `workspaceId` is refused with 4215, which is the whole bug
