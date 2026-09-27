@@ -185,8 +185,16 @@ where the fact used to stop. So `asks` is surfaced wherever an owner makes a
 decision that depends on being asked:
 
 - the scopes editor in **Settings → Agents**, under the `run` checkbox,
+- the new-agent form on that page, where a runtime and `run` are chosen
+  together and the agent can be booting seconds later,
 - the agent's row in that list, as a short `never asks` label,
 - and the agent's card in the office, on an `asking` row.
+
+What it says is bounded to tool permissions and the `run` scope. Every other
+scope — `chat`, `move`, `status`, `dm` — is enforced by the office itself,
+whatever the runtime does, so none of this may read as "this agent is not
+governed": only the one scope that leans on the runtime asking is hollow
+there.
 
 One helper decides the words: `apps/web/src/lib/runtime-asking.ts`. It reads
 the catalogue by `runtimeId` and returns nothing at all for a `verified`

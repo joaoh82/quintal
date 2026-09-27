@@ -262,6 +262,15 @@ export function AgentsManager({
                 </label>
               ))}
             </div>
+            {/* The same notice the saved agent gets, before the decision
+                rather than after it. An owner picks a runtime and unchecks
+                `run` in one pass here, and a Codex agent can be booting a few
+                seconds later — telling them afterwards is telling them too
+                late. Gated on a machine being chosen because that is when a
+                runtime is real: `createAgentAction` treats runtime and machine
+                as all-or-nothing, and the saved row gates its badge the same
+                way. */}
+            {newHost ? <AskingCaveatNotice runtimeId={newRuntime} /> : null}
           </fieldset>
 
           <label className="flex flex-col gap-1">
@@ -510,10 +519,9 @@ function AgentRow({
         </span>
       ) : null}
 
-      {/* Whether this runtime has ever been seen to ask Quintal anything. On
-          the row because the row is where an owner scans their agents and
-          decides which one to open — "never asks" is the fact that decides it,
-          and it was only ever in the harness's stdout. */}
+      {/* Whether this runtime has ever been seen to ask about tools. On the
+          row because the row is where an owner scans a fleet and decides which
+          agent to open. */}
       {agent.hostLabel !== null ? <AsksBadge runtimeId={agent.runtimeId} /> : null}
 
       {/* What it can reach on disk, for the same reason its owner's name is
@@ -758,9 +766,9 @@ function AgentProfileForm({
 /**
  * That this runtime has never been seen to ask, in two or three words.
  *
- * A plain label and not a warning colour: an agent on Codex is a perfectly
- * legitimate thing to run, and the ticket is about informing the owner's
- * choice rather than discouraging it. The title carries the sentence.
+ * A plain label and not a warning colour: an agent on Codex is a legitimate
+ * thing to run, and this informs that choice rather than discouraging it. The
+ * `title` carries the full claim, which the badge alone is too short to make.
  */
 function AsksBadge({ runtimeId }: { runtimeId: string | null }) {
   const caveat = askingCaveat(runtimeId);
@@ -778,11 +786,10 @@ function AsksBadge({ runtimeId }: { runtimeId: string | null }) {
 /**
  * The limit, said where the `run` checkbox is.
  *
- * Above the save button rather than beside the checkbox, because it is true
- * whether or not `run` is ticked: the owner who leaves it off is the one most
- * likely to believe Quintal will ask them, and on a `never_observed` runtime
- * it never will. `externalGrants` is printed with it because it names the file
- * that does decide — the only control there is.
+ * Under the whole fieldset rather than beside the checkbox, because it is true
+ * whether or not `run` is ticked — the owner who leaves it off is the one most
+ * likely to believe they will be asked. `externalGrants` is printed with it
+ * because it names the file that does decide.
  */
 function AskingCaveatNotice({ runtimeId }: { runtimeId: string | null }) {
   const caveat = askingCaveat(runtimeId);
@@ -790,7 +797,9 @@ function AskingCaveatNotice({ runtimeId }: { runtimeId: string | null }) {
   return (
     <p className="text-muted-foreground border-muted-foreground/25 rounded border border-dashed px-2 py-1.5 text-xs">
       <span className="text-foreground font-medium">{caveat.badge}.</span> {caveat.headline}
-      {caveat.externalGrants ? ` ${caveat.externalGrants}` : ''}
+      {caveat.externalGrants ? (
+        <span className="mt-1 block">{caveat.externalGrants}</span>
+      ) : null}
     </p>
   );
 }

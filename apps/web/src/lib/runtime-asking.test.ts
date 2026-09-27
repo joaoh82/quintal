@@ -30,7 +30,25 @@ describe('what to say about a runtime that may never ask', () => {
     // The office card has a few hundred pixels; the claim may not shrink with
     // the space.
     assert.ok((caveat?.summary.length ?? 0) < (caveat?.headline.length ?? 0));
-    assert.match(caveat?.summary ?? '', /gates nothing/);
+    assert.match(caveat?.summary ?? '', /tool permissions/);
+  });
+
+  it('claims nothing about the scopes the office enforces itself', () => {
+    // The notice renders under the whole scopes fieldset and on the card
+    // directly under the scopes row, so a sentence saying Quintal gates
+    // nothing reads as "these checkboxes are decorative". They are not:
+    // chat, move and status are refused by `OfficeRoom` with `missing_scope`
+    // whatever the runtime does about tools. Only the run scope is hollow
+    // here, and only the run scope may be described that way.
+    for (const runtimeId of ['codex', 'opencode', 'gemini', 'goose']) {
+      const caveat = askingCaveat(runtimeId);
+      for (const text of [caveat?.headline ?? '', caveat?.summary ?? '']) {
+        assert.doesNotMatch(text, /gates nothing\b/, runtimeId);
+        assert.doesNotMatch(text, /nothing here gates/, runtimeId);
+        // Whatever it does say has to be about tools, not about the agent.
+        assert.match(text, /tool permission/, runtimeId);
+      }
+    }
   });
 
   it('warns on opencode too', () => {

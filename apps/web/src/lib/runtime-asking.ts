@@ -7,25 +7,16 @@ import {
 } from '@quintal/shared';
 
 /**
- * Whether the office can honestly claim to be gating an agent's tools.
+ * What must be said about a runtime that has never been seen to ask.
  *
- * QUIN-53 drove every installed runtime end to end and found two that never
- * send `session/request_permission` at all: Codex, which created a file
- * *outside* its working directory in the mode it calls "Always ask to edit
- * external files", and opencode, in both of its modes. The catalogue has said
- * so since — `asks: 'never_observed'` — and the harness logs it, into its own
- * stdout, where the owner setting scopes in a browser never sees it. The fact
- * was on the wrong side of the screen.
+ * A `never_observed` runtime must not be described as gated: leaving `run` off
+ * promises the owner that commands will be put to them, and on those runtimes
+ * none ever are. Why each runtime carries the status it does is in
+ * `docs/RUNTIME-PERMISSIONS.md` and the catalogue's own `notes`.
  *
- * It matters because of what an owner believes when they leave `run` off, or
- * take it away: that every command the agent is unsure about will be put to
- * them. On those two runtimes nothing ever is, and withdrawing `run` — which
- * reads as "I have taken this authority back" — takes back nothing, because
- * nothing was routed through Quintal in the first place.
- *
- * This is honesty about a limit, not a fix for it. Quintal cannot make Codex
- * ask, and nothing here blocks or hides anything: an owner may run an agent on
- * Codex, they simply should not be able to believe Quintal is gating it.
+ * The claim is about tool permissions alone. Every other scope is enforced by
+ * the office regardless of what the runtime does, so nothing here may read as
+ * "this agent is ungoverned".
  */
 export interface AskingCaveat {
   /** Which fact this is. `verified` never produces a caveat. */
@@ -43,6 +34,10 @@ export interface AskingCaveat {
    * Where the runtime's own control lives, when the catalogue names the file.
    * Null rather than a guess: pointing at the wrong settings file is worse
    * than pointing at none.
+   *
+   * The headline deliberately stops before "and here is where it is decided",
+   * because this says that with the path in it. Two sentences making the same
+   * claim, one of them vaguer, is how a notice stops being read.
    */
   externalGrants: string | null;
 }
@@ -50,17 +45,14 @@ export interface AskingCaveat {
 /**
  * What must be said about this runtime's asking, or null when nothing must be.
  *
- * Null for three different reasons, all of which mean "say nothing": the
- * runtime is `verified` (it does ask, and the office's cards reach it), the
- * agent has no runtime the office decided, or the id is not in the catalogue
- * at all — a fleet file written against a newer catalogue, say. An unknown id
- * gets silence rather than a warning, because a warning would be a claim
- * about a runtime nobody has measured.
+ * Null for three reasons that all mean "say nothing": the runtime is
+ * `verified`, the agent has no runtime the office decided, or the id is not in
+ * the catalogue — an uncatalogued id gets silence rather than a warning,
+ * because a warning would be a claim about a runtime nobody has measured.
  *
- * `unknown` reads deliberately weaker than `never_observed`. "We have not
+ * `unknown` reads deliberately weaker than `never_observed`: "we have not
  * established this" and "we drove it and it never asked" are different facts,
- * and only the second one changes what an owner should expect. Gemini and
- * Goose are `unknown` today, for want of an API key and an install.
+ * and only the second changes what an owner should expect.
  */
 export function askingCaveat(runtimeId: string | null | undefined): AskingCaveat | null {
   if (!runtimeId) return null;
@@ -72,8 +64,8 @@ export function askingCaveat(runtimeId: string | null | undefined): AskingCaveat
     return {
       status: 'never_observed',
       badge: 'never asks',
-      headline: `${label} decides tool permissions itself. Driven end to end, it never once asked Quintal — so nothing here gates what this agent does, with or without the run scope, and the runtime's own settings are the only control.`,
-      summary: `${label} decides for itself; Quintal gates nothing here.`,
+      headline: `${label} decides tool permissions itself: driven end to end, it never once asked Quintal. Leaving the run scope off will not put its commands to you, and taking it away stops nothing. The other scopes are unaffected — the office enforces those itself.`,
+      summary: `${label} decides tool permissions itself; the run scope does not gate them.`,
       externalGrants: profile.externalGrants,
     };
   }
@@ -81,8 +73,8 @@ export function askingCaveat(runtimeId: string | null | undefined): AskingCaveat
   return {
     status: 'unknown',
     badge: 'asking unverified',
-    headline: `It has not been established whether ${label} ever asks Quintal for permission. If it does not, leaving the run scope off gates nothing, and the runtime's own settings are the only control.`,
-    summary: `Not established whether ${label} ever asks Quintal.`,
+    headline: `It has not been established whether ${label} ever asks Quintal for tool permission. If it does not, leaving the run scope off will not put its commands to you. The other scopes are unaffected either way — the office enforces those itself.`,
+    summary: `Not established whether ${label} ever asks Quintal for tool permission.`,
     externalGrants: profile.externalGrants,
   };
 }
