@@ -74,13 +74,13 @@ writeFileSync('stage/payload.txt', `${payload.files} files, ${(payload.bytes / 1
 // quintal-node load them otherwise, and notarization will not accept them.
 if (process.platform === 'darwin') signPayload(env.APPLE_SIGNING_IDENTITY);
 
-// `sidecar` decides whether externalBin is applied to this bundle.
+// `sidecar` decides whether externalBin and the personal payload are applied
+// to this bundle — both are things linuxdeploy must not see, see below.
 function build(bundleArg, sidecar) {
   execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', [
     '--filter', '@quintal/desktop', 'exec', 'tauri', 'build', ...verbose, '--ci', '--target', target,
     '--bundles', bundleArg,
-    ...(sidecar ? ['--config', 'src-tauri/tauri.bundle.conf.json'] : []),
-    '--config', 'src-tauri/tauri.personal.conf.json',
+    ...(sidecar ? ['--config', 'src-tauri/tauri.bundle.conf.json', '--config', 'src-tauri/tauri.personal.conf.json'] : []),
     '--config', 'src-tauri/tauri.release.conf.json',
     ...updaterConfig, '--', '--locked',
   ], { env, stdio: 'inherit', shell: process.platform === 'win32' });
@@ -91,8 +91,11 @@ function build(bundleArg, sidecar) {
 // an uncaught std::runtime_error — it aborts, and the bundle dies reporting
 // only `failed to run linuxdeploy`. So the AppImage is bundled *without*
 // externalBin and fix-appimage.sh installs the harness into usr/bin during the
-// repack it already performs. Nothing else needs this: the deb bundler does not
-// use linuxdeploy and keeps the sidecar the ordinary way.
+// repack it already performs. The personal office payload has the same problem
+// — its native modules are ELF files linuxdeploy runs `ldd` over, and one of
+// them exits 1 — so it is left out of the AppImage the same way and copied
+// into usr/lib/Quintal/personal by the repack. Nothing else needs this: the
+// deb bundler does not use linuxdeploy and keeps both the ordinary way.
 //
 // The AppImage goes first so the deb left in `bundle/deb` at the end is always
 // the sidecar-carrying one, whatever Tauri does with its intermediate copy.

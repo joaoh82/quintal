@@ -90,10 +90,14 @@ only when there is an updater signing key, on top of the base Tauri config.
 Keep the latter deltas: never duplicate `bundle.externalBin` there, because
 JSON merge-patch replaces arrays — both sidecars live in the one list in
 `tauri.bundle.conf.json`. The AppImage is the exception: it is bundled
-*without* `tauri.bundle.conf.json`, so linuxdeploy never sees the harness. Given
-one, it runs `ldd` over it, and the non-zero exit reaches linuxdeploy as an
-uncaught exception that aborts the whole bundle. `fix-appimage.sh` installs the
-harness during its repack instead, and the first-launch smoke proves it is there.
+*without* `tauri.bundle.conf.json` and *without* `tauri.personal.conf.json`, so
+linuxdeploy never sees the harness, the Node runtime or the payload. Given any
+of them, it runs `ldd` over every ELF it finds — the payload's native modules
+included — and a non-zero exit reaches linuxdeploy as an uncaught exception
+that aborts the whole bundle. `fix-appimage.sh` installs all three during its
+repack instead, the payload under `usr/lib/Quintal/personal` where Tauri's
+resource directory resolves inside an AppDir, and the first-launch smoke
+proves they are there.
 The AppImage is built before the deb so the deb left behind is always the one
 carrying its sidecar the ordinary way. Keep `entitlements.plist`: native Tauri signing
 must apply its JIT entitlements to the Bun sidecar. Each macOS job mounts the

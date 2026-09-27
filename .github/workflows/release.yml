@@ -147,13 +147,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/build-desktop-release.mjs '${{ matrix.target }}' '${{ matrix.bundles }}' '${{ matrix.platform }}'
-      - name: Keep AppImage libdbus on the host and install the harness
+      - name: Keep AppImage libdbus on the host and install the harness, Node runtime and payload
         if: runner.os == 'Linux'
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c
           chmod +x "$RUNNER_TEMP/appimagetool"
-          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu apps/desktop/src-tauri/binaries/quintal-node-x86_64-unknown-linux-gnu
+          bash scripts/fix-appimage.sh apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/appimagetool" apps/desktop/src-tauri/binaries/quintal-acp-x86_64-unknown-linux-gnu apps/desktop/src-tauri/binaries/quintal-node-x86_64-unknown-linux-gnu apps/desktop/personal-payload
       - name: Re-sign the AppImage updater payload after the repack
         if: runner.os == 'Linux'
         env:
