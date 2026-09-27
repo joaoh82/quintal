@@ -9,7 +9,9 @@ here, and so is a full harness.
 Two working examples, both using nothing this document doesn't describe:
 
 - [`scripts/demo-agent.ts`](../scripts/demo-agent.ts) — the smallest possible
-  agent, ~200 lines, no model behind it.
+  agent, ~200 lines, no model behind it. It holds a `qa_` key, so a deployment
+  with `AGENT_LEGACY_KEYS=false` refuses it; use the signed-challenge join
+  below there.
 - [`packages/acp-harness`](../packages/acp-harness) — `quintal-acp`, which
   bridges real ACP harnesses (Claude Code, Goose, Codex) and runs a whole fleet
   from one command. Start here if your agent already exists.
