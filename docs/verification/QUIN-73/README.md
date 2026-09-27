@@ -22,7 +22,7 @@ and the shape changed slightly as a result. See "The hole the tests found".
 | --- | --- |
 | `pnpm typecheck` | Pass — shared, server, web, harness, website, root |
 | `pnpm build` | Pass — shared, harness, web, server |
-| `pnpm --filter @quintal/shared test` | Pass — **437 tests**, 0 fail (15 new) |
+| `pnpm --filter @quintal/shared test` | Pass — **441 tests**, 0 fail (19 new) |
 | `pnpm --filter @quintal/web test` | Pass — **235 tests**, 0 fail (2 new) |
 | `pnpm --filter quintal-acp test` | Pass — **323 tests**, 0 fail (2 new) |
 | `pnpm --filter @quintal/server test` | Pass — 113 tests, 0 fail |
@@ -52,12 +52,39 @@ The fix is an asymmetry, now the load-bearing part of the policy: **stale
 evidence cannot license an allow, but it can still license a refusal.** A
 catalogued option id measured as broader than per-call stays unofferable even
 when the profile is otherwise distrusted — a version bump is no reason to
-believe a grant got *narrower*. A renamed id escapes this and lands on the
-spec default like anything unrecognised, which is the safe direction.
+believe a grant got *narrower*.
+
+The asymmetry is keyed on the option id, so a **rename escapes it**. Review
+correctly caught that the first version of this doc called that escape "the
+safe direction"; it is only safe when the renamed id's kind is honest. See
+"What this still cannot see" below.
 
 `packages/shared/src/runtime-permissions.ts` carries the reasoning at the
 branch; `runtime-permissions.test.ts` asserts it against every non-per-call
 option in the catalogue, not just the one that failed.
+
+## Review round
+
+Two reviewers approved. Three line comments, all non-blocking, all addressed:
+
+1. **The "safe direction" claim was false** (above). Corrected in the code
+   comment, `docs/RUNTIME-PERMISSIONS.md` and this file, with a
+   failing-by-design test.
+2. **The worker warned on expiry too**, so every worker of every office would
+   log the same nag on every restart once the window passed — about a debt
+   this repository owes, not anything wrong on that machine, and contrary to
+   this PR's own policy. Now `version_moved` only, matching the settings page.
+3. **The supervisor's `adapter: null` guard** collapses "asked, did not say"
+   into "not asked". Kept — it buys last-known-wins on a re-probe that fails
+   to handshake — and now says so in a comment.
+
+Also from review: a worker that handshakes without naming itself now warns,
+bounded to profiles that name an adapter so an unmeasured runtime stays quiet;
+and `runtimes.test.ts` pins `normaliseAdapter`'s three-way distinction.
+
+One review point was **not** acted on: that codex and opencode have catalogued
+options with no fixture tie. Both have zero catalogued options
+(`options: []`), so there is nothing to tie.
 
 ## Expiry does not degrade a live office
 
@@ -113,8 +140,23 @@ The honest way to close all three is one local run of
 `probe-permissions.mts --check` against an installed Claude Code, and a fleet
 boot with a deliberately wrong `verifiedAgainst`. Neither was done.
 
-**The limit the ticket names is not closed and cannot be.** An option id that
-keeps its name and widens its meaning under the same version is invisible
-here — the difference is in behaviour, not in the payload. There is a
-failing-by-design test recording it in `runtime-permissions.test.ts` and a
-section in `docs/RUNTIME-PERMISSIONS.md` saying so.
+### What this still cannot see
+
+Two gaps, both uncloseable from the payload, each with a failing-by-design
+test in `runtime-permissions.test.ts` and a section in
+`docs/RUNTIME-PERMISSIONS.md`.
+
+- **The limit the ticket names.** An option id that keeps its name and widens
+  its meaning under the same version: the difference is in behaviour, not in
+  the payload.
+- **A renamed option whose kind lies** — found in review, not by me. A moved
+  adapter that renames `exit-plan-default` while keeping kind `allow_once`
+  falls through the id-keyed asymmetry to the spec default, becomes an
+  offerable per-call allow, and is taken automatically by the `run` scope.
+  Confirmed by hand against the built package before the test was written.
+  Refusing every unrecognised `allow_once` would close it and would also kill
+  "degraded, not dead" for plain renames, so it stays open and stated.
+
+Both are bounded the same way: the meaning can only drift under a release,
+and a release that moves the version stops the catalogue being trusted at
+all. Re-probing is what actually closes either.

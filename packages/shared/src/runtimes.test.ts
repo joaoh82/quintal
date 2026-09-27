@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  HOST_REPORT_LIMITS,
   RUNTIMES,
   acpCommandFor,
   isUsable,
@@ -159,5 +160,38 @@ describe('the models a machine reports', () => {
     });
     assert.equal(out?.runtimes?.[0]?.models, null);
     assert.equal(modelChoice(out?.runtimes?.[0], 'sonnet'), null);
+  });
+});
+
+describe('the adapter a machine reports running', () => {
+  const report = (adapter: unknown) =>
+    normaliseHostReport({
+      label: 'laptop',
+      reposDir: '/repos',
+      runtimes: [{ id: 'claude-code', installed: true, path: '/bin/claude', adapter }],
+    })?.runtimes?.[0];
+
+  it('keeps the same three answers apart that the model list does', () => {
+    // Undefined: nobody asked — the key is left off so a later report does
+    // not blank what is stored. Null: asked, and it did not say.
+    assert.equal('adapter' in report(undefined)!, false, 'not asked');
+    assert.equal(report(null)!.adapter, null, 'asked, said nothing');
+    assert.deepEqual(report({ name: 'a', version: '1' })!.adapter, { name: 'a', version: '1' });
+  });
+
+  it('is null rather than half an answer when a half is missing', () => {
+    // An identity with no version cannot be compared against the catalogue,
+    // so it is not an identity.
+    assert.equal(report({ name: 'a' })!.adapter, null);
+    assert.equal(report({ version: '1' })!.adapter, null);
+    assert.equal(report({ name: '  ', version: '1' })!.adapter, null);
+    assert.equal(report('a 1')!.adapter, null, 'a string is not an identity');
+  });
+
+  it('bounds both halves, because a key holder writes them', () => {
+    const long = 'x'.repeat(HOST_REPORT_LIMITS.adapterMaxLength + 50);
+    const adapter = report({ name: long, version: long })!.adapter!;
+    assert.equal(adapter.name.length, HOST_REPORT_LIMITS.adapterMaxLength);
+    assert.equal(adapter.version.length, HOST_REPORT_LIMITS.adapterMaxLength);
   });
 });

@@ -1,8 +1,8 @@
 import type * as schema from '@agentclientprotocol/sdk';
 import {
   ADAPTER_IDENTITY_MAX_LENGTH,
+  adapterMoved,
   permissionProfile,
-  profileStaleness,
   type AdapterIdentity,
 } from '@quintal/shared';
 
@@ -289,14 +289,32 @@ export class Worker {
   #warnIfAdapterMoved(): void {
     const runtimeId = runtimeIdOf(this.options.config);
     const profile = permissionProfile(runtimeId);
-    if (!profile) return;
-    const stale = profileStaleness(profile, this.adapter);
-    if (!stale) return;
+    if (!profile?.verifiedAgainst) return;
+
+    // An adapter that handshakes without naming itself reads as "did not
+    // look", which leaves the catalogue trusted. That is the right default
+    // for the many callers that never see a handshake — but this one did,
+    // and the runtime chose not to say. Bounded to profiles that name an
+    // adapter, so a runtime nobody has measured stays quiet.
+    if (!this.adapter) {
+      this.#log(
+        'warn',
+        `${runtimeId} did not say which adapter it is, so its permission catalogue (measured against ${profile.verifiedAgainst.name} ${profile.verifiedAgainst.version}) cannot be checked against what is running.`,
+      );
+      return;
+    }
+
+    // `version_moved` only, deliberately. Expiry is CI's: it fails the
+    // catalogue test, which somebody makes and reviews. Warning about it
+    // here would mean every worker of every office logging the same nag on
+    // every restart once the window passes, about a debt this repository
+    // owes rather than anything wrong on that machine. The settings page
+    // draws the same line.
+    const moved = adapterMoved(profile, this.adapter);
+    if (!moved) return;
     this.#log(
       'warn',
-      stale.reason === 'version_moved'
-        ? `${runtimeId} is running ${stale.observed}, but its permission catalogue was measured against ${stale.catalogued}. Standing grants are no longer offered for it until it is re-probed — see docs/RUNTIME-PERMISSIONS.md ("Re-establishing it").`
-        : `${runtimeId}'s permission catalogue was last established on ${stale.catalogued} and is past its verification window; re-probe it — see docs/RUNTIME-PERMISSIONS.md ("Re-establishing it").`,
+      `${runtimeId} is running ${moved.observed}, but its permission catalogue was measured against ${moved.catalogued}. Standing grants are no longer offered for it until it is re-probed — see docs/RUNTIME-PERMISSIONS.md ("Re-establishing it").`,
     );
   }
 

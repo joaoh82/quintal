@@ -184,6 +184,14 @@ export class Supervisor {
           const { models, adapter } = await probeRuntime(command);
           // A probe that never answered leaves the key off: "not asked" is
           // what the office should show, not "offers no choice".
+          // A null adapter is omitted rather than reported, which collapses
+          // "asked, and it did not say" into "not asked" — a distinction
+          // `normaliseHostReport` otherwise keeps. Deliberate: omitting
+          // leaves the stored identity alone, so a re-probe that fails to
+          // handshake keeps the last known adapter instead of blanking it,
+          // and the settings page goes on showing something true. If the
+          // page ever needs to tell "answered without identity" from "never
+          // probed", `adapter` needs the three-way treatment `models` has.
           return {
             ...status,
             ...(models !== undefined ? { models } : {}),

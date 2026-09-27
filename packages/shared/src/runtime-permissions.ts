@@ -502,8 +502,22 @@ export function optionSemantics(
   // "This option was measured as broader than per-call" is a fact about how
   // this runtime names things, and a version bump is no reason to believe it
   // got *narrower*. So a known-broad id stays unexplained rather than
-  // reverting to its kind. A rename escapes this, and lands on the spec
-  // default like anything else unrecognised — which is the safe direction.
+  // reverting to its kind.
+  //
+  // A rename escapes this, and that escape is **not** always safe. It is
+  // safe when the renamed id's kind is honest. It is not when the kind
+  // lies: a moved adapter that renames `exit-plan-default` while keeping
+  // kind `allow_once` is unknown to the catalogue, lands on the spec
+  // default, and becomes an offerable per-call allow the `run` scope takes
+  // automatically — QUIN-53's bug, re-opened through a rename.
+  //
+  // It is uncloseable here. A renamed lying id is indistinguishable at the
+  // payload from a genuinely new, honest per-call option, and refusing every
+  // unrecognised `allow_once` would kill "degraded, not dead" for the far
+  // commoner case of a plain rename. What bounds it is the same thing that
+  // bounds the reused-id gap: it needs a release that also moves the version,
+  // and re-probing is what actually closes it. There is a failing-by-design
+  // test recording this in `runtime-permissions.test.ts`.
   if (stale && optionId !== undefined) {
     const known = catalogued?.options.find((entry) => entry.optionId === optionId);
     if (known && !grantIsPerCall(known)) return UNKNOWN_SEMANTICS;

@@ -360,6 +360,30 @@ describe('a measurement that has simply aged out', () => {
 });
 
 describe('the limit this cannot reach', () => {
+  it('cannot see a renamed option whose ACP kind lies about it', () => {
+    // Recorded as failing-by-design, to the same standard as the reused-id
+    // gap below — the escape to the spec default is only safe when the
+    // renamed id's kind is honest.
+    //
+    // Keeping the id is caught by the asymmetry…
+    const moved = { name: '@agentclientprotocol/claude-agent-acp', version: '0.99.0' };
+    assert.equal(
+      grantIsOfferable(optionSemantics('claude-code', { optionId: 'exit-plan-default', kind: 'allow_once' }, moved)),
+      false,
+    );
+
+    // …but renaming it is not. `exit-plan-manual` is unknown to the
+    // catalogue, so it lands on SPEC_DEFAULTS.allow_once and becomes an
+    // offerable per-call allow the run scope takes automatically. That is
+    // QUIN-53's bug through a rename, and it is asserted here rather than
+    // hidden: a renamed lying id is indistinguishable at the payload from a
+    // new honest per-call option, and refusing every unrecognised
+    // `allow_once` would kill "degraded, not dead" for plain renames.
+    const renamed = optionSemantics('claude-code', { optionId: 'exit-plan-manual', kind: 'allow_once' }, moved);
+    assert.equal(grantIsPerCall(renamed), true, 'reads as per-call, which it is not');
+    assert.equal(grantIsOfferable(renamed), true, 'and is therefore offered — the gap, stated');
+  });
+
   it('cannot see an option id that kept its name and widened its meaning', () => {
     // Recorded as a failing-by-design case rather than left implicit.
     //

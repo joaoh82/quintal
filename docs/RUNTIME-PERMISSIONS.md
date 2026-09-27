@@ -283,6 +283,9 @@ grant got narrower. Without that asymmetry `exit-plan-default` — kind
 allow and the card would say "Allow once" about leaving plan mode, which is
 the exact bug this catalogue was built to stop.
 
+That asymmetry is keyed on the option id, so a **rename escapes it**, and the
+escape is only safe when the renamed id's kind is honest. See below.
+
 Ageing out is treated differently from moving. An expired entry fails the
 test suite, which is a change somebody makes and reviews; it does **not**
 degrade a live office. A measurement going unrefreshed is a debt this
@@ -291,12 +294,24 @@ owner's buttons should not narrow one morning because a date passed.
 
 ### What this still cannot see
 
-An option id that keeps its name and widens its meaning under the *same*
+Two gaps, both uncloseable from the payload, both bounded by the same thing:
+the meaning can only drift under a release, and a release that moves the
+version stops the catalogue being trusted at all. Re-probing is what actually
+closes either. Each has a failing-by-design test in
+`runtime-permissions.test.ts`.
+
+**A renamed option whose ACP kind lies about it.** The stale-evidence
+asymmetry above is keyed on the option id. A moved adapter that renames
+`exit-plan-default` while keeping kind `allow_once` is unknown to the
+catalogue, lands on the spec default, and becomes an offerable per-call allow
+the `run` scope takes automatically — QUIN-53's bug, through a rename. It
+cannot be closed here: a renamed lying id is indistinguishable at the payload
+from a genuinely new, honest per-call option, and refusing every unrecognised
+`allow_once` would kill "degraded, not dead" for the far commoner case of a
+plain rename.
+
+**An option id that keeps its name and widens its meaning** under the *same*
 version. If a future `claude-agent-acp` 0.81.2 started persisting
 `allow-with-updates`, the catalogue would keep describing it as
 session-scoped and the button would keep promising that. The difference is
-not in the payload, only in behaviour, so nothing in the tree notices. The
-version check is what makes it survivable rather than closed: the meaning can
-only drift under a release, and a release that moves the version stops the
-catalogue being trusted at all. There is a failing-by-design test recording
-this limit in `runtime-permissions.test.ts`.
+not in the payload, only in behaviour, so nothing in the tree notices.
