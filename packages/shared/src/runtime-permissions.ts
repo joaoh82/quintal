@@ -103,7 +103,31 @@ export interface RuntimePermissionProfile {
   externalGrants: string | null;
   /** ISO date the entry was last established against a real runtime. */
   verifiedAt: string;
+  /**
+   * The exact adapter this was measured against, so a moved one can be seen.
+   *
+   * The evidence strings say this in prose already, but prose cannot be
+   * compared to a handshake. `agentInfo` at `initialize` gives a name and a
+   * version; this is the pair it is checked against. Null where nothing was
+   * measured at all — an `unknown` profile has no version to have moved from.
+   */
+  verifiedAgainst: AdapterIdentity | null;
 }
+
+/** An adapter as it names itself at `initialize`. */
+export interface AdapterIdentity {
+  name: string;
+  version: string;
+}
+
+/**
+ * Bound on either half of a reported adapter identity.
+ *
+ * `agentInfo` comes off a process this machine spawned, but it reaches an
+ * owner's settings page, so it is held to a length like everything else a
+ * key holder can write there. See `HOST_REPORT_LIMITS` in `runtimes.ts`.
+ */
+export const ADAPTER_IDENTITY_MAX_LENGTH = 128;
 
 /** Everything not established. The answer for an option nobody has measured. */
 export const UNKNOWN_SEMANTICS: RuntimeOptionSemantics = {
@@ -197,6 +221,7 @@ const CLAUDE_CODE: RuntimePermissionProfile = {
   externalGrants:
     'Claude Code keeps its own allow rules in ~/.claude/settings.json (and a project .claude/settings.local.json). Quintal neither writes nor reads them; they are managed with the `claude` CLI.',
   verifiedAt: '2026-09-24',
+  verifiedAgainst: { name: '@agentclientprotocol/claude-agent-acp', version: '0.81.2' },
 };
 
 const OMP: RuntimePermissionProfile = {
@@ -246,6 +271,7 @@ const OMP: RuntimePermissionProfile = {
   ],
   externalGrants: null,
   verifiedAt: '2026-09-24',
+  verifiedAgainst: { name: 'oh-my-pi', version: '18.2.6' },
 };
 
 const CODEX: RuntimePermissionProfile = {
@@ -257,6 +283,7 @@ const CODEX: RuntimePermissionProfile = {
   externalGrants:
     'Codex decides in-process from its own approval policy and sandbox settings (~/.codex/config.toml). Nothing about those decisions reaches Quintal, and Quintal cannot change or revoke them.',
   verifiedAt: '2026-09-24',
+  verifiedAgainst: { name: '@agentclientprotocol/codex-acp', version: '1.13.1' },
 };
 
 const OPENCODE: RuntimePermissionProfile = {
@@ -268,6 +295,7 @@ const OPENCODE: RuntimePermissionProfile = {
   externalGrants:
     "opencode decides from its own `permission` configuration. Quintal neither sees nor changes it.",
   verifiedAt: '2026-09-24',
+  verifiedAgainst: { name: 'opencode', version: '1.4.3' },
 };
 
 const GEMINI: RuntimePermissionProfile = {
@@ -278,6 +306,7 @@ const GEMINI: RuntimePermissionProfile = {
   options: [],
   externalGrants: null,
   verifiedAt: '2026-09-24',
+  verifiedAgainst: null,
 };
 
 const GOOSE: RuntimePermissionProfile = {
@@ -287,6 +316,7 @@ const GOOSE: RuntimePermissionProfile = {
   options: [],
   externalGrants: null,
   verifiedAt: '2026-09-24',
+  verifiedAgainst: null,
 };
 
 export const RUNTIME_PERMISSIONS: readonly RuntimePermissionProfile[] = [
@@ -301,6 +331,88 @@ export const RUNTIME_PERMISSIONS: readonly RuntimePermissionProfile[] = [
 /** What has been established about one runtime, or nothing. */
 export function permissionProfile(runtimeId: string): RuntimePermissionProfile | undefined {
   return RUNTIME_PERMISSIONS.find((profile) => profile.runtimeId === runtimeId);
+}
+
+/**
+ * How long a measurement is allowed to stand before it is only a rumour.
+ *
+ * Six months is a judgement, not a finding. It is long enough that nobody is
+ * re-probing on a treadmill and short enough that an entry cannot quietly
+ * outlive the adapter it describes by a year. The catalogue test fails when
+ * an entry passes it, so the window is enforced against the tree rather than
+ * against anybody's memory.
+ */
+export const VERIFICATION_WINDOW_DAYS = 183;
+
+/** Why a profile's measured facts should no longer be trusted. */
+export type StalenessReason =
+  /** The adapter now names a different version than the one measured. */
+  | 'version_moved'
+  /** Nothing has been re-measured inside the verification window. */
+  | 'expired';
+
+export interface Staleness {
+  reason: StalenessReason;
+  /** What the catalogue was measured against. */
+  catalogued: string;
+  /** What is actually running, when that is what moved. */
+  observed: string | null;
+}
+
+/**
+ * Whether what is running is still the thing that was measured.
+ *
+ * Only ever positive about a *difference*. An unobserved version is not a
+ * mismatch — most callers never see a handshake, and treating "did not look"
+ * as "moved" would degrade every path in the office to the spec fallback.
+ *
+ * A changed name counts as much as a changed version: an adapter that renamed
+ * itself is not the adapter the evidence describes, whatever its numbering.
+ */
+export function adapterMoved(
+  profile: RuntimePermissionProfile,
+  observed: AdapterIdentity | null | undefined,
+): Staleness | null {
+  const measured = profile.verifiedAgainst;
+  if (!measured || !observed) return null;
+  if (measured.name === observed.name && measured.version === observed.version) return null;
+  return {
+    reason: 'version_moved',
+    catalogued: `${measured.name} ${measured.version}`,
+    observed: `${observed.name} ${observed.version}`,
+  };
+}
+
+/** Whether the measurement has simply aged out, whatever is running. */
+export function verificationExpired(
+  profile: RuntimePermissionProfile,
+  now: Date = new Date(),
+): Staleness | null {
+  const verified = Date.parse(`${profile.verifiedAt}T00:00:00Z`);
+  if (Number.isNaN(verified)) return null;
+  const days = (now.getTime() - verified) / 86_400_000;
+  if (days <= VERIFICATION_WINDOW_DAYS) return null;
+  return { reason: 'expired', catalogued: profile.verifiedAt, observed: null };
+}
+
+/**
+ * Whether this profile's measured facts still stand — and if not, why.
+ *
+ * The reporting view, for a warning line or a settings page: it answers for
+ * both triggers. The decision path in `optionSemantics` uses `adapterMoved`
+ * alone and says there why.
+ *
+ * A profile with nothing measured (`verifiedAgainst: null`, no options) can
+ * never go stale: there is nothing to have moved out from under. Saying so
+ * here keeps `unknown` reachable rather than collapsing it into `expired`.
+ */
+export function profileStaleness(
+  profile: RuntimePermissionProfile,
+  observed?: AdapterIdentity | null,
+  now: Date = new Date(),
+): Staleness | null {
+  if (!profile.verifiedAgainst) return null;
+  return adapterMoved(profile, observed) ?? verificationExpired(profile, now);
 }
 
 /**
@@ -348,14 +460,68 @@ const SPEC_DEFAULTS: Readonly<Record<string, RuntimeOptionSemantics>> = {
  * The id comes first because that is where the meaning actually lives: two
  * options of the same kind in the same request can differ by everything that
  * matters, which is exactly the Claude Code plan-exit case.
+ *
+ * `observed` is the adapter as it named itself at `initialize`, when the
+ * caller has a handshake to hand. When it does not, the catalogue is trusted
+ * as before — "did not look" must not read as "moved", or every path that
+ * never sees a handshake would degrade for no reason.
  */
 export function optionSemantics(
   runtimeId: string,
   option: { optionId?: unknown; kind?: unknown },
+  observed?: AdapterIdentity | null,
 ): RuntimeOptionSemantics {
-  const profile = permissionProfile(runtimeId);
+  const catalogued = permissionProfile(runtimeId);
+  // A moved adapter is not the one the catalogue measured, so its entries
+  // stop being evidence about what is running now, and lookup degrades to
+  // `SPEC_DEFAULTS` — the state an uncatalogued runtime is already in, where
+  // `allow_once` still resolves and `allow_always` is refused as unexplained.
+  // Usable rather than dead, and a path already in the tree rather than a
+  // second one to reason about.
+  //
+  // Expiry deliberately does *not* degrade here. `verificationExpired` fails
+  // the catalogue test, which is a change somebody makes and reviews; making
+  // it degrade live would mean an office's buttons quietly narrowing one
+  // morning because a date passed, with no adapter having moved and nothing
+  // in the tree different. A measurement going unrefreshed is a debt owed by
+  // this repository, not a fact about the runtime on somebody's laptop.
+  const stale = catalogued !== undefined && adapterMoved(catalogued, observed) !== null;
+  const profile = stale ? undefined : catalogued;
   const optionId = typeof option.optionId === 'string' ? option.optionId : undefined;
   const kind = typeof option.kind === 'string' ? option.kind : undefined;
+
+  // Stale evidence is still enough to refuse with, just not to allow with.
+  //
+  // The asymmetry matters, and dropping it re-opens the bug QUIN-53 closed.
+  // Claude Code's `exit-plan-default` carries kind `allow_once` while really
+  // being a session-policy switch; degrade it to its kind and the spec
+  // default makes it per-call, so the run scope takes it automatically and
+  // the card says "Allow once" — exactly the false promise the catalogue was
+  // built to stop, reappearing the moment an adapter bumps.
+  //
+  // "This option was measured as broader than per-call" is a fact about how
+  // this runtime names things, and a version bump is no reason to believe it
+  // got *narrower*. So a known-broad id stays unexplained rather than
+  // reverting to its kind.
+  //
+  // A rename escapes this, and that escape is **not** always safe. It is
+  // safe when the renamed id's kind is honest. It is not when the kind
+  // lies: a moved adapter that renames `exit-plan-default` while keeping
+  // kind `allow_once` is unknown to the catalogue, lands on the spec
+  // default, and becomes an offerable per-call allow the `run` scope takes
+  // automatically — QUIN-53's bug, re-opened through a rename.
+  //
+  // It is uncloseable here. A renamed lying id is indistinguishable at the
+  // payload from a genuinely new, honest per-call option, and refusing every
+  // unrecognised `allow_once` would kill "degraded, not dead" for the far
+  // commoner case of a plain rename. What bounds it is the same thing that
+  // bounds the reused-id gap: it needs a release that also moves the version,
+  // and re-probing is what actually closes it. There is a failing-by-design
+  // test recording this in `runtime-permissions.test.ts`.
+  if (stale && optionId !== undefined) {
+    const known = catalogued?.options.find((entry) => entry.optionId === optionId);
+    if (known && !grantIsPerCall(known)) return UNKNOWN_SEMANTICS;
+  }
   if (profile && optionId !== undefined) {
     const exact = profile.options.find((entry) => entry.optionId === optionId);
     if (exact) return exact;

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type * as schema from '@agentclientprotocol/sdk';
-import type { RuntimeModels } from '@quintal/shared';
+import { ADAPTER_IDENTITY_MAX_LENGTH, type AdapterIdentity, type RuntimeModels } from '@quintal/shared';
 
 import { AgentProcess } from './acp/agent-process.js';
 
@@ -99,6 +99,20 @@ export function pickModel(
 /** How long a runtime gets to start, open a session, and say what it offers. */
 export const PROBE_TIMEOUT_MS = 25_000;
 
+/** What one probe of a runtime established, in one spawn. */
+export interface RuntimeProbe {
+  /** See `probeModels`: list, null for "no choice", undefined for "not asked". */
+  models: RuntimeModels | null | undefined;
+  /**
+   * The adapter as it named itself at `initialize`.
+   *
+   * Free here: the handshake has to happen before a session can be opened,
+   * so asking who answered costs nothing on top of the model probe. Null
+   * when the runtime never got that far, or did not say.
+   */
+  adapter: AdapterIdentity | null;
+}
+
 /**
  * Ask a runtime which models it offers, by opening and closing one session.
  *
@@ -107,10 +121,12 @@ export const PROBE_TIMEOUT_MS = 25_000;
  * dropped. Best-effort: a runtime that hangs, crashes, or answers without a
  * model option is reported as "no choice", which is true as far as the
  * office is concerned.
+ *
+ * The adapter's own name and version come back alongside, because the
+ * permission catalogue is measured against an exact adapter and this is the
+ * one place the fleet already pays for a handshake. See QUIN-73.
  */
-export async function probeModels(
-  command: string[],
-): Promise<RuntimeModels | null | undefined> {
+export async function probeRuntime(command: string[]): Promise<RuntimeProbe> {
   const cwd = mkdtempSync(join(tmpdir(), 'quintal-probe-'));
   const proc = new AgentProcess({
     command,
@@ -123,8 +139,19 @@ export async function probeModels(
   // offers no choice. Undefined: it never answered — a cold `npx` on a slow
   // network, a crash — and "not asked" is the honest report, so the office
   // keeps waiting rather than showing "no choice" for a runtime that has one.
+  let adapter: AdapterIdentity | null = null;
   const attempt = (async (): Promise<RuntimeModels | null | undefined> => {
-    await proc.start();
+    const info = await proc.start();
+    // Recorded before the session is opened: a runtime that handshakes and
+    // then fails at `session/new` has still told us who it is, and that is
+    // exactly the case the catalogue wants to hear about.
+    adapter =
+      info.agentInfo?.name && info.agentInfo.version
+        ? {
+            name: info.agentInfo.name.slice(0, ADAPTER_IDENTITY_MAX_LENGTH),
+            version: info.agentInfo.version.slice(0, ADAPTER_IDENTITY_MAX_LENGTH),
+          }
+        : null;
     const session = await proc.newSession({ cwd, mcpServers: [] } as schema.NewSessionRequest);
     return modelOption((session as { configOptions?: unknown }).configOptions);
   })().catch((): undefined => undefined);
@@ -137,7 +164,7 @@ export async function probeModels(
   });
 
   try {
-    return await Promise.race([attempt, deadline]);
+    return { models: await Promise.race([attempt, deadline]), adapter };
   } finally {
     clearTimeout(timer);
     proc.stop();

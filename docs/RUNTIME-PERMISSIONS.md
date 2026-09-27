@@ -238,3 +238,80 @@ Then update `packages/shared/src/runtime-permissions.ts`, re-record
 `packages/acp-harness/test/fixtures/runtime-options.json` from the probe
 output, and update this page. The tests read the fixtures, so an adapter that
 renames an option id fails them loudly rather than quietly widening a grant.
+
+### Knowing when to
+
+Every entry carries `verifiedAgainst`: the exact adapter its semantics were
+measured from, as it names itself at `initialize`. Three things check it, so
+nobody has to remember to.
+
+```sh
+pnpm exec tsx packages/acp-harness/scripts/probe-permissions.mts --check
+pnpm exec tsx packages/acp-harness/scripts/probe-permissions.mts --write-fixture
+```
+
+`--check` spawns each runtime, compares what it says it is against what the
+catalogue was measured against, prints one line per runtime and exits non-zero
+when anything moved. `--write-fixture` writes the recorded option arrays,
+fixture-shaped and with `_agent` filled in, to a `.recorded.json` sidecar —
+diff it against the real fixture and carry over what changed. It is a sidecar
+on purpose: the fixture's probe names (`edit-in-manual-mode`) are curated and
+the tests quote them.
+
+Alongside those, without anyone running anything:
+
+- **The fleet warns.** Every worker compares the handshake's `agentInfo`
+  against the catalogue at start-up and logs a warning naming both versions.
+- **The settings page says so**, under the runtime, in amber.
+- **The tests fail** when an entry ages past `VERIFICATION_WINDOW_DAYS`
+  (183 days), and when the fixture's `_agent` and the catalogue's
+  `verifiedAgainst` stop agreeing.
+
+### What a moved adapter changes
+
+A runtime whose observed adapter differs from `verifiedAgainst` stops being
+read through the catalogue. Lookup degrades to what ACP itself defines, which
+is the state an uncatalogued runtime is already in: `allow_once` still
+resolves, so a per-call **Allow** survives, and `allow_always` has no spec
+default and is refused as unexplained. Degraded, not dead.
+
+One thing is kept from the stale entry: an option id measured as *broader*
+than per-call stays unofferable. Stale evidence cannot license an allow, but
+it can still license a refusal, and a version bump is no reason to believe a
+grant got narrower. Without that asymmetry `exit-plan-default` — kind
+`allow_once`, really a session-policy switch — would degrade into a per-call
+allow and the card would say "Allow once" about leaving plan mode, which is
+the exact bug this catalogue was built to stop.
+
+That asymmetry is keyed on the option id, so a **rename escapes it**, and the
+escape is only safe when the renamed id's kind is honest. See below.
+
+Ageing out is treated differently from moving. An expired entry fails the
+test suite, which is a change somebody makes and reviews; it does **not**
+degrade a live office. A measurement going unrefreshed is a debt this
+repository owes, not a fact about the runtime on somebody's laptop, and an
+owner's buttons should not narrow one morning because a date passed.
+
+### What this still cannot see
+
+Two gaps, both uncloseable from the payload, both bounded by the same thing:
+the meaning can only drift under a release, and a release that moves the
+version stops the catalogue being trusted at all. Re-probing is what actually
+closes either. Each has a failing-by-design test in
+`runtime-permissions.test.ts`.
+
+**A renamed option whose ACP kind lies about it.** The stale-evidence
+asymmetry above is keyed on the option id. A moved adapter that renames
+`exit-plan-default` while keeping kind `allow_once` is unknown to the
+catalogue, lands on the spec default, and becomes an offerable per-call allow
+the `run` scope takes automatically — QUIN-53's bug, through a rename. It
+cannot be closed here: a renamed lying id is indistinguishable at the payload
+from a genuinely new, honest per-call option, and refusing every unrecognised
+`allow_once` would kill "degraded, not dead" for the far commoner case of a
+plain rename.
+
+**An option id that keeps its name and widens its meaning** under the *same*
+version. If a future `claude-agent-acp` 0.81.2 started persisting
+`allow-with-updates`, the catalogue would keep describing it as
+session-scoped and the button would keep promising that. The difference is
+not in the payload, only in behaviour, so nothing in the tree notices.

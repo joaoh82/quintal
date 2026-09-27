@@ -2,7 +2,7 @@ import { acpCommandFor, isUsable, runtimeById, type RuntimeStatus } from '@quint
 import { redactSecrets } from './secrets.js';
 
 import type { AgentConfig } from './config.js';
-import { probeModels } from './models.js';
+import { probeRuntime } from './models.js';
 import { AgentRunner, type RunnerState } from './runner/AgentRunner.js';
 import { detectRuntimes, hostLabel } from './runtimes.js';
 
@@ -181,10 +181,22 @@ export class Supervisor {
           const spec = runtimeById(status.id);
           const command = spec ? acpCommandFor(spec) : null;
           if (!command) return status;
-          const models = await probeModels(command);
+          const { models, adapter } = await probeRuntime(command);
           // A probe that never answered leaves the key off: "not asked" is
           // what the office should show, not "offers no choice".
-          return models === undefined ? status : { ...status, models };
+          // A null adapter is omitted rather than reported, which collapses
+          // "asked, and it did not say" into "not asked" — a distinction
+          // `normaliseHostReport` otherwise keeps. Deliberate: omitting
+          // leaves the stored identity alone, so a re-probe that fails to
+          // handshake keeps the last known adapter instead of blanking it,
+          // and the settings page goes on showing something true. If the
+          // page ever needs to tell "answered without identity" from "never
+          // probed", `adapter` needs the three-way treatment `models` has.
+          return {
+            ...status,
+            ...(models !== undefined ? { models } : {}),
+            ...(adapter !== null ? { adapter } : {}),
+          };
         }),
       );
       const stillLive = runners.find((runner) => runner.connected);

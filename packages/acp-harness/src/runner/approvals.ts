@@ -1,4 +1,9 @@
-import type { ApprovalOption, ApprovalRequest, RuntimeOptionSemantics } from '@quintal/shared';
+import type {
+  AdapterIdentity,
+  ApprovalOption,
+  ApprovalRequest,
+  RuntimeOptionSemantics,
+} from '@quintal/shared';
 import {
   activityText,
   compareGrants,
@@ -103,13 +108,17 @@ function kindOf(option: OfferedOption): string | null {
  * is the same rule as "no button promises what it cannot explain", applied
  * one layer down.
  */
-export function pickAllow(runtimeId: string, options: unknown): AllowChoice | null {
+export function pickAllow(
+  runtimeId: string,
+  options: unknown,
+  observed?: AdapterIdentity | null,
+): AllowChoice | null {
   const candidates = offered(options)
     .filter((option) => kindOf(option)?.startsWith('allow') === true)
     .map((option) => ({
       optionId: option.optionId as string,
       kind: kindOf(option),
-      semantics: optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind }),
+      semantics: optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind }, observed),
     }))
     // Explainable *and* not a quiet purchase of less asking later. A
     // loosening option is dropped here rather than ranked last, so no
@@ -130,10 +139,14 @@ export function pickAllow(runtimeId: string, options: unknown): AllowChoice | nu
  * whole module exists to stop. With no per-call refusal we answer
  * `cancelled`, which every ACP agent must accept.
  */
-export function pickReject(runtimeId: string, options: unknown): AllowChoice | null {
+export function pickReject(
+  runtimeId: string,
+  options: unknown,
+  observed?: AdapterIdentity | null,
+): AllowChoice | null {
   for (const option of offered(options)) {
     if (kindOf(option) !== 'reject_once') continue;
-    const semantics = optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind });
+    const semantics = optionSemantics(runtimeId, { optionId: option.optionId, kind: option.kind }, observed);
     // An unmeasured `reject_once` is still a refusal of this one call: that
     // is what the kind means in ACP, and refusing less is the safe direction.
     return { optionId: option.optionId as string, kind: 'reject_once', semantics };
@@ -154,8 +167,12 @@ export function pickReject(runtimeId: string, options: unknown): AllowChoice | n
  * one than a button that guesses. A runtime that offers no reject still gets
  * Deny: a cancelled outcome is a refusal by another name.
  */
-export function supportedOptions(runtimeId: string, options: unknown): ApprovalOption[] {
-  const allow = pickAllow(runtimeId, options);
+export function supportedOptions(
+  runtimeId: string,
+  options: unknown,
+  observed?: AdapterIdentity | null,
+): ApprovalOption[] {
+  const allow = pickAllow(runtimeId, options, observed);
   return [
     ...(allow ? [{ id: 'allow_once' as const, label: grantLabel(allow.semantics) }] : []),
     { id: 'deny' as const, label: 'Deny' },
@@ -196,9 +213,10 @@ export function chooseRuntimeOption(
   options: unknown,
   decision: PermissionDecision,
   automatic = false,
+  observed?: AdapterIdentity | null,
 ): RuntimeSelection {
   if (decision === 'deny') {
-    const reject = pickReject(runtimeId, options);
+    const reject = pickReject(runtimeId, options, observed);
     return {
       optionId: reject?.optionId ?? null,
       kind: reject?.kind ?? null,
@@ -208,7 +226,7 @@ export function chooseRuntimeOption(
     };
   }
 
-  const allow = pickAllow(runtimeId, options);
+  const allow = pickAllow(runtimeId, options, observed);
   if (!allow) {
     return {
       optionId: null,

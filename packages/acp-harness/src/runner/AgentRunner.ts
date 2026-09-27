@@ -17,6 +17,7 @@ import {
   isAddressed,
   parseAgentCommand,
   type RuntimeStatus,
+  type AdapterIdentity,
   type AgentActivity,
   type AgentBanterEvent,
   type AgentChannelChatEvent,
@@ -310,6 +311,22 @@ export class AgentRunner {
    */
   get #runtimeId(): string {
     return runtimeIdOf(this.config);
+  }
+
+  /**
+   * The adapter this agent's runtime actually is, once one has said so.
+   *
+   * Read off the pool rather than stored, and taken from whichever worker
+   * has answered: every worker of an agent runs the same command, so the
+   * handshake's `agentInfo` is a fact about the runtime and not about the
+   * process. Null before the first handshake — and null means "did not
+   * look", which leaves the catalogue trusted exactly as it was.
+   */
+  get #adapter(): AdapterIdentity | null {
+    for (const worker of this.#pool?.workers() ?? []) {
+      if (worker.adapter) return worker.adapter;
+    }
+    return null;
   }
 
   get connected(): boolean {
@@ -1848,7 +1865,7 @@ export class AgentRunner {
     const options = params.options as Array<{ optionId: string; kind?: string }>;
 
     if (ready?.scopes?.includes('run')) {
-      const choice = chooseRuntimeOption(this.#runtimeId, options, 'once', true);
+      const choice = chooseRuntimeOption(this.#runtimeId, options, 'once', true, this.#adapter);
       const allowed = choice.optionId !== null;
       const requestId = randomUUID();
       const turnId = String(
@@ -1914,7 +1931,7 @@ export class AgentRunner {
       ...this.#approvalTarget(scope),
       toolName,
       summary: summariseToolCall(params.toolCall, 400, toolName),
-      options: supportedOptions(this.#runtimeId, options),
+      options: supportedOptions(this.#runtimeId, options, this.#adapter),
       askedAt: now,
       expiresAt: now + PERMISSION_TIMEOUT_MS,
     };
@@ -1962,7 +1979,7 @@ export class AgentRunner {
       if (turn) this.#publicTurns.get(turn.id)?.state('running');
     }
 
-    const choice = chooseRuntimeOption(this.#runtimeId, options, decision);
+    const choice = chooseRuntimeOption(this.#runtimeId, options, decision, false, this.#adapter);
     this.#auditPermission({
       requestId: request.requestId,
       toolName,
@@ -2107,7 +2124,10 @@ export class AgentRunner {
     // from the options kept here — so this should never fire. Checked anyway:
     // the alternative is a resolution reading `allowed` while the runtime is
     // told `cancelled`, which is the exact mismatch the text path had.
-    if (allowed && chooseRuntimeOption(this.#runtimeId, pending.options, 'once').optionId === null) {
+    if (
+      allowed &&
+      chooseRuntimeOption(this.#runtimeId, pending.options, 'once', false, this.#adapter).optionId === null
+    ) {
       this.#log('warn', `allow for ${pending.request.toolName} has no selectable option — denying`);
       allowed = false;
     }
@@ -2182,7 +2202,7 @@ export class AgentRunner {
     const request = match.approval.request;
     const owner = this.#gateway.ready?.ownerName ?? 'owner';
     if (decision !== 'deny') {
-      const choice = chooseRuntimeOption(this.#runtimeId, match.approval.options, decision);
+      const choice = chooseRuntimeOption(this.#runtimeId, match.approval.options, decision, false, this.#adapter);
       if (choice.optionId === null) {
         this.#speak(
           `I can't allow that: nothing ${this.#runtimeId} offered for it can be explained, so there is no allow I can stand behind. Denying it — which is why the card offered only Deny.`,

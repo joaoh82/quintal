@@ -5,6 +5,14 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { PublicApprovalRequest, PublicApprovalResolved } from '@quintal/shared';
+import {
+  GRANT_BREADTHS,
+  GRANT_LIFETIMES,
+  RUNTIME_PERMISSIONS,
+  activityText,
+  grantIsOfferable,
+  grantLabel,
+} from '@quintal/shared';
 
 import {
   EMPTY_APPROVALS,
@@ -174,5 +182,59 @@ describe('the approval card on screen', () => {
     const bare = request({ summary: '' });
     const html = await render(bare, receiveApproval(EMPTY_APPROVALS, bare), true);
     assert.match(html, /did not say what it would do/);
+  });
+});
+
+/**
+ * The label-width half of QUIN-72.
+ *
+ * The human pass over the live card — is it legible under a countdown, is
+ * the amber pill findable, does the private strip look like yours — is still
+ * outstanding and is recorded as such in docs/verification/QUIN-72. What can
+ * be settled without a person looking is whether the *longest* thing the
+ * button can say survives the cap it is sliced by, and that is settled here:
+ * QUIN-53 made the label variable, and a label clipped from "Allow here,
+ * this session" to "Allow here" would be exactly the false promise QUIN-53
+ * removed.
+ */
+describe('the widest the allow button can get', () => {
+  it('fits every label grantLabel can produce inside the 40-character cap', () => {
+    // `parseApproval` slices each label with `activityText(label, 40)`. A
+    // label longer than that is silently truncated on the way to the card,
+    // and the truncation lands mid-phrase rather than at a word.
+    const labels = new Set<string>();
+    for (const breadth of GRANT_BREADTHS) {
+      for (const lifetime of GRANT_LIFETIMES) {
+        labels.add(grantLabel({
+          breadth,
+          lifetime,
+          persistsAt: null,
+          loosensFuturePermission: false,
+          evidence: 'synthetic',
+        }));
+      }
+    }
+    assert.ok(labels.size > 1, 'the label really is variable');
+    for (const label of labels) {
+      assert.equal(
+        activityText(label, 40),
+        label,
+        `"${label}" (${label.length} chars) is clipped by the 40-character option-label cap`,
+      );
+    }
+  });
+
+  it('never clips a label into one that promises less than it grants', () => {
+    // The specific failure worth naming: truncation must not turn a
+    // session-scoped grant into what reads as a narrower one. Checked
+    // against the real catalogue rather than synthetic semantics.
+    for (const profile of RUNTIME_PERMISSIONS) {
+      for (const entry of profile.options) {
+        if (!grantIsOfferable(entry)) continue;
+        const label = grantLabel(entry);
+        const shown = activityText(label, 40);
+        assert.equal(shown, label, `${profile.runtimeId}/${entry.optionId} clips to "${shown}"`);
+      }
+    }
   });
 });
