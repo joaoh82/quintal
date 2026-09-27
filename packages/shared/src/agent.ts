@@ -64,6 +64,18 @@ export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
 export const RUN_SCOPE_WITHDRAWAL_NOTE =
   'Quintal stops answering for it from its next session. Allow rules kept by the runtime itself are not revoked by this \u2014 they live in the runtime\u2019s own settings and are removed there.';
 
+/**
+ * What withdrawing `run` does on a runtime that has never been seen to ask.
+ *
+ * A companion rather than an edit, because the general note above is still
+ * true wherever the runtime does ask. Where it never has, "Quintal stops
+ * answering for it" describes stopping something that never happened, and an
+ * owner would come away believing they had taken authority back. They have
+ * not; the runtime never gave Quintal any.
+ */
+export const RUN_SCOPE_WITHDRAWAL_NOTE_NEVER_ASKS =
+  'Nothing observable changes. This agent\u2019s runtime has never been seen to ask Quintal for permission, so there was nothing for Quintal to stop answering — what the agent may do is decided inside the runtime, by the runtime\u2019s own settings.';
+
 /** Parse the `scopes` JSON column, discarding anything unrecognised. */
 export function parseScopes(raw: unknown): AgentScope[] {
   if (!Array.isArray(raw)) return [...DEFAULT_AGENT_SCOPES];

@@ -9,7 +9,6 @@ import {
   AGENT_PARALLELISM_MIN,
   AGENT_SCOPE_NOTES,
   AGENT_SCOPES,
-  RUN_SCOPE_WITHDRAWAL_NOTE,
   AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
@@ -29,6 +28,7 @@ import { useActionState, useState } from 'react';
 import { RelativeTime } from '@/components/RelativeTime';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { askingCaveat, runWithdrawalNote } from '@/lib/runtime-asking';
 
 import {
   assignAgentAction,
@@ -262,6 +262,15 @@ export function AgentsManager({
                 </label>
               ))}
             </div>
+            {/* The same notice the saved agent gets, before the decision
+                rather than after it. An owner picks a runtime and unchecks
+                `run` in one pass here, and a Codex agent can be booting a few
+                seconds later — telling them afterwards is telling them too
+                late. Gated on a machine being chosen because that is when a
+                runtime is real: `createAgentAction` treats runtime and machine
+                as all-or-nothing, and the saved row gates its badge the same
+                way. */}
+            {newHost ? <AskingCaveatNotice runtimeId={newRuntime} /> : null}
           </fieldset>
 
           <label className="flex flex-col gap-1">
@@ -510,6 +519,11 @@ function AgentRow({
         </span>
       ) : null}
 
+      {/* Whether this runtime has ever been seen to ask about tools. On the
+          row because the row is where an owner scans a fleet and decides which
+          agent to open. */}
+      {agent.hostLabel !== null ? <AsksBadge runtimeId={agent.runtimeId} /> : null}
+
       {/* What it can reach on disk, for the same reason its owner's name is
           here: the answer should not require reading a file on another machine. */}
       <WorkspaceBadge path={agent.workspacePath} />
@@ -750,6 +764,47 @@ function AgentProfileForm({
 }
 
 /**
+ * That this runtime has never been seen to ask, in two or three words.
+ *
+ * A plain label and not a warning colour: an agent on Codex is a legitimate
+ * thing to run, and this informs that choice rather than discouraging it. The
+ * `title` carries the full claim, which the badge alone is too short to make.
+ */
+function AsksBadge({ runtimeId }: { runtimeId: string | null }) {
+  const caveat = askingCaveat(runtimeId);
+  if (!caveat) return null;
+  return (
+    <span
+      className="text-muted-foreground border-muted-foreground/30 rounded border border-dashed px-1.5 py-0.5 text-[11px]"
+      title={caveat.headline}
+    >
+      {caveat.badge}
+    </span>
+  );
+}
+
+/**
+ * The limit, said where the `run` checkbox is.
+ *
+ * Under the whole fieldset rather than beside the checkbox, because it is true
+ * whether or not `run` is ticked — the owner who leaves it off is the one most
+ * likely to believe they will be asked. `externalGrants` is printed with it
+ * because it names the file that does decide.
+ */
+function AskingCaveatNotice({ runtimeId }: { runtimeId: string | null }) {
+  const caveat = askingCaveat(runtimeId);
+  if (!caveat) return null;
+  return (
+    <p className="text-muted-foreground border-muted-foreground/25 rounded border border-dashed px-2 py-1.5 text-xs">
+      <span className="text-foreground font-medium">{caveat.badge}.</span> {caveat.headline}
+      {caveat.externalGrants ? (
+        <span className="mt-1 block">{caveat.externalGrants}</span>
+      ) : null}
+    </p>
+  );
+}
+
+/**
  * What this agent is allowed to do, changeable after the fact.
  *
  * Scopes used to be set once, at creation, and never again — so an owner who
@@ -794,6 +849,7 @@ function AgentScopesForm({ agent }: { agent: AgentListEntry }) {
           ))}
         </div>
       </fieldset>
+      <AskingCaveatNotice runtimeId={agent.runtimeId} />
       <div className="flex items-center gap-3">
         <Button type="submit" size="sm" variant="outline" disabled={pending}>
           {pending ? 'Saving…' : 'Save scopes'}
@@ -810,7 +866,7 @@ function AgentScopesForm({ agent }: { agent: AgentListEntry }) {
       {mine && state.ok && state.withdrewRun ? (
         <p className="rounded border border-amber-300/40 bg-amber-300/[0.07] px-2 py-1.5 text-xs">
           <span className="font-medium">Withdrew {agent.name}&rsquo;s run scope.</span>{' '}
-          {RUN_SCOPE_WITHDRAWAL_NOTE}
+          {runWithdrawalNote(agent.runtimeId)}
         </p>
       ) : null}
     </form>
