@@ -36,9 +36,12 @@
 //! - **Crashes are bounded.** A server that exits on its own is restarted a
 //!   few times and then reported, with its last words, rather than
 //!   restarted forever behind a window that says nothing.
-//! - **It dies with the app.** Stopped on a tidy exit, and holding its stdin
-//!   open so that a crash or a force-quit closes the pipe and the server sees
-//!   EOF — the one notification that survives every way a parent can die.
+//! - **It dies with the app, the same way every time.** Its stdin is held
+//!   open for as long as this app lives, so a crash or a force-quit closes
+//!   the pipe and the server sees EOF — the one notification that survives
+//!   every way a parent can die. A tidy quit closes that same pipe on
+//!   purpose, so the graceful stop needs no signal and works on Windows,
+//!   where Node has no `SIGTERM` to receive.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -49,7 +52,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::spawn::{drain, LogBuffer, LogLine};
+use crate::spawn::{drain, wind_down, Ask, LogBuffer, LogLine};
 
 /// The word the personal office is known by everywhere it needs a key: as
 /// the active entry in the servers file, and as the slot suffix in the
@@ -1103,21 +1106,10 @@ impl Office {
         let Some(mut child) = child else {
             return;
         };
-        interrupt(&child);
-        let deadline = Instant::now() + grace;
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break;
-                }
-            }
-        }
+        // Closes the stdin pipe first, which is the ask that works on every
+        // platform, then sends SIGTERM where there is one to send. See
+        // `spawn::wind_down`.
+        wind_down(&mut child, Ask::Terminate, grace);
     }
 
     fn exited(&self) -> bool {
@@ -1179,21 +1171,6 @@ fn healthy(url: &str) -> bool {
         .call()
         .map(|response| response.status() == 200)
         .unwrap_or(false)
-}
-
-fn interrupt(child: &Child) {
-    #[cfg(unix)]
-    {
-        // SIGTERM, which the server handles by shutting Colyseus down and
-        // closing the database. Safe: a pid this process owns.
-        unsafe {
-            libc::kill(child.id() as libc::pid_t, libc::SIGTERM);
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = child;
-    }
 }
 
 #[cfg(test)]
@@ -1776,6 +1753,82 @@ mod tests {
         ));
         assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
         office.stop();
+    }
+
+    /// A quit asks the server to wind up, and the ask that has to work is the
+    /// closed stdin pipe — because on Windows it is the only one there is.
+    ///
+    /// So the fixture ignores `SIGTERM` and ends at EOF on stdin, which is
+    /// what `QUINTAL_EXIT_WITH_PARENT` makes the real server do. `stop()`
+    /// returning well inside the grace is the whole point: before this, a
+    /// Windows quit sent nothing, waited out all eight seconds and killed the
+    /// server, leaving Colyseus rooms open and the database never closed.
+    #[cfg(unix)]
+    #[test]
+    fn a_server_that_ignores_the_signal_is_still_stopped_by_its_stdin_closing() {
+        use std::os::unix::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
+        let node = dir.path().join("node");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o755)
+            .open(&node)
+            .unwrap();
+        // `cat` is the wait: it returns at EOF on stdin, and nothing else here
+        // can end the script — the signal is ignored.
+        writeln!(
+            file,
+            "#!/bin/sh\n\
+             trap '' TERM\n\
+             printf ready > {}\n\
+             cat > /dev/null\n\
+             exit 0",
+            ready.display()
+        )
+        .unwrap();
+        drop(file);
+        let entry = dir.path().join("entry.js");
+        std::fs::write(&entry, "").unwrap();
+
+        let office = Arc::new(
+            Office::prepare(
+                dir.path(),
+                Payload {
+                    node,
+                    entry,
+                    web_dir: dir.path().join("web"),
+                    manifest: Manifest::default(),
+                },
+                &"ab".repeat(32),
+                "0.5.0",
+            )
+            .expect("prepared"),
+        );
+        // It never answers `/health`; this test is about the way out, not the
+        // way in, and `stop()` is allowed from any phase.
+        office.start(|_| {});
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while std::fs::metadata(&ready).map(|m| m.len()).unwrap_or(0) == 0 {
+            assert!(Instant::now() < deadline, "the fake server never started");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        let started = Instant::now();
+        office.stop();
+        assert!(
+            started.elapsed() < GRACE,
+            "took {:?}: the closed pipe must end it, not the kill after the grace",
+            started.elapsed()
+        );
+        assert_eq!(office.status().phase, "stopped");
+        assert!(
+            office.inner.lock().unwrap().child.is_none(),
+            "nothing may be left running"
+        );
     }
 
     /// The supervisor, against a stand-in server: a shell script that answers

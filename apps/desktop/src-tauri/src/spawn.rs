@@ -457,22 +457,7 @@ impl Fleet {
         };
         drop(slot);
 
-        interrupt(&child);
-
-        let deadline = Instant::now() + grace;
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break;
-                }
-            }
-        }
+        wind_down(&mut child, Ask::Interrupt, grace);
 
         *self.last.lock().expect("last lock") = Some(FleetState::Stopped);
         Ok(())
@@ -537,27 +522,110 @@ pub(crate) fn drain<R: std::io::Read + Send + 'static>(
     });
 }
 
-/// Ask a process to wind up, rather than shooting it.
-fn interrupt(child: &Child) {
+/// Which signal a child is asked with, on the platform that has them. The
+/// harness handles `SIGINT`; the server handles `SIGTERM`.
+#[derive(Clone, Copy)]
+pub(crate) enum Ask {
+    Interrupt,
+    Terminate,
+}
+
+/// Ask a process to wind up, then insist.
+///
+/// Two ways of asking, because only one of them works everywhere.
+///
+/// - **Close the stdin pipe.** Both children we start watch it already: the
+///   write end is held open for as long as this app lives, and EOF on it is
+///   how they learn the app has gone — `QUINTAL_EXIT_WITH_PARENT`, in
+///   `apps/server/src/index.ts` and `packages/acp-harness/src/cli.ts`.
+///   Closing it deliberately is the same notification a crash or a force-quit
+///   delivers, so a tidy quit and a violent one take one path, and it needs
+///   no signal — which is what makes it the graceful stop on Windows, where
+///   Node has no `SIGTERM` to receive. Before this, a quit there asked for
+///   nothing, waited out the whole grace and killed the server: every quit
+///   was a crash from its point of view, with Colyseus rooms left open and
+///   the database never closed.
+/// - **Send the signal, on Unix.** Not redundant: it arrives without the
+///   child having to notice a pipe, and it is the path the fixtures and the
+///   shipped handlers have always taken.
+///
+/// Then wait, and kill whatever is left — a child that ignores both is still
+/// stopped, because the alternative is an office nothing can reopen.
+pub(crate) fn wind_down(child: &mut Child, ask: Ask, grace: Duration) {
+    // Taking the handle drops it, which closes the write end. Nothing is
+    // written to it, ever — the pipe is a liveness signal, not a channel.
+    drop(child.stdin.take());
+
     #[cfg(unix)]
     {
         // Safe: `kill` with a pid we own and a signal number. The worst a stale
         // pid can do is ESRCH, which we ignore — the wait loop then times out
         // and kills, the same outcome as never having sent it.
+        let signal = match ask {
+            Ask::Interrupt => libc::SIGINT,
+            Ask::Terminate => libc::SIGTERM,
+        };
         unsafe {
-            libc::kill(child.id() as libc::pid_t, libc::SIGINT);
+            libc::kill(child.id() as libc::pid_t, signal);
         }
     }
     #[cfg(not(unix))]
     {
-        // Windows has no SIGINT to send a child like this; the grace loop falls
-        // through to `kill`. Documented rather than pretended otherwise.
-        let _ = child;
+        // No signals here; the closed pipe above is the whole ask.
+        let _ = ask;
+    }
+
+    let deadline = Instant::now() + grace;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break;
+            }
+        }
     }
 }
 
 #[cfg(all(test, windows))]
 mod windows_tests {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    /// The graceful stop on Windows, where there is no signal to send.
+    ///
+    /// `pause` is waiting on stdin, so it is the smallest stand-in for a child
+    /// that watches the pipe: closing the write end has to be enough to end it.
+    /// Under a second proves it wound down on the ask rather than being waited
+    /// out and killed — which is what every quit here used to be.
+    #[test]
+    fn a_child_waiting_on_stdin_stops_when_the_pipe_closes() {
+        let mut child = Command::new("cmd")
+            .args(["/c", "pause"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("cmd /c pause");
+
+        let started = Instant::now();
+        super::wind_down(&mut child, super::Ask::Terminate, Duration::from_secs(5));
+
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "took {:?}: the closed pipe must end it, not the kill after the grace",
+            started.elapsed()
+        );
+        assert!(
+            child.try_wait().expect("reaped").is_some(),
+            "nothing may be left running"
+        );
+    }
+
     #[test]
     fn the_windows_harness_beside_the_executable_wins() {
         let dir = tempfile::tempdir().unwrap();
@@ -596,9 +664,12 @@ mod tests {
     /// with no handler installed, so the graceful stop it was checking for could
     /// not happen. It failed 9 runs in 10 in the suite and passed 12 in 12
     /// alone, which is exactly the shape of a timing assumption.
+    /// Content, not existence: `> file` creates it before the `printf` that
+    /// fills it has run, so a test that read it on sight got an empty string
+    /// under a busy parallel run. Every fixture here writes something.
     fn wait_for(path: &Path) {
         let deadline = Instant::now() + Duration::from_secs(10);
-        while !path.exists() {
+        while std::fs::metadata(path).map(|m| m.len()).unwrap_or(0) == 0 {
             assert!(Instant::now() < deadline, "child never became ready");
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -994,6 +1065,44 @@ mod tests {
             std::fs::read_to_string(&noted).unwrap_or_default(),
             "caught",
             "the fleet was asked to stop, not shot"
+        );
+    }
+
+    /// The other way of asking, and the only one Windows has: the pipe the
+    /// host holds closes, and the harness winds up without a signal.
+    ///
+    /// The fixture ignores `INT` so nothing but the closed stdin can be what
+    /// ended it. `cat` is the wait: it returns at EOF, which is exactly the
+    /// contract `watchForOrphaning` implements in the real harness.
+    #[test]
+    fn a_harness_that_ignores_the_signal_still_stops_when_its_stdin_closes() {
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
+        let harness = fake_harness(
+            dir.path(),
+            &format!(
+                "trap '' INT\nprintf ready > {}\ncat > /dev/null\nexit 0\n",
+                ready.display()
+            ),
+        );
+
+        let fleet = Fleet::new();
+        fleet
+            .start_with(&harness, dir.path(), server(), "qh_x", None)
+            .expect("started");
+        wait_for(&ready);
+
+        let started = Instant::now();
+        fleet.stop().expect("stopped");
+
+        assert!(
+            started.elapsed() < GRACE,
+            "took {:?}: the closed pipe must end it, not the kill after the grace",
+            started.elapsed()
+        );
+        assert!(
+            !matches!(fleet.status(), FleetState::Running { .. }),
+            "nothing may be left running"
         );
     }
 
