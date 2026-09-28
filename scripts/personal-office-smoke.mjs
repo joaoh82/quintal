@@ -219,10 +219,12 @@ try {
   process.kill(nodePid, 'SIGKILL');
   const back = await waitFor('the server to come back', async () => {
     const again = listeners(office.record.port);
-    if (!again.length) return null;
-    const pid = listenerPid(again);
+    // ss can still see the dying socket after SIGKILL, but no longer find its
+    // owner in /proc. Wait for an identifiable replacement before checking it.
+    const pid = listenerPid(again, { required: false });
+    if (!pid || pid === nodePid) return null;
     serverPids.add(pid);
-    return pid && pid !== nodePid && (await health(office.origin)) ? pid : null;
+    return (await health(office.origin)) ? pid : null;
   }, 60_000);
   check('a killed server is restarted on the same port', true, `new pid ${back.value} after ${back.ms}ms`);
   const afterRestart = await signIn(office.origin, ownerKey);

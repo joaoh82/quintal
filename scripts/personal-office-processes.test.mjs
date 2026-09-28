@@ -48,6 +48,15 @@ test('tool errors cannot become successful shutdown evidence', () => {
   assert.throws(() => listeners(43123, 'darwin', denied), /denied/);
 });
 
+test('restart polling tolerates the ownerless socket left briefly after SIGKILL', () => {
+  const closing = parseSs('LISTEN 0 511 127.0.0.1:43123 0.0.0.0:*');
+  assert.throws(() => listenerPid(closing), /identifiable/);
+  assert.equal(listenerPid(closing, { required: false }), null);
+  assert.equal(listenerPid([], { required: false }), null);
+  const restarted = parseSs('LISTEN 0 511 127.0.0.1:43123 0.0.0.0:* users:(("node",pid=422,fd=28))');
+  assert.equal(listenerPid(restarted, { required: false }), 422);
+});
+
 test('Windows explicitly skips before loading workspace dependencies or launching an app', () => {
   const smoke = new URL('./personal-office-smoke.mjs', import.meta.url).href;
   const output = execFileSync(process.execPath, ['--input-type=module', '-e',

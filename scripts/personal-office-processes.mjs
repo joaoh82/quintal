@@ -39,9 +39,10 @@ export function listeners(port, platform = process.platform, run = execFileSync)
   }
 }
 
-export function listenerPid(sockets) {
+export function listenerPid(sockets, { required = true } = {}) {
   const pids = [...new Set(sockets.map((socket) => socket.pid))];
   if (pids.length !== 1 || !Number.isSafeInteger(pids[0]) || pids[0] <= 1) {
+    if (!required) return null;
     throw new Error(`Expected one identifiable server PID: ${JSON.stringify(sockets)}`);
   }
   return pids[0];
