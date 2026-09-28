@@ -1,4 +1,5 @@
 import {
+  ZONE_KINDS,
   isZoneKind,
   type MapZone,
   type OfficeMap,
@@ -61,14 +62,25 @@ export interface TiledMap {
 export const LAYERS = {
   floor: 'floor',
   walls: 'walls',
-  furniture: 'furniture',
-  decor: 'decor',
+  /** Invisible. What the furniture actually blocks; see `props`. */
+  collision: 'collision',
+  /** Anchored sprites, drawn and depth-sorted rather than laid out on the grid. */
+  props: 'props',
   spawns: 'spawns',
   zones: 'zones',
 } as const;
 
-/** Tile layers that block movement. `decor` deliberately does not. */
-export const COLLISION_LAYERS: readonly string[] = [LAYERS.walls, LAYERS.furniture];
+/**
+ * Tile layers that block movement.
+ *
+ * Furniture no longer blocks by being drawn, because furniture is no longer
+ * drawn on the grid: a desk is a 128x96 sprite whose visible part is 61x44,
+ * and treating the cell as the obstacle would wall off the room around it.
+ * What a prop blocks is authored into `collision` by the map builder, which is
+ * also the only thing that can decide you walk under a tree's canopy but not
+ * through its trunk.
+ */
+export const COLLISION_LAYERS: readonly string[] = [LAYERS.walls, LAYERS.collision];
 
 function propertyMap(properties?: TiledProperty[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -118,7 +130,7 @@ function parseZones(map: TiledMap): MapZone[] {
 
     if (kind === undefined || !isZoneKind(kind)) {
       throw new Error(
-        `Zone "${object.name}" (id ${object.id}) has kind "${kind ?? '<missing>'}" — expected private | spawn | agent_area`,
+        `Zone "${object.name}" (id ${object.id}) has kind "${kind ?? '<missing>'}" — expected ${ZONE_KINDS.join(' | ')}`,
       );
     }
 

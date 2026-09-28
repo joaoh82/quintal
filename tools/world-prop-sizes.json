@@ -1,0 +1,386 @@
+{
+  "office/desk-north": [
+    61,
+    44
+  ],
+  "office/desk-south": [
+    61,
+    44
+  ],
+  "office/desk-east": [
+    30,
+    52
+  ],
+  "office/desk-west": [
+    30,
+    52
+  ],
+  "office/chair-west": [
+    21,
+    32
+  ],
+  "office/divider-horizontal": [
+    60,
+    38
+  ],
+  "office/divider-vertical": [
+    24,
+    43
+  ],
+  "office/printer-cabinet": [
+    41,
+    46
+  ],
+  "office/reception-counter": [
+    96,
+    40
+  ],
+  "office/server-cabinet": [
+    32,
+    45
+  ],
+  "office/storage-cabinet": [
+    42,
+    52
+  ],
+  "office/coat-stand": [
+    25,
+    52
+  ],
+  "office/desk-lamp": [
+    13,
+    16
+  ],
+  "office/laptop": [
+    19,
+    16
+  ],
+  "office/telephone": [
+    10,
+    10
+  ],
+  "office/paper-tray": [
+    12,
+    11
+  ],
+  "garden/tree": [
+    80,
+    94
+  ],
+  "garden/flowering-tree": [
+    80,
+    88
+  ],
+  "garden/shrub": [
+    39,
+    32
+  ],
+  "garden/flowerbed": [
+    55,
+    36
+  ],
+  "garden/bench-south": [
+    56,
+    36
+  ],
+  "garden/bench-north": [
+    57,
+    36
+  ],
+  "garden/bench-east": [
+    31,
+    42
+  ],
+  "garden/bench-west": [
+    31,
+    42
+  ],
+  "garden/fountain": [
+    65,
+    70
+  ],
+  "garden/fern-planter": [
+    40,
+    38
+  ],
+  "garden/lamppost": [
+    22,
+    60
+  ],
+  "garden/outdoor-bin": [
+    24,
+    32
+  ],
+  "garden/fence-horizontal": [
+    60,
+    28
+  ],
+  "garden/fence-vertical": [
+    18,
+    28
+  ],
+  "garden/rocks": [
+    40,
+    23
+  ],
+  "garden/garden-table": [
+    40,
+    40
+  ],
+  "cafeteria/dining-table": [
+    87,
+    44
+  ],
+  "cafeteria/square-table": [
+    40,
+    44
+  ],
+  "cafeteria/chair-north": [
+    21,
+    30
+  ],
+  "cafeteria/chair-south": [
+    18,
+    30
+  ],
+  "cafeteria/chair-east": [
+    19,
+    30
+  ],
+  "cafeteria/chair-west": [
+    19,
+    30
+  ],
+  "cafeteria/serving-counter": [
+    72,
+    50
+  ],
+  "cafeteria/coffee-counter": [
+    56,
+    48
+  ],
+  "cafeteria/drinks-fridge": [
+    33,
+    62
+  ],
+  "cafeteria/microwave-cabinet": [
+    38,
+    46
+  ],
+  "cafeteria/sink-counter": [
+    51,
+    46
+  ],
+  "cafeteria/dish-trolley": [
+    36,
+    32
+  ],
+  "cafeteria/recycling-station": [
+    57,
+    36
+  ],
+  "cafeteria/vending-machine": [
+    36,
+    53
+  ],
+  "cafeteria/fruit-bowl": [
+    14,
+    12
+  ],
+  "cafeteria/meal-tray": [
+    22,
+    13
+  ],
+  "hallway/door-closed": [
+    32,
+    43
+  ],
+  "hallway/door-open": [
+    36,
+    48
+  ],
+  "hallway/glass-doors-closed": [
+    55,
+    52
+  ],
+  "hallway/glass-doors-open": [
+    49,
+    52
+  ],
+  "hallway/elevator": [
+    62,
+    62
+  ],
+  "hallway/waiting-bench": [
+    68,
+    36
+  ],
+  "hallway/plant-trough": [
+    64,
+    34
+  ],
+  "hallway/plant-tall": [
+    28,
+    41
+  ],
+  "hallway/noticeboard": [
+    42,
+    32
+  ],
+  "hallway/artwork": [
+    28,
+    27
+  ],
+  "hallway/clock": [
+    17,
+    17
+  ],
+  "hallway/emergency-cabinet": [
+    18,
+    26
+  ],
+  "hallway/coat-hooks": [
+    36,
+    38
+  ],
+  "hallway/drinking-fountain": [
+    28,
+    39
+  ],
+  "hallway/direction-sign": [
+    38,
+    16
+  ],
+  "hallway/entrance-mat": [
+    50,
+    25
+  ],
+  "meeting/boardroom-table": [
+    103,
+    58
+  ],
+  "meeting/oval-table": [
+    96,
+    64
+  ],
+  "meeting/chair-north": [
+    25,
+    27
+  ],
+  "meeting/chair-south": [
+    25,
+    29
+  ],
+  "meeting/chair-east": [
+    21,
+    32
+  ],
+  "meeting/chair-west": [
+    21,
+    32
+  ],
+  "meeting/presentation-screen": [
+    69,
+    42
+  ],
+  "meeting/whiteboard": [
+    61,
+    52
+  ],
+  "meeting/flipchart": [
+    32,
+    47
+  ],
+  "meeting/media-cabinet": [
+    64,
+    40
+  ],
+  "meeting/speakerphone": [
+    14,
+    10
+  ],
+  "meeting/notebook": [
+    13,
+    10
+  ],
+  "meeting/laptop": [
+    18,
+    16
+  ],
+  "meeting/water-set": [
+    18,
+    13
+  ],
+  "meeting/acoustic-panel": [
+    32,
+    38
+  ],
+  "meeting/side-table": [
+    28,
+    32
+  ],
+  "office-base/bookcase": [
+    40,
+    59
+  ],
+  "office-base/chair-east": [
+    21,
+    32
+  ],
+  "office-base/chair-north": [
+    25,
+    30
+  ],
+  "office-base/chair-south": [
+    24,
+    32
+  ],
+  "office-base/coffee-station": [
+    54,
+    53
+  ],
+  "office-base/coffee-table": [
+    45,
+    32
+  ],
+  "office-base/desk-computer": [
+    62,
+    44
+  ],
+  "office-base/desk-empty": [
+    62,
+    40
+  ],
+  "office-base/filing-cabinet": [
+    26,
+    40
+  ],
+  "office-base/meeting-table": [
+    52,
+    52
+  ],
+  "office-base/plant-small": [
+    33,
+    32
+  ],
+  "office-base/plant-tall": [
+    28,
+    44
+  ],
+  "office-base/sofa": [
+    62,
+    42
+  ],
+  "office-base/water-cooler": [
+    19,
+    52
+  ],
+  "office-base/whiteboard": [
+    54,
+    48
+  ],
+  "office-base/window": [
+    60,
+    39
+  ]
+}

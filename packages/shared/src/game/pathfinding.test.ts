@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import type { OfficeMap } from '../map.js';
-import { PACKAGE_ROOT } from '../db/url.js';
 import { findPath, nearestWalkable } from './pathfinding.js';
-import { parseTiledMap, type TiledMap } from './tiled.js';
 
 /**
  * The walkability grid is about to become shared truth: the browser walks on it
  * and the game server will simulate against it. These lock the contract before
  * a second consumer can quietly disagree with the first.
+ *
+ * The shipped map is checked in `src/maps/hq.test.ts`, next to the loader that
+ * reads it.
  */
 
 /** Build a map from ASCII art. `#` blocks, anything else is walkable. */
@@ -123,62 +122,5 @@ describe('nearestWalkable', () => {
       '###',
     ]);
     assert.equal(nearestWalkable(map, { x: 1, y: 1 }, 2), null);
-  });
-});
-
-describe('the shipped HQ map', () => {
-  const raw = JSON.parse(
-    readFileSync(join(PACKAGE_ROOT, 'maps/hq.json'), 'utf8'),
-  ) as TiledMap;
-  const map = parseTiledMap(raw);
-
-  it('parses into the expected shape', () => {
-    assert.equal(map.width, 40);
-    assert.equal(map.height, 30);
-    assert.equal(map.tileSize, 32);
-    assert.equal(map.walkable.length, 40 * 30);
-  });
-
-  it('has the zones the product depends on', () => {
-    const agentAreas = map.zones.filter((zone) => zone.kind === 'agent_area');
-    assert.equal(agentAreas.length, 1, 'exactly one Agent Bay');
-    assert.equal(map.zones.filter((zone) => zone.kind === 'private').length, 3);
-    assert.ok(map.zones.some((zone) => zone.kind === 'spawn'));
-
-    // The bay is the product's headline feature; a stray Tiled drag that
-    // shrinks it to a corner should fail here, not in a screenshot.
-    const bay = agentAreas[0];
-    assert.ok(bay);
-    assert.ok(
-      bay.bounds.width * bay.bounds.height >= 250,
-      `Agent Bay is only ${bay.bounds.width}x${bay.bounds.height} tiles`,
-    );
-  });
-
-  it('can walk from the human spawn to every spawn point', () => {
-    const human = map.spawns.find((spawn) => spawn.kind === 'human');
-    assert.ok(human, 'no human spawn');
-
-    for (const spawn of map.spawns) {
-      assert.ok(
-        map.walkable[spawn.y * map.width + spawn.x],
-        `spawn "${spawn.name}" is inside something solid`,
-      );
-      if (spawn === human) continue;
-      const path = findPath(map, human, spawn);
-      assert.ok(path.length > 0, `no route from the lobby to "${spawn.name}"`);
-    }
-  });
-
-  it('leaves every meeting room reachable through its door', () => {
-    const human = map.spawns.find((spawn) => spawn.kind === 'human');
-    assert.ok(human);
-
-    for (const zone of map.zones.filter((z) => z.kind === 'private')) {
-      const inside = { x: zone.bounds.x, y: zone.bounds.y + 1 };
-      const goal = nearestWalkable(map, inside);
-      assert.ok(goal, `${zone.label} has no free tile near its corner`);
-      assert.ok(findPath(map, human, goal).length > 0, `${zone.label} is sealed off`);
-    }
   });
 });

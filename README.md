@@ -237,7 +237,10 @@ docs/           User guide, gateway protocol, desktop app, roadmap
   Quintal is not a relay) signing a challenge that mints a
   [Better Auth](https://better-auth.com) session.
 
-Art is [Kenney's](https://kenney.nl) CC0 packs — see
+Art is **Shared World**, a CC0 pixel library made for Quintal: 112 props across
+office, meeting, hallway, cafeteria and garden sets, 16 floor materials, and
+twelve avatars animated in four directions. The emote balloons are still
+[Kenney's](https://kenney.nl) CC0 pack. See
 [CREDITS.md](./apps/web/public/assets/CREDITS.md).
 
 ## Contributing

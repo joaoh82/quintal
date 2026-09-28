@@ -19,7 +19,7 @@ The `/docs/` index links to the current technical documentation in the public re
 
 ## Design and assets
 
-DM Sans is self-hosted through Fontsource. Theme colors follow the system preference, and interactions respect reduced motion. Screenshots are optimized WebP derivatives of the repository's `screenshots/` assets; the originals are unchanged. Only screenshots not flagged for stale warnings in the brief are used. Pixel art in the product is from Kenney; see `apps/web/public/assets/CREDITS.md`.
+DM Sans is self-hosted through Fontsource. Theme colors follow the system preference, and interactions respect reduced motion. Screenshots are optimized WebP derivatives of the repository's `screenshots/` assets; the originals are unchanged. Only screenshots not flagged for stale warnings in the brief are used. Pixel art in the product is the Shared World CC0 pack, with emote balloons from Kenney; see `apps/web/public/assets/CREDITS.md`.
 
 The website uses static export and precompressed responsive screenshots through the `Screenshot` component. There is no runtime image server. Each screenshot has 640px, 960px, and full-size WebP versions. Use compression and cache headers on the static host, with immutable caching for `/_next/static/`. After changing domains, update the metadata base, robots, and sitemap.
 

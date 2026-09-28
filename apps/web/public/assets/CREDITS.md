@@ -4,47 +4,65 @@ Everything in this directory is CC0 (public domain) or derived from CC0 work.
 Quintal itself is AGPL-3.0, but these assets carry no such obligation — you can
 lift them for anything.
 
-## Tileset and character sprites
+## The world: Shared World v1.0
 
-**`tilesets/kenney-rpg-urban-32.png`**
+**`world/`** — terrain, walls, furniture and the twelve avatars.
 
-- Source: [RPG Urban Pack](https://kenney.nl/assets/rpg-urban-pack) v1.0 by
-  [Kenney](https://kenney.nl) (created 2019-01-05)
-- Downloaded from:
-  <https://kenney.nl/media/pages/assets/rpg-urban-pack/0a097d1dc7-1677578575/kenney_rpg-urban-pack.zip>
-- License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) —
-  free for personal, educational and commercial use. Crediting Kenney is
-  optional; we do it because it's the decent thing to do.
+- Source: **Shared World** v1.0 (28 September 2026), an art-only pixel library
+  authored for Quintal by João Henrique Machado Silva.
+- License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+- Made with an image-generation tool, then sliced, anchored, alpha-hardened and
+  exported at native scale by hand. The external pack at
+  <https://masalimov-ilnur.itch.io/pixel-office> was a style reference only; no
+  sprite file from it was extracted or included.
 
-**How this file was derived.** We took `Tilemap/tilemap_packed.png` from the zip
-(432×288, 27×18 grid of 16×16 tiles, no margin or spacing) and upscaled it ×2
-with **nearest-neighbour** resampling to 864×576, giving a 27×18 grid of 32×32
-tiles. Nothing else was changed: no recolouring, no re-arranging, so tile
-indices match Kenney's original sheet exactly.
+The library ships more than a game needs — per-frame PNGs, animated previews,
+contact sheets and the generated sources. Only what the browser loads is
+vendored here, by `tools/sync-world-assets.mjs`; the same script copies the
+pack's art contract to [`docs/world-assets.md`](../../../../docs/world-assets.md),
+which is what to follow when drawing more.
 
-The upscale exists because Quintal's world grid is 32px (`TILE_SIZE` in
-`@quintal/shared`). Doing it in the source image rather than at render time
-keeps the pixel art crisp and avoids half-pixel seams between tiles.
+| Path | What it is |
+| --- | --- |
+| `world/terrain/surfaces.png` | 16 seamless 32×32 floor materials, one 128×128 sheet |
+| `world/walls/walls.png` | 16 cardinal wall caps. Frame index = N 1 + E 2 + S 4 + W 8 |
+| `world/props/*.png` + `.json` | Prop atlases with named frames, in Phaser's atlas format |
+| `world/avatars/*.png` | One 256×192 sheet per body: 8 columns × 4 rows of 32×48 frames |
 
-To reproduce: download the zip, then run the equivalent of
+**Scale contracts.** The world grid is 32px (`TILE_SIZE` in `@quintal/shared`).
+The 16 retained office props are 64×64 cells anchored at (32,62); every other
+prop is a 128×96 cell anchored at (64,94). The padding is padding — a desk is
+61×44 inside it, which is why what a prop *blocks* is authored into the map's
+`collision` layer rather than taken from its cell. Avatar frames are 32×48 with
+the feet at (16,42).
 
-```python
-from PIL import Image
-src = Image.open("Tilemap/tilemap_packed.png").convert("RGBA")
-w, h = src.size
-src.resize((w * 2, h * 2), Image.NEAREST).save("kenney-rpg-urban-32.png")
+**Avatar sheets.** Rows are south, west, east, north. Columns pair up into idle,
+walk, sit and work. The office plays idle and walk; the sit and work frames are
+loaded and indexed (`BODY_STATE_COLUMN` in `apps/web/src/game/constants.ts`) but
+nothing drives them until the map has seats in it.
+
+To re-vendor after the pack changes:
+
+```sh
+node tools/sync-world-assets.mjs /path/to/shared-world-assets-v1
 ```
-
-**Character sprites** come from the same sheet — columns 23–26 of each row. Each
-character occupies a 4×3 block: the four columns are facing left, down, up and
-right; the three rows are walk-cycle frames. Quintal's default avatar is the
-first block (tile indices 23–26, 50–53, 77–80).
 
 ## Map
 
 `packages/shared/maps/hq.json` is Quintal's own work (AGPL-3.0, like the rest of
-the repo), authored against the tileset above. It's a standard
-[Tiled](https://www.mapeditor.org/) map — open it in Tiled and edit away.
+the repo). It is ordinary [Tiled](https://www.mapeditor.org/) JSON and opens in
+Tiled, but it is **generated** by `tools/build-hq-map.mjs` — the floor plan, the
+wall connection indices, the collision grid and 304 prop placements have to stay
+consistent with each other, and that is a job for a script. Edit the builder and
+re-run it:
+
+```sh
+node tools/build-hq-map.mjs
+```
+
+It refuses to write a map whose spawns are blocked or whose zones can't be
+walked to. `packages/shared/src/maps/hq.test.ts` checks the committed file for
+the same things, because the file is what actually ships.
 
 ## Emotes
 
@@ -53,6 +71,10 @@ the repo), authored against the tileset above. It's a standard
 - Source: [Emotes Pack](https://kenney.nl/assets/emotes-pack) v1.0 by
   [Kenney](https://kenney.nl) (2018)
 - License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+
+The balloons stayed when the rest of the Kenney art went. They are a UI
+vocabulary rather than scenery — a thinking balloon over an agent's head means
+the same thing in any art style — and Shared World has no equivalent.
 
 **How this file was derived.** The pack ships 30 balloons in 8 styles as
 16×16 PNGs. We took **Pixel / Style 1** (the square balloon with a tail — the

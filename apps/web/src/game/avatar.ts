@@ -1,15 +1,41 @@
 import {
   CHAT_BUBBLE_MS,
   INTERPOLATION_DELAY_MS,
+  bodyForSeed,
   emoteFrames,
+  isBodyId,
   isEmote,
+  type BodyId,
   type Direction,
   type OfficePlayer,
   type PlayerKind,
 } from '@quintal/shared';
 import * as Phaser from 'phaser';
 
-import { ASSETS, CHARACTER_FRAMES, EMOTE_FRAME_MS } from './constants';
+import {
+  ASSETS,
+  BODY_ORIGIN,
+  DEPTH,
+  EMOTE_FRAME_MS,
+  bodyAnimation,
+  bodyFrames,
+  bodyTexture,
+} from './constants';
+
+/**
+ * Which of the twelve bodies somebody walks around in.
+ *
+ * `spriteKey` wins when it names one, which is the hook a chooser will hang
+ * off; today only agents carry one and its three legacy values are colours,
+ * not bodies, so in practice everybody falls through to the derived answer.
+ * The seed is the stable identity where there is one — a reconnect must not
+ * change somebody's face — and the name only for a guest who has no identity
+ * to speak of.
+ */
+function bodyFor(sessionId: string, player: OfficePlayer): BodyId {
+  if (isBodyId(player.spriteKey)) return player.spriteKey;
+  return bodyForSeed(player.userId || player.name || sessionId);
+}
 
 /** One position the server told us about, with the time we heard it. */
 interface Snapshot {
@@ -46,11 +72,23 @@ const AGENT_LABEL_STYLE = {
 
 /**
  * Where the balloon sits relative to the feet: centred over the head, clear
- * of the nameplate (which spans roughly y−36 to y−22). One constant for the
- * two places that position it — the first version offset it to the right
- * and it read as belonging to whoever stood there.
+ * of the nameplate. One constant for the two places that position it — the
+ * first version offset it to the right and it read as belonging to whoever
+ * stood there.
  */
-const EMOTE_OFFSET = { x: 0, y: -40 } as const;
+const EMOTE_OFFSET = { x: 0, y: -52 } as const;
+
+/**
+ * Where the overlays sit above the feet.
+ *
+ * A body is 48px of frame standing on its 42nd row, so the head clears y-34 —
+ * twelve pixels higher than the sprite this replaced. Everything above the
+ * head moved up by exactly that, which is why these are one block of numbers
+ * rather than magic constants at each call site.
+ */
+const LABEL_Y = -34;
+const STATUS_Y = -24;
+const BUBBLE_Y = -48;
 
 /** The speaking ring: the roster's green, so the two read as one signal. */
 const SPEAKING_RING_COLOR = 0x34d399;
@@ -92,6 +130,7 @@ const BUBBLE_STYLE = {
 export class Avatar {
   readonly sessionId: string;
   readonly kind: PlayerKind;
+  readonly body: BodyId;
   /** Scratch space for the scene's "did anything notable change" test. */
   lastStatus = '';
 
@@ -132,13 +171,19 @@ export class Avatar {
     this.#name = player.name;
     this.#status = player.status;
     this.#owner = player.ownerName;
+    this.body = bodyFor(sessionId, player);
 
     this.#sprite = scene.add
-      .sprite(player.x, player.y, `${ASSETS.tileset}-frames`, CHARACTER_FRAMES.down[0])
+      .sprite(player.x, player.y, bodyTexture(this.body), bodyFrames('idle', 'down')[0])
       // Feet-anchored: the sprite's centre of mass is its middle, but the
-      // position the server tracks is where it stands.
-      .setOrigin(0.5, 0.75)
-      .setDepth(isSelf ? 12 : 10);
+      // position the server tracks is where it stands — and where it stands is
+      // also what it sorts by against the furniture.
+      .setOrigin(BODY_ORIGIN.x, BODY_ORIGIN.y)
+      .setDepth(player.y);
+    // Started here and not left to `setFacing`, which short-circuits when
+    // nothing changed — and standing still facing south is exactly the state
+    // an avatar is born in.
+    this.#sprite.anims.play(bodyAnimation(this.body, 'idle', 'down'));
 
     const isAgent = player.kind === 'agent';
 
@@ -148,21 +193,21 @@ export class Avatar {
       this.#ring = scene.add
         .ellipse(player.x, player.y + 6, 22, 10, AGENT_RING_COLOR, 0.28)
         .setStrokeStyle(1, AGENT_RING_COLOR, 0.55)
-        .setDepth(9);
+        .setDepth(player.y + DEPTH.ringOffset);
     }
 
     this.#label = scene.add
       .text(player.x, player.y, this.#labelText(), isAgent ? AGENT_LABEL_STYLE : LABEL_STYLE)
       .setOrigin(0.5, 1)
-      .setDepth(20);
+      .setDepth(DEPTH.label);
 
     if (isSelf) this.#label.setColor('#8affc1');
 
     if (isAgent) {
       this.#statusLine = scene.add
-        .text(player.x, player.y - 12, player.status, AGENT_STATUS_STYLE)
+        .text(player.x, player.y + STATUS_Y, player.status, AGENT_STATUS_STYLE)
         .setOrigin(0.5, 1)
-        .setDepth(19)
+        .setDepth(DEPTH.status)
         .setVisible(player.status.length > 0);
       // The balloon: centred over the head, above the nameplate. A speech
       // bubble sits a little higher still, so a laugh and the line that
@@ -170,7 +215,7 @@ export class Avatar {
       this.#emoteSprite = scene.add
         .sprite(player.x + EMOTE_OFFSET.x, player.y + EMOTE_OFFSET.y, ASSETS.emotes, 0)
         .setOrigin(0.5, 1)
-        .setDepth(31)
+        .setDepth(DEPTH.emote)
         .setVisible(false);
       this.setEmote(player.emote, player.emoteUntil);
     }
@@ -294,41 +339,45 @@ export class Avatar {
       this.#voiceRing = this.#scene.add
         .ellipse(this.#sprite.x, this.#sprite.y + 6, 26, 12, SPEAKING_RING_COLOR, 0.14)
         .setStrokeStyle(2, SPEAKING_RING_COLOR, 0.9)
-        .setDepth(9);
+        .setDepth(this.#sprite.y + DEPTH.ringOffset);
     }
     this.#voiceRing.setVisible(true);
   }
 
   setPosition(x: number, y: number): void {
-    this.#sprite.setPosition(x, y);
-    this.#label.setPosition(x, y - 22);
-    this.#ring?.setPosition(x, y + 6);
-    this.#voiceRing?.setPosition(x, y + 6);
-    this.#statusLine?.setPosition(x, y - 12);
-    if (this.#bubble) this.#bubble.setPosition(x, y - 36);
+    // Depth is the y of the feet, on the same scale props sort by, so the
+    // office draws itself in the order you would see it from here.
+    this.#sprite.setPosition(x, y).setDepth(y);
+    this.#label.setPosition(x, y + LABEL_Y);
+    this.#ring?.setPosition(x, y + 6).setDepth(y + DEPTH.ringOffset);
+    this.#voiceRing?.setPosition(x, y + 6).setDepth(y + DEPTH.ringOffset);
+    this.#statusLine?.setPosition(x, y + STATUS_Y);
+    if (this.#bubble) this.#bubble.setPosition(x, y + BUBBLE_Y);
     this.#emoteSprite?.setPosition(x + EMOTE_OFFSET.x, y + EMOTE_OFFSET.y);
   }
 
+  /**
+   * Face a direction, walking or standing.
+   *
+   * Standing still plays an idle loop rather than freezing on a frame: the old
+   * sheet had nothing else to offer, and a room of people holding one pose
+   * reads as a screenshot. Both states are animations, so this is one call
+   * either way.
+   */
   setFacing(dir: Direction, moving: boolean): void {
     if (dir === this.#facing && moving === this.#moving) return;
     this.#facing = dir;
     this.#moving = moving;
-
-    if (moving) {
-      this.#sprite.anims.play(`walk-${dir}`, true);
-    } else {
-      this.#sprite.anims.stop();
-      this.#sprite.setFrame(CHARACTER_FRAMES[dir][0]);
-    }
+    this.#sprite.anims.play(bodyAnimation(this.body, moving ? 'walk' : 'idle', dir), true);
   }
 
   /** Show what this occupant just said, for a few seconds. */
   say(text: string, now: number = performance.now()): void {
     this.#bubble?.destroy();
     this.#bubble = this.#scene.add
-      .text(this.#sprite.x, this.#sprite.y - 36, text, BUBBLE_STYLE)
+      .text(this.#sprite.x, this.#sprite.y + BUBBLE_Y, text, BUBBLE_STYLE)
       .setOrigin(0.5, 1)
-      .setDepth(30);
+      .setDepth(DEPTH.bubble);
     this.#bubbleUntil = now + CHAT_BUBBLE_MS;
   }
 
