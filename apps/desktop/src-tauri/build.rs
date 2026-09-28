@@ -46,6 +46,7 @@ fn main() {
             "personal_status",
             "personal_logs",
             "retry_personal_office",
+            "restore_personal_backup",
         ]),
     ))
     .expect("failed to build the Quintal desktop host");

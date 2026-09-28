@@ -98,6 +98,23 @@ impl From<SpawnError> for HostError {
     }
 }
 
+impl From<personal::PersonalError> for HostError {
+    fn from(error: personal::PersonalError) -> Self {
+        let code = match &error {
+            personal::PersonalError::NoPayload(_) => "no_payload",
+            personal::PersonalError::NoRuntime => "no_runtime",
+            personal::PersonalError::AlreadyRunning => "already_running",
+            personal::PersonalError::NoBackup => "no_backup_to_restore",
+            personal::PersonalError::NotRestorable => "not_restorable",
+            personal::PersonalError::Io(_) => "office_failed",
+        };
+        HostError {
+            code: code.into(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<crate::ptt::PttError> for HostError {
     fn from(error: crate::ptt::PttError) -> Self {
         let code = match &error {
@@ -619,6 +636,7 @@ pub fn personal_status(state: State<'_, HostState>) -> personal::Status {
                 .display()
                 .to_string(),
             backup: None,
+            restorable: false,
         },
     }
 }
@@ -645,6 +663,29 @@ pub fn personal_logs(state: State<'_, HostState>) -> Vec<LogLine> {
 pub fn retry_personal_office(app: tauri::AppHandle, state: State<'_, HostState>) {
     state.stop_everything();
     app.restart();
+}
+
+/// Put back the copy of the database taken before this version ran.
+///
+/// The other half of the backup, and the reason it is taken: an upgrade whose
+/// migration fails leaves somebody with a broken office, a path in a log and a
+/// paragraph in `docs/DESKTOP.md` about copying files around with the app shut.
+/// This is that paragraph, as a button.
+///
+/// It takes no arguments on purpose. The page does not name the backup — the
+/// office restores the one *it* took this launch, so the worst a hostile page
+/// can do is ask for the thing the screen was already offering. And the office
+/// refuses even that unless this launch failed before it ever opened; see
+/// `Office::restore`.
+#[tauri::command]
+pub fn restore_personal_backup(state: State<'_, HostState>) -> Result<personal::Status, HostError> {
+    let Some(office) = state.personal.as_ref() else {
+        return Err(HostError {
+            code: "no_office".into(),
+            message: "This launch is not a personal office.".into(),
+        });
+    };
+    Ok(office.restore()?)
 }
 
 // --- push-to-talk -----------------------------------------------------------
