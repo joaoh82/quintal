@@ -319,9 +319,26 @@ when it exists, not something that happens by pointing the app elsewhere.
 
 Closing the window quits the app, and quitting stops the server and the
 fleet by the same path. There is no background mode yet: an office nobody has
-a window on is not running. The server holds a pipe from the app open, so a
-crash or a force-quit that runs no handler still ends it — the same mechanism
-the fleet uses, described under [Leaving](#leaving).
+a window on is not running.
+
+**A quit closes the server's stdin, and that is the ask.** The app holds the
+write end of that pipe for as long as it lives, so a crash or a force-quit
+that runs no handler still ends the server — the same mechanism the fleet
+uses, described under [Leaving](#leaving). A tidy quit closes the same pipe on
+purpose before it waits, so both routes out are one route: the server sees EOF,
+shuts Colyseus down and closes the database, and the app waits for it to go.
+On Unix a `SIGTERM` goes too, which the server has always handled; on Windows
+there is no signal to send, and the closed pipe is the whole graceful stop.
+Before that, a quit on Windows asked for nothing — it spent the full
+eight-second grace and then killed the server, so every quit there was a crash
+from the server's point of view, with rooms left open and the database never
+closed. Whatever ignores both is still killed once the grace runs out; an
+office that cannot be reopened is worse than an unclean shutdown.
+
+The fleet is stopped the same way, by the same function
+(`wind_down` in `apps/desktop/src-tauri/src/spawn.rs`): its stdin closes, and
+`SIGINT` follows on Unix. The harness reads `QUINTAL_EXIT_WITH_PARENT` exactly
+as the server does, so it needs nothing of its own.
 
 Sleep does not stop the server; it pauses with everything else and resumes
 with it. Agents cannot work while the computer sleeps, and anything they
@@ -678,3 +695,8 @@ that app is no longer its parent, which covers every way the app can die
 including the ones no handler runs for. A harness you start yourself in a
 terminal is unaffected — it keeps running when the shell exits, because that is
 a reasonable thing to want.
+
+That end-of-the-pipe watch is also what a tidy quit uses: the app closes the
+harness's stdin rather than relying on a signal, because the same code stops
+the personal office's server and Windows has no `SIGTERM` for it — see
+[Lifecycle](#lifecycle).

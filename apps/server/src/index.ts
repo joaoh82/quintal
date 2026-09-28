@@ -190,18 +190,31 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // Die with the process that started us, when asked to.
 //
 // The desktop app runs this server for a personal office and holds the write
-// end of its stdin for as long as the app lives. A tidy quit sends SIGTERM;
-// a crash, a force-quit or a `kill -9` of the app runs no handler at all, and
-// what would survive is a server on a loopback port holding the office's
-// database open, with nothing left that knows to stop it. The kernel closes
-// the pipe however the parent died, so EOF on stdin is the one notification
-// that arrives in every case — the same contract quintal-acp follows.
+// end of its stdin for as long as the app lives. A crash, a force-quit or a
+// `kill -9` of the app runs no handler at all, and what would survive is a
+// server on a loopback port holding the office's database open, with nothing
+// left that knows to stop it. The kernel closes the pipe however the parent
+// died, so EOF on stdin is the one notification that arrives in every case —
+// the same contract quintal-acp follows.
+//
+// It is also how a *tidy* quit asks. The app closes this pipe deliberately
+// before it waits, because Windows has no SIGTERM for Node to receive: the
+// handlers above never ran there, so every quit spent the full grace period
+// and ended in a kill, with rooms left open and the database never closed.
+// One path on every platform, and this is it — see `wind_down` in
+// apps/desktop/src-tauri/src/spawn.rs.
 //
 // Opt-in, and only by the app: a server started from a terminal, or under
 // Docker with no stdin attached, must not stop because stdin happens to be
 // closed or absent.
 if (process.env.QUINTAL_EXIT_WITH_PARENT === '1') {
-  process.stdin.on('end', () => shutdown('the process that started this server has gone'));
-  process.stdin.on('error', () => shutdown('the process that started this server has gone'));
+  const parentIsGone = () =>
+    shutdown('the process that started this server has gone');
+  process.stdin.on('end', parentIsGone);
+  // `close` as well as `end`: on Windows a pipe whose write end has gone can
+  // reach the second without the first, and a missed EOF there is the whole
+  // bug this guards against.
+  process.stdin.on('close', parentIsGone);
+  process.stdin.on('error', parentIsGone);
   process.stdin.resume();
 }
