@@ -1,6 +1,7 @@
 import {
   ClientMessage,
   ServerMessage,
+  activityTerminal,
   directionFromIntent,
   findPath,
   followPath,
@@ -46,6 +47,7 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { Avatar } from '../avatar';
+import { Speech } from '../speech';
 import {
   ASSETS,
   BODY_FRAME,
@@ -114,6 +116,9 @@ export class OfficeScene extends Phaser.Scene {
   #rosterSignature = '';
   /** When each occupant was last seen doing something. Drives "last action". */
   readonly #lastAction = new Map<string, number>();
+
+  /** Turns an agent's public activity back into a bubble over its head. */
+  readonly #speech = new Speech();
 
   #debugEnabled = false;
   #debugStatic!: Phaser.GameObjects.Graphics;
@@ -240,6 +245,7 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     room.onMessage('activity', (activity: import('@quintal/shared').PublicActivity) => {
+      this.#speakActivity(activity);
       this.#bridge.emit('activity', activity);
     });
     room.onMessage(
@@ -310,6 +316,27 @@ export class OfficeScene extends Phaser.Scene {
       this.#lastAction.delete(sessionId);
       this.#publishRoster();
     });
+  }
+
+  /**
+   * Put an agent's line over its head, if anybody here can hear it.
+   *
+   * Who can hear it is the office's decision, not this one: `nearby` is set
+   * per client from earshot, so all this does is draw. See `Speech` for why
+   * the bubble comes from the activity rather than from a chat message — in
+   * short, the activity is already the transcript, and saying it twice would
+   * write it twice.
+   */
+  #speakActivity(activity: import('@quintal/shared').PublicActivity): void {
+    const said = this.#speech.next(activity);
+    if (activityTerminal(activity.state)) this.#speech.forget(activity.turnId);
+    if (!said) return;
+
+    for (const [sessionId, player] of this.#room.state.players) {
+      if (player.kind !== 'agent' || player.userId !== said.agentId) continue;
+      this.#avatars.get(sessionId)?.say(said.text);
+      return;
+    }
   }
 
   #onPlayerChange(sessionId: string, player: OfficePlayer): void {
