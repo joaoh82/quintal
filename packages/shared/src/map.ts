@@ -15,12 +15,19 @@ import type { PlayerKind } from './player.js';
 export type ZoneKind =
   /** A room you can close off: meetings, focus time. Proximity stops at the walls. */
   | 'private'
+  /**
+   * A named part of the floor anybody may be in: the corridor, the cafeteria,
+   * the garden. It gets a label and a conversation of its own like any zone,
+   * but unlike `private` it is somewhere an idling agent may wander — which is
+   * the whole difference between a shared space and a room with a door.
+   */
+  | 'common'
   /** Where people arrive. Nothing may block a spawn zone. */
   | 'spawn'
   /** Home turf for agents — docks, workstations, the place a fleet idles. */
   | 'agent_area';
 
-export const ZONE_KINDS: readonly ZoneKind[] = ['private', 'spawn', 'agent_area'];
+export const ZONE_KINDS: readonly ZoneKind[] = ['private', 'common', 'spawn', 'agent_area'];
 
 export function isZoneKind(value: string): value is ZoneKind {
   return (ZONE_KINDS as readonly string[]).includes(value);

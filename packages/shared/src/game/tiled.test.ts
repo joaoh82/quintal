@@ -42,14 +42,27 @@ const object = (
 const identity = <T extends { id: number; name: string; type: string; x: number; y: number; width: number; height: number; point?: boolean; properties?: Array<{ name: string; type: string; value: string }> }>(o: T) => o;
 
 describe('buildWalkableGrid', () => {
-  it('blocks on walls and furniture but not floor or decor', () => {
+  it('blocks on walls and authored collision, but not on the floor', () => {
     const map = base([
       tileLayer('floor', [1, 1, 1, 1]),
       tileLayer('walls', [1, 0, 0, 0]),
-      tileLayer('furniture', [0, 1, 0, 0]),
-      tileLayer('decor', [0, 0, 1, 0]),
+      tileLayer('collision', [0, 1, 0, 0]),
     ]);
     assert.deepEqual(buildWalkableGrid(map), [false, false, true, true]);
+  });
+
+  /**
+   * Furniture is drawn from the `props` object layer, not the grid, precisely
+   * so that a desk's 128x96 cell does not become a 128x96 obstacle. If an
+   * unknown tile layer ever started blocking again, every room with a sprite
+   * layer in it would silently shrink.
+   */
+  it('ignores tile layers that are not collision layers', () => {
+    const map = base([
+      tileLayer('floor', [1, 1, 1, 1]),
+      tileLayer('decor', [1, 1, 1, 1]),
+    ]);
+    assert.deepEqual(buildWalkableGrid(map), [true, true, true, true]);
   });
 });
 

@@ -318,6 +318,35 @@ export function messageMaxLength(channelId?: string | null): number {
 export const CHAT_BUBBLE_MS = 6_000;
 
 /**
+ * What a line looks like over somebody's head.
+ *
+ * The conversation keeps the whole answer; the bubble is the signal that it
+ * was said *here*, and a bubble the size of a wall is worse than useless. So
+ * this takes as much as fits — whole sentences where it can, a word boundary
+ * where it cannot — and marks a cut, because an agent that appears to stop
+ * mid-thought reads as broken.
+ *
+ * Deliberately simpler than the harness's `toBubbles`, which packs a reply
+ * into several messages to *send*. This cuts one line to *show*: the rest is
+ * already in the transcript a few pixels away.
+ */
+export function speechBubble(text: string, limit: number = CHAT_MAX_LENGTH): string {
+  const line = text.replace(/\s+/g, ' ').trim();
+  if (line.length <= limit) return line;
+
+  // One character of headroom for the ellipsis.
+  const head = line.slice(0, limit - 1);
+  // The longest prefix ending in a sentence terminator, closing quotes and
+  // brackets included — `He said "stop."` ends where it looks like it ends.
+  const sentence = /^.*[.!?]["')\]»]*(?=\s)/.exec(head)?.[0];
+  if (sentence && sentence.length >= limit / 3) return `${sentence}…`;
+
+  const space = head.lastIndexOf(' ');
+  const word = space > limit / 3 ? head.slice(0, space) : head;
+  return `${word.trimEnd()}…`;
+}
+
+/**
  * How many messages the nearby-chat panel keeps in memory, and the most one
  * `history_get` returns. Everything older is on the server.
  */

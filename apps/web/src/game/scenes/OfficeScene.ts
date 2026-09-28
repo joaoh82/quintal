@@ -1,6 +1,7 @@
 import {
   ClientMessage,
   ServerMessage,
+  activityTerminal,
   directionFromIntent,
   findPath,
   followPath,
@@ -46,17 +47,30 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { Avatar } from '../avatar';
+import { Speech } from '../speech';
 import {
   ASSETS,
+  BODY_FRAME,
+  BODY_IDS,
+  BODY_ROW,
+  BODY_TIMING,
   CAMERA_LERP,
   CAMERA_ZOOM,
-  CHARACTER_FRAMES,
+  DEPTH,
   EMOTE_SIZE,
   DEBUG_COLORS,
   PATHS,
+  PROP_ATLASES,
   RECONCILE_LERP,
   RECONCILE_SNAP_PX,
   RECONCILE_TOLERANCE_PX,
+  bodyAnimation,
+  bodyFrames,
+  bodyPath,
+  bodyTexture,
+  isPropAtlasKey,
+  propAtlasPath,
+  type BodyState,
 } from '../constants';
 
 interface OfficeSceneData {
@@ -103,6 +117,9 @@ export class OfficeScene extends Phaser.Scene {
   /** When each occupant was last seen doing something. Drives "last action". */
   readonly #lastAction = new Map<string, number>();
 
+  /** Turns an agent's public activity back into a bubble over its head. */
+  readonly #speech = new Speech();
+
   #debugEnabled = false;
   #debugStatic!: Phaser.GameObjects.Graphics;
   #debugPath!: Phaser.GameObjects.Graphics;
@@ -117,39 +134,60 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image(ASSETS.tileset, PATHS.tileset);
+    this.load.image(ASSETS.surfaces, PATHS.surfaces);
+    this.load.image(ASSETS.walls, PATHS.walls);
     this.load.tilemapTiledJSON(ASSETS.map, PATHS.map);
     this.load.spritesheet(ASSETS.emotes, PATHS.emotes, {
       frameWidth: EMOTE_SIZE,
       frameHeight: EMOTE_SIZE,
     });
-    // The character shares the tileset image; load it again as a spritesheet so
-    // frame indices line up with the sheet's tile indices.
-    this.load.spritesheet(`${ASSETS.tileset}-frames`, PATHS.tileset, {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
+
+    for (const key of Object.keys(PROP_ATLASES)) {
+      const paths = propAtlasPath(key as keyof typeof PROP_ATLASES);
+      this.load.atlas(`props-${key}`, paths.texture, paths.atlas);
+    }
+
+    // Every body, not only the ones currently in the room: somebody joining
+    // must not appear as a blank rectangle while their sheet is fetched. Twelve
+    // sheets is 450KB, which is worth paying once at load for a room where
+    // nobody pops in as a blank rectangle.
+    for (const body of BODY_IDS) {
+      this.load.spritesheet(bodyTexture(body), bodyPath(body), {
+        frameWidth: BODY_FRAME.width,
+        frameHeight: BODY_FRAME.height,
+      });
+    }
   }
 
   create(): void {
     const tilemap = this.make.tilemap({ key: ASSETS.map });
-    const tileset = tilemap.addTilesetImage(ASSETS.tileset, ASSETS.tileset);
-    if (!tileset) throw new Error('Tileset image failed to attach to the tilemap');
+    const surfaces = tilemap.addTilesetImage('surfaces', ASSETS.surfaces);
+    const walls = tilemap.addTilesetImage('walls', ASSETS.walls);
+    if (!surfaces || !walls) throw new Error('Tileset images failed to attach to the tilemap');
 
     // The same parser the server runs, over the same file. Prediction can only
     // agree with authority if both are walking the same grid.
     this.#map = parseTiledMap(this.cache.tilemap.get(ASSETS.map).data as TiledMap);
 
-    for (const name of ['floor', 'walls', 'furniture', 'decor']) {
-      if (!tilemap.createLayer(name, tileset, 0, 0)) {
-        throw new Error(`Map is missing the "${name}" layer`);
-      }
+    // `collision` is drawn from the wall image but never shown: it is the
+    // authored footprint of the furniture, which is sprites on an object layer
+    // rather than tiles. Creating it anyway keeps the Z overlay honest — what
+    // it paints red is the layer the server actually blocks on.
+    for (const [name, depth] of [
+      ['floor', DEPTH.floor],
+      ['walls', DEPTH.walls],
+    ] as const) {
+      const layer = tilemap.createLayer(name, [surfaces, walls], 0, 0);
+      if (!layer) throw new Error(`Map is missing the "${name}" layer`);
+      layer.setDepth(depth);
     }
+    if (!tilemap.getLayer('collision')) throw new Error('Map is missing the "collision" layer');
 
+    this.#createProps(tilemap);
     this.#createAnimations();
     this.#zoneLabels();
-    this.#debugStatic = this.add.graphics().setDepth(50).setVisible(false);
-    this.#debugPath = this.add.graphics().setDepth(51).setVisible(false);
+    this.#debugStatic = this.add.graphics().setDepth(DEPTH.debug).setVisible(false);
+    this.#debugPath = this.add.graphics().setDepth(DEPTH.debug + 1).setVisible(false);
 
     const world = { width: tilemap.widthInPixels, height: tilemap.heightInPixels };
     this.cameras.main.setBounds(0, 0, world.width, world.height);
@@ -207,6 +245,7 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     room.onMessage('activity', (activity: import('@quintal/shared').PublicActivity) => {
+      this.#speakActivity(activity);
       this.#bridge.emit('activity', activity);
     });
     room.onMessage(
@@ -277,6 +316,27 @@ export class OfficeScene extends Phaser.Scene {
       this.#lastAction.delete(sessionId);
       this.#publishRoster();
     });
+  }
+
+  /**
+   * Put an agent's line over its head, if anybody here can hear it.
+   *
+   * Who can hear it is the office's decision, not this one: `nearby` is set
+   * per client from earshot, so all this does is draw. See `Speech` for why
+   * the bubble comes from the activity rather than from a chat message — in
+   * short, the activity is already the transcript, and saying it twice would
+   * write it twice.
+   */
+  #speakActivity(activity: import('@quintal/shared').PublicActivity): void {
+    const said = this.#speech.next(activity);
+    if (activityTerminal(activity.state)) this.#speech.forget(activity.turnId);
+    if (!said) return;
+
+    for (const [sessionId, player] of this.#room.state.players) {
+      if (player.kind !== 'agent' || player.userId !== said.agentId) continue;
+      this.#avatars.get(sessionId)?.say(said.text);
+      return;
+    }
   }
 
   #onPlayerChange(sessionId: string, player: OfficePlayer): void {
@@ -548,15 +608,77 @@ export class OfficeScene extends Phaser.Scene {
 
   // --- presentation --------------------------------------------------------
 
+  /**
+   * Draw the furniture.
+   *
+   * Props are sprites rather than tiles because they are not tile-shaped: a
+   * desk is 61x44 inside a 128x96 cell and a garden tree is taller than three
+   * tiles. Each is placed at the ground point it stands on and given that
+   * point as its depth, which is the whole trick — people and furniture sort
+   * against each other on one number, so you pass behind a bookcase and in
+   * front of the desk below it without either being a special case.
+   *
+   * A `z` property overrides that for the things the rule gets wrong: a window
+   * or a clock is on the wall behind everyone, whatever floor it hangs above.
+   */
+  #createProps(tilemap: Phaser.Tilemaps.Tilemap): void {
+    const layer = tilemap.getObjectLayer('props');
+    if (!layer) throw new Error('Map is missing the "props" layer');
+
+    for (const object of layer.objects) {
+      const properties = object.properties as
+        | Array<{ name: string; value: string | number }>
+        | undefined;
+      const read = (name: string) => properties?.find((entry) => entry.name === name)?.value;
+
+      const sprite = String(read('sprite') ?? '');
+      const slash = sprite.indexOf('/');
+      const atlas = sprite.slice(0, slash);
+      const frame = sprite.slice(slash + 1);
+      if (!isPropAtlasKey(atlas) || frame.length === 0) {
+        throw new Error(`Prop "${sprite}" (object ${object.id}) names no known atlas`);
+      }
+
+      const x = object.x ?? 0;
+      const y = object.y ?? 0;
+      const z = read('z');
+      this.add
+        .image(x, y, `props-${atlas}`, frame)
+        .setOrigin(0.5, PROP_ATLASES[atlas].origin)
+        .setDepth(typeof z === 'number' ? z : y);
+    }
+  }
+
+  /**
+   * Idle and walk, for every body in every direction.
+   *
+   * Ninety-six animations sounds like a lot and costs nothing: they are frame
+   * indices into sheets already in memory, and defining them all up front means
+   * a body is never asked to play an animation that has not been created yet.
+   *
+   * The timings come from the pack and are uneven — idle holds for well over a
+   * second and blinks for a tenth. Phaser divides an animation's `duration`
+   * evenly across its frames and then adds each frame's own `duration`, so the
+   * short frame sets the base and the long one carries the difference.
+   */
   #createAnimations(): void {
-    const key = `${ASSETS.tileset}-frames`;
-    for (const [direction, frames] of Object.entries(CHARACTER_FRAMES)) {
-      this.anims.create({
-        key: `walk-${direction}`,
-        frames: frames.map((frame) => ({ key, frame })),
-        frameRate: 8,
-        repeat: -1,
-      });
+    const states: BodyState[] = ['idle', 'walk'];
+    for (const body of BODY_IDS) {
+      for (const state of states) {
+        const [longMs, shortMs] = BODY_TIMING[state];
+        for (const direction of Object.keys(BODY_ROW) as Array<keyof typeof BODY_ROW>) {
+          const [first, second] = bodyFrames(state, direction);
+          this.anims.create({
+            key: bodyAnimation(body, state, direction),
+            frames: [
+              { key: bodyTexture(body), frame: first, duration: longMs - shortMs },
+              { key: bodyTexture(body), frame: second, duration: 0 },
+            ],
+            duration: shortMs * 2,
+            repeat: -1,
+          });
+        }
+      }
     }
   }
 
@@ -577,7 +699,7 @@ export class OfficeScene extends Phaser.Scene {
         )
         .setOrigin(0.5, 0.5)
         .setAlpha(isAgentArea ? 0.85 : 0.55)
-        .setDepth(5);
+        .setDepth(DEPTH.zoneLabel);
     }
   }
 

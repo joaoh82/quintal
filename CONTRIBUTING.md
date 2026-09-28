@@ -122,11 +122,20 @@ Every zone rectangle needs `kind` (`private`, `spawn` or `agent_area`), `zoneId`
 and `label` properties; the parser throws on an unknown `kind` rather than
 silently dropping the zone. A door is simply a hole in the `walls` layer.
 
-`tools/generate-hq-map.mjs` is how the map was first built. It is **not** a build
-step — if you've edited the map in Tiled, re-running it will overwrite your work.
+`tools/build-hq-map.mjs` **is** the map. `packages/shared/maps/hq.json` is
+generated from it and committed; edit the builder and re-run it rather than
+editing the JSON, because the floor plan, the wall connection indices and the
+collision grid have to agree and only the builder keeps them agreeing. It
+refuses to write a map whose spawns are blocked or whose zones can't be walked
+to, and `packages/shared/src/maps/hq.test.ts` checks the committed file for the
+same things.
 
-Art comes from Kenney's CC0 packs. If you add assets, record where they came from
-and their license in `apps/web/public/assets/CREDITS.md`.
+Art is the Shared World CC0 pack, vendored into `apps/web/public/assets/world`
+by `tools/sync-world-assets.mjs`. `docs/world-assets.md` is the art contract —
+projection, anchors, palette ramps, animation layout — and is what to follow
+when drawing a new prop or a thirteenth avatar; it is copied from the pack, so
+edit it there. If you add assets, record where they came from and their license
+in `apps/web/public/assets/CREDITS.md`.
 
 ## Conventions
 
