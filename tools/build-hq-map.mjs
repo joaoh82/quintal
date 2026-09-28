@@ -50,6 +50,16 @@ const surfaceGid = (name) => {
 
 const floor = new Array(W * H).fill(surfaceGid('ceramic-ivory'));
 const wall = new Array(W * H).fill(false);
+/**
+ * Where a wall has a door in it.
+ *
+ * Kept apart from `wall` because the two questions have different answers.
+ * You can walk through a doorway, so it is not wall for collision — but the
+ * wall either side of it is still a run, not an end. Left to the connection
+ * mask, both sides render the family's end pieces, which stop nine pixels
+ * short of the tile edge and leave the door standing in a ragged hole.
+ */
+const doorway = new Array(W * H).fill(false);
 const blocked = new Array(W * H).fill(false);
 const props = [];
 
@@ -73,8 +83,9 @@ function wallColumn(x, y0, y1) {
   for (let y = y0; y <= y1; y += 1) if (inside(x, y)) wall[at(x, y)] = true;
 }
 
-function doorway(x, y) {
+function openDoorway(x, y) {
   wall[at(x, y)] = false;
+  doorway[at(x, y)] = true;
 }
 
 /**
@@ -168,15 +179,45 @@ function prop(sprite, tx, ty, options = {}) {
 /**
  * A door standing in a doorway.
  *
- * Two things are wrong if a door is placed like ordinary furniture. Its sprite
- * is taller than the wall row it fills, so it has to be lifted to sit in the
- * gap rather than below it; and it would then sort in front of anybody
- * standing next to it, so somebody in the room behind would be hidden by their
- * own door. Pinning the depth a row above the opening puts the door in the
- * wall, where it belongs, and everybody who walks near it in front.
+ * Placed like ordinary furniture a door lands on the floor *below* the wall
+ * it is supposed to be in, because a prop's anchor is the ground it stands on
+ * and a door's ground is the doorway itself. The wall line runs through the
+ * middle of its row, so the door is centred on that line: half of it reads as
+ * being in the wall, half as swinging toward you. The window and the artwork
+ * hang the same way, which is why they already looked right.
+ *
+ * The depth is pinned a row above the opening so the door sorts behind
+ * anybody standing near it. Otherwise somebody in the room beyond would be
+ * hidden by their own door.
  */
-function door(sprite, tx, ty, lift) {
-  prop(sprite, tx, ty, { lift, z: (ty - 1) * TILE });
+/**
+ * Anything fixed to a wall: a door, a window, a clock, the coat hooks.
+ *
+ * Placed like ordinary furniture these land on the floor *below* the wall they
+ * belong to, because a prop's anchor is the ground it stands on and these do
+ * not stand on the ground at all. `ty` is the wall's own row, and the sprite
+ * is centred on the line running through it: half reads as being in the wall,
+ * half as facing you.
+ *
+ * Only for a wall that runs east to west. The sprites are all drawn face-on,
+ * so there is nothing to centre on a wall running north to south — one in a
+ * side wall stands in its opening instead, which is what `lift: 0` gives.
+ *
+ * The depth is pinned a row above the wall so these sort behind anybody
+ * walking past, and never below the wall layer itself — a window that sorted
+ * under the wall it is set into would simply vanish.
+ */
+function onWall(sprite, tx, ty) {
+  const size = PROP_SIZES[sprite];
+  if (!size) throw new Error(`No visible size recorded for "${sprite}"`);
+  const lift = size[1] / 2 - TILE / 2;
+  // Centring works everywhere but the outer wall, where half a window would
+  // hang off the top of the map and be clipped. There, sit it just inside.
+  const top = ty * TILE + TILE / 2 - size[1] / 2;
+  prop(sprite, tx, ty, {
+    lift: top < 0 ? lift - top : lift,
+    z: Math.max(0, (ty - 1) * TILE),
+  });
 }
 
 /** A run of the same prop, every `step` tiles. */
@@ -226,11 +267,11 @@ function shell() {
   // Doorways. Every room reaches the hallway; the office also opens straight
   // into the cafeteria, because walking back out to the corridor for coffee is
   // the kind of realism nobody enjoys.
-  for (const x of [9, 27, 45]) doorway(x, 11);
-  for (const x of [12, 26, 46]) doorway(x, 17);
-  doorway(38, 24);
-  doorway(19, 34);
-  doorway(20, 34);
+  for (const x of [9, 27, 45]) openDoorway(x, 11);
+  for (const x of [12, 26, 46]) openDoorway(x, 17);
+  openDoorway(38, 24);
+  openDoorway(19, 34);
+  openDoorway(20, 34);
 }
 
 function floors() {
@@ -276,11 +317,11 @@ function huddleRoom() {
   prop('meeting/flipchart', 15, 3);
   prop('meeting/side-table', 15, 9);
   prop('office-base/plant-tall', 16, 2);
-  prop('meeting/acoustic-panel', 3, 1, { z: 12 });
-  prop('meeting/acoustic-panel', 5, 1, { z: 12 });
-  prop('office-base/window', 12, 1, { z: 12 });
-  prop('office-base/window', 14.5, 1, { z: 12 });
-  door('hallway/door-open', 9, 11, -22);
+  onWall('meeting/acoustic-panel', 3, 0);
+  onWall('meeting/acoustic-panel', 5, 0);
+  onWall('office-base/window', 12, 0);
+  onWall('office-base/window', 14.5, 0);
+  onWall('hallway/door-open', 9, 11);
 }
 
 function focusRoom() {
@@ -297,11 +338,11 @@ function focusRoom() {
   prop('meeting/media-cabinet', 21, 3);
   prop('meeting/whiteboard', 33, 4);
   prop('office-base/plant-tall', 34, 9);
-  prop('meeting/acoustic-panel', 20, 1, { z: 12 });
-  prop('meeting/acoustic-panel', 22, 1, { z: 12 });
-  prop('office-base/window', 30.5, 1, { z: 12 });
-  prop('office-base/window', 33, 1, { z: 12 });
-  door('hallway/door-open', 27, 11, -22);
+  onWall('meeting/acoustic-panel', 20, 0);
+  onWall('meeting/acoustic-panel', 22, 0);
+  onWall('office-base/window', 30.5, 0);
+  onWall('office-base/window', 33, 0);
+  onWall('hallway/door-open', 27, 11);
 }
 
 /** Heads-down desks rather than a table: the room is for working, not meeting. */
@@ -317,14 +358,14 @@ function deepWorkRoom() {
   prop('office-base/plant-tall', 53, 10);
   prop('office/desk-lamp', 38.5, 3, { lift: -26 });
   prop('office/desk-lamp', 46.5, 8, { lift: -26 });
-  prop('office-base/window', 40.5, 1, { z: 12 });
-  prop('office-base/window', 44, 1, { z: 12 });
-  prop('office-base/window', 47.5, 1, { z: 12 });
-  door('hallway/door-open', 45, 11, -22);
+  onWall('office-base/window', 40.5, 0);
+  onWall('office-base/window', 44, 0);
+  onWall('office-base/window', 47.5, 0);
+  onWall('hallway/door-open', 45, 11);
 }
 
 function hallway() {
-  prop('hallway/glass-doors-closed', 0, 14, { z: 12 });
+  prop('hallway/glass-doors-closed', 0, 14, { z: 13 * TILE });
   prop('hallway/entrance-mat', 2, 14, { z: 2 });
   prop('office/reception-counter', 5.5, 15);
   prop('office/chair-west', 5.5, 13);
@@ -338,19 +379,19 @@ function hallway() {
   prop('hallway/plant-tall', 33, 16);
   prop('hallway/waiting-bench', 39.5, 16);
   prop('hallway/plant-trough', 28.5, 12);
-  prop('hallway/artwork', 16, 12, { z: 12 });
+  onWall('hallway/artwork', 16, 11);
   prop('hallway/drinking-fountain', 30, 12);
 
   prop('hallway/elevator', 54, 14);
-  prop('hallway/direction-sign', 50, 12, { z: 12 });
-  prop('hallway/noticeboard', 23, 12, { z: 12 });
-  prop('hallway/artwork', 7, 12, { z: 12 });
-  prop('hallway/clock', 28, 12, { z: 12 });
-  prop('hallway/emergency-cabinet', 43, 12, { z: 12 });
-  prop('hallway/coat-hooks', 36, 12, { z: 12 });
-  door('hallway/door-open', 12, 17, -22);
-  door('hallway/door-open', 26, 17, -22);
-  door('hallway/door-open', 46, 17, -22);
+  onWall('hallway/direction-sign', 50, 11);
+  onWall('hallway/noticeboard', 23, 11);
+  onWall('hallway/artwork', 7, 11);
+  onWall('hallway/clock', 28, 11);
+  onWall('hallway/emergency-cabinet', 43, 11);
+  onWall('hallway/coat-hooks', 36, 11);
+  onWall('hallway/door-open', 12, 17);
+  onWall('hallway/door-open', 26, 17);
+  onWall('hallway/door-open', 46, 17);
 }
 
 function openOffice() {
@@ -421,7 +462,7 @@ function cafeteria() {
 }
 
 function garden() {
-  door('hallway/glass-doors-open', 19.5, 34, 0);
+  onWall('hallway/glass-doors-open', 19.5, 34);
 
   prop('garden/fountain', 19.5, 40);
   prop('garden/bench-north', 16.5, 37);
@@ -480,13 +521,24 @@ const ZONES = [
   { id: 'huddle', kind: 'private', label: 'Huddle Room', bounds: rect(ROOMS.huddle) },
   { id: 'focus', kind: 'private', label: 'Focus Room', bounds: rect(ROOMS.focus) },
   { id: 'deep-work', kind: 'private', label: 'Deep Work', bounds: rect(ROOMS.deepWork) },
-  { id: 'hallway', kind: 'common', label: 'Hallway', bounds: rect(ROOMS.hall) },
   { id: 'lobby', kind: 'spawn', label: 'Lobby', bounds: { x: 13, y: 12, width: 12, height: 5 } },
-  { id: 'office', kind: 'common', label: 'Open Office', bounds: rect(ROOMS.office) },
   { id: 'agent-bay', kind: 'agent_area', label: 'Agent Bay', bounds: rect(ROOMS.bay) },
   { id: 'cafeteria', kind: 'common', label: 'Cafeteria', bounds: rect(ROOMS.cafe) },
   { id: 'garden', kind: 'common', label: 'Garden', bounds: rect(ROOMS.garden) },
 ];
+
+/**
+ * The corridor and the open-plan desks are deliberately not zones.
+ *
+ * A zone is a conversation, so it should be somewhere you go to be, not
+ * somewhere you pass through or the place you are by default — which is
+ * exactly what the open floor means. Naming them left the catch-all
+ * conversation with nothing but doorway gaps in it, and filed a line you
+ * walked three steps to say into a different transcript from the one before.
+ *
+ * Their labels went with them, because a label comes from a zone. The rooms
+ * read as rooms without one.
+ */
 
 const SPAWNS = [
   ...[16, 18, 20, 22].map((x, i) => ({ name: `human-${i + 1}`, kind: 'human', x, y: 14 })),
@@ -506,9 +558,15 @@ agentBay();
 cafeteria();
 garden();
 
-/** Cardinal connection index: north 1, east 2, south 4, west 8. */
+/**
+ * Cardinal connection index: north 1, east 2, south 4, west 8.
+ *
+ * A doorway counts as connected, so the run carries straight through it and
+ * the band meets the door frame instead of stopping short of it.
+ */
 function wallGid(x, y) {
-  const on = (dx, dy) => (inside(x + dx, y + dy) ? wall[at(x + dx, y + dy)] : false);
+  const on = (dx, dy) =>
+    inside(x + dx, y + dy) ? wall[at(x + dx, y + dy)] || doorway[at(x + dx, y + dy)] : false;
   const mask = (on(0, -1) ? 1 : 0) + (on(1, 0) ? 2 : 0) + (on(0, 1) ? 4 : 0) + (on(-1, 0) ? 8 : 0);
   return WALL_FIRSTGID + mask;
 }

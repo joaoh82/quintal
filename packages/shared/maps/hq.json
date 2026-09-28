@@ -3218,9 +3218,9 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -3236,9 +3236,9 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -3254,9 +3254,9 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -3557,9 +3557,8 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
-    19,
     27,
     27,
     27,
@@ -3571,9 +3570,10 @@
     27,
     27,
     27,
-    25,
+    27,
+    27,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -3591,9 +3591,9 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -3920,7 +3920,7 @@
     0,
     0,
     0,
-    18,
+    22,
     0,
     0,
     0,
@@ -4032,7 +4032,7 @@
     0,
     0,
     0,
-    21,
+    22,
     0,
     0,
     0,
@@ -4516,10 +4516,10 @@
     27,
     27,
     27,
-    25,
+    27,
     0,
     0,
-    19,
+    27,
     27,
     27,
     27,
@@ -8093,7 +8093,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8101,7 +8101,7 @@
      "visible": true,
      "width": 0,
      "x": 112,
-     "y": 64
+     "y": 38
     },
     {
      "height": 0,
@@ -8117,7 +8117,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8125,7 +8125,7 @@
      "visible": true,
      "width": 0,
      "x": 176,
-     "y": 64
+     "y": 38
     },
     {
      "height": 0,
@@ -8141,7 +8141,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8149,7 +8149,7 @@
      "visible": true,
      "width": 0,
      "x": 400,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -8165,7 +8165,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8173,7 +8173,7 @@
      "visible": true,
      "width": 0,
      "x": 480,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -8197,7 +8197,7 @@
      "visible": true,
      "width": 0,
      "x": 304,
-     "y": 362
+     "y": 392
     },
     {
      "height": 0,
@@ -8593,7 +8593,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8601,7 +8601,7 @@
      "visible": true,
      "width": 0,
      "x": 656,
-     "y": 64
+     "y": 38
     },
     {
      "height": 0,
@@ -8617,7 +8617,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8625,7 +8625,7 @@
      "visible": true,
      "width": 0,
      "x": 720,
-     "y": 64
+     "y": 38
     },
     {
      "height": 0,
@@ -8641,7 +8641,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8649,7 +8649,7 @@
      "visible": true,
      "width": 0,
      "x": 992,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -8665,7 +8665,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -8673,7 +8673,7 @@
      "visible": true,
      "width": 0,
      "x": 1072,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -8697,7 +8697,7 @@
      "visible": true,
      "width": 0,
      "x": 880,
-     "y": 362
+     "y": 392
     },
     {
      "height": 0,
@@ -9207,7 +9207,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -9215,7 +9215,7 @@
      "visible": true,
      "width": 0,
      "x": 1312,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -9231,7 +9231,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -9239,7 +9239,7 @@
      "visible": true,
      "width": 0,
      "x": 1424,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -9255,7 +9255,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 0
       }
      ],
      "rotation": 0,
@@ -9263,7 +9263,7 @@
      "visible": true,
      "width": 0,
      "x": 1536,
-     "y": 64
+     "y": 39
     },
     {
      "height": 0,
@@ -9287,7 +9287,7 @@
      "visible": true,
      "width": 0,
      "x": 1456,
-     "y": 362
+     "y": 392
     },
     {
      "height": 0,
@@ -9303,7 +9303,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 416
       }
      ],
      "rotation": 0,
@@ -9560,7 +9560,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9568,7 +9568,7 @@
      "visible": true,
      "width": 0,
      "x": 528,
-     "y": 416
+     "y": 381.5
     },
     {
      "height": 0,
@@ -9622,7 +9622,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9630,7 +9630,7 @@
      "visible": true,
      "width": 0,
      "x": 1616,
-     "y": 416
+     "y": 376
     },
     {
      "height": 0,
@@ -9646,7 +9646,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9654,7 +9654,7 @@
      "visible": true,
      "width": 0,
      "x": 752,
-     "y": 416
+     "y": 384
     },
     {
      "height": 0,
@@ -9670,7 +9670,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9678,7 +9678,7 @@
      "visible": true,
      "width": 0,
      "x": 240,
-     "y": 416
+     "y": 381.5
     },
     {
      "height": 0,
@@ -9694,7 +9694,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9702,7 +9702,7 @@
      "visible": true,
      "width": 0,
      "x": 912,
-     "y": 416
+     "y": 376.5
     },
     {
      "height": 0,
@@ -9718,7 +9718,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9726,7 +9726,7 @@
      "visible": true,
      "width": 0,
      "x": 1392,
-     "y": 416
+     "y": 381
     },
     {
      "height": 0,
@@ -9742,7 +9742,7 @@
       {
        "name": "z",
        "type": "int",
-       "value": 12
+       "value": 320
       }
      ],
      "rotation": 0,
@@ -9750,7 +9750,7 @@
      "visible": true,
      "width": 0,
      "x": 1168,
-     "y": 416
+     "y": 387
     },
     {
      "height": 0,
@@ -9774,7 +9774,7 @@
      "visible": true,
      "width": 0,
      "x": 400,
-     "y": 554
+     "y": 584
     },
     {
      "height": 0,
@@ -9798,7 +9798,7 @@
      "visible": true,
      "width": 0,
      "x": 848,
-     "y": 554
+     "y": 584
     },
     {
      "height": 0,
@@ -9822,7 +9822,7 @@
      "visible": true,
      "width": 0,
      "x": 1488,
-     "y": 554
+     "y": 584
     },
     {
      "height": 0,
@@ -12012,7 +12012,7 @@
      "visible": true,
      "width": 0,
      "x": 640,
-     "y": 1120
+     "y": 1130
     },
     {
      "height": 0,
@@ -14006,34 +14006,6 @@
     {
      "height": 160,
      "id": 320,
-     "name": "Hallway",
-     "properties": [
-      {
-       "name": "kind",
-       "type": "string",
-       "value": "common"
-      },
-      {
-       "name": "zoneId",
-       "type": "string",
-       "value": "hallway"
-      },
-      {
-       "name": "label",
-       "type": "string",
-       "value": "Hallway"
-      }
-     ],
-     "rotation": 0,
-     "type": "zone",
-     "visible": true,
-     "width": 1728,
-     "x": 32,
-     "y": 384
-    },
-    {
-     "height": 160,
-     "id": 321,
      "name": "Lobby",
      "properties": [
       {
@@ -14060,36 +14032,8 @@
      "y": 384
     },
     {
-     "height": 320,
-     "id": 322,
-     "name": "Open Office",
-     "properties": [
-      {
-       "name": "kind",
-       "type": "string",
-       "value": "common"
-      },
-      {
-       "name": "zoneId",
-       "type": "string",
-       "value": "office"
-      },
-      {
-       "name": "label",
-       "type": "string",
-       "value": "Open Office"
-      }
-     ],
-     "rotation": 0,
-     "type": "zone",
-     "visible": true,
-     "width": 1184,
-     "x": 32,
-     "y": 576
-    },
-    {
      "height": 192,
-     "id": 323,
+     "id": 321,
      "name": "Agent Bay",
      "properties": [
       {
@@ -14117,7 +14061,7 @@
     },
     {
      "height": 320,
-     "id": 324,
+     "id": 322,
      "name": "Cafeteria",
      "properties": [
       {
@@ -14145,7 +14089,7 @@
     },
     {
      "height": 352,
-     "id": 325,
+     "id": 323,
      "name": "Garden",
      "properties": [
       {
@@ -14180,7 +14124,7 @@
   }
  ],
  "nextlayerid": 7,
- "nextobjectid": 326,
+ "nextobjectid": 324,
  "orientation": "orthogonal",
  "properties": [
   {
