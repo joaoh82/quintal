@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { signPayload } from './sign-payload.mjs';
 
@@ -136,9 +137,36 @@ if (process.platform === 'darwin') {
     if (signing === 'Developer ID signed and notarized') {
       execFileSync('xcrun', ['stapler', 'validate', app], { stdio: 'inherit' });
     }
+    // Exercise the download while it is still mounted read-only. The smoke
+    // owns its scratch HOME and file secrets backend, and exits nonzero for
+    // any failed lifecycle/auth check before this build can stage installers.
+    mkdirSync('smoke-evidence', { recursive: true });
+    const smokeLog = 'smoke-evidence/personal-office.log';
+    const log = openSync(smokeLog, 'w');
+    try {
+      execFileSync(process.execPath, ['scripts/personal-office-smoke.mjs', app], {
+        env, stdio: ['ignore', log, log], timeout: 8 * 60_000,
+      });
+    } finally {
+      closeSync(log);
+      console.log(readFileSync(smokeLog, 'utf8'));
+    }
     console.log(`PASS: DMG app signature verifies; packaged sidecar retains allow-jit and answers --help; packaged Node is ${nodeVersion} and the personal payload is in Resources`);
   } finally {
-    if (mounted) execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' });
+    if (mounted) {
+      // macOS can briefly retain the app's image after its process exits.
+      // Retry EBUSY only; an unrelated detach failure must still fail the job.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          execFileSync('hdiutil', ['detach', mount], { stdio: 'inherit' });
+          break;
+        } catch (error) {
+          if (error.status !== 16 || attempt >= 9) throw error;
+          console.log('DMG still busy after app exit; retrying detach');
+          await delay(1_000);
+        }
+      }
+    }
     rmSync(mount, { recursive: true, force: true });
   }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run inside xvfb-run on a fresh Linux runner, against the real AppImage.
+# Run inside xvfb-run and dbus-run-session, against the real AppImage.
 set -euo pipefail
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 appimage=$(realpath "$1")
 evidence=$(realpath "$2")
 mkdir -p "$evidence"
@@ -38,10 +39,11 @@ if find squashfs-root -name 'libdbus-1.so*' | grep -q .; then
   exit 1
 fi
 unset QUINTAL_SERVER_URL QUINTAL_OFFICE_URL
-export XDG_DATA_HOME="$scratch/data" XDG_CONFIG_HOME="$scratch/config"
+export HOME="$scratch/home" XDG_DATA_HOME="$scratch/data" XDG_CONFIG_HOME="$scratch/config" XDG_CACHE_HOME="$scratch/cache"
+mkdir -p "$HOME"
 export QUINTAL_SECRETS_BACKEND=file QUINTAL_NO_LOGIN_PATH=1
 export WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
-"$appimage" --appimage-extract-and-run > "$evidence/app.log" 2>&1 &
+"$scratch/squashfs-root/AppRun" > "$evidence/app.log" 2>&1 &
 app_pid=$!
 # Tesseract wants dark text on a light ground. The picker is the other way
 # round — near-white on near-black — and reading it directly returns noise: the
@@ -58,6 +60,14 @@ for _ in $(seq 1 45); do
   # Either is proof the picker rendered; OCR does not always get both.
   if grep -qiE 'your office|personal office' "$evidence/server-picker.txt"; then
     echo 'PASS: packaged AppImage rendered the first screen; bundled sidecar and Node runtime answered; payload present'
+    # Release the single-instance owner before launching a personal office.
+    kill "$app_pid"
+    wait "$app_pid" || true
+    app_pid=''
+    # AppRun supplies the packaged library/resource paths and execs the host,
+    # so the PID the lifecycle smoke kills is the app, not the AppImage runtime.
+    # pipefail preserves failures while tee retains evidence on either outcome.
+    node "$script_dir/personal-office-smoke.mjs" "$scratch/squashfs-root/AppRun" 2>&1 | tee "$evidence/personal-office.log"
     exit 0
   fi
   sleep 2

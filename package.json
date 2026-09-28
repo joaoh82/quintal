@@ -14,7 +14,7 @@
     "start": "cross-env NODE_ENV=production node apps/server/dist/index.js",
     "typecheck": "pnpm --filter @quintal/shared build && pnpm -r typecheck && tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:release && pnpm test:payload && pnpm -r --if-present test",
-    "test:payload": "node --test scripts/prune-personal-payload.test.mjs",
+    "test:payload": "node --test scripts/prune-personal-payload.test.mjs scripts/personal-office-processes.test.mjs",
     "test:release": "tsx --test scripts/set-version.test.ts scripts/release-assets.test.ts",
     "db:generate": "pnpm --filter @quintal/shared db:generate",
     "db:migrate": "pnpm --filter @quintal/shared db:migrate",
