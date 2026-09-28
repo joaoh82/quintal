@@ -64,7 +64,11 @@
     font-family: ui-monospace, monospace; white-space: pre-wrap; text-align: left;
     max-height: 9rem; overflow: auto; background: #09090b; border-radius: .4rem;
     padding: .5rem .6rem; }
-  #office .actions { display: flex; gap: .5rem; justify-content: center; margin-top: .9rem; }
+  #office .actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center;
+    margin-top: .9rem; }
+  /* Three buttons, one of them carrying a date, do not fit on one line in this
+     window. Wrapping the row is right; wrapping a label mid-word is not. */
+  #office .actions button { white-space: nowrap; }
 </style>
 
 <main>
@@ -74,15 +78,24 @@
   </p>
 
   <!--
-    The personal office coming up. `personal_status` says which of four
-    things is true — starting, ready, failed, stopped — and the page says
-    the same, in words. A failure shows the server's last lines, because a
-    "something went wrong" with nothing to read is how bugs stay unreported.
+    The personal office coming up. `personal_status` says which one thing is
+    true — starting, ready, failed, restored, stopped — and the page says the
+    same, in words. A failure shows the server's last lines, because a
+    "something went wrong" with nothing to read is how bugs stay unreported,
+    and — when the failure came before the office ever opened — the way back
+    to the copy taken before this version ran.
   -->
   <section id="office" hidden>
     <p id="office-status">Starting your personal office…</p>
     <p class="detail" id="office-detail" hidden></p>
     <div class="actions" id="office-actions" hidden>
+      <!--
+        Only for an office that failed before it ever opened, and only when a
+        copy was taken before this version ran. Both conditions are the host's
+        to decide — `status.restorable` — because the same two decide whether
+        the command will do anything.
+      -->
+      <button id="restore" hidden>Restore the backup</button>
       <button id="retry">Try again</button>
       <button class="link" id="office-elsewhere">Connect to a server instead</button>
     </div>
@@ -232,8 +245,18 @@
     starting: 'Starting your personal office…',
     ready: 'Your office is ready. Opening it…',
     failed: 'Your personal office could not start.',
+    restored: 'Your office is back as it was before the upgrade.',
     stopped: 'Your personal office is not running.',
   };
+
+  // A backup is named `<stamp>-<from>-to-<to>`, and the stamp is
+  // `YYYYMMDD-HHMMSS` in UTC. A person picking a button needs the date, not
+  // the path the detail already prints underneath.
+  function stampOf(path) {
+    const name = String(path).split(/[\\/]/).pop() ?? '';
+    const parts = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/.exec(name);
+    return parts ? `${parts[1]}-${parts[2]}-${parts[3]} ${parts[4]}:${parts[5]} UTC` : name;
+  }
 
   async function followOffice() {
     for (;;) {
@@ -251,7 +274,7 @@
           : line;
 
       const detail = el('office-detail');
-      if (status.phase === 'failed' || status.phase === 'stopped') {
+      if (status.phase === 'failed' || status.phase === 'stopped' || status.phase === 'restored') {
         const lines = [];
         if (status.message) lines.push(status.message);
         if (status.backup) lines.push(`A backup was taken first: ${status.backup}`);
@@ -265,15 +288,49 @@
         } catch {}
         detail.textContent = lines.join('\n');
         detail.hidden = false;
+        const restore = el('restore');
+        restore.hidden = !status.restorable;
+        if (status.restorable) {
+          restore.textContent = `Restore the backup from ${stampOf(status.backup)}`;
+        }
         el('office-actions').hidden = false;
         return;
       }
       detail.hidden = true;
+      el('restore').hidden = true;
       el('office-actions').hidden = true;
       if (status.phase === 'ready') return;
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
   }
+
+  // Said out loud, because it is the one button here that changes data — and
+  // because putting the database back is only half of it: this app is the one
+  // whose migration failed, and it will run the same migration again unless
+  // the person goes back to the version they were on. The host says which
+  // version that is once it has restored; the warning has to come first.
+  el('restore').onclick = async () => {
+    const yes = confirm(
+      'Put back the copy of your office taken before this upgrade?\n\n' +
+        'Anything the failed upgrade did is undone, and the database it left ' +
+        'behind is kept beside the backup.\n\n' +
+        'This version of Quintal will try the same migration again, so you will ' +
+        'need the version you were on before to open your office.',
+    );
+    if (!yes) return;
+    el('restore').disabled = true;
+    try {
+      await invoke('restore_personal_backup');
+    } catch (error) {
+      fail(error?.message ?? String(error), 'office-detail');
+      return;
+    } finally {
+      el('restore').disabled = false;
+    }
+    // Back to the same loop, which renders whatever the office now says —
+    // the restored phase, its message, and no restore button.
+    void followOffice();
+  };
 
   el('retry').onclick = () => {
     void invoke('retry_personal_office').catch((error) => fail(String(error), 'office-detail'));

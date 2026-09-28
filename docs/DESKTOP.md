@@ -234,9 +234,10 @@ installs from, and the Node it runs on is the official build pinned in
    cannot race over one database. A second launch of the app hands itself to
    the first and exits anyway.
 4. If the app version has changed since the server last ran, the database is
-   copied to `backups/` first — migrations run on the server's first boot,
-   and a migration that fails halfway is the one failure with no way back
-   unless this happened. The last five backups are kept.
+   copied to `backups/<stamp>-<from>-to-<to>/` first — migrations run on the
+   server's first boot, and a migration that fails halfway is the one failure
+   with no way back unless this happened. The last five backups are kept, and
+   the first screen can put one back; see [When it goes wrong](#when-it-goes-wrong).
 5. It starts the server with a curated environment — nothing from your shell
    about where a database lives can reach it — and waits for `/health`. The
    first screen shows progress meanwhile, and the office opens the moment
@@ -251,7 +252,8 @@ installs from, and the Node it runs on is the official build pinned in
 Inside it: `quintal.db` (the office, one SQLite file), `objects/` (avatars
 and attachments), `auth-secret` (the session-signing secret, `0600`, so a
 restart does not sign you out), `office.json` (a stable id for the office,
-the port it last used, the version that last ran), `backups/`, and
+the port it last used, the version that last ran, and the backup a restore
+put back if one is waiting to be opened), `backups/`, and
 `office.lock`. Nothing is written inside the installed app; the payload it
 ships is read-only and stays that way.
 
@@ -270,11 +272,37 @@ fresh grant) and **Connect to a server instead**.
 
 A server that exits on its own is started again, up to three times in five
 minutes. After that the app stops trying and reports the exit code and the
-last thing the server wrote to stderr. If that was a failed migration, the
-backup taken before the upgrade is named on the same screen; restoring is
-copying its `quintal.db` (and `-wal`, `-shm` if present) back over the live
-ones with the app closed. A restart with no backup and no error is a server
-that took longer than ninety seconds to answer, which is reported as such.
+last thing the server wrote to stderr. A restart with no backup and no error
+is a server that took longer than ninety seconds to answer, which is reported
+as such.
+
+If a migration is what failed, the same screen offers **Restore the backup
+from &lt;date&gt;**, and that is the whole recovery:
+
+- The database the failed run left behind is moved to
+  `backups/<stamp>-failed-<version>/` — not deleted. It is the only evidence
+  of what the migration did, and the only copy of anything written since the
+  backup if this was the wrong button.
+- The backup's `quintal.db`, `-wal` and `-shm` are copied back. All three
+  travel together in both directions: a `-wal` from the failed run left beside
+  a restored database is a log SQLite would replay onto bytes it was never
+  written against.
+- `office.json` records which version the database now belongs to and that it
+  came from a backup, so relaunching the version that failed does not copy the
+  same bytes aside again and push the copies that matter out of the five.
+
+**Restoring does not roll the app back**, and the screen says so once it is
+done: this is still the version whose migration failed, and opening the office
+with it runs the same migration against the same database. Install the version
+named in the message — the one the office was on — before opening it again.
+[Releases](https://github.com/joaoh82/quintal/releases) has every version.
+
+The button is offered only for an office that failed **before it ever opened**
+this launch. Once somebody has been in the office, a database from before the
+upgrade is not a way back; it is everything done since thrown away — so the
+host refuses it, whatever asks. Copying the files back by hand with the app
+closed is still what the command does, for anybody who would rather do it
+themselves.
 
 If the keychain will not open, the office cannot start — it has to know
 whose it is — and the screen says that rather than creating a new identity

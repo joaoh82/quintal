@@ -83,6 +83,13 @@ pub enum PersonalError {
     NoRuntime,
     #[error("another copy of Quintal is already running this office")]
     AlreadyRunning,
+    #[error("there is no backup of this office to put back")]
+    NoBackup,
+    #[error(
+        "this office has been open since that backup was taken; putting it back \
+         now would undo everything done since"
+    )]
+    NotRestorable,
     #[error("could not prepare the personal office: {0}")]
     Io(String),
 }
@@ -147,6 +154,13 @@ pub struct Record {
     /// The app version that last brought the server up successfully.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// The backup a restore put back, named by its directory, until the
+    /// office next opens. While this is set the database on disk *is* that
+    /// backup, byte for byte, which is what stops a relaunch of the version
+    /// that failed from copying the same bytes aside again — see
+    /// `backup_before_upgrade`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restored_from: Option<String>,
     #[serde(default)]
     pub created_at: String,
 }
@@ -357,20 +371,52 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 
 // --- backups -----------------------------------------------------------------------
 
+/// A way back: where the copy of the database is, and whether this launch
+/// is what made it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Backup {
+    pub dir: PathBuf,
+    /// False when the copy was already there — the live database was
+    /// restored from it and nothing has opened the office since, so it is
+    /// still the same bytes.
+    pub fresh: bool,
+}
+
+/// What a restore put back, for the sentence that explains it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Restored {
+    /// Where the database that failed was moved to, so it is not lost.
+    pub aside: PathBuf,
+    /// The app version the restored database belongs to, when the backup's
+    /// name says — `None` for a directory nobody here named.
+    pub from: Option<String>,
+}
+
 /// Copy the database aside before a different app version touches it.
 ///
 /// Migrations run on the server's first boot after an upgrade, and a
 /// migration that fails halfway is the one failure with no way back unless
-/// this ran first. Returns where the copy went, or `None` when there was
-/// nothing to back up or nothing changed.
+/// this ran first. Returns the copy, or `None` when there was nothing to
+/// back up or nothing changed.
 pub fn backup_before_upgrade(
     layout: &Layout,
     record: &Record,
     version: &str,
-) -> Result<Option<PathBuf>, PersonalError> {
+) -> Result<Option<Backup>, PersonalError> {
     let db = layout.db();
     if !db.is_file() {
         return Ok(None);
+    }
+    // A database a restore just put back *is* the backup it came from. The
+    // version that failed is still the one running, so the check below would
+    // copy it aside again on every relaunch — five retries and the rotation
+    // holds nothing but duplicates of the file somebody is trying to get back
+    // to. Offered again instead, unchanged, so the screen can still name it.
+    if let Some(name) = record.restored_from.as_deref() {
+        let dir = layout.backups().join(name);
+        if dir.is_dir() {
+            return Ok(Some(Backup { dir, fresh: false }));
+        }
     }
     if record.version.as_deref() == Some(version) {
         return Ok(None);
@@ -388,13 +434,92 @@ pub fn backup_before_upgrade(
             std::fs::copy(&source, dir.join(format!("quintal.db{suffix}")))?;
         }
     }
-    prune_backups(layout)?;
-    Ok(Some(dir))
+    prune_backups(layout, Some(&dir))?;
+    Ok(Some(Backup { dir, fresh: true }))
 }
 
-/// Keep the newest `BACKUPS_KEPT`. Names start with a timestamp, so
+/// Put a backup's database back where the office reads it from.
+///
+/// The live files are moved aside rather than deleted. A restore is somebody's
+/// last resort, and the half-migrated database it replaces is the only
+/// evidence of what the migration did; it is also the only copy of anything
+/// written after the backup, in the case where this was the wrong button.
+///
+/// All three files travel together in both directions. A `-wal` left behind
+/// from the failed run beside a restored `quintal.db` is not a database with
+/// one stale file in it — it is a log SQLite will replay onto bytes it was
+/// never written against.
+///
+/// The record is updated to say which version the database is now from, and
+/// that it came from a backup: the app is still the new one, and the next
+/// launch must not treat these bytes as something fresh to copy aside.
+pub fn restore_backup(
+    layout: &Layout,
+    backup: &Path,
+    version: &str,
+) -> Result<Restored, PersonalError> {
+    // The only directories this accepts are the office's own backups. Nothing
+    // but this app calls it, but a copy driven by a path from anywhere else is
+    // a way to overwrite any file on the machine, and the check is one
+    // comparison.
+    if backup.parent() != Some(layout.backups().as_path()) || !backup.join("quintal.db").is_file() {
+        return Err(PersonalError::NoBackup);
+    }
+    let aside = layout
+        .backups()
+        .join(format!("{}-failed-{version}", now_stamp()));
+    std::fs::create_dir_all(&aside)?;
+    for suffix in ["", "-wal", "-shm"] {
+        let live = PathBuf::from(format!("{}{suffix}", layout.db().display()));
+        if live.is_file() {
+            move_file(&live, &aside.join(format!("quintal.db{suffix}")))?;
+        }
+        let source = backup.join(format!("quintal.db{suffix}"));
+        if source.is_file() {
+            std::fs::copy(&source, &live)?;
+        }
+    }
+
+    let name = backup
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let from = versions_in(&name).map(|(from, _)| from.to_string());
+    let mut record = read_record(layout);
+    if let Some(from) = &from {
+        record.version = Some(from.clone());
+    }
+    record.restored_from = Some(name);
+    write_record(layout, &record)?;
+    prune_backups(layout, Some(backup))?;
+    Ok(Restored { aside, from })
+}
+
+/// The versions a backup's name sits between: `<stamp>-<from>-to-<to>`.
+/// `None` for a directory `backup_before_upgrade` did not name.
+fn versions_in(name: &str) -> Option<(&str, &str)> {
+    if name.as_bytes().get(STAMP_LEN) != Some(&b'-') {
+        return None;
+    }
+    name.get(STAMP_LEN + 1..)?.split_once("-to-")
+}
+
+/// Rename where the filesystem allows it, copy where it does not — the two
+/// paths are in the same directory tree, but a data directory that spans a
+/// mount is somebody's real setup.
+fn move_file(from: &Path, to: &Path) -> Result<(), PersonalError> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to)?;
+    std::fs::remove_file(from)?;
+    Ok(())
+}
+
+/// Keep the newest `BACKUPS_KEPT`, never dropping `keep` — which is the one
+/// the caller is in the middle of using. Names start with a timestamp, so
 /// lexical order is chronological.
-fn prune_backups(layout: &Layout) -> Result<(), PersonalError> {
+fn prune_backups(layout: &Layout, keep: Option<&Path>) -> Result<(), PersonalError> {
     let Ok(entries) = std::fs::read_dir(layout.backups()) else {
         return Ok(());
     };
@@ -404,12 +529,19 @@ fn prune_backups(layout: &Layout) -> Result<(), PersonalError> {
         .filter(|path| path.is_dir())
         .collect();
     dirs.sort();
-    while dirs.len() > BACKUPS_KEPT {
-        let oldest = dirs.remove(0);
-        std::fs::remove_dir_all(oldest)?;
+    let mut oldest = 0;
+    while dirs.len() > BACKUPS_KEPT && oldest < dirs.len() {
+        if Some(dirs[oldest].as_path()) == keep {
+            oldest += 1;
+            continue;
+        }
+        std::fs::remove_dir_all(dirs.remove(oldest))?;
     }
     Ok(())
 }
+
+/// The width of `YYYYMMDD-HHMMSS`, which every backup's name starts with.
+const STAMP_LEN: usize = 15;
 
 /// `YYYYMMDD-HHMMSS` in UTC, with no dependency for the calendar.
 fn now_stamp() -> String {
@@ -537,7 +669,7 @@ pub fn plan(settings: &Settings<'_>) -> Spawn {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
-    /// `starting`, `ready`, `failed` or `stopped`.
+    /// `starting`, `ready`, `failed`, `restored` or `stopped`.
     pub phase: String,
     /// Where the office is, once it is anywhere.
     pub origin: Option<String>,
@@ -548,8 +680,13 @@ pub struct Status {
     pub pid: Option<u32>,
     /// Where the database and objects live, so an error can say so.
     pub data_dir: String,
-    /// The backup taken before this launch, if one was.
+    /// The backup taken before this launch, if there is one.
     pub backup: Option<String>,
+    /// Whether that backup can be put back from here, now. True only for an
+    /// office that failed before it ever opened this launch: once somebody
+    /// has been in the office, a database from before the upgrade is not a
+    /// way back, it is everything since thrown away.
+    pub restorable: bool,
 }
 
 struct Inner {
@@ -558,6 +695,10 @@ struct Inner {
     stopping: bool,
     /// Moments the server exited on its own, for the restart budget.
     crashes: Vec<Instant>,
+    /// Whether the server answered `/health` at any point this launch. What
+    /// separates "the upgrade broke it" — where the backup is the answer —
+    /// from "it worked and later died", where restoring would lose a day.
+    ever_ready: bool,
     /// Held while the server runs. Dropping it releases the lock.
     lock: Option<std::fs::File>,
 }
@@ -600,6 +741,7 @@ impl Office {
             pid: None,
             data_dir: layout.root().display().to_string(),
             backup: None,
+            restorable: false,
         };
         Ok(Self {
             layout,
@@ -612,6 +754,7 @@ impl Office {
                 status,
                 stopping: false,
                 crashes: Vec::new(),
+                ever_ready: false,
                 lock: None,
             })),
             logs: Arc::new(LogBuffer::default()),
@@ -690,13 +833,20 @@ impl Office {
                 backed_up = true;
                 let record = read_record(&self.layout);
                 match backup_before_upgrade(&self.layout, &record, &self.version) {
-                    Ok(Some(dir)) => {
+                    Ok(Some(backup)) => {
                         self.logs.push(
                             "host",
-                            format!("backed up the database to {}", dir.display()),
+                            if backup.fresh {
+                                format!("backed up the database to {}", backup.dir.display())
+                            } else {
+                                format!(
+                                    "the database is the one restored from {}, still unopened",
+                                    backup.dir.display()
+                                )
+                            },
                         );
                         self.inner.lock().expect("office lock").status.backup =
-                            Some(dir.display().to_string());
+                            Some(backup.dir.display().to_string());
                     }
                     Ok(None) => {}
                     Err(error) => {
@@ -795,12 +945,19 @@ impl Office {
                     let mut inner = self.inner.lock().expect("office lock");
                     inner.status.phase = "ready".into();
                     inner.status.origin = Some(origin.clone());
+                    inner.status.restorable = false;
+                    inner.ever_ready = true;
                 }
                 // This version has now run migrations and come up: remember
                 // it, so the next launch of the same version takes no backup.
+                // A restore is spent at the same moment — the database has
+                // been opened, so it is no longer the backup it came from.
                 let mut record = read_record(&self.layout);
-                if record.version.as_deref() != Some(self.version.as_str()) {
+                if record.version.as_deref() != Some(self.version.as_str())
+                    || record.restored_from.is_some()
+                {
                     record.version = Some(self.version.clone());
+                    record.restored_from = None;
                     let _ = write_record(&self.layout, &record);
                 }
                 on_ready(&origin);
@@ -843,6 +1000,10 @@ impl Office {
             if inner.crashes.len() as u32 > MAX_RESTARTS {
                 inner.status.phase = "failed".into();
                 inner.status.origin = None;
+                // A server that never came up this launch, with a copy of the
+                // database from before this version touched it, is the one
+                // case a person can fix from the first screen.
+                inner.status.restorable = !inner.ever_ready && inner.status.backup.is_some();
                 inner.status.message = Some(format!(
                     "{why}, and kept doing so. Its last words: {}. Your data is in {}.",
                     if tail.is_empty() {
@@ -866,6 +1027,59 @@ impl Office {
             );
             std::thread::sleep(Duration::from_millis(500 * u64::from(attempt)));
         }
+    }
+
+    /// Put the backup taken before this version ran back, and say what has
+    /// to happen next.
+    ///
+    /// The whole recovery, from the screen that reported the failure: the
+    /// server is already stopped, the database that failed is moved aside,
+    /// the copy is put back, and the office is left not running. It is not
+    /// relaunched, because relaunching *this* app would run the same
+    /// migration against the same database again — the way out is the
+    /// version the office was on, which only the person can install.
+    ///
+    /// Refused unless this launch failed before the office ever opened.
+    /// After a successful start the database has moved on from the backup,
+    /// and putting it back would be a silent way to lose a day's work — so
+    /// a page that called this through XSS, in a working office, gets an
+    /// error and nothing else.
+    pub fn restore(&self) -> Result<Status, PersonalError> {
+        let backup = {
+            let inner = self.inner.lock().expect("office lock");
+            if !inner.status.restorable || inner.child.is_some() {
+                return Err(if inner.status.backup.is_none() {
+                    PersonalError::NoBackup
+                } else {
+                    PersonalError::NotRestorable
+                });
+            }
+            PathBuf::from(inner.status.backup.clone().ok_or(PersonalError::NoBackup)?)
+        };
+
+        let restored = restore_backup(&self.layout, &backup, &self.version)?;
+        self.note(format!(
+            "restored the database from {}; the one that failed is in {}",
+            backup.display(),
+            restored.aside.display()
+        ));
+
+        let rollback = match restored.from.as_deref() {
+            Some(from) => format!("install Quintal {from} again before opening it"),
+            None => "install the version of Quintal you were on before the upgrade".to_string(),
+        };
+        let mut inner = self.inner.lock().expect("office lock");
+        inner.status.phase = "restored".into();
+        inner.status.origin = None;
+        inner.status.restorable = false;
+        inner.status.message = Some(format!(
+            "Your office is back as it was before the upgrade. This copy of Quintal is \
+             {} and would run the same migration again, so {rollback}. The database that \
+             failed is kept at {}.",
+            self.version,
+            restored.aside.display()
+        ));
+        Ok(inner.status.clone())
     }
 
     /// Ask the server to stop, then insist. Safe to call when nothing runs.
@@ -1149,6 +1363,8 @@ mod tests {
         let taken = backup_before_upgrade(&layout, &record, "0.5.0")
             .unwrap()
             .expect("a backup");
+        assert!(taken.fresh);
+        let taken = taken.dir;
         assert!(taken.join("quintal.db").is_file());
         assert!(taken.join("quintal.db-wal").is_file());
         assert!(taken
@@ -1191,6 +1407,202 @@ mod tests {
         }
         let kept = std::fs::read_dir(layout.backups()).unwrap().count();
         assert!(kept <= BACKUPS_KEPT, "kept {kept}");
+    }
+
+    /// The whole point of the copy: every file it holds comes back, and the
+    /// database that failed is kept rather than deleted.
+    #[test]
+    fn a_restore_puts_every_file_back_and_keeps_the_one_that_failed() {
+        let (_dir, layout) = layout();
+        std::fs::create_dir_all(layout.root()).unwrap();
+        let wal = format!("{}-wal", layout.db().display());
+        let shm = format!("{}-shm", layout.db().display());
+        std::fs::write(layout.db(), b"the office").unwrap();
+        // Rows written after the last checkpoint live only here. A restore
+        // that puts the main file back and leaves this one behind loses them.
+        std::fs::write(&wal, b"rows not yet checkpointed").unwrap();
+        std::fs::write(&shm, b"shared memory").unwrap();
+
+        let record = Record {
+            version: Some("0.4.0".into()),
+            ..Record::default()
+        };
+        let backup = backup_before_upgrade(&layout, &record, "0.5.0")
+            .unwrap()
+            .expect("a backup");
+
+        // What a migration that fails halfway leaves behind.
+        std::fs::write(layout.db(), b"half migrated").unwrap();
+        std::fs::write(&wal, b"half migrated wal").unwrap();
+
+        let restored = restore_backup(&layout, &backup.dir, "0.5.0").expect("restored");
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
+        assert_eq!(
+            std::fs::read(&wal).unwrap(),
+            b"rows not yet checkpointed",
+            "the WAL is part of the database, not a file beside it"
+        );
+        assert_eq!(std::fs::read(&shm).unwrap(), b"shared memory");
+        assert_eq!(
+            std::fs::read(restored.aside.join("quintal.db")).unwrap(),
+            b"half migrated",
+            "the database that failed is the only evidence of what went wrong"
+        );
+        assert_eq!(
+            std::fs::read(restored.aside.join("quintal.db-wal")).unwrap(),
+            b"half migrated wal"
+        );
+        assert_eq!(restored.from.as_deref(), Some("0.4.0"));
+    }
+
+    /// The other half of the same rule. A `-wal` the backup has no counterpart
+    /// for is not a spare file: SQLite would replay it onto bytes it was never
+    /// written against, which is a corrupt office rather than an old one.
+    #[test]
+    fn a_wal_the_backup_does_not_have_is_not_left_behind() {
+        let (_dir, layout) = layout();
+        std::fs::create_dir_all(layout.root()).unwrap();
+        std::fs::write(layout.db(), b"the office").unwrap();
+        let record = Record {
+            version: Some("0.4.0".into()),
+            ..Record::default()
+        };
+        let backup = backup_before_upgrade(&layout, &record, "0.5.0")
+            .unwrap()
+            .expect("a backup");
+        assert!(!backup.dir.join("quintal.db-wal").exists());
+
+        let wal = format!("{}-wal", layout.db().display());
+        std::fs::write(layout.db(), b"half migrated").unwrap();
+        std::fs::write(&wal, b"what the migration wrote").unwrap();
+
+        restore_backup(&layout, &backup.dir, "0.5.0").expect("restored");
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
+        assert!(
+            !PathBuf::from(&wal).exists(),
+            "a WAL from the failed run must not survive the database it belongs to"
+        );
+    }
+
+    /// A restore says which version the database is now from, and stops the
+    /// next launch of the version that failed copying the same bytes aside
+    /// again — five retries would otherwise leave nothing but duplicates.
+    #[test]
+    fn a_restored_database_is_not_backed_up_again_until_the_office_opens() {
+        let (_dir, layout) = layout();
+        std::fs::create_dir_all(layout.root()).unwrap();
+        std::fs::write(layout.db(), b"the office").unwrap();
+        let record = Record {
+            version: Some("0.4.0".into()),
+            ..Record::default()
+        };
+        let backup = backup_before_upgrade(&layout, &record, "0.5.0")
+            .unwrap()
+            .expect("a backup");
+        restore_backup(&layout, &backup.dir, "0.5.0").expect("restored");
+
+        let after = read_record(&layout);
+        assert_eq!(after.version.as_deref(), Some("0.4.0"));
+        assert_eq!(
+            after.restored_from.as_deref(),
+            backup.dir.file_name().unwrap().to_str()
+        );
+
+        let again = backup_before_upgrade(&layout, &after, "0.5.0")
+            .unwrap()
+            .expect("the copy it was restored from");
+        assert_eq!(again.dir, backup.dir);
+        assert!(!again.fresh, "nothing was copied: it is the same bytes");
+        assert_eq!(
+            std::fs::read_dir(layout.backups()).unwrap().count(),
+            2,
+            "the backup and the database that failed, and nothing else"
+        );
+    }
+
+    /// The command takes no path, but the function does, and a copy driven by
+    /// a path from anywhere else would overwrite any file on the machine.
+    #[test]
+    fn only_this_office_s_own_backups_are_restored() {
+        let (dir, layout) = layout();
+        std::fs::create_dir_all(layout.root()).unwrap();
+        std::fs::write(layout.db(), b"the office").unwrap();
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(elsewhere.join("quintal.db"), b"somebody else's").unwrap();
+        assert!(matches!(
+            restore_backup(&layout, &elsewhere, "0.5.0"),
+            Err(PersonalError::NoBackup)
+        ));
+        // And a directory that is in the right place but holds no database.
+        let empty = layout.backups().join("20260101-000000-0.4.0-to-0.5.0");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert!(matches!(
+            restore_backup(&layout, &empty, "0.5.0"),
+            Err(PersonalError::NoBackup)
+        ));
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
+    }
+
+    #[test]
+    fn a_backup_name_says_which_versions_it_sits_between() {
+        assert_eq!(
+            versions_in("20260928-141530-0.4.0-to-0.5.0"),
+            Some(("0.4.0", "0.5.0"))
+        );
+        assert_eq!(
+            versions_in("20260928-141530-unknown-to-0.5.0").unwrap().0,
+            "unknown"
+        );
+        // What a restore leaves behind, and anything else somebody put there.
+        assert_eq!(versions_in("20260928-141530-failed-0.5.0"), None);
+        assert_eq!(versions_in("notes"), None);
+    }
+
+    /// Restoring is refused for anything but an office that failed before it
+    /// ever opened — including an office that is still coming up, which is
+    /// what a page calling this on its own would find.
+    #[test]
+    fn an_office_that_has_not_failed_restores_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let office = Office::prepare(
+            dir.path(),
+            fake_payload(dir.path()),
+            &"ab".repeat(32),
+            "0.5.0",
+        )
+        .expect("prepared");
+        assert_eq!(office.status().phase, "starting");
+        assert!(matches!(office.restore(), Err(PersonalError::NoBackup)));
+
+        // And the case that matters: an office that came up, with the backup
+        // its own upgrade took still named on the status. This is the shape a
+        // page inside a working office would call from, and the answer is no
+        // — a database from before the upgrade is not a way back from there.
+        let layout = Layout::under(dir.path());
+        std::fs::create_dir_all(layout.root()).unwrap();
+        std::fs::write(layout.db(), b"the office").unwrap();
+        let backup = backup_before_upgrade(
+            &layout,
+            &Record {
+                version: Some("0.4.0".into()),
+                ..Record::default()
+            },
+            "0.5.0",
+        )
+        .unwrap()
+        .expect("a backup");
+        {
+            let mut inner = office.inner.lock().unwrap();
+            inner.status.phase = "ready".into();
+            inner.status.backup = Some(backup.dir.display().to_string());
+            inner.ever_ready = true;
+        }
+        assert!(matches!(
+            office.restore(),
+            Err(PersonalError::NotRestorable)
+        ));
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
     }
 
     #[test]
@@ -1252,6 +1664,118 @@ mod tests {
         let stamp = now_stamp();
         assert_eq!(stamp.len(), 15, "{stamp}");
         assert!(stamp.starts_with("20"));
+    }
+
+    /// The recovery, end to end, against a stand-in server that fails its
+    /// migration: the office is upgraded, the backup is taken, the fake
+    /// server writes over the database and dies with a migration error, the
+    /// app gives up — and a restore puts the office back and says which
+    /// version it now belongs to.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_migration_is_undone_from_the_screen_that_reports_it() {
+        use std::os::unix::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let layout = Layout::under(dir.path());
+        std::fs::create_dir_all(layout.root()).unwrap();
+        // An office that has been running on 0.4.0, with a WAL the last
+        // checkpoint has not folded in yet.
+        std::fs::write(layout.db(), b"the office").unwrap();
+        std::fs::write(format!("{}-wal", layout.db().display()), b"today's rows").unwrap();
+        write_record(
+            &layout,
+            &Record {
+                id: "a".repeat(32),
+                version: Some("0.4.0".into()),
+                ..Record::default()
+            },
+        )
+        .unwrap();
+
+        // A migration that gets as far as writing before it fails, which is
+        // the only kind that needs a backup.
+        let node = dir.path().join("node");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o755)
+            .open(&node)
+            .unwrap();
+        writeln!(
+            file,
+            "#!/bin/sh\n\
+             printf 'half migrated' > \"$QUINTAL_DATA_ROOT/quintal.db\"\n\
+             rm -f \"$QUINTAL_DATA_ROOT/quintal.db-wal\"\n\
+             echo 'migration failed: no such column' >&2\n\
+             exit 1"
+        )
+        .unwrap();
+        drop(file);
+        let entry = dir.path().join("entry.js");
+        std::fs::write(&entry, "").unwrap();
+
+        let office = Arc::new(
+            Office::prepare(
+                dir.path(),
+                Payload {
+                    node,
+                    entry,
+                    web_dir: dir.path().join("web"),
+                    manifest: Manifest::default(),
+                },
+                &"ab".repeat(32),
+                "0.5.0",
+            )
+            .expect("prepared"),
+        );
+        office.start(|_| panic!("a server that exits at once is never ready"));
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let failed = loop {
+            let status = office.status();
+            if status.phase == "failed" {
+                break status;
+            }
+            assert!(Instant::now() < deadline, "never gave up: {status:?}");
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        assert!(failed.restorable, "{failed:?}");
+        let backup = PathBuf::from(failed.backup.clone().expect("a backup"));
+        assert_eq!(
+            std::fs::read(layout.db()).unwrap(),
+            b"half migrated",
+            "the fixture is only interesting if it really wrote to the database"
+        );
+
+        let restored = office.restore().expect("restored");
+        assert_eq!(restored.phase, "restored");
+        assert!(!restored.restorable, "there is nothing left to put back");
+        let message = restored.message.clone().unwrap();
+        assert!(message.contains("0.4.0"), "{message}");
+        assert!(message.contains("0.5.0"), "{message}");
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
+        assert_eq!(
+            std::fs::read(format!("{}-wal", layout.db().display())).unwrap(),
+            b"today's rows",
+            "a restore the WAL sat out is a database missing a day"
+        );
+        assert_eq!(
+            std::fs::read(backup.join("quintal.db")).unwrap(),
+            b"the office"
+        );
+        let record = read_record(&layout);
+        assert_eq!(record.version.as_deref(), Some("0.4.0"));
+        assert!(record.restored_from.is_some());
+
+        // Once. A second press has nothing to put back, and must not move the
+        // restored database aside.
+        assert!(matches!(
+            office.restore(),
+            Err(PersonalError::NotRestorable)
+        ));
+        assert_eq!(std::fs::read(layout.db()).unwrap(), b"the office");
+        office.stop();
     }
 
     /// The supervisor, against a stand-in server: a shell script that answers

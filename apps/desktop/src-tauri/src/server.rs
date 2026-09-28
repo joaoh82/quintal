@@ -291,11 +291,18 @@ pub fn capability(server: Option<&str>, personal: bool) -> String {
     // the page showing while the server comes up: it reads the status to
     // show progress, and the logs to show what went wrong. Nothing here
     // moves a credential — `retry_personal_office` only restarts the app.
+    //
+    // `restore_personal_backup` is the one that touches data, and it is in
+    // this list because the screen that offers it is in this list. What keeps
+    // it safe is not the grant: the office refuses to restore anything unless
+    // this launch failed before it ever opened, so the office's own page —
+    // which by definition opened — can never reach a database to overwrite.
     if personal || server.is_none() {
         permissions.extend([
             "allow-personal-status",
             "allow-personal-logs",
             "allow-retry-personal-office",
+            "allow-restore-personal-backup",
         ]);
     }
 
@@ -469,6 +476,7 @@ mod servers_tests {
         let with_server = capability(Some("https://server.example.com"), false);
         assert!(!with_server.contains("allow-choose-personal-office"));
         assert!(!with_server.contains("allow-personal-status"));
+        assert!(!with_server.contains("allow-restore-personal-backup"));
 
         let picker = capability(None, false);
         assert!(picker.contains("allow-choose-personal-office"));
@@ -481,6 +489,7 @@ mod servers_tests {
         assert!(personal.contains("allow-personal-status"));
         assert!(personal.contains("allow-personal-logs"));
         assert!(personal.contains("allow-retry-personal-office"));
+        assert!(personal.contains("allow-restore-personal-backup"));
         assert!(!personal.contains("allow-choose-personal-office"));
         assert!(!personal.contains("allow-add-server"));
     }

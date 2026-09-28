@@ -96,6 +96,7 @@ pub fn run() {
             commands::personal_status,
             commands::personal_logs,
             commands::retry_personal_office,
+            commands::restore_personal_backup,
         ])
         .setup(|app| {
             // Before anything looks for a binary. An app launched from Finder
