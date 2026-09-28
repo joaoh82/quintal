@@ -162,6 +162,7 @@ office and app together. See [Contributing](./CONTRIBUTING.md#getting-set-up).
 | `pnpm test` / `pnpm typecheck` | The test suites; every package typechecked |
 | `pnpm desktop:bundle` | A local macOS development `Quintal.app`, personal office included — see [docs/DESKTOP.md](./docs/DESKTOP.md) |
 | `pnpm desktop:payload` | Fetch the pinned Node, prune web dependencies using Next's file traces, and boot the personal office payload as proof |
+| `node scripts/personal-office-smoke.mjs <app-path>` | Run the bundled personal office's 19 lifecycle/auth checks on macOS or Linux — see [the smoke instructions](./docs/DESKTOP.md#verifying-the-bundled-personal-office) |
 
 There is a [`justfile`](./justfile) with the same recipes if you prefer `just`.
 

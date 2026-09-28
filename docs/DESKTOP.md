@@ -314,6 +314,53 @@ and `QUINTAL_NODE_BIN=apps/desktop/src-tauri/binaries/quintal-node-<triple>`
 override where the host looks, and `QUINTAL_SERVER_URL=personal` chooses the
 personal office the way a URL there chooses a server.
 
+### Verifying the bundled personal office
+
+`scripts/personal-office-smoke.mjs` drives the real app through 19 checks:
+loopback-only binding (never port 3000), personal mode, login, stranger and
+guest refusal, owner admission, private data and secret, second-launch exit,
+server crash recovery on the same port, force-quit cleanup, lock release,
+and a relaunch retaining the port, office id and owner account without a backup.
+It creates a temporary HOME and XDG directories, uses file-backed secrets,
+and removes its data and processes afterward. Payload, Node and private-key
+environment overrides are cleared so the proof uses the bundle and a fresh owner.
+RSS and start times are informational; there are no performance budgets.
+
+After building the shared package and a bundle with its personal payload:
+
+```bash
+# macOS: accepts a .app directory or its Contents/MacOS/quintal-desktop executable
+node scripts/personal-office-smoke.mjs /path/to/Quintal.app
+
+# Linux: extract the AppImage, then run with a display (or Xvfb)
+/path/to/Quintal.AppImage --appimage-extract
+xvfb-run -a dbus-run-session -- node scripts/personal-office-smoke.mjs "$PWD/squashfs-root/AppRun"
+```
+
+macOS needs `lsof` and `ps`; Linux uses `ss` (the `iproute2` package) and
+`/proc`, plus a session D-Bus for the single-instance plugin. The CI wrapper
+starts a private bus shared by every launch. A missing listener tool fails the check. Windows prints an explicit
+skip: Unix signals and listener inspection have not been ported. All launches
+need a display. For local macOS runs, build with a throwaway bundle identifier,
+for example `--config '{"identifier":"sh.quintal.quin75-smoke"}'`, so the
+single-instance plugin cannot hand off to your installed Quintal. CI uses the
+real identifier on a fresh runner.
+
+The release workflow runs this against the app inside each mounted macOS DMG
+(arm64 and x64 via Rosetta). Both release and packaging run it against the
+extracted Linux x64 AppImage under Xvfb. The AppImage's separate OCR check still
+proves that the first window painted. The smoke's 19 checks use HTTP and process
+inspection; they do not prove office-canvas rendering or UI interaction.
+Each workflow uploads `smoke-evidence/personal-office.log`, including failures;
+the Linux artifact also contains the screenshot and OCR text.
+
+To check that the guard catches an orphaned server, temporarily remove the
+`QUINTAL_EXIT_WITH_PARENT` entry in `personal.rs`'s `plan()`, rebuild the app,
+and run the same smoke. **A force-quit app takes its server with it** must fail
+and exit nonzero. Restore the entry and rebuild before the positive run or
+committing. A packaging run of that temporary change exercises the same guard
+on Linux; no sabotage belongs in a release tag.
+
 ## Connecting to a server
 
 In this mode the app is a client. It loads an office from a server over

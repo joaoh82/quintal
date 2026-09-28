@@ -69,8 +69,10 @@ runner cannot execute (none in the current matrix; Intel macOS runs under
 Rosetta) records `skipped`. The payload rides as a bundle resource via
 `tauri.personal.conf.json`; the Node binary rides with the harness in
 `tauri.bundle.conf.json`, and `fix-appimage.sh` installs it into the AppImage
-the same way. The macOS DMG check runs the packaged Node and looks for the
-payload under `Contents/Resources/personal`. The job summary reports the
+the same way. The macOS DMG check runs the packaged Node, looks for the
+payload under `Contents/Resources/personal`, and runs the personal office's
+19-check lifecycle/auth smoke against the app before unmounting the DMG.
+Both architectures run it, with Intel using Rosetta. The job summary reports the
 payload's size. On macOS `scripts/sign-payload.mjs` re-signs every Mach-O in
 the payload with the release identity before Tauri copies it into
 `Resources/` — notarization rejects unsigned native modules wherever they sit,
@@ -275,18 +277,33 @@ a planned production version tag for a sabotage test.
 - The ordinary CI job runs those tests through `pnpm test`. Desktop CI retains
   Rust format, Clippy, unit tests and its existing IPC checks. The Windows release
   job additionally tests lookup of the packaged `quintal-acp.exe`.
-- The Linux release job launches the actual AppImage under Xvfb with fresh app
-  data. It requires OCR of **Which server?**, checks the packaged sidecar's
-  `--help`, and refuses an AppImage containing libdbus. The `appimage-smoke`
-  artifact contains the screenshot, OCR text and process logs, including failures.
+- Both macOS release jobs require the mounted DMG app to pass all 19 checks in
+  `scripts/personal-office-smoke.mjs`. The `personal-office-smoke-macos-arm64`
+  and `personal-office-smoke-macos-x64` artifacts retain `personal-office.log`
+  even when the smoke fails.
+- The Linux release and packaging jobs extract the actual AppImage and launch
+  its AppRun under Xvfb with fresh app data. They require OCR of **Your office**
+  or **personal office**, check the packaged sidecar's `--help`, and refuse an
+  AppImage containing libdbus. After the picker closes, the same AppRun must
+  pass the 19 personal-office checks, including server crash recovery and
+  force-quit cleanup. The `appimage-smoke` (release) and
+  `packaging-appimage-smoke` artifacts contain the screenshot, OCR text and
+  process logs, including `personal-office.log` on success or failure.
+- Windows release and packaging jobs explicitly skip the personal-office
+  end-to-end smoke because Unix signals and listener inspection are not yet
+  ported. The Windows packaged-harness regression still runs.
 - On clean macOS Apple Silicon and Intel machines, install the DMG and confirm
   the server picker opens. On a clean Windows VM, install the NSIS executable
   and do the same. Also install the .deb on a clean Ubuntu VM. Attach screenshots
   and OS details to the release PR. A successful build alone does not prove
   installation or Gatekeeper/SmartScreen behavior.
 
-The automated AppImage smoke uses a file secrets backend to avoid a CI keychain
-prompt; it does not verify a user's desktop Secret Service. Credential-backed
+The automated personal-office and AppImage smokes use a file secrets backend
+and throwaway HOME/XDG directories to avoid CI keychain prompts; they do not
+verify a user's keychain or desktop Secret Service. Local reproduction and the
+orphaned-server sabotage check are documented in
+[the desktop guide](./docs/DESKTOP.md#verifying-the-bundled-personal-office).
+Credential-backed
 notarization, real downloaded-file quarantine behavior, all clean-VM installs,
 and website stable links need their respective environments. Keep any missing
 verification explicit in the PR.
