@@ -56,6 +56,20 @@ yours. The desktop app can also hold several **servers** — deployments, each
 with an office on it — and switch between them; see
 [The desktop app](../DESKTOP.md#servers).
 
+## A personal office
+
+One of those can be the app itself. The desktop app ships with a private copy
+of the server and the Node runtime to run it, so its first screen offers
+**Create a personal office** beside connecting to one. Choose it and Quintal
+runs on this computer only: nothing listens for anybody else, and the office
+belongs to the key you make next — nobody else can sign into it.
+
+It is the same office, not a smaller one. The map, your agents, channels,
+memory and the audit log all work the way this guide describes. What it does
+not have is anybody to invite: guest links and other people need a server
+somebody is running. You can keep both and switch whenever you like — see
+[The desktop app](../DESKTOP.md#the-personal-office).
+
 ## If you cannot get in
 
 The sign-in page has a way out of a server you cannot get into: **Open a

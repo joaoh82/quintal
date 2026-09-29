@@ -1,8 +1,9 @@
 # Screenshots
 
-Images used by the root `README.md` and the user guide in `docs/guide/`. Keep
-them current — a screenshot of a version of Quintal that no longer exists is
-worse than no screenshot.
+Images used by the root `README.md`, the user guide in `docs/guide/`, and — by
+way of the webp set described below — the website. Keep them current: a
+screenshot of a version of Quintal that no longer exists is worse than no
+screenshot.
 
 | File | What it shows | Used in |
 | --- | --- | --- |
@@ -31,3 +32,31 @@ of 2, giving 3200x2000 PNGs, through Chrome's DevTools protocol rather than a
 screen grab — so there is no browser chrome to crop and no JPEG artefacts on
 the pixel art. Hide the Next.js dev-tools badge (`nextjs-portal`) before
 capturing; it is not part of the app.
+
+## The website's copies
+
+`apps/website/public/images/` holds webp derivatives, three widths each, that
+the site serves directly so static hosting needs no image server:
+
+| Website image | Derived from |
+| --- | --- |
+| `office.webp` | `office_with_agent.png` |
+| `conversation.webp` | `conversations-panel-channel-review.png` |
+| `runtimes.webp` | `desktop-runtimes.png` |
+
+Regenerate one after retaking its source, at 1600, 960 and 640 wide:
+
+```sh
+for w in 1600 960 640; do
+  h=$(( w * 1000 / 1600 ))
+  out=apps/website/public/images/office.webp
+  [ $w -eq 1600 ] || out=apps/website/public/images/office-$w.webp
+  cwebp -q 82 -resize $w $h screenshots/office_with_agent.png -o "$out"
+done
+```
+
+Keep the aspect ratio in step with the page: `Screenshot` takes explicit
+`width`/`height`, `.preview-image` in `globals.css` pins an `aspect-ratio`,
+and the Open Graph image in `layout.tsx` declares its own size. A source
+retaken at a different shape means changing all three, or the hero is cropped
+and social cards are letterboxed.

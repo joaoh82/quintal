@@ -191,6 +191,14 @@ Not every tool asks. Runtimes decide for themselves which actions need a
 person, and Claude Code asks before it *changes* things — writing a file asks;
 a shell command it judges harmless does not.
 
+Some runtimes never ask at all. When yours is one of them, the agent's card
+says so rather than leaving you waiting for a question that is not coming —
+what it runs, it runs. That claim is about tool permissions and nothing else,
+and it comes from what the runtime was measured doing, not from what it
+reports about itself. If a runtime changes underneath a measurement, Quintal
+notices and stops trusting the old one. The full table is in
+[Runtime permissions](../RUNTIME-PERMISSIONS.md).
+
 ### Owner commands
 
 Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,

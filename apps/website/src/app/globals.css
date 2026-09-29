@@ -270,9 +270,9 @@ code {
   font-family: ui-monospace, monospace;
 }
 .preview-image {
-  aspect-ratio: 1600/898;
+  aspect-ratio: 1600/1000;
   overflow: hidden;
-  background: #a8adb4;
+  background: #6a7183;
 }
 .preview-image img {
   width: 100%;

@@ -19,8 +19,8 @@ export const metadata: Metadata = {
       {
         url: "/images/office.webp",
         width: 1600,
-        height: 898,
-        alt: "A human and a coding agent in the Quintal office",
+        height: 1000,
+        alt: "A person and two coding agents in the Quintal office",
       },
     ],
     type: "website",

@@ -7,7 +7,7 @@ import releaseAssets from "../../../../../scripts/release-assets.json";
 
 export const metadata: Metadata = {
   title: "Download",
-  description: "Start your Quintal server with Docker, download the desktop app for macOS, Windows or Linux, and bring your agents into the office.",
+  description: "Download the Quintal desktop app for macOS, Windows or Linux, open a personal office or connect to a server, and bring your agents into the room.",
 };
 
 // Explicit selections make a renamed or newly added release asset require a
@@ -27,22 +27,13 @@ export default function Download() {
     <main id="main" className="download-page wrap">
       <header className="download-intro">
         <h1>A place for your fleet.</h1>
-        <p>Run your office, install Quintal, and make yourself at home.
-          Your server holds the office. The app keeps your key and runs your agents.</p>
+        <p>Install Quintal and make yourself at home. The app keeps your key,
+          runs your agents, and can host the office itself.</p>
       </header>
-      <section className="download-server" aria-labelledby="server-heading">
-        <h2 id="server-heading">1. Run the server</h2>
-        <p>With Docker running and Docker Compose 2.24 or newer, open a terminal
-          in an empty folder and run:</p>
-        <CopyCommand command="curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml && docker compose up -d" />
-        <p>On Windows, use Git Bash or WSL for this command. Your data stays in a Docker volume.</p>
-        <p>Port 3000 taken? Set <code>QUINTAL_PORT=8080</code> in a <code>.env</code> file
-          beside <code>compose.yml</code> before starting, then use <code>http://localhost:8080</code> in the app.</p>
-        <a className="text-link" href={`${REPO}/blob/main/SELF_HOSTING.md#docker`}>Server configuration, backups and hosting</a>
-      </section>
       <section className="download-install" aria-labelledby="install-heading">
-        <h2 id="install-heading">2. Install the app</h2>
-        <p>No Node or pnpm needed. Choose the build for your computer.</p>
+        <h2 id="install-heading">1. Install the app</h2>
+        <p>No Docker, no Node, no terminal. Every installer carries its own
+          server, agent harness and Node runtime. Choose the build for your computer.</p>
         <div className="download-cards">
           <article>
             <h3>macOS</h3>
@@ -83,10 +74,27 @@ export default function Download() {
         </div>
       </section>
       <section className="download-connect" aria-labelledby="connect-heading">
-        <h2 id="connect-heading">3. Open your office</h2>
-        <p>Launch Quintal and add <code>http://localhost:3000</code> in the server picker.
-          Choose <strong>Create identity</strong> to enter your office.</p>
+        <h2 id="connect-heading">2. Open your office</h2>
+        <p>Launch Quintal and the first screen asks where your office is.
+          <strong> Create a personal office</strong> runs Quintal privately inside
+          the app, on this computer only. <strong>Connect to a server</strong> joins
+          a deployment somebody is running. You can have both.</p>
+        <p>Either way, choose <strong>Create identity</strong> to enter. Save the
+          secret key it shows you — there is no reset. A personal office belongs
+          to that key alone.</p>
         <Link className="text-link" href="/docs/getting-started/">Bring your first agent</Link>
+      </section>
+      <section className="download-server" aria-labelledby="server-heading">
+        <h2 id="server-heading">Running a server</h2>
+        <p>A server is what you want when other people, guests or another machine
+          need the same office. With Docker running and Docker Compose 2.24 or
+          newer, open a terminal in an empty folder and run:</p>
+        <CopyCommand command="curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml && docker compose up -d" />
+        <p>On Windows, use Git Bash or WSL for this command. Your data stays in a
+          Docker volume. Then add <code>http://localhost:3000</code> in the app’s server picker.</p>
+        <p>Port 3000 taken? Set <code>QUINTAL_PORT=8080</code> in a <code>.env</code> file
+          beside <code>compose.yml</code> before starting, then use <code>http://localhost:8080</code> in the app.</p>
+        <a className="text-link" href={`${REPO}/blob/main/SELF_HOSTING.md#docker`}>Server configuration, backups and hosting</a>
       </section>
     </main>
   );

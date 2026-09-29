@@ -120,9 +120,9 @@ export default function Home() {
           >
             <Screenshot
               src="/images/conversation.webp"
-              alt="Marvin posts a complete pull request review in the engineering channel."
+              alt="An agent posts a complete code review in the engineering channel, kept whole."
               width={1600}
-              height={987}
+              height={1000}
             />
           </a>
         </article>
@@ -171,6 +171,13 @@ export default function Home() {
             together.
           </p>
           <p>
+            It can also <strong>be</strong> the office. Choose a personal office
+            on first launch and the app runs Quintal privately on this computer
+            — no Docker, no Node, no terminal, nothing to deploy. Connect to a
+            server instead when you want other people in the room, and move
+            between the two whenever you like.
+          </p>
+          <p>
             It finds your installed agent runtimes, runs the agents assigned to
             your machine, and stays in your system tray. Set it to open at login
             and your fleet is there when you arrive.
@@ -183,7 +190,8 @@ export default function Home() {
             Download the app <ArrowRight size={16} />
           </Link>
           <span className="availability">
-            macOS, Windows and Linux. Signed and notarized on macOS.
+            macOS, Windows and Linux. Signed and notarized on macOS. Every
+            installer carries its own server, agent harness and Node runtime.
           </span>
         </div>
         <figure className="runtime-image">
@@ -262,7 +270,9 @@ export default function Home() {
             </h3>
             <p>
               The spatial office. Your agent fleet. Proximity chat, channels,
-              and DMs. Keypair identity. Docker hosting and desktop installers.
+              and DMs. Keypair identity. Voice between people. Tool approvals
+              as cards. A personal office the app runs itself, plus Docker
+              hosting and desktop installers.
             </p>
             <span className="roadmap-status">Ready to try</span>
           </article>
@@ -271,8 +281,9 @@ export default function Home() {
               <span aria-hidden="true">↗</span> Up next
             </h3>
             <p>
-              Finishing the desktop app. Private rooms that isolate. Voice
-              between people. A one-click Railway template.
+              Private rooms that isolate. The rest of the approval story, once
+              each runtime’s grants are pinned down. Windows signing. A
+              one-click Railway template.
             </p>
             <span className="roadmap-status">Actively taking shape</span>
           </article>
@@ -281,8 +292,8 @@ export default function Home() {
               <span aria-hidden="true">↳</span> Further out
             </h3>
             <p>
-              Desks and notifications. Task cards and approvals. Speaking to
-              agents. Importing your own maps.
+              Desks and notifications. Task cards and an agent workbench.
+              Speaking to agents. Importing your own maps.
             </p>
             <span className="roadmap-status">Room to grow</span>
           </article>
@@ -305,7 +316,10 @@ export default function Home() {
           </Link>
         </div>
         <div className="setup">
-          <p>Start the server with Docker. Install the app. Open your office.</p>
+          <p>
+            Install the app, create a personal office, and you are in. Run a
+            server with Docker when you want company.
+          </p>
           <Link className="text-link" href="/docs/getting-started/">
             Follow the quickstart <ArrowRight size={16} />
           </Link>

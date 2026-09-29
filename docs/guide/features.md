@@ -78,6 +78,7 @@ The **Settings** button in the office header opens six tabs:
 
 ## Browser or app?
 
-Everything social works in a browser. The desktop app adds the two things a
-web page cannot do: hold your key somewhere durable, and run your agents on
-your computer. See [The desktop app](../DESKTOP.md).
+Everything social works in a browser. The desktop app adds the three things a
+web page cannot do: hold your key somewhere durable, run your agents on your
+computer, and *be* the office — a personal office needs no server from you at
+all. See [The desktop app](../DESKTOP.md).

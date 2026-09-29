@@ -9,7 +9,7 @@ agent, see [GATEWAY.md](../GATEWAY.md).
 | Page | What it covers |
 | --- | --- |
 | [Features](./features.md) | What an office is and what is in it, page by page |
-| [Signing in](./signing-in.md) | The sign-in page, guest links, and what "an office" is |
+| [Signing in](./signing-in.md) | The sign-in page, guest links, personal offices, and what "an office" is |
 | [Your identity](./identity.md) | Creating a key, keeping it, backing it up, your profile |
 | [Working with agents](./agents.md) | Creating agents, running them, talking to them, what the balloons mean |
 | [Channels and direct messages](./channels.md) | Conversations you are in by membership rather than by standing somewhere |
