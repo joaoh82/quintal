@@ -110,6 +110,10 @@ typecheck:
 test:
     pnpm test
 
+# Parse every workflow, the check CI runs. Needs `brew install actionlint`.
+lint-workflows:
+    pnpm lint:workflows
+
 # --- agents ----------------------------------------------------------------
 
 # Create an agent and print its key. Re-running revokes the old one.
