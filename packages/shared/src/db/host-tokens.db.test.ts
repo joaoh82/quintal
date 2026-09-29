@@ -649,7 +649,7 @@ describe('the names an office knows a machine by', () => {
       runtimeId: 'codex',
       hostLabel: 'Laptop',
     });
-    await revokeAgent(db, agent.id);
+    await revokeAgent(db, agent.id, josh.id);
 
     assert.deepEqual(
       await knownMachineNames(db, {
