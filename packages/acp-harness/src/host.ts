@@ -46,6 +46,22 @@ export interface StoredHost {
   writtenAt?: Date;
   /** Overrides the hostname when this machine should answer to another name. */
   label?: string;
+  /**
+   * What the office last said this machine is called.
+   *
+   * Recorded on every successful fleet fetch and used for nothing but
+   * explaining — deliberately *not* fed to `labelFor`, which must keep
+   * answering null so the office stays the authority on the name. A rename in
+   * the UI has to keep working.
+   *
+   * It exists because a 401 is where somebody needs it and the office will not
+   * answer one. Agents are pinned to a machine by name, so re-registering under
+   * a different one leaves every agent assigned to the old name with nowhere to
+   * run — and the token that would have said which name it was is the thing
+   * that just stopped working. Writing it down while the office is still
+   * talking is the only moment it can be had.
+   */
+  knownAs?: string;
   reposDir?: string;
 }
 
@@ -124,6 +140,8 @@ export function evictLegacyHostFile(
 interface PersistedHost {
   token: string;
   label?: string;
+  /** What the office last called this machine. See `StoredHost.knownAs`. */
+  knownAs?: string;
   reposDir?: string;
   /** When this slot was last written, as ISO-8601. */
   writtenAt?: string;
@@ -165,6 +183,7 @@ function loadHostFile(): { hosts: Record<string, PersistedHost>; path: string } 
             [url]: {
               token: record.token,
               ...(typeof record.label === 'string' ? { label: record.label } : {}),
+              ...(typeof record.knownAs === 'string' ? { knownAs: record.knownAs } : {}),
               ...(typeof record.reposDir === 'string' ? { reposDir: record.reposDir } : {}),
             },
           },
@@ -213,6 +232,7 @@ function storedFromPersisted(
     path,
     writtenAt: writtenAt ?? fallbackWrittenAt,
     label: entry.label,
+    knownAs: entry.knownAs,
     reposDir: entry.reposDir,
   };
 }
@@ -264,20 +284,77 @@ export function readStoredHost(url?: string | null): StoredHost | null {
   return null;
 }
 
+/**
+ * Keep a token for one office, without discarding what is already known.
+ *
+ * **Merges into the slot rather than replacing it**, which is the whole point.
+ * The common way to run this command is the recovery path — the office
+ * rejected the old token, so you mint a new one and type
+ * `quintal-acp login --token qh_new`. Replacing the slot there silently drops
+ * the `--host` label and the `--repos-dir` that were set months ago, so the
+ * fleet comes back up under a different name, in a different directory, and
+ * the two facts that explain it are gone.
+ *
+ * A caller that means to change one of those passes it. Omitting a flag asks
+ * for no change; it has never meant "unset this", and there was no way to say
+ * that before either.
+ */
 export function writeStoredHost(host: StoredHost): string {
   const url = officeKey(host.url);
   if (url.length === 0) {
     throw new ConfigError('a host token needs the office URL it belongs to');
   }
   const { hosts, path } = loadHostFile();
+  const existing = hosts[url];
+  const label = host.label?.trim();
+  const reposDir = host.reposDir?.trim();
+  const knownAs = host.knownAs?.trim();
   hosts[url] = {
     token: host.token,
-    ...(host.label && host.label.trim().length > 0 ? { label: host.label.trim() } : {}),
-    ...(host.reposDir && host.reposDir.trim().length > 0 ? { reposDir: host.reposDir } : {}),
+    ...(label && label.length > 0
+      ? { label }
+      : existing?.label
+        ? { label: existing.label }
+        : {}),
+    ...(knownAs && knownAs.length > 0
+      ? { knownAs }
+      : existing?.knownAs
+        ? { knownAs: existing.knownAs }
+        : {}),
+    ...(reposDir && reposDir.length > 0
+      ? { reposDir }
+      : existing?.reposDir
+        ? { reposDir: existing.reposDir }
+        : {}),
     writtenAt: new Date().toISOString(),
   };
   persistHostFile(hosts, path);
   return path;
+}
+
+/**
+ * Write down what the office just called this machine.
+ *
+ * Called on every successful fleet fetch, and a no-op unless the name changed,
+ * because `up` asks on a loop and rewriting a credential file every few seconds
+ * is a good way to lose one to a badly timed crash.
+ *
+ * Never throws. This is a note for a future error message; a machine that
+ * cannot write it should still run its agents.
+ */
+export function rememberOfficeLabel(host: StoredHost, label: string): void {
+  const name = label.trim();
+  if (name.length === 0 || host.source === 'env') return;
+  try {
+    const url = officeKey(host.url);
+    const { hosts, path } = loadHostFile();
+    const existing = hosts[url];
+    if (!existing || existing.knownAs === name) return;
+    hosts[url] = { ...existing, knownAs: name };
+    persistHostFile(hosts, path);
+  } catch {
+    // See above: an unwritable note is not a reason to stop.
+  }
 }
 
 interface FleetResponse {
@@ -326,11 +403,23 @@ export function staleTokenMessage(host: StoredHost): string {
       ? ` (written ${host.writtenAt.toISOString().slice(0, 10)})`
       : '';
 
+  // The name is the difference between "register this machine again" and
+  // actually getting the fleet back. Agents are pinned to a machine by name, so
+  // registering under a fresh one stands up a second machine and leaves every
+  // agent assigned to the old name idle — and the token that could have said
+  // which name it was is the thing that just stopped working. This is why it
+  // was written down while the office was still talking.
+  const name = host.knownAs?.trim();
+  const again =
+    name && name.length > 0
+      ? `register this machine again as \`${name}\`, the name its agents are assigned to, and run \`login\` with the new token`
+      : 'register this machine again and run `login` with the new token';
+
   return (
     `the office${office} rejected the host token in ${where}${age}. ` +
     'If you pointed this machine at a different office, or the office or its database was recreated since then, ' +
     'that token refers to a machine that no longer exists — ' +
-    'register this machine again and run `login` with the new token. ' +
+    `${again}. ` +
     'If you revoked it on purpose, create a new one at /settings/agents.'
   );
 }

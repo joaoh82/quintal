@@ -26,6 +26,7 @@ import {
   fetchFleet,
   type StoredHost,
   labelFor,
+  rememberOfficeLabel,
   listedOfficeUrls,
   readStoredHost,
   toAgentConfigs,
@@ -295,6 +296,10 @@ async function main(): Promise<void> {
       // Poll under the name the office actually used, so a later rename in the
       // UI is visible rather than silently answered for the old one.
       officeFleet = { host: stored, label: fleet.host.label, mapId };
+      // And write it down. The next 401 cannot ask the office what this
+      // machine is called, and that name is what the agents are pinned to —
+      // see `rememberOfficeLabel`.
+      rememberOfficeLabel(stored, fleet.host.label);
 
       for (const skip of built.skipped) {
         process.stderr.write(`skipping "${skip.name}": ${skip.why}\n`);
