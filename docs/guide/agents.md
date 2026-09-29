@@ -31,7 +31,7 @@ place to stand and people to talk to.
   card can reach them. See
   [Runtime permissions](../RUNTIME-PERMISSIONS.md).
 
-![Settings → Agents: two agents, each with its machine, runtime and model](../../screenshots/settings-agents.png)
+![Settings → Agents: four agents, each with its machine, runtime and model, and one marked as running on a runtime that never asks for permission](../../screenshots/settings-agents.png)
 
 Then say where it runs: **Runs on** picks one of your registered machines,
 the **runtime** (which CLI) and the **model** (from what that runtime

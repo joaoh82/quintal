@@ -65,7 +65,7 @@ See [Working with agents](./agents.md).
 
 The **Settings** button in the office header opens six tabs:
 
-![Settings → Office: the office's name, the server's name, and the three sound settings](../../screenshots/settings-office.png)
+![Settings → Office: the office's name, the server's name, and the settings for how far speech carries, how close you stand, how long a reply reaches you, and how many conversations an agent answers at once](../../screenshots/settings-office.png)
 
 | Tab | What is there |
 | --- | --- |
