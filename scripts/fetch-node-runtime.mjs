@@ -88,6 +88,40 @@ async function download(url, to) {
  * Make sure the runtime for `triple` is in place, fetching it if needed.
  * Returns its path.
  */
+/**
+ * Pull one member out of `archiveName` into `extractedName`, both named
+ * relatively and resolved against CACHE_DIR.
+ *
+ * Relative names are not tidiness. An absolute Windows path reaches bsdtar as
+ * `D:\a\...`, and to it anything whose first colon precedes its first slash
+ * is a remote `host:path` — v0.6.0's Windows job died on `tar: Cannot connect
+ * to D: resolve failed`. bsdtar has no GNU `--force-local` to turn that off,
+ * and forward slashes do not help because the colon still comes first.
+ *
+ * Which `tar` also matters. The Windows job runs under Git Bash, whose PATH
+ * finds MSYS **GNU** tar first, and GNU tar cannot read a zip — v0.6.1 died on
+ * `tar: This does not look like a tar archive`. Windows does ship bsdtar, in
+ * System32, so name it outright rather than trusting PATH. If it is somehow
+ * absent, PowerShell expands the zip instead; it costs the whole archive
+ * rather than one member, which on a runner is a second or two.
+ */
+function extractMember(archiveName, extractedName, member) {
+  const run = (file, args) => execFileSync(file, args, { stdio: 'inherit', cwd: CACHE_DIR });
+  if (process.platform !== 'win32') {
+    run('tar', ['-xf', archiveName, '-C', extractedName, member]);
+    return;
+  }
+  const bsdtar = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+  if (existsSync(bsdtar)) {
+    run(bsdtar, ['-xf', archiveName, '-C', extractedName, member]);
+    return;
+  }
+  run('powershell', [
+    '-NoProfile', '-NonInteractive', '-Command',
+    `Expand-Archive -LiteralPath '${archiveName}' -DestinationPath '${extractedName}' -Force`,
+  ]);
+}
+
 export async function ensureNodeRuntime(triple, { log = console.log } = {}) {
   const spec = ARTIFACTS[triple];
   if (!spec) throw new Error(`No Node runtime is defined for ${triple}`);
@@ -117,19 +151,11 @@ export async function ensureNodeRuntime(triple, { log = console.log } = {}) {
     );
   }
 
-  // `tar` reads both formats: bsdtar on macOS and Windows, GNU tar on Linux
-  // (which reads zip too, but only the Windows runner ever meets one).
   const member = `node-v${NODE_VERSION}-${spec.archive.replace(/\.(tar\.gz|zip)$/, '')}/${spec.binary}`;
   const extractedName = `extract-${triple}`;
   const extracted = join(CACHE_DIR, extractedName);
   mkdirSync(extracted, { recursive: true });
-  // Run from the cache directory and name both paths relatively. An absolute
-  // Windows path reaches bsdtar as `D:\a\...`, and anything with a colon
-  // before its first slash is a remote `host:path` to it — the Windows job
-  // died on `tar: Cannot connect to D: resolve failed`. bsdtar has no
-  // --force-local to turn that off, and forward slashes do not help because
-  // the colon still comes first. Relative names have no colon at all.
-  execFileSync('tar', ['-xf', archiveName, '-C', extractedName, member], { stdio: 'inherit', cwd: CACHE_DIR });
+  extractMember(archiveName, extractedName, member);
   const binary = join(extracted, member);
   if (!existsSync(binary)) throw new Error(`${member} was not in ${archiveName}`);
 
