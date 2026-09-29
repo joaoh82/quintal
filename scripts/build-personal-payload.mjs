@@ -418,7 +418,19 @@ async function smoke(manifest) {
   const ownerKey = generateSecretKey();
   const pubkey = getPublicKeyHex(ownerKey);
   const before = snapshot();
-  const data = mkdtempSync(join(tmpdir(), 'quintal-payload-smoke-'));
+  // Beside the payload, not in the OS temp directory, and specifically so the
+  // two share a volume. Next resolves its project directory with
+  // `path.relative(process.cwd(), dir)` (next/dist/server/next.js), and on
+  // Windows two different drives have no relative path between them — so it
+  // hands back the absolute `D:\\…` target, which is then joined onto the cwd
+  // again. The payload booted from a `C:` temp directory with the repo on `D:`
+  // went looking for
+  // `C:\\…\\smoke\\D:\\…\\web\\D:\\…\\web\\.next\\routes-manifest.json`
+  // and died. POSIX always has a relative path between two absolute paths,
+  // which is why only Windows ever saw this.
+  const smokeRoot = join(root, 'apps/desktop/src-tauri/target/payload-smoke');
+  mkdirSync(smokeRoot, { recursive: true });
+  const data = mkdtempSync(join(smokeRoot, 'run-'));
 
   log(`booting the payload on ${origin} with ${relative(root, node) || node}`);
   const child = spawn(node, [join(PAYLOAD_DIR, manifest.entry)], {
@@ -550,7 +562,15 @@ async function smoke(manifest) {
     console.error(output);
     throw error;
   } finally {
-    rmSync(data, { recursive: true, force: true });
+    // Windows holds files open a moment after the process exits, so a plain
+    // rmSync throws EBUSY from the `finally` and replaces whatever actually
+    // went wrong. Retry, then give up quietly: a leftover directory under
+    // `target/` is not worth losing the real error over.
+    try {
+      rmSync(data, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch (error) {
+      console.error(`[payload] could not remove ${data}: ${error.message}`);
+    }
   }
 }
 
