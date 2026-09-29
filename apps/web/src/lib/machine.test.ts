@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { HostBridge } from './host';
-import { machineNaming, registerThisMachine } from './machine';
+import { knownMachines, machineNaming, registerThisMachine } from './machine';
 
 function hostThat(
-  status: { label: string; registered: boolean } | Error,
+  status:
+    | { label: string; registered: boolean; knownAs?: string | null }
+    | Error,
   remember: (token: string, label: string) => Promise<void> = async () => {},
 ): HostBridge {
   return {
@@ -48,6 +50,84 @@ describe('deciding whether to ask for a name', () => {
   it('does not ask when the keychain will not answer', async () => {
     const prompt = await machineNaming(hostThat(new Error('keychain is locked')));
     assert.equal(prompt.kind, 'failed');
+  });
+
+  /**
+   * The bug this whole path exists to stop.
+   *
+   * A machine whose token this office rejected is unregistered, but it is not
+   * anonymous — the app still remembers what it registered as, and that name is
+   * what every agent assigned to it is waiting on. Asking "name this computer"
+   * with the hostname in the field is how somebody ends up with two machines
+   * and an idle fleet.
+   */
+  it('offers the name it was registered under, not the hostname', async () => {
+    const prompt = await machineNaming(
+      hostThat({ label: 'DPR010_Office', registered: false, knownAs: 'DPR010_Office' }),
+    );
+
+    assert.equal(prompt.kind, 'ask');
+    assert.equal(prompt.kind === 'ask' ? prompt.suggested : '', 'DPR010_Office');
+    assert.equal(
+      prompt.kind === 'ask' ? prompt.knownAs : '',
+      'DPR010_Office',
+      'the prompt has to know this is a reclaim, so it can say so',
+    );
+  });
+
+  it('knows a genuine first run from a machine that lost its token', async () => {
+    const prompt = await machineNaming(hostThat({ label: 'Joaos-MBP', registered: false }));
+    assert.equal(prompt.kind === 'ask' ? prompt.knownAs : 'unset', null);
+  });
+});
+
+describe('the names this office already knows', () => {
+  const answers = (body: unknown, status = 200) =>
+    (async () =>
+      new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  /**
+   * The list somebody needs is the list that is empty under the old rule. Every
+   * token revoked, four agents still pinned to `DPR010_Office`: the name that
+   * brings the machine back exists, and the prompt has to offer it.
+   */
+  it('offers names with no live token, because those are the ones to reclaim', async () => {
+    const machines = await knownMachines(
+      answers({
+        machines: [
+          { label: 'DPR010_Office', registered: false, agents: 4 },
+          { label: 'Work laptop', registered: true, agents: 0 },
+        ],
+      }),
+    );
+
+    assert.deepEqual(machines, [
+      { label: 'DPR010_Office', registered: false, agents: 4 },
+      { label: 'Work laptop', registered: true, agents: 0 },
+    ]);
+  });
+
+  it('drops entries with no usable name rather than offering a blank button', async () => {
+    const machines = await knownMachines(
+      answers({ machines: [{ label: '' }, { agents: 2 }, 'DPR010_Office', null] }),
+    );
+    assert.deepEqual(machines, []);
+  });
+
+  it('fills in what an older office left out', async () => {
+    const machines = await knownMachines(answers({ machines: [{ label: 'Laptop' }] }));
+    assert.deepEqual(machines, [{ label: 'Laptop', registered: false, agents: 0 }]);
+  });
+
+  /** A worse prompt, not a broken one: nothing here may stop somebody naming a machine. */
+  it('says nothing when the office will not answer', async () => {
+    assert.deepEqual(await knownMachines(answers({ error: 'nope' }, 500)), []);
+    assert.deepEqual(
+      await knownMachines((async () => {
+        throw new Error('offline');
+      }) as unknown as typeof fetch),
+      [],
+    );
   });
 });
 

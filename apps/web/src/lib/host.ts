@@ -316,6 +316,17 @@ export interface HostStatus {
   label: string;
   /** Does this machine already hold a host token? */
   registered: boolean;
+  /**
+   * The name this machine last registered under with this server, if any.
+   *
+   * Outlives the token on purpose. `knownAs` set with `registered: false` is
+   * the state that used to be unrecoverable: this office knew this computer as
+   * that name, the credential is gone, and the agents pinned to the name are
+   * still waiting. Saying so lets the UI ask "claim it back?" instead of
+   * "name your computer" — and the second question, answered with the
+   * hostname the field helpfully pre-filled, is how the machine gets lost.
+   */
+  knownAs: string | null;
 }
 
 declare global {

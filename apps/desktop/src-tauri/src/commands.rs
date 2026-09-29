@@ -281,6 +281,15 @@ pub struct HostStatus {
     pub label: String,
     /// Does this machine already hold a host token?
     pub registered: bool,
+    /// The name this machine last registered under here, token or no token.
+    ///
+    /// Present and `registered: false` is the state worth naming: this office
+    /// knew this computer as `known_as`, and does not any more. The page needs
+    /// to tell those two apart, because "name your computer" and "your
+    /// computer was called X — claim it back" are different questions, and
+    /// asking the first one where the second belongs is how the agents pinned
+    /// to X end up with nowhere to run.
+    pub known_as: Option<String>,
 }
 
 #[tauri::command]
@@ -295,12 +304,14 @@ pub fn host_status(state: State<'_, HostState>) -> Result<HostStatus, HostError>
         return Ok(HostStatus {
             label: machine::label(),
             registered: false,
+            known_as: None,
         });
     };
-    let registered = machine::registered_label(&state.store, slot)?;
+    let known_as = machine::registered_label(&state.store, slot)?;
     Ok(HostStatus {
-        label: registered.unwrap_or_else(machine::label),
+        label: known_as.clone().unwrap_or_else(machine::label),
         registered: machine::token(&state.store, slot)?.is_some(),
+        known_as,
     })
 }
 
@@ -324,10 +335,13 @@ pub fn remember_host_token(
 }
 
 /// Drop this machine's host token, so the next launch registers again.
+///
+/// The *name* stays. Registering again is how you take this machine back, and
+/// the name is what says which machine that is — see `machine::forget_token_for`.
 #[tauri::command]
 pub fn forget_host_token(state: State<'_, HostState>) -> Result<(), HostError> {
     let slot = state.slot().ok_or(SpawnError::NoServer)?;
-    machine::forget_for(&state.store, slot)?;
+    machine::forget_token_for(&state.store, slot)?;
     Ok(())
 }
 
@@ -369,10 +383,27 @@ pub fn start_fleet_here(state: &HostState) -> Result<FleetState, HostError> {
     let provisioned = match agent_keys::provision(&state.store, slot, &office) {
         Ok(provisioned) => provisioned,
         Err(IdentityError::StaleHostToken) => {
-            // Drop it so the next status check reports unregistered and the
-            // UI offers to register with *this* office, rather than retrying
-            // a token this office has already refused.
-            let _ = machine::forget_for(&state.store, slot);
+            // Drop the token so the next status check reports unregistered and
+            // the UI offers to register with *this* office, rather than
+            // retrying one this office has already refused.
+            //
+            // The name survives it. A 401 here is not always somebody revoking
+            // a machine on purpose — a dev server pointed at a fresh database
+            // answers exactly the same way — and forgetting what this computer
+            // was called turns a re-registration into a *second* machine, with
+            // every agent still pinned to the first.
+            let _ = machine::forget_token_for(&state.store, slot);
+            let known = machine::registered_label(&state.store, slot).ok().flatten();
+            state.fleet.note(match &known {
+                Some(label) => format!(
+                    "this office no longer recognises this computer's token; \
+                     it was registered as {label} — register under that name \
+                     again to take it back"
+                ),
+                None => "this office no longer recognises this computer's token; \
+                         register this machine again"
+                    .to_string(),
+            });
             return Err(IdentityError::StaleHostToken.into());
         }
         Err(error) => return Err(error.into()),

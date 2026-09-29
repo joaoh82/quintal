@@ -164,17 +164,50 @@ pub fn remember(
     Ok(())
 }
 
-/// Drop the token, so the next launch registers again.
+/// Drop the token but keep the name, so this machine can be claimed back.
 ///
-/// Used when the office rejects it — the desktop equivalent of the stale
+/// Used when the office rejects the token — the desktop equivalent of the stale
 /// `~/.config/quintal/host.json` the CLI walks into.
+///
+/// **The name is the recovery path, so it is the last thing to throw away.**
+/// Agents are pinned to a machine *by label*, so the name this computer
+/// registered under is the only thing that says which machine in the office
+/// those agents are waiting on. Dropping it with the token is how somebody
+/// loses their computer: the next prompt falls back to `gethostname()`,
+/// offers `Joaos-MacBook-Pro-2` where `DPR010_Office` belonged, and one click
+/// on the default stands up a rival machine while every agent assigned to the
+/// old name sits with nowhere to run.
+///
+/// Keeping it costs nothing — a label with no token behind it cannot act, it
+/// can only be *offered back* — and it turns an unrecoverable state into a
+/// pre-filled field.
+pub fn forget_token_for(store: &SecretStore, server: &str) -> Result<(), IdentityError> {
+    forget(store, server, Keep::Label)
+}
+
+/// Forget this machine's registration with a server entirely, name included.
+///
+/// For when the server itself is going away: a name kept for a server this app
+/// no longer knows about is an offer nobody can take.
 pub fn forget_for(store: &SecretStore, server: &str) -> Result<(), IdentityError> {
+    forget(store, server, Keep::Nothing)
+}
+
+enum Keep {
+    Label,
+    Nothing,
+}
+
+fn forget(store: &SecretStore, server: &str, keep: Keep) -> Result<(), IdentityError> {
     let mut blob = store.load()?;
     let Some(existing) = blob.slots.get(crate::identity::IDENTITY_SLOT).cloned() else {
         return Ok(());
     };
     let had_token = blob.slots.remove(&token_slot(server)).is_some();
-    let had_label = blob.slots.remove(&label_slot(server)).is_some();
+    let had_label = match keep {
+        Keep::Label => false,
+        Keep::Nothing => blob.slots.remove(&label_slot(server)).is_some(),
+    };
     if !had_token && !had_label {
         return Ok(());
     }
@@ -423,8 +456,36 @@ mod label_tests {
         assert!(remember(&store, SERVER, "qh_abc", "  ").is_err());
     }
 
+    /// The one that stops somebody losing their computer.
+    ///
+    /// A rejected token is not proof that this machine was meant to go away —
+    /// a dev server pointed at a fresh database rejects a perfectly good one.
+    /// The name is what says *which* machine in the office the agents are
+    /// pinned to, so it outlives the credential and becomes the pre-filled
+    /// answer to "name this computer".
     #[test]
-    fn forgetting_drops_the_name_with_the_token() {
+    fn forgetting_a_token_keeps_the_name_to_claim_it_back_with() {
+        let (_dir, store) = store();
+        load_or_create_with(&store, None).expect("an identity");
+        remember(&store, SERVER, "qh_abc", "Laptop").expect("stored");
+
+        forget_token_for(&store, SERVER).expect("forgotten");
+
+        assert_eq!(token(&store, SERVER).expect("readable"), None);
+        assert_eq!(
+            registered_label(&store, SERVER)
+                .expect("readable")
+                .as_deref(),
+            Some("Laptop"),
+            "the name is the way back; dropping it orphans every agent pinned to it"
+        );
+    }
+
+    /// Forgetting the *server* is the one case where the name goes too: a name
+    /// kept for a server this app no longer knows about is an offer nobody can
+    /// take.
+    #[test]
+    fn forgetting_a_server_drops_the_name_with_the_token() {
         let (_dir, store) = store();
         load_or_create_with(&store, None).expect("an identity");
         remember(&store, SERVER, "qh_abc", "Laptop").expect("stored");
@@ -432,11 +493,7 @@ mod label_tests {
         forget_for(&store, SERVER).expect("forgotten");
 
         assert_eq!(token(&store, SERVER).expect("readable"), None);
-        assert_eq!(
-            registered_label(&store, SERVER).expect("readable"),
-            None,
-            "a name with no token behind it would name a machine that cannot act"
-        );
+        assert_eq!(registered_label(&store, SERVER).expect("readable"), None);
     }
 
     /// Network-assigned suffixes are not part of anybody's chosen name.
