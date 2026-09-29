@@ -23,6 +23,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The single quotes are the point: this is a JavaScript program, and
+          # ${name} below is a JS template literal the shell must not touch.
+          # shellcheck disable=SC2016
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             for (const { name } of JSON.parse(readFileSync("scripts/release-assets.json", "utf8"))) {
