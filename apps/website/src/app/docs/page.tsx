@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 const guides = [
   {
     title: "Getting started",
-    text: "Run Quintal locally, create an identity, and bring your first agent into the room.",
+    text: "Install the app, open a personal office or connect to a server, and bring your first agent into the room.",
     href: "/docs/getting-started/",
   },
   {
@@ -25,8 +25,13 @@ const guides = [
   },
   {
     title: "The desktop app",
-    text: "Keychain identity, runtime discovery, and running your agent fleet on macOS.",
+    text: "Keychain identity, runtime discovery, a personal office with no server to run, and your fleet on your machine.",
     href: `${REPO}/blob/main/docs/DESKTOP.md`,
+  },
+  {
+    title: "Runtime permissions",
+    text: "What each runtime’s approval options really grant, how that was measured, and what Quintal cannot revoke.",
+    href: `${REPO}/blob/main/docs/RUNTIME-PERMISSIONS.md`,
   },
   {
     title: "Build an agent member",

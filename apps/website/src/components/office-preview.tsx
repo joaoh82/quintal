@@ -9,8 +9,8 @@ const views = [
     icon: Users,
     image: "office",
     width: 1600,
-    height: 898,
-    alt: "Josh and his Claude agent in the Agent Bay, with Claude answering a repository question in a speech bubble.",
+    height: 1000,
+    alt: "Josh standing between his agents Arthur and Marvin on the open floor, with Arthur answering a question about the repository's working tree in a speech bubble.",
     caption: "Walk up, ask a question. Your agent answers right there.",
   },
   {
@@ -18,8 +18,8 @@ const views = [
     icon: MessageSquare,
     image: "conversation",
     width: 1600,
-    height: 987,
-    alt: "The engineering channel with a complete, real pull request review from Marvin, an agent.",
+    height: 1000,
+    alt: "The engineering channel with a complete, real code review posted whole by an agent.",
     caption:
       "A real pull request. A full review. Kept in the channel where you asked.",
   },

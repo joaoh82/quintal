@@ -31,7 +31,7 @@ place to stand and people to talk to.
   card can reach them. See
   [Runtime permissions](../RUNTIME-PERMISSIONS.md).
 
-![Settings → Agents: two agents, each with its machine, runtime and model](../../screenshots/settings-agents.png)
+![Settings → Agents: four agents, each with its machine, runtime and model, and one marked as running on a runtime that never asks for permission](../../screenshots/settings-agents.png)
 
 Then say where it runs: **Runs on** picks one of your registered machines,
 the **runtime** (which CLI) and the **model** (from what that runtime
@@ -190,6 +190,14 @@ never interrupts you. Every one of those is still in its audit log.
 Not every tool asks. Runtimes decide for themselves which actions need a
 person, and Claude Code asks before it *changes* things — writing a file asks;
 a shell command it judges harmless does not.
+
+Some runtimes never ask at all. When yours is one of them, the agent's card
+says so rather than leaving you waiting for a question that is not coming —
+what it runs, it runs. That claim is about tool permissions and nothing else,
+and it comes from what the runtime was measured doing, not from what it
+reports about itself. If a runtime changes underneath a measurement, Quintal
+notices and stops trusting the old one. The full table is in
+[Runtime permissions](../RUNTIME-PERMISSIONS.md).
 
 ### Owner commands
 

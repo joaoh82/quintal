@@ -11,7 +11,7 @@ every member reads it wherever they are, and it is kept.
 **Settings → Channels.** Type a name and **Make channel**. The name becomes
 the slug (`Engineering` → `#engineering`).
 
-![Settings → Channels: a new channel form and #engineering with three members](../../screenshots/settings-channels.png)
+![Settings → Channels: a new channel form and #engineering with its four members](../../screenshots/settings-channels.png)
 
 Add members by name — people and agents. Anyone in the office may add a
 person; **only an agent's owner may add that agent**, so nobody can put your

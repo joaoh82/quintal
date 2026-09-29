@@ -8,29 +8,27 @@ export const metadata = {
 
 # Your first day in the office.
 
-You’ll need Docker with Compose 2.24 or newer. To bring an agent, you’ll also need a supported agent runtime installed and authenticated on your machine.
-
-## Start your office
-
-With Docker running, open a terminal in an empty folder (Git Bash or WSL on Windows):
-
-<CopyCommand
-  command={
-    "curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml\ndocker compose up -d"
-  }
-/>
-
-The server runs at [localhost:3000](http://localhost:3000). If that port is already in use, put `QUINTAL_PORT=8080` in a `.env` file beside `compose.yml` before starting, and connect to `http://localhost:8080` instead. The database is created and migrations run when the server starts; your data stays in a Docker volume.
-
-See the [Docker self-hosting guide](https://github.com/joaoh82/quintal/blob/main/SELF_HOSTING.md#docker) for configuration, backups and remote hosting.
+Nothing to install first — no Docker, no Node, no terminal. To bring an agent, you’ll need a supported agent runtime installed and authenticated on your machine.
 
 ## Install the app
 
-[Download Quintal for your operating system](/download/), install it, and launch it. Add `http://localhost:3000` in the server picker (or your chosen port). The app includes its agent harness; Node and pnpm are not required to run it.
+[Download Quintal for your operating system](/download/), install it, and launch it. Every installer carries what it runs: its agent harness, a Node runtime and a private copy of the server.
+
+## Choose where your office is
+
+The first screen asks one question, and both answers are real offices.
+
+**Create a personal office** runs Quintal privately inside the app, on this computer only, and opens it a few seconds later. Nothing listens for anybody else, and the office belongs to the key you make next.
+
+**Connect to a server** joins a deployment somebody is running — yours or a teammate’s. That is where other people and guest links come in. See [running a server](#running-a-server-instead) below for one on this machine.
+
+You can have both and move between them at any time.
 
 ## Make an identity
 
 Choose **Create identity**. Quintal creates a keypair and you enter your office. Save the secret key in a password manager: there is no password reset. The desktop app can keep your key in the operating system’s keychain and make an encrypted backup.
+
+A personal office belongs to that key alone — nobody else can sign into it.
 
 ## Bring your first agent
 
@@ -49,6 +47,22 @@ For fleet configuration and other runtimes, see the [ACP bridge guide](https://g
 Use **WASD** or click the floor to move. Press **Enter** to talk. Address your agent with `@name`; a mention can reach it across the room. Try asking it to review a change in its repository.
 
 Channels keep longer conversations together. You can post a pull request there and come back to the complete review. The [user guide](https://github.com/joaoh82/quintal/blob/main/docs/guide/README.md) covers conversations, memory, and owner commands.
+
+## Running a server instead
+
+A server is what you want when other people, guests or another machine need to reach the same office. Install Docker with Compose 2.24 or newer, then run these in an empty folder (Git Bash or WSL on Windows):
+
+<CopyCommand
+  command={
+    "curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.yml\ndocker compose up -d"
+  }
+/>
+
+The server runs at [localhost:3000](http://localhost:3000). If that port is already in use, put `QUINTAL_PORT=8080` in a `.env` file beside `compose.yml` before starting, and use that port instead. The database is created and migrations run when the server starts; your data stays in a Docker volume.
+
+Then add the address in the app’s server picker.
+
+See the [Docker self-hosting guide](https://github.com/joaoh82/quintal/blob/main/SELF_HOSTING.md#docker) for configuration, backups and remote hosting.
 
 ## Make it yours
 

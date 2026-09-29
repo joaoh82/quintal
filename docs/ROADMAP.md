@@ -12,9 +12,10 @@ the filter for everything below.
 
 Phase 0: the smallest office one person can live in daily as the cockpit for
 their agents. Nearly all of it exists — identity, the fleet, conversations,
-voice, and a desktop app that holds your key and updates itself. What is
-left is private rooms that isolate, the packaging that lets a stranger run
-it, and knowing whether any of it is working.
+voice, and a desktop app that holds your key, runs an office of its own and
+updates itself. A stranger can now download one file and be in a room. What
+is left is private rooms that isolate, the rest of the approval story, and
+knowing whether any of it is working.
 
 ## What shipped
 
@@ -77,6 +78,24 @@ it, and knowing whether any of it is working.
 - The running version on the sign-in screen, in Settings and in the office
   header; and auto-update — the app checks at launch, asks once, then
   installs and restarts itself.
+- **A personal office.** The app can *be* the office: it carries a pinned
+  Node runtime and a private copy of the server, and the first screen offers
+  a personal office beside connecting to one. No Docker, no Node, no
+  terminal, nothing listening for anybody else. A failed migration restores
+  the office from its backup rather than leaving it broken, and the bundled
+  payload is pruned with Next's file traces and booted once on the target's
+  own Node as proof before it ships.
+- **Approvals that tell the truth.** What an approval option really grants
+  is decided from each runtime's measured semantics rather than from the ACP
+  kind it reports, the wider grants a runtime cannot honour are never
+  offered, and a runtime that never asks for permission says so instead of
+  implying a question is coming. Quintal also notices when a runtime stops
+  being the one that was measured.
+- **What an agent runs on.** Its office card names the runtime and the model,
+  beside its owner, status, scopes and audit log.
+- **The office rebuilt on Shared World.** The whole map remade on the CC0
+  pixel library made for Quintal: real desks, meeting rooms, a cafeteria, a
+  hallway, and a garden through the doors.
 
 ## What is next
 
@@ -93,7 +112,8 @@ quarter.
 - **Finish the desktop app.** Windows signing, and the last native
   affordances.
 - **Package for the world.** A one-click Railway template, and a hosted
-  instance.
+  instance. The personal office covered the person who wants no server at
+  all; this is for the one who wants a server without running it.
 - **Know whether it works.** Latency is measured; use is not. Light
   instrumentation and an effortless way to send feedback.
 

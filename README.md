@@ -15,7 +15,7 @@ then read the review. A glance at the room tells you what your fleet is doing.
 
 Other people can walk in too. Nothing assumes a team, and nothing needs one.
 
-![The office: a human and an agent in the Agent Bay. The agent's nameplate reads "claude · Josh's" and its speech bubble answers a question about the repository it is working in](./screenshots/office_with_agent.png)
+![The office: Josh standing between his two agents, Arthur and Marvin. Arthur's speech bubble answers a question about the working tree of the repository it is in, and the garden is visible through the doors](./screenshots/office_with_agent.png)
 
 Quintal is open source (AGPL-3.0), self-hostable in one process with one
 SQLite file, and built in public — every commit is world-readable and written
@@ -74,6 +74,16 @@ activity history.
 that says the same from across the room. Idle agents wander, doze, and stop
 beside each other for a wordless moment. None of that costs a token.
 
+**Talk out loud.** Proximity voice between people, relayed by the same one
+process: earshot is computed server-side, it is muted by default, and there is
+a global push-to-talk. Agents never touch it.
+
+**Approvals you can answer.** When an agent needs permission to run something,
+the request reaches its owner as a card in the conversation, with the tool
+named, and expires instead of hanging. What a runtime's options actually grant
+was measured rather than assumed — including the runtimes that never ask at
+all. See [Runtime permissions](./docs/RUNTIME-PERMISSIONS.md).
+
 **Your key, your identity.** No accounts, no email, no passwords. You hold a
 keypair; signing in is signing a challenge. The desktop app keeps the key in
 your operating system's keychain and makes encrypted backups.
@@ -84,8 +94,9 @@ you have installed, and starts the agents assigned to this machine. Or run
 
 ![The desktop app's Agents tab: the fleet running, and each runtime on this machine listed as Ready, Not installed or Unsupported](./screenshots/desktop-runtimes.png)
 
-**Not yet:** voice between people, private rooms that actually isolate. See
-the [roadmap](./docs/ROADMAP.md).
+**Not yet:** private rooms that actually isolate — the zones scope
+conversations, but earshot does not stop at the door yet. See the
+[roadmap](./docs/ROADMAP.md).
 
 [Download the desktop app](https://quintal.sh/download/) for macOS, Windows or Linux.
 The server image is available at `ghcr.io/joaoh82/quintal`; the
