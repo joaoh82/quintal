@@ -133,6 +133,7 @@ mod path_tests {
 
     /// The bug: a GUI launch gets launchd's PATH, which has none of the places
     /// agent CLIs live, so every runtime read as "not installed".
+    #[cfg(unix)]
     #[test]
     fn merging_adds_what_was_missing_and_keeps_the_order() {
         let merged = merge_paths(
@@ -145,6 +146,7 @@ mod path_tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn merging_does_not_duplicate_or_keep_empties() {
         assert_eq!(merge_paths("/bin", "/bin"), "/bin");
@@ -153,16 +155,86 @@ mod path_tests {
 
     #[test]
     fn a_path_is_read_past_whatever_else_the_shell_printed() {
-        let noisy = format!("Welcome!\nsome motd\n{PATH_MARKER}/opt/homebrew/bin:/usr/bin");
+        let noisy =
+            format!("Welcome!\nsome motd\n{PATH_MARKER}/opt/homebrew/bin:/usr/bin\0logout chatter");
         assert_eq!(
             extract_path(&noisy).as_deref(),
             Some("/opt/homebrew/bin:/usr/bin"),
         );
     }
 
+    #[cfg(unix)]
+    fn probe(script: &str, timeout: std::time::Duration) -> Option<String> {
+        read_shell_path(
+            std::process::Command::new("/bin/sh").args(["-c", script]),
+            timeout,
+        )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn noisy_startup_does_not_fill_the_pipe_and_lose_the_path() {
+        let script =
+            format!("head -c 131072 /dev/zero; printf '{PATH_MARKER}/tools/bin:/usr/bin\\0'");
+        assert_eq!(
+            probe(&script, std::time::Duration::from_secs(2)).as_deref(),
+            Some("/tools/bin:/usr/bin")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_startup_can_take_longer_than_the_old_three_second_limit() {
+        let script = format!("sleep 3.2; printf '{PATH_MARKER}/tools/bin\\0'");
+        assert_eq!(
+            probe(&script, std::time::Duration::from_secs(5)).as_deref(),
+            Some("/tools/bin")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_that_never_answers_is_bounded() {
+        let start = std::time::Instant::now();
+        assert_eq!(
+            probe("exec sleep 5", std::time::Duration::from_millis(100)),
+            None
+        );
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_complete_answer_does_not_wait_for_logout() {
+        let script = format!("printf '{PATH_MARKER}/tools/bin\\0'; exec sleep 5");
+        assert_eq!(
+            probe(&script, std::time::Duration::from_millis(500)).as_deref(),
+            Some("/tools/bin")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn standard_installations_survive_a_failed_shell_probe() {
+        let recovered = merge_paths(
+            "/usr/bin:/bin",
+            &fallback_path(Some("/Users/test person".into())),
+        );
+        let dirs: Vec<_> = std::env::split_paths(&recovered).collect();
+        for expected in [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/Users/test person/.local/bin",
+            "/Users/test person/.opencode/bin",
+        ] {
+            assert!(dirs.contains(&PathBuf::from(expected)));
+        }
+    }
+
     #[test]
     fn nothing_useful_is_not_mistaken_for_a_path() {
         assert_eq!(extract_path("no marker here"), None);
+        assert_eq!(extract_path(&format!("{PATH_MARKER}/partial")), None);
         assert_eq!(extract_path(&format!("{PATH_MARKER}   ")), None);
     }
 }
@@ -267,11 +339,12 @@ pub fn adopt_login_path() {
     if std::env::var_os("QUINTAL_NO_LOGIN_PATH").is_some() {
         return;
     }
-    let Some(from_shell) = login_shell_path() else {
-        return;
-    };
+    let from_shell = login_shell_path().unwrap_or_default();
     let current = std::env::var("PATH").unwrap_or_default();
-    std::env::set_var("PATH", merge_paths(&current, &from_shell));
+    let recovered = merge_paths(&current, &from_shell);
+    #[cfg(unix)]
+    let recovered = merge_paths(&recovered, &fallback_path(std::env::var_os("HOME")));
+    std::env::set_var("PATH", recovered);
 }
 
 /// Everything in `current`, then anything in `extra` it did not already have.
@@ -279,51 +352,118 @@ pub fn adopt_login_path() {
 /// Appended rather than prepended: a PATH somebody set deliberately keeps
 /// deciding which binary wins, and this only ever adds places to look.
 fn merge_paths(current: &str, extra: &str) -> String {
-    let mut out: Vec<&str> = Vec::new();
-    for entry in current.split(':').chain(extra.split(':')) {
-        if !entry.is_empty() && !out.contains(&entry) {
+    let mut out = Vec::new();
+    for entry in std::env::split_paths(current).chain(std::env::split_paths(extra)) {
+        if !entry.as_os_str().is_empty() && !out.contains(&entry) {
             out.push(entry);
         }
     }
-    out.join(":")
+    std::env::join_paths(out)
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
 }
 
-fn login_shell_path() -> Option<String> {
-    let shell = std::env::var("SHELL").ok()?;
+/// A failed shell startup must not hide standard standalone installations.
+#[cfg(unix)]
+fn fallback_path(home: Option<std::ffi::OsString>) -> String {
+    let mut dirs = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ];
+    if let Some(home) = home {
+        let home = PathBuf::from(home);
+        for suffix in [".local/bin", ".opencode/bin", ".bun/bin", ".cargo/bin"] {
+            dirs.push(home.join(suffix));
+        }
+    }
+    std::env::join_paths(dirs)
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
+}
 
-    let mut child = std::process::Command::new(shell)
-        .args(["-lic", &format!("printf '{PATH_MARKER}%s' \"$PATH\"")])
+#[cfg(not(unix))]
+fn login_shell_path() -> Option<String> {
+    None
+}
+
+#[cfg(unix)]
+fn login_shell_path() -> Option<String> {
+    let shell = std::env::var_os("SHELL")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            if cfg!(target_os = "macos") {
+                "/bin/zsh"
+            } else {
+                "/bin/sh"
+            }
+            .into()
+        });
+    let mut command = std::process::Command::new(shell);
+    command.args(["-lic", &format!("printf '{PATH_MARKER}%s\\0' \"$PATH\"")]);
+    let result = read_shell_path(&mut command, std::time::Duration::from_secs(10));
+    if result.is_none() {
+        eprintln!("quintal: login-shell PATH discovery failed; using inherited and standard installation paths");
+    }
+    result
+}
+
+/// Drain stdout while the shell runs: waiting for exit first deadlocks when rc
+/// output fills the pipe. A NUL terminator lets us stop even if a shell logout
+/// hook (or a descendant holding stdout open) never exits.
+#[cfg(unix)]
+fn read_shell_path(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+) -> Option<String> {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+    let mut child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
         .ok()?;
-
-    // A login shell runs somebody's rc files, which can do anything at all —
-    // including block. Better to start with the PATH we have than not start.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_millis(25));
-            }
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
+    let result = (|| {
+        let mut stdout = child.stdout.take()?;
+        let fd = stdout.as_raw_fd();
+        // SAFETY: stdout owns this live descriptor throughout the probe.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+        if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+            return None;
+        }
+        let deadline = std::time::Instant::now() + timeout;
+        let mut output = Vec::new();
+        let mut buf = [0u8; 8192];
+        while std::time::Instant::now() < deadline {
+            match stdout.read(&mut buf) {
+                Ok(0) => return None,
+                Ok(n) => {
+                    output.extend_from_slice(&buf[..n]);
+                    if let Some(path) = extract_path(&String::from_utf8_lossy(&output)) {
+                        return Some(path);
+                    }
+                    if output.len() > 1024 * 1024 {
+                        return None;
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return None,
             }
         }
-    }
-
-    let mut text = String::new();
-    use std::io::Read;
-    child.stdout.take()?.read_to_string(&mut text).ok()?;
-    extract_path(&text)
+        None
+    })();
+    let _ = child.kill();
+    let _ = child.wait();
+    result
 }
 
-/// Pull the PATH out of whatever else the shell decided to print.
+/// Require the complete framed answer, excluding startup and logout chatter.
 fn extract_path(output: &str) -> Option<String> {
-    let after = output.rsplit_once(PATH_MARKER)?.1.trim();
-    (!after.is_empty()).then(|| after.to_string())
+    let after = output.rsplit_once(PATH_MARKER)?.1.split_once('\0')?.0;
+    (!after.trim().is_empty()).then(|| after.to_string())
 }
