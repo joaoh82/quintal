@@ -16,6 +16,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A workflow GitHub cannot parse does not fail — it does not run. There is no
+  # red check on the pull request that introduced it, nothing in the merge
+  # queue, nothing anywhere until something needs that workflow. `release.yml`
+  # and `packaging.yml` sat unparseable on main for a day that way, and the
+  # bill came due at a version tag: the Release run never started, v0.6.0 built
+  # no installers, and that tag can never be reused.
+  #
+  # So: parse every workflow on every pull request. actionlint also type-checks
+  # ${{ }} expressions, validates runner labels and action inputs, and runs
+  # shellcheck over `run:` blocks — but the load-bearing part is the parse.
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned by version and checksum rather than taken from a third-party
+      # action, the same bargain fix-appimage.sh makes with appimagetool: the
+      # hash is the trust, and an upgrade is a deliberate edit here.
+      - name: Lint every workflow
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLO --retry 3 \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" actionlint
+          # Every file, not only the changed ones: an unparseable workflow is
+          # just as broken when the pull request that breaks it touches
+          # something else entirely.
+          ./actionlint -color
+
   build:
     runs-on: ubuntu-latest
     steps:
