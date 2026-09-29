@@ -2,7 +2,7 @@ import { normaliseHostReport } from '@quintal/shared';
 import {
   ensurePersonalWorkspace,
   getDb,
-  listHostTokens,
+  knownMachineNames,
   registerMachineForUser,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -86,12 +86,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * The machines this person has already registered.
+ * The machines this office knows this person by.
  *
  * Only names, and only their own. The prompt uses them so that naming this
  * computer after one it already has is a visible choice rather than an accident
  * — reusing a name replaces that machine's token, which is exactly how you move
  * a machine into the app without orphaning the agents pinned to it.
+ *
+ * It answers with names that have *no* live token too, and that is the whole
+ * point. This list used to be "machines with an unrevoked token", which is
+ * empty in precisely the situation somebody needs it: the token was revoked, or
+ * a rebuilt database forgot it, or the desktop app dropped it on a 401. The
+ * agents stay pinned to the name through all of that, so the name is still the
+ * way back — it was just never offered. `agents` says how many are waiting on
+ * each one, because "4 agents are assigned to this" is the sentence that makes
+ * the right choice obvious.
  */
 export async function GET(): Promise<NextResponse> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -109,9 +118,10 @@ export async function GET(): Promise<NextResponse> {
     pubkey: session.user.pubkey,
   });
 
-  const machines = (await listHostTokens(db, workspace.id))
-    .filter((row) => row.revokedAt === null && row.ownerUserId === session.user.id)
-    .map((row) => row.label);
+  const machines = await knownMachineNames(db, {
+    workspaceId: workspace.id,
+    ownerUserId: session.user.id,
+  });
 
-  return NextResponse.json({ machines: [...new Set(machines)] });
+  return NextResponse.json({ machines });
 }

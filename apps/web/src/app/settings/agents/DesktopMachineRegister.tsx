@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { RegisterMachineForm } from '@/components/RegisterMachineForm';
-import { existingMachineNames, machineNaming } from '@/lib/machine';
+import { knownMachines, machineNaming, type KnownMachine } from '@/lib/machine';
 import { useHost } from '@/lib/use-host';
 
 /**
@@ -17,7 +17,8 @@ import { useHost } from '@/lib/use-host';
 export function DesktopMachineRegister() {
   const { host, ready } = useHost();
   const [suggested, setSuggested] = useState<string | null>(null);
-  const [existing, setExisting] = useState<string[]>([]);
+  const [knownAs, setKnownAs] = useState<string | null>(null);
+  const [known, setKnown] = useState<KnownMachine[]>([]);
 
   useEffect(() => {
     if (!host) return;
@@ -25,8 +26,9 @@ export function DesktopMachineRegister() {
     void machineNaming().then(async (prompt) => {
       if (cancelled || prompt.kind !== 'ask') return;
       setSuggested(prompt.suggested);
-      const names = await existingMachineNames();
-      if (!cancelled) setExisting(names);
+      setKnownAs(prompt.knownAs);
+      const machines = await knownMachines();
+      if (!cancelled) setKnown(machines);
     });
     return () => {
       cancelled = true;
@@ -39,11 +41,19 @@ export function DesktopMachineRegister() {
     <div className="mt-3 rounded-md border p-3">
       <h3 className="text-xs font-semibold">Register this computer</h3>
       <p className="text-muted-foreground mt-1 text-xs">
-        This office does not know this machine yet. Name it to run agents
-        here. Each office keeps its own registration, so a token from
-        another office will not work.
+        {knownAs === null
+          ? `This office does not know this machine yet. Name it to run agents
+             here. Each office keeps its own registration, so a token from
+             another office will not work.`
+          : `This office no longer recognises this machine's registration.
+             Register under the same name to take it back — the agents assigned
+             to it keep working.`}
       </p>
-      <RegisterMachineForm suggested={suggested} existing={existing} />
+      <RegisterMachineForm
+        suggested={suggested}
+        known={known}
+        knownAs={knownAs}
+      />
     </div>
   );
 }

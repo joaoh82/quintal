@@ -240,6 +240,83 @@ export async function findHostByToken(
   };
 }
 
+/** A name this person's office knows a machine by, and why it knows it. */
+export interface KnownMachine {
+  label: string;
+  /** Is there a live token behind this name right now? */
+  registered: boolean;
+  /** How many of this person's agents are pinned to it. */
+  agents: number;
+}
+
+/**
+ * Every name this person's office knows a machine by.
+ *
+ * Deliberately wider than "machines with a live token", because the moment
+ * somebody most needs this list is the moment that set is empty. A token can be
+ * revoked, expire from a rebuilt database, or be dropped by a desktop app that
+ * got a 401 — and none of that unpins the agents. `hostLabel` is the only thing
+ * that says which machine an agent is waiting on, so a name four agents point
+ * at is a real machine whether or not a credential currently backs it.
+ *
+ * Offering only the live ones is what turns "my computer is gone" into a true
+ * statement: the name that would bring it back exists, and the prompt just
+ * never mentions it.
+ *
+ * Own machines only, and own agents only. A teammate's machine is not a name
+ * you may claim — registering under it would hand you their agents.
+ */
+export async function knownMachineNames(
+  db: Database,
+  input: { workspaceId: string; ownerUserId: string },
+): Promise<KnownMachine[]> {
+  const [tokens, assignments] = await Promise.all([
+    db
+      .select({ label: hostTokens.label })
+      .from(hostTokens)
+      .where(
+        and(
+          eq(hostTokens.workspaceId, input.workspaceId),
+          eq(hostTokens.ownerUserId, input.ownerUserId),
+          isNull(hostTokens.revokedAt),
+        ),
+      ),
+    db
+      .select({ label: agents.hostLabel })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.workspaceId, input.workspaceId),
+          eq(agents.ownerUserId, input.ownerUserId),
+          isNull(agents.revokedAt),
+        ),
+      ),
+  ]);
+
+  const known = new Map<string, KnownMachine>();
+  const entry = (label: string): KnownMachine => {
+    const found = known.get(label);
+    if (found) return found;
+    const fresh = { label, registered: false, agents: 0 };
+    known.set(label, fresh);
+    return fresh;
+  };
+
+  for (const row of tokens) entry(row.label).registered = true;
+  for (const row of assignments) {
+    // An agent with no host is not assigned anywhere; an empty label is not a
+    // name anybody could reuse.
+    if (typeof row.label !== 'string' || row.label.trim().length === 0) continue;
+    entry(row.label).agents += 1;
+  }
+
+  // Most-claimable first: a name with agents waiting on it is the one somebody
+  // is looking for, and a registered machine is not something to re-register.
+  return [...known.values()].sort(
+    (a, b) => Number(a.registered) - Number(b.registered) || b.agents - a.agents,
+  );
+}
+
 export async function listHostTokens(db: Database, workspaceId: string) {
   return db
     .select({

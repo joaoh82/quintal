@@ -17,6 +17,7 @@ import {
   fleetForHost,
   findHostByToken,
   hostMayActAs,
+  knownMachineNames,
   listHostTokens,
   registerMachineForUser,
   revokeHostToken,
@@ -521,5 +522,141 @@ describe('the owner name on a joined row', () => {
     for (const row of listed) {
       assert.ok(!('ownerPubkey' in row), 'ownerPubkey should be stripped');
     }
+  });
+});
+
+
+/**
+ * The list that answers "where did my computer go".
+ *
+ * Every entry here exists because the old version of this — live tokens only —
+ * went empty in exactly the situation somebody needed it. A revoked token, a
+ * rebuilt database, a desktop app that took a 401 as "forget this machine":
+ * the credential goes, the `hostLabel` on every agent does not, and that name
+ * is the only way back to the machine they are pinned to.
+ */
+describe('the names an office knows a machine by', () => {
+  it('keeps offering a name after its token is revoked, because the agents are still on it', async () => {
+    const { db, josh } = await setup();
+    const token = await createHostToken(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'DPR010_Office',
+    });
+    await makeAgent(db, josh, 'Marvin', {
+      runtimeId: 'claude-code',
+      hostLabel: 'DPR010_Office',
+    });
+    await makeAgent(db, josh, 'Arthur', {
+      runtimeId: 'codex',
+      hostLabel: 'DPR010_Office',
+    });
+
+    await revokeHostToken(db, token.id);
+
+    assert.deepEqual(
+      await knownMachineNames(db, {
+        workspaceId: josh.workspaceId,
+        ownerUserId: josh.id,
+      }),
+      [{ label: 'DPR010_Office', registered: false, agents: 2 }],
+      'the name survives the credential — it is what the agents point at',
+    );
+  });
+
+  it('says which names have a live token behind them', async () => {
+    const { db, josh } = await setup();
+    await createHostToken(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'Work laptop',
+    });
+
+    assert.deepEqual(
+      await knownMachineNames(db, {
+        workspaceId: josh.workspaceId,
+        ownerUserId: josh.id,
+      }),
+      [{ label: 'Work laptop', registered: true, agents: 0 }],
+    );
+  });
+
+  /** A machine with agents waiting on it is the one being looked for. */
+  it('puts the reclaimable names first', async () => {
+    const { db, josh } = await setup();
+    await createHostToken(db, {
+      workspaceId: josh.workspaceId,
+      ownerUserId: josh.id,
+      label: 'Live',
+    });
+    await makeAgent(db, josh, 'One', { runtimeId: 'codex', hostLabel: 'Lonely' });
+    await makeAgent(db, josh, 'Two', { runtimeId: 'codex', hostLabel: 'Busy' });
+    await makeAgent(db, josh, 'Three', { runtimeId: 'codex', hostLabel: 'Busy' });
+
+    assert.deepEqual(
+      (
+        await knownMachineNames(db, {
+          workspaceId: josh.workspaceId,
+          ownerUserId: josh.id,
+        })
+      ).map((machine) => machine.label),
+      ['Busy', 'Lonely', 'Live'],
+    );
+  });
+
+  /**
+   * The one that has to hold. Registering under a name takes over the machine
+   * the agents are assigned to, so offering a teammate's name would be offering
+   * a way to adopt their agents.
+   */
+  it('never offers a name that belongs to somebody else', async () => {
+    const { db, josh, sam } = await setup();
+    await createHostToken(db, {
+      workspaceId: sam.workspaceId,
+      ownerUserId: sam.id,
+      label: "Sam's laptop",
+    });
+    await makeAgent(db, sam, 'Theirs', {
+      runtimeId: 'codex',
+      hostLabel: "Sam's laptop",
+    });
+
+    assert.deepEqual(
+      await knownMachineNames(db, {
+        workspaceId: josh.workspaceId,
+        ownerUserId: josh.id,
+      }),
+      [],
+    );
+  });
+
+  it('ignores agents that are not assigned anywhere', async () => {
+    const { db, josh } = await setup();
+    await makeAgent(db, josh, 'Unassigned');
+
+    assert.deepEqual(
+      await knownMachineNames(db, {
+        workspaceId: josh.workspaceId,
+        ownerUserId: josh.id,
+      }),
+      [],
+    );
+  });
+
+  it('stops counting an agent once it is revoked', async () => {
+    const { db, josh } = await setup();
+    const agent = await makeAgent(db, josh, 'Marvin', {
+      runtimeId: 'codex',
+      hostLabel: 'Laptop',
+    });
+    await revokeAgent(db, agent.id, josh.id);
+
+    assert.deepEqual(
+      await knownMachineNames(db, {
+        workspaceId: josh.workspaceId,
+        ownerUserId: josh.id,
+      }),
+      [],
+    );
   });
 });

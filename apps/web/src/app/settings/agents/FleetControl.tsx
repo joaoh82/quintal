@@ -10,7 +10,7 @@ import {
   type FleetState,
   type LogLine,
 } from '@/lib/host';
-import { existingMachineNames, machineNaming } from '@/lib/machine';
+import { knownMachines, machineNaming, type KnownMachine } from '@/lib/machine';
 import { useHost } from '@/lib/use-host';
 
 /**
@@ -37,7 +37,8 @@ export function FleetControl() {
   const [atLogin, setAtLogin] = useState<boolean | null>(null);
   const [needsRegistration, setNeedsRegistration] = useState(false);
   const [suggested, setSuggested] = useState('');
-  const [existing, setExisting] = useState<string[]>([]);
+  const [knownAs, setKnownAs] = useState<string | null>(null);
+  const [known, setKnown] = useState<KnownMachine[]>([]);
   const tail = useRef<HTMLPreElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -56,7 +57,8 @@ export function FleetControl() {
     const prompt = await machineNaming();
     if (prompt.kind !== 'ask') return;
     setSuggested(prompt.suggested);
-    setExisting(await existingMachineNames());
+    setKnownAs(prompt.knownAs);
+    setKnown(await knownMachines());
     setNeedsRegistration(true);
   }, []);
 
@@ -157,12 +159,24 @@ export function FleetControl() {
 
       {needsRegistration ? (
         <div className="mt-3 rounded-md border p-3">
-          <h3 className="text-xs font-semibold">Register this machine</h3>
+          <h3 className="text-xs font-semibold">
+            {knownAs === null
+              ? 'Register this machine'
+              : 'Register this machine again'}
+          </h3>
           <p className="text-muted-foreground mt-1 text-xs">
-            This office does not know this computer yet. Register it here to
-            run agents — a token from another office will not work.
+            {knownAs === null
+              ? `This office does not know this computer yet. Register it here
+                 to run agents — a token from another office will not work.`
+              : `This office no longer recognises this computer's registration.
+                 Register under the same name to take it back — the agents
+                 assigned to it keep working.`}
           </p>
-          <RegisterMachineForm suggested={suggested} existing={existing} />
+          <RegisterMachineForm
+            suggested={suggested}
+            known={known}
+            knownAs={knownAs}
+          />
         </div>
       ) : null}
 

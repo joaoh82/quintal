@@ -63,8 +63,15 @@ async function reasonFrom(response: Response): Promise<string> {
 export type NamingPrompt =
   /** A browser, or a machine that has already registered. Ask nothing. */
   | { kind: 'settled' }
-  /** Ask, offering this as the default. */
-  | { kind: 'ask'; suggested: string }
+  /**
+   * Ask, offering `suggested` as the default.
+   *
+   * `knownAs` is the name this machine last registered under here, when it has
+   * one — which means the question is not "what should this computer be
+   * called" but "this office knew you as X and does not any more". The two
+   * deserve different words and the same pre-filled field.
+   */
+  | { kind: 'ask'; suggested: string; knownAs: string | null }
   | { kind: 'failed'; reason: string };
 
 /**
@@ -80,7 +87,9 @@ export async function machineNaming(
   try {
     const status = await host.hostStatus();
     if (status.registered) return { kind: 'settled' };
-    return { kind: 'ask', suggested: status.label };
+    // `label` already prefers the remembered registration over the hostname,
+    // so the field comes up holding the name that takes this machine back.
+    return { kind: 'ask', suggested: status.label, knownAs: status.knownAs ?? null };
   } catch (error: unknown) {
     // A locked keychain lands here. Asking anyway would mint a token this
     // machine then cannot store, leaving a dead row in the Machines list.
@@ -152,24 +161,49 @@ function describe(error: unknown): string {
   return 'something went wrong';
 }
 
+/** A name this office knows a machine by, and what is behind it. */
+export interface KnownMachine {
+  label: string;
+  /** Is a live token backing this name right now? */
+  registered: boolean;
+  /** How many agents are pinned to it, waiting for a machine to run on. */
+  agents: number;
+}
+
 /**
- * Names this person has already given machines, for the prompt to offer.
+ * The names this office already knows machines by, for the prompt to offer.
+ *
+ * Includes names with no live token — a revoked one, a rebuilt database, a 401
+ * the desktop app took as "forget this machine". Those are exactly the names
+ * somebody is trying to get back, and the old version of this call filtered
+ * them out, so the prompt went quiet at the only moment it had something
+ * useful to say.
  *
  * Best effort: an empty list is a worse prompt, not a broken one, so a failure
  * here must not stop somebody naming their computer.
  */
-export async function existingMachineNames(
+export async function knownMachines(
   fetchImpl: typeof fetch = fetch,
-): Promise<string[]> {
+): Promise<KnownMachine[]> {
   try {
     const response = await fetchImpl('/api/host/register', {
       credentials: 'same-origin',
     });
     if (!response.ok) return [];
     const body = (await response.json()) as { machines?: unknown };
-    return Array.isArray(body.machines)
-      ? body.machines.filter((name): name is string => typeof name === 'string')
-      : [];
+    if (!Array.isArray(body.machines)) return [];
+    return body.machines.flatMap((entry): KnownMachine[] => {
+      if (typeof entry !== 'object' || entry === null) return [];
+      const { label, registered, agents } = entry as Record<string, unknown>;
+      if (typeof label !== 'string' || label.length === 0) return [];
+      return [
+        {
+          label,
+          registered: registered === true,
+          agents: typeof agents === 'number' ? agents : 0,
+        },
+      ];
+    });
   } catch {
     return [];
   }
