@@ -97,9 +97,12 @@ export function RegisterMachineForm({
           This computer was registered here as <strong>{knownAs}</strong>.
           Registering under that name again takes it back.
         </p>
-      ) : known.length > 0 ? (
+      ) : known.length > 0 || knownAs !== null ? (
+        // Only once there is something to lose. On a genuine first run every
+        // name is new, and warning about it would be warning about nothing.
         <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-          <strong>{trimmed}</strong> is a new machine. Agents are assigned to a
+          <strong>{trimmed}</strong> is a new machine
+          {knownAs === null ? '' : `, not ${knownAs}`}. Agents are assigned to a
           machine by name, so anything pinned to another name will not run here.
         </p>
       ) : null}
