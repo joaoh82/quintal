@@ -131,7 +131,7 @@ jobs:
           node scripts/build-personal-payload.mjs '${{ matrix.target }}'
       - name: Windows host regressions
         if: runner.os == 'Windows'
-        run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml windows_tests::
+        run: 'cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml windows_tests::'
       - name: Build installers (native Tauri signing and notarization on macOS)
         env:
           APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
