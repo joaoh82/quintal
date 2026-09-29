@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { withSigningKeychain } from './mac-signing-keychain.mjs';
 import { signPayload } from './sign-payload.mjs';
 
 const [target, bundles, platform] = process.argv.slice(2);
@@ -73,7 +74,21 @@ writeFileSync('stage/payload.txt', `${payload.files} files, ${(payload.bytes / 1
 // On macOS the payload's native modules are signed with the app's identity
 // before Tauri copies them into Resources: the hardened runtime will not let
 // quintal-node load them otherwise, and notarization will not accept them.
-if (process.platform === 'darwin') signPayload(env.APPLE_SIGNING_IDENTITY);
+//
+// A real identity has to be in a keychain first. Tauri imports the
+// certificate itself, but not until `tauri build` below, so signing the
+// payload here needs its own — see mac-signing-keychain.mjs. An ad-hoc
+// signature needs no identity and no keychain.
+if (process.platform === 'darwin') {
+  if (env.APPLE_SIGNING_IDENTITY === '-') {
+    signPayload(env.APPLE_SIGNING_IDENTITY);
+  } else {
+    withSigningKeychain(
+      { certificate: env.APPLE_CERTIFICATE, password: env.APPLE_CERTIFICATE_PASSWORD },
+      () => signPayload(env.APPLE_SIGNING_IDENTITY),
+    );
+  }
+}
 
 // `sidecar` decides whether externalBin and the personal payload are applied
 // to this bundle — both are things linuxdeploy must not see, see below.
