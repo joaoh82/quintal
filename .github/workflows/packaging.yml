@@ -166,6 +166,15 @@ jobs:
           pnpm --filter quintal-acp build
           node scripts/build-harness-sidecar.mjs x86_64-pc-windows-msvc
 
+      # The one thing only this runner can prove about the payload: that the
+      # pinned Node runtime can actually be unpacked here. Windows is the only
+      # target whose archive is a zip, and the only one whose shell is Git
+      # Bash — where PATH finds MSYS GNU tar, which cannot read one. Both of
+      # v0.6.0's and v0.6.1's Windows failures were in this single step, and
+      # neither was reachable before a tag because nothing here ran it.
+      - name: Fetch this target's Node runtime
+        run: node scripts/fetch-node-runtime.mjs x86_64-pc-windows-msvc
+
       # The harness lookup, and the graceful stop — the one that has no signal
       # to send here and so can only be proven on this runner.
       - name: Windows host regressions
