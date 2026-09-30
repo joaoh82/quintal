@@ -78,6 +78,14 @@ const GRACE: Duration = Duration::from_secs(8);
 /// Backups kept per office, oldest dropped first.
 const BACKUPS_KEPT: usize = 5;
 
+/// How many of the server's dying stderr lines are reported.
+///
+/// Three was the tail of a Node crash and nothing else: the `errno`/`code`
+/// dump and the version banner, with the line that says *what went wrong*
+/// already scrolled past. A fatal Node error is about a dozen lines, so keep
+/// enough of them to name the fault.
+const LAST_WORDS: usize = 12;
+
 #[derive(Debug, Error)]
 pub enum PersonalError {
     #[error("this build of Quintal carries no personal office payload (looked in {0})")]
@@ -222,6 +230,25 @@ pub struct Payload {
     pub manifest: Manifest,
 }
 
+/// A path with a root, whatever we were handed.
+///
+/// Everything here ends up as the server's argv or environment, and the
+/// server does not share this process's current directory: it is started in
+/// the office's data directory. So a path read against *our* directory —
+/// `apps/desktop/personal-payload` from a checkout, or on Windows the
+/// drive-relative `C:payload` a shell can hand back — passes `is_file()`
+/// here and then means somewhere else entirely over there. Node says so in
+/// the one dialect nobody reads: `EISDIR: illegal operation on a directory,
+/// lstat 'C:'`, thrown while resolving the main module against a root that
+/// is not a root.
+///
+/// `std::path::absolute` keeps the path lexical — no symlink following, no
+/// requirement that it exist yet — and understands the Windows drive-relative
+/// form, which plain `current_dir().join(..)` does not.
+fn anchored(path: PathBuf) -> PathBuf {
+    std::path::absolute(&path).unwrap_or(path)
+}
+
 /// Find the payload and the runtime.
 ///
 /// The payload: `QUINTAL_PERSONAL_PAYLOAD` if set — development and CI point
@@ -237,12 +264,12 @@ pub fn locate_payload(
     resource_dir: Option<&Path>,
     exe_dir: Option<&Path>,
 ) -> Result<Payload, PersonalError> {
-    let payload_dir = match std::env::var_os("QUINTAL_PERSONAL_PAYLOAD") {
+    let payload_dir = anchored(match std::env::var_os("QUINTAL_PERSONAL_PAYLOAD") {
         Some(explicit) => PathBuf::from(explicit),
         None => resource_dir
             .map(|dir| dir.join(PERSONAL))
             .ok_or_else(|| PersonalError::NoPayload("no resource directory".into()))?,
-    };
+    });
     let manifest_path = payload_dir.join("payload.json");
     if !manifest_path.is_file() {
         return Err(PersonalError::NoPayload(payload_dir.display().to_string()));
@@ -267,6 +294,7 @@ pub fn locate_payload(
 
     let node = std::env::var_os("QUINTAL_NODE_BIN")
         .map(PathBuf::from)
+        .map(anchored)
         .filter(|path| path.is_file())
         .or_else(|| {
             exe_dir
@@ -990,7 +1018,7 @@ impl Office {
                 .iter()
                 .rev()
                 .filter(|line| line.stream == "err")
-                .take(3)
+                .take(LAST_WORDS)
                 .map(|line| line.text.clone())
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -1008,7 +1036,10 @@ impl Office {
                 // case a person can fix from the first screen.
                 inner.status.restorable = !inner.ever_ready && inner.status.backup.is_some();
                 inner.status.message = Some(format!(
-                    "{why}, and kept doing so. Its last words: {}. Your data is in {}.",
+                    "{why}, and kept doing so. It was started as {} {}. Its last words: {}. \
+                     Your data is in {}.",
+                    self.payload.node.display(),
+                    self.payload.entry.display(),
                     if tail.is_empty() {
                         "nothing".to_string()
                     } else {
@@ -1592,6 +1623,23 @@ mod tests {
         ));
         drop(first);
         take_lock(&layout).expect("free again");
+    }
+
+    /// The bug: the host checked the payload against *its* current directory
+    /// and the server was then started in another one, so a path without a
+    /// root meant two different places. On Windows the drive-relative form
+    /// took the app down with `lstat 'C:'` from Node's main-module
+    /// resolution, which names neither the payload nor the office.
+    #[test]
+    fn a_payload_path_is_rooted_before_any_server_is_told_about_it() {
+        let rootless = anchored(PathBuf::from("apps/desktop/personal-payload"));
+        assert!(rootless.is_absolute(), "{}", rootless.display());
+        assert!(rootless.ends_with("apps/desktop/personal-payload"));
+
+        // A path that already has a root is left exactly as it was.
+        let dir = tempfile::tempdir().unwrap();
+        let rooted = dir.path().join("personal");
+        assert_eq!(anchored(rooted.clone()), rooted);
     }
 
     #[test]
