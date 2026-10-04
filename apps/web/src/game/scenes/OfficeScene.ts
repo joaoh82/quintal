@@ -207,7 +207,7 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  override update(_time: number, deltaMs: number): void {
+  override update(time: number, deltaMs: number): void {
     const deltaSeconds = deltaMs / 1000;
 
     this.#readKeyboard();
@@ -221,8 +221,8 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.#publishTile();
-    if (_time >= this.#nextMinimapAt) {
-      this.#nextMinimapAt = _time + 200;
+    if (time >= this.#nextMinimapAt) {
+      this.#nextMinimapAt = time + 200;
       this.#publishMinimap();
     }
     if (this.#debugEnabled) this.#drawDebugPath();
