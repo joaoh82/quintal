@@ -92,6 +92,11 @@ pub enum PersonalError {
     NoPayload(String),
     #[error("this build of Quintal carries no Node runtime for the personal office")]
     NoRuntime,
+    #[error(
+        "Quintal is installed at a path Windows can only spell with a \\\\?\\ prefix, \
+         which Node cannot start the office from ({0}). Install it somewhere shorter."
+    )]
+    VerbatimPath(String),
     #[error("another copy of Quintal is already running this office")]
     AlreadyRunning,
     #[error("there is no backup of this office to put back")]
@@ -255,10 +260,20 @@ pub struct Payload {
 /// rather than its root directory, and the error prints with the prefix
 /// stripped: the same `lstat 'C:'`, from a path that had a root all along.
 /// `dunce` drops the prefix only where the plain form names the same file,
-/// and does nothing off Windows.
+/// and does nothing off Windows. Where it cannot — over 260 characters, a
+/// reserved name, a trailing dot — the prefix stays, and [`unanchored`]
+/// refuses the path by name rather than let Node fail on it unreadably.
 fn anchored(path: PathBuf) -> PathBuf {
     let path = std::path::absolute(&path).unwrap_or(path);
     dunce::simplified(&path).to_path_buf()
+}
+
+/// A path [`anchored`] could not take the `\\?\` off, as the error to show.
+fn unanchored(path: &Path) -> Result<(), PersonalError> {
+    if cfg!(windows) && path.as_os_str().to_string_lossy().starts_with(r"\\?\") {
+        return Err(PersonalError::VerbatimPath(path.display().to_string()));
+    }
+    Ok(())
 }
 
 /// Find the payload and the runtime.
@@ -282,6 +297,8 @@ pub fn locate_payload(
             .map(|dir| dir.join(PERSONAL))
             .ok_or_else(|| PersonalError::NoPayload("no resource directory".into()))?,
     });
+    // Entry and web dir are joined onto this, so they are plain when it is.
+    unanchored(&payload_dir)?;
     let manifest_path = payload_dir.join("payload.json");
     if !manifest_path.is_file() {
         return Err(PersonalError::NoPayload(payload_dir.display().to_string()));
@@ -321,6 +338,7 @@ pub fn locate_payload(
                 .map(anchored)
         })
         .ok_or(PersonalError::NoRuntime)?;
+    unanchored(&node)?;
 
     Ok(Payload {
         node,
@@ -1660,11 +1678,14 @@ mod tests {
     /// directory arrives in, the server is handed paths with a root.
     #[test]
     fn a_payload_under_a_rootless_resource_dir_is_rooted_too() {
-        // Under this process's directory, so its bare name is a relative path
-        // to it — on Windows the temp directory can be on another drive.
-        let cwd = std::env::current_dir().unwrap();
-        let dir = tempfile::tempdir_in(&cwd).unwrap();
-        let relative = PathBuf::from(dir.path().file_name().unwrap());
+        // Under this process's directory, so a relative path reaches it — on
+        // Windows the temp directory can be on another drive, with no relative
+        // path between them. In `target/`: ignored by git and by `tauri dev`,
+        // should a killed run leave it behind.
+        let scratch = Path::new("target");
+        std::fs::create_dir_all(scratch).unwrap();
+        let dir = tempfile::tempdir_in(scratch).unwrap();
+        let relative = scratch.join(dir.path().file_name().unwrap());
         let payload = dir.path().join(PERSONAL);
         std::fs::create_dir_all(payload.join("node_modules/@quintal/server/dist")).unwrap();
         std::fs::write(
@@ -2017,14 +2038,6 @@ mod windows_tests {
         std::fs::write(resources.join("quintal-node.exe"), "").unwrap();
 
         let found = locate_payload(Some(&resources), Some(&resources)).expect("found");
-        for path in [&found.entry, &found.web_dir, &found.node] {
-            assert!(
-                path.is_absolute() && !path.to_string_lossy().starts_with(r"\\?\"),
-                "handed to Node as {}",
-                path.display()
-            );
-        }
-        assert!(found.entry.is_file());
 
         // The bundled runtime when the payload step has fetched it, as in CI;
         // otherwise whichever Node is on PATH.
@@ -2036,7 +2049,9 @@ mod windows_tests {
             PathBuf::from("node")
         };
 
-        // Started from the office's data directory, not ours.
+        // Started first, from the office's data directory rather than ours,
+        // so a regression fails with what Node said and not with a string
+        // comparison standing in for it.
         let data = tempfile::tempdir().unwrap();
         let layout = Layout::under(data.path());
         std::fs::create_dir_all(layout.root()).unwrap();
@@ -2062,5 +2077,33 @@ mod windows_tests {
             output.status,
             String::from_utf8_lossy(&output.stderr)
         );
+
+        for path in [&found.entry, &found.web_dir, &found.node] {
+            assert!(
+                path.is_absolute() && !path.to_string_lossy().starts_with(r"\\?\"),
+                "handed to Node as {}",
+                path.display()
+            );
+        }
+    }
+
+    /// Where the prefix cannot come off — here, a plain spelling over 260
+    /// characters — the payload is refused by name, not handed to Node to
+    /// fail on with another `lstat 'C:'`.
+    #[test]
+    fn a_resource_dir_that_must_stay_verbatim_is_refused_by_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut resources = dir.path().canonicalize().unwrap();
+        for _ in 0..3 {
+            resources.push("q".repeat(100));
+        }
+        std::fs::create_dir_all(&resources).unwrap();
+
+        match locate_payload(Some(&resources), Some(&resources)) {
+            Err(PersonalError::VerbatimPath(path)) => {
+                assert!(path.starts_with(r"\\?\"), "{path}")
+            }
+            other => panic!("expected the verbatim path to be refused, got {other:?}"),
+        }
     }
 }

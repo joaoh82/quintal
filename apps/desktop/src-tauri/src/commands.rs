@@ -103,6 +103,7 @@ impl From<personal::PersonalError> for HostError {
         let code = match &error {
             personal::PersonalError::NoPayload(_) => "no_payload",
             personal::PersonalError::NoRuntime => "no_runtime",
+            personal::PersonalError::VerbatimPath(_) => "install_path",
             personal::PersonalError::AlreadyRunning => "already_running",
             personal::PersonalError::NoBackup => "no_backup_to_restore",
             personal::PersonalError::NotRestorable => "not_restorable",
