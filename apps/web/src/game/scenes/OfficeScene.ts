@@ -114,6 +114,7 @@ export class OfficeScene extends Phaser.Scene {
   #currentTile: TilePoint = { x: -1, y: -1 };
   /** Signature of the last roster we published, to avoid pointless re-renders. */
   #rosterSignature = '';
+  #nextMinimapAt = 0;
   /** When each occupant was last seen doing something. Drives "last action". */
   readonly #lastAction = new Map<string, number>();
 
@@ -197,6 +198,7 @@ export class OfficeScene extends Phaser.Scene {
     this.#bindInput();
     this.#bindRoom();
 
+    this.#bridge.emit('minimapMap', this.#map);
     this.#bridge.emit('ready', {
       mapName: this.#map.name,
       width: this.#map.width,
@@ -205,7 +207,7 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  override update(_time: number, deltaMs: number): void {
+  override update(time: number, deltaMs: number): void {
     const deltaSeconds = deltaMs / 1000;
 
     this.#readKeyboard();
@@ -219,7 +221,35 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.#publishTile();
+    if (time >= this.#nextMinimapAt) {
+      this.#nextMinimapAt = time + 200;
+      this.#publishMinimap();
+    }
     if (this.#debugEnabled) this.#drawDebugPath();
+  }
+
+  #publishMinimap(): void {
+    const size = this.#map.tileSize;
+    const view = this.cameras.main.worldView;
+    const players: import('@quintal/shared').GameEvents['minimap']['players'] = [];
+    for (const [sessionId, avatar] of this.#avatars) {
+      const player = this.#room.state.players.get(sessionId);
+      if (!player) continue;
+      players.push({
+        sessionId,
+        name: player.name,
+        kind: player.kind,
+        isSelf: sessionId === this.#selfId,
+        x: avatar.sprite.x / size,
+        y: avatar.sprite.y / size,
+      });
+    }
+    // Draw self last, so nearby occupants cannot cover the local marker.
+    players.sort((a, b) => Number(a.isSelf) - Number(b.isSelf));
+    this.#bridge.emit('minimap', {
+      viewport: { x: view.x / size, y: view.y / size, width: view.width / size, height: view.height / size },
+      players,
+    });
   }
 
   // --- room ----------------------------------------------------------------

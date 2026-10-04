@@ -17,6 +17,7 @@ import type { OfficeSession } from './createGame';
 import { ChatPanel } from './ui/ChatPanel';
 import { CommsOverlay } from './ui/CommsOverlay';
 import { HelpPanel } from './ui/HelpPanel';
+import { Minimap } from './ui/Minimap';
 import { RosterPanel } from './ui/RosterPanel';
 import { VoiceBar } from './ui/VoiceBar';
 import { useConversations } from './useConversations';
@@ -287,6 +288,8 @@ export default function OfficeGame({
           activityDetailLevel={activityDetailLevel}
         />
       </div>
+
+      <Minimap connection={connection} />
 
       {(reconnecting && connectionDetail) || connection === 'error' || connection === 'offline' ? (
         <div
