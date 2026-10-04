@@ -1,0 +1,10 @@
+
+== v0.6.4: entry on Tauri's resource_dir
+   argv[1] = \\?\C:\Users\me\AppData\Local\Quintal\personal\node_modules\@quintal\server\dist\index.js
+   first lstat: \\?\C:\  ->  \\?\C:
+   THROWS  EISDIR: illegal operation on a directory, lstat 'C:'  { errno: -4068, code: 'EISDIR', syscall: 'lstat', path: 'C:' }
+
+== fixed: entry after dunce::simplified 
+   argv[1] = C:\Users\me\AppData\Local\Quintal\personal\node_modules\@quintal\server\dist\index.js
+   first lstat: C:\  ->  \\?\C:\
+   resolves to C:\Users\me\AppData\Local\Quintal\personal\node_modules\@quintal\server\dist\index.js  (12 lstats)

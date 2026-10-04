@@ -245,8 +245,20 @@ pub struct Payload {
 /// `std::path::absolute` keeps the path lexical — no symlink following, no
 /// requirement that it exist yet — and understands the Windows drive-relative
 /// form, which plain `current_dir().join(..)` does not.
+///
+/// And no verbatim prefix. On Windows Tauri canonicalizes the executable, so
+/// `resource_dir()` — and every path built on it — is `\\?\C:\...`. Node
+/// cannot start a main module from one: `realpathSync` lstats the root it
+/// splits off, `\\?\C:\`, and Node's C++ `ToNamespacedPath` re-resolves
+/// that with `\\?` as the device and `C:\` as a tail whose trailing
+/// separator normalizes away. What reaches the OS is `\\?\C:`, the volume
+/// rather than its root directory, and the error prints with the prefix
+/// stripped: the same `lstat 'C:'`, from a path that had a root all along.
+/// `dunce` drops the prefix only where the plain form names the same file,
+/// and does nothing off Windows.
 fn anchored(path: PathBuf) -> PathBuf {
-    std::path::absolute(&path).unwrap_or(path)
+    let path = std::path::absolute(&path).unwrap_or(path);
+    dunce::simplified(&path).to_path_buf()
 }
 
 /// Find the payload and the runtime.
@@ -306,6 +318,7 @@ pub fn locate_payload(
                     })
                 })
                 .filter(|path| path.is_file())
+                .map(anchored)
         })
         .ok_or(PersonalError::NoRuntime)?;
 
@@ -1642,6 +1655,42 @@ mod tests {
         assert_eq!(anchored(rooted.clone()), rooted);
     }
 
+    /// The same, by the route an installed build takes: no override, the
+    /// payload found under the resource directory. Whatever form that
+    /// directory arrives in, the server is handed paths with a root.
+    #[test]
+    fn a_payload_under_a_rootless_resource_dir_is_rooted_too() {
+        // Under this process's directory, so its bare name is a relative path
+        // to it — on Windows the temp directory can be on another drive.
+        let cwd = std::env::current_dir().unwrap();
+        let dir = tempfile::tempdir_in(&cwd).unwrap();
+        let relative = PathBuf::from(dir.path().file_name().unwrap());
+        let payload = dir.path().join(PERSONAL);
+        std::fs::create_dir_all(payload.join("node_modules/@quintal/server/dist")).unwrap();
+        std::fs::write(
+            payload.join("node_modules/@quintal/server/dist/index.js"),
+            "",
+        )
+        .unwrap();
+        std::fs::write(payload.join("payload.json"), "{}").unwrap();
+        let runtime = if cfg!(windows) {
+            "quintal-node.exe"
+        } else {
+            "quintal-node"
+        };
+        std::fs::write(dir.path().join(runtime), "").unwrap();
+
+        let found = locate_payload(Some(&relative), Some(&relative)).expect("found");
+        for path in [&found.entry, &found.web_dir, &found.node] {
+            assert!(
+                path.is_absolute(),
+                "handed to the server rootless: {}",
+                path.display()
+            );
+        }
+        assert!(found.entry.is_file());
+    }
+
     #[test]
     fn a_missing_payload_is_named_rather_than_guessed() {
         let dir = tempfile::tempdir().unwrap();
@@ -1930,5 +1979,88 @@ mod tests {
             std::thread::sleep(Duration::from_millis(50));
         }
         office.stop();
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+
+    /// QUIN-4: an installed build on Windows never opened its office. Node
+    /// died with `EISDIR: lstat 'C:'` resolving its main module, because the
+    /// entry was built on Tauri's canonicalized resource directory —
+    /// `\\?\C:\...` — and Node's `realpathSync` turns that root into the
+    /// volume `\\?\C:`. So this starts the server the way the supervisor
+    /// does, from the plan, on the runtime the bundle ships: a string
+    /// comparison against `\\?\` would pass on any Node that stopped minding.
+    #[test]
+    fn a_verbatim_resource_dir_still_starts_the_server() {
+        let dir = tempfile::tempdir().unwrap();
+        // What `resource_dir()` hands over on Windows.
+        let resources = dir.path().canonicalize().unwrap();
+        assert!(
+            resources.to_string_lossy().starts_with(r"\\?\"),
+            "the case under test is a verbatim directory: {}",
+            resources.display()
+        );
+        let payload = resources.join(PERSONAL);
+        let server = payload.join(r"node_modules\@quintal\server\dist");
+        std::fs::create_dir_all(&server).unwrap();
+        std::fs::write(server.join("index.js"), "console.log('started')\n").unwrap();
+        // The manifest as build-personal-payload.mjs writes it: forward slashes.
+        std::fs::write(
+            payload.join("payload.json"),
+            r#"{"entry":"node_modules/@quintal/server/dist/index.js","webDir":"node_modules/@quintal/web"}"#,
+        )
+        .unwrap();
+        std::fs::write(resources.join("quintal-node.exe"), "").unwrap();
+
+        let found = locate_payload(Some(&resources), Some(&resources)).expect("found");
+        for path in [&found.entry, &found.web_dir, &found.node] {
+            assert!(
+                path.is_absolute() && !path.to_string_lossy().starts_with(r"\\?\"),
+                "handed to Node as {}",
+                path.display()
+            );
+        }
+        assert!(found.entry.is_file());
+
+        // The bundled runtime when the payload step has fetched it, as in CI;
+        // otherwise whichever Node is on PATH.
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(r"binaries\quintal-node-x86_64-pc-windows-msvc.exe");
+        let runtime = if bundled.is_file() {
+            bundled
+        } else {
+            PathBuf::from("node")
+        };
+
+        // Started from the office's data directory, not ours.
+        let data = tempfile::tempdir().unwrap();
+        let layout = Layout::under(data.path());
+        std::fs::create_dir_all(layout.root()).unwrap();
+        let spawn = plan(&Settings {
+            payload: &found,
+            layout: &layout,
+            port: 0,
+            owner_pubkey: "",
+        });
+        let output = Command::new(&runtime)
+            .args(&spawn.args)
+            .current_dir(&spawn.cwd)
+            .env_clear()
+            .envs(spawn.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .stdin(Stdio::null())
+            .output()
+            .unwrap_or_else(|error| panic!("no Node to run ({}): {error}", runtime.display()));
+        assert!(
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("started"),
+            "{} {:?} exited {}:\n{}",
+            runtime.display(),
+            spawn.args,
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
