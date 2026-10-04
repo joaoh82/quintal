@@ -4,7 +4,8 @@ The test plan below was approved before execution. Everything here ran on
 Linux x86_64 (Arch, kernel 7.2) in the implementation worktree, based on main
 `f3e3e5b`, with stable Rust and Node 26.7.0 on the host; the bundle under test
 carries its pinned Node 22.23.3. There is no Windows machine in this
-environment: the Windows-only test is run by CI's `windows_tests::` step.
+environment: the Windows-only tests ran in CI's `windows_tests::` step, on
+the fix and — after review — on the fix sabotaged back to v0.6.4.
 
 ## What was wrong
 
@@ -39,6 +40,12 @@ the anchored payload directory, so the `\\?\` reaching `QUINTAL_WEB_DIR` and
 Next, set aside in the ticket as a separate problem, is gone by the same
 change. `dunce` 1.0.5 was already in the lockfile through Tauri.
 
+Where `dunce` must keep the prefix — the plain spelling over 260 characters,
+a reserved name, a trailing dot — `locate_payload` refuses the payload as
+`PersonalError::VerbatimPath` (host code `install_path`), naming the path,
+instead of handing Node a verbatim entry to fail on unreadably. Added after
+review.
+
 ## Checks
 
 | # | Check | Result |
@@ -51,6 +58,8 @@ change. `dunce` 1.0.5 was already in the lockfile through Tauri.
 | 5 | `cargo clippy --locked --all-targets -- -D warnings`; `cargo fmt --check` | **pass**; fmt clean after `cargo fmt` wrapped the new lines |
 | 6 | JS lint / typecheck | not run — no JS or TS changed; the desktop CI gates for this change are 4 and 5 |
 | 7 | `personal-office-smoke.mjs` against a real bundle ([`office-smoke.txt`](./office-smoke.txt)) | **pass — 19/19** |
+| 8 | PR CI, `windows` job, on the fix | **pass** — `personal::windows_tests::a_verbatim_resource_dir_still_starts_the_server ... ok` on the bundled Node 22.23.3 |
+| 9 | Windows CI with the fix sabotaged back to v0.6.4 — prefix kept, guard off — on a throwaway branch, since deleted ([run](https://github.com/joaoh82/quintal/actions/runs/37237506829/job/111539474544), [`windows-sabotage.txt`](./windows-sabotage.txt)) | **failed as it must**: the bundled Node 22.23.3 exits 1 with the reporter's stack, headed `Error: EISDIR: illegal operation on a directory, lstat 'C:'` at `node:fs:2749` — `realpathSync`'s root lstat. The over-260 test fails too: without the guard the path falls through to a generic `NoPayload` |
 
 ### The replay (2)
 
@@ -101,11 +110,15 @@ canonicalizes a temporary directory (so it *is* `\\?\`), lays a payload
 under it with the manifest's forward-slashed `entry`, runs `locate_payload`
 and `plan()`, and starts the bundled `quintal-node-x86_64-pc-windows-msvc.exe`
 — the reporter's Node 22.23.3, which CI fetches before this step — from the
-office's data directory exactly as the supervisor does. On v0.6.4 it dies with
-the EISDIR above; with the fix it prints and exits 0. It runs in
-`packaging.yml` and `release.yml` under the existing `windows_tests::`
-filter. **It has not been run on Windows by this verification** — that is the
-PR's Windows job.
+office's data directory exactly as the supervisor does, before comparing any
+strings, so a regression fails with what Node said. Observed both ways on
+Windows CI (checks 8 and 9): with the fix it prints and exits 0; with v0.6.4's
+anchoring Node dies with the reporter's `lstat 'C:'`. It runs in
+`packaging.yml` and `release.yml` under the existing `windows_tests::` filter.
+
+`personal::windows_tests::a_resource_dir_that_must_stay_verbatim_is_refused_by_name`
+builds a resource directory past 260 characters, which `dunce` must leave
+verbatim, and expects `VerbatimPath` naming it.
 
 `personal::tests::a_payload_under_a_rootless_resource_dir_is_rooted_too`
 covers the resource-dir route on every platform, which had no test.
@@ -116,5 +129,5 @@ covers the resource-dir route on every platform, which had no test.
   stands in for it.
 - `scripts/personal-office-smoke.mjs` on Windows: it still skips there
   (QUIN-75), which is why CI never saw this.
-- An install path over 260 characters: `dunce` keeps the prefix there, and
-  Node would fail the same way.
+- An *installed* app at a path over 260 characters. The refusal is unit-tested
+  on Windows CI, but not seen in the bootstrap page.

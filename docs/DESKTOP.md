@@ -620,7 +620,9 @@ starts in the office's data directory, not the app's, so a relative path would
 mean somewhere else; and Node cannot start a main module from a verbatim path
 at all — its `realpathSync` turns the root `\\?\C:\` into the volume `\\?\C:`
 and dies with `EISDIR: illegal operation on a directory, lstat 'C:'` before
-any Quintal code runs ([QUIN-4](./verification/QUIN-4/README.md)).
+any Quintal code runs ([QUIN-4](./verification/QUIN-4/README.md)). Where the
+prefix cannot come off — a plain spelling over 260 characters — the office
+refuses to start and names the path instead.
 
 Native modules — libSQL, sharp, msgpackr — are the target's, swapped in from
 the registry at the version and integrity the lockfile pins when the build
