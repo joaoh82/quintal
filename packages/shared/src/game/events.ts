@@ -1,4 +1,4 @@
-import type { MapZone } from '../map.js';
+import type { MapZone, OfficeMap, TileRect } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
 import type { VoiceUiState } from '../voice.js';
 import type {
@@ -97,6 +97,20 @@ export type GameEvents = {
   approvalResolved: import('../approval.js').PublicApprovalResolved;
   /** The scene has finished loading the map and is rendering. */
   ready: { mapName: string; width: number; height: number; zones: MapZone[] };
+  /** Static minimap geometry, once per scene. */
+  minimapMap: OfficeMap;
+  /** Rendered positions and camera bounds in tiles, sampled at 5 Hz. */
+  minimap: {
+    viewport: TileRect;
+    players: Array<{
+      sessionId: string;
+      name: string;
+      kind: PlayerKind;
+      isSelf: boolean;
+      x: number;
+      y: number;
+    }>;
+  };
   /** The local player entered or left a zone. Fires only on change. */
   zone: { zone: MapZone | null; previous: MapZone | null };
   /** Local player position, in tiles. Fires only when the tile changes. */
