@@ -613,6 +613,17 @@ for the target, pinned to one version and one checksum per platform in
 `QUINTAL_NODE_BIN`, and nowhere else — a personal office running on whichever
 Node happens to be installed is one that changes when Homebrew does.
 
+Every path the host hands that runtime — the entry, `QUINTAL_WEB_DIR`, the
+binary itself — is made absolute first and, on Windows, stripped of the `\\?\`
+prefix Tauri's resource directory carries (`personal::anchored`). The server
+starts in the office's data directory, not the app's, so a relative path would
+mean somewhere else; and Node cannot start a main module from a verbatim path
+at all — its `realpathSync` turns the root `\\?\C:\` into the volume `\\?\C:`
+and dies with `EISDIR: illegal operation on a directory, lstat 'C:'` before
+any Quintal code runs ([QUIN-4](./verification/QUIN-4/README.md)). Where the
+prefix cannot come off — a plain spelling over 260 characters — the office
+refuses to start and names the path instead.
+
 Native modules — libSQL, sharp, msgpackr — are the target's, swapped in from
 the registry at the version and integrity the lockfile pins when the build
 machine is not the target (Intel macOS is built on Apple Silicon).

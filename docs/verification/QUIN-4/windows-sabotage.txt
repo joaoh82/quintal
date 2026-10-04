@@ -1,0 +1,46 @@
+# Windows CI with the fix sabotaged back to v0.6.4 (no prefix stripped, guard off)
+# https://github.com/joaoh82/quintal/actions/runs/37237506829/job/111539474544
+
+test spawn::windows_tests::the_windows_harness_beside_the_executable_wins ... ok
+test personal::windows_tests::a_resource_dir_that_must_stay_verbatim_is_refused_by_name ... FAILED
+test spawn::windows_tests::a_child_waiting_on_stdin_stops_when_the_pipe_closes ... ok
+test personal::windows_tests::a_verbatim_resource_dir_still_starts_the_server ... FAILED
+
+failures:
+
+---- personal::windows_tests::a_resource_dir_that_must_stay_verbatim_is_refused_by_name stdout ----
+
+thread 'personal::windows_tests::a_resource_dir_that_must_stay_verbatim_is_refused_by_name' (6984) panicked at src\personal.rs:2107:22:
+expected the verbatim path to be refused, got Err(NoPayload("\\\\?\\C:\\Users\\runneradmin\\AppData\\Local\\Temp\\.tmpQoQmFK\\qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\\qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\\qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\\personal"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- personal::windows_tests::a_verbatim_resource_dir_still_starts_the_server stdout ----
+
+thread 'personal::windows_tests::a_verbatim_resource_dir_still_starts_the_server' (2004) panicked at src\personal.rs:2073:9:
+D:\a\quintal\quintal\apps\desktop\src-tauri\binaries\quintal-node-x86_64-pc-windows-msvc.exe ["\\\\?\\C:\\Users\\runneradmin\\AppData\\Local\\Temp\\.tmp5MM7gN\\personal\\node_modules\\@quintal\\server\\dist\\index.js"] exited exit code: 1:
+node:fs:2749
+    const out = binding.lstat(base, false, undefined, true /* throwIfNoEntry */);
+                        ^
+
+Error: EISDIR: illegal operation on a directory, lstat 'C:'
+    at Object.realpathSync (node:fs:2749:25)
+    at toRealPath (node:internal/modules/helpers:61:13)
+    at Function._findPath (node:internal/modules/cjs/loader:760:22)
+    at resolveMainPath (node:internal/modules/run_main:39:23)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:163:20)
+    at node:internal/main/run_main_module:36:49 {
+  errno: -4068,
+  code: 'EISDIR',
+  syscall: 'lstat',
+  path: 'C:'
+}
+
+Node.js v22.23.3
+
+
+
+failures:
+    personal::windows_tests::a_resource_dir_that_must_stay_verbatim_is_refused_by_name
+    personal::windows_tests::a_verbatim_resource_dir_still_starts_the_server
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.04s

@@ -1,0 +1,22 @@
+  ok   the office comes up on a loopback port — http://127.0.0.1:35673 in 1732ms
+  ok   the port is not 3000 — 35673
+  ok   the server listens on 127.0.0.1 only — [{"pid":1579303,"address":"127.0.0.1:35673"}]
+  ok   the server knows it is a personal office — {"name":"","personal":true}
+  ok   the login page renders — HTTP 200
+  ok   a stranger is refused, even on an empty database — HTTP 403: This is a personal office. Only its owner can sign in here.
+  ok   the owner signs in — HTTP 200
+  ok   a guest link is refused at the door — the join page says so
+  ok   the database, objects, secret and lock live in the data directory — auth-secret, office.json, office.lock, quintal.db, quintal.db-shm, quintal.db-wal
+  ok   the session secret is private — mode 600
+  info measured: cold start 1732ms; RSS app 282MB, server 192MB
+  ok   a second launch exits and leaves the first alone — second exited with 0
+  ok   a killed server is restarted on the same port — new pid 1579781 after 1676ms
+  ok   the owner is still the owner after the restart
+  ok   a force-quit app takes its server with it — app exited after 201ms; server gone 53ms later
+  ok   the lock is released — a fresh app started the same office
+  ok   the next launch keeps the port — http://127.0.0.1:35673 in 1193ms
+  ok   the office id is stable
+  ok   the owner comes back to the same account — user 57994d13-968d-4e06-b896-87a7c454011a
+  ok   no backup is taken when the version has not changed — 0 backups
+  info measured: warm start 1193ms
+PASSED: 19/19 checks
