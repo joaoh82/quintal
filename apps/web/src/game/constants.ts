@@ -139,18 +139,18 @@ export const DEPTH = {
 } as const;
 
 /**
- * Reconciliation thresholds, in pixels.
+ * Reconciliation, in pixels and seconds. See `reconcile.ts` for when it runs —
+ * only at rest, never against a position the server reported mid-walk.
  *
- * Client and server never agree exactly — they integrate the same movement at
- * different frame rates. Below the tolerance, ignore the difference. Above it,
- * ease across so the correction isn't visible as a shimmer. Past the snap
- * distance, prediction was wrong rather than merely stale: take the server's
- * answer immediately, because sliding a whole tile looks worse than a jump.
+ * At rest both sides should agree exactly, so a gap is eased away and then
+ * closed outright once it is too small to see. Past the snap distance,
+ * prediction was wrong rather than merely late: take the server's answer
+ * immediately, because sliding a whole tile looks worse than a jump.
  */
-export const RECONCILE_TOLERANCE_PX = 1.5;
+export const RECONCILE_EXACT_PX = 0.5;
 export const RECONCILE_SNAP_PX = 48;
-/** Share of the remaining error closed per patch. */
-export const RECONCILE_LERP = 0.25;
+/** Time constant of the ease: about two thirds of the gap closes in this long. */
+export const RECONCILE_EASE_SECONDS = 0.06;
 
 /** Colours for the Z debug overlay. */
 export const DEBUG_COLORS = {

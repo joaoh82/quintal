@@ -100,12 +100,16 @@ export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 export interface InputPayload {
   x: number;
   y: number;
+  /** Movement command count, echoed back as `OfficePlayer.inputSeq`. */
+  seq?: number;
 }
 
 /** Click-to-move target, in tiles. */
 export interface WalkToPayload {
   x: number;
   y: number;
+  /** Shares its count with `InputPayload.seq`. */
+  seq?: number;
 }
 
 export interface ChatSendPayload {

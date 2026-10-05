@@ -31,6 +31,8 @@ import {
   type GameBridge,
   type HistoryGetPayload,
   type HistoryPayload,
+  type InputPayload,
+  type WalkToPayload,
   type MapZone,
   type MoveIntent,
   type OfficeMap,
@@ -47,6 +49,7 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { Avatar } from '../avatar';
+import { canSettle, settle, type Authority } from '../reconcile';
 import { Speech } from '../speech';
 import {
   ASSETS,
@@ -61,9 +64,6 @@ import {
   DEBUG_COLORS,
   PATHS,
   PROP_ATLASES,
-  RECONCILE_LERP,
-  RECONCILE_SNAP_PX,
-  RECONCILE_TOLERANCE_PX,
   bodyAnimation,
   bodyFrames,
   bodyPath,
@@ -104,6 +104,10 @@ export class OfficeScene extends Phaser.Scene {
 
   /** Where we think we are. Corrected by, not replaced by, the server. */
   #predicted = { x: 0, y: 0 };
+  /** What the server last said about us; settled onto once it is current. */
+  #authority: Authority | null = null;
+  /** Count of movement commands sent, keyboard and click alike. */
+  #moveSeq = 0;
   #intent: MoveIntent = { x: 0, y: 0 };
   #sentIntent: MoveIntent = { x: 0, y: 0 };
   #facing: Direction = 'down';
@@ -210,6 +214,7 @@ export class OfficeScene extends Phaser.Scene {
 
     this.#readKeyboard();
     this.#predict(deltaSeconds);
+    this.#settle(deltaSeconds);
 
     const now = performance.now();
     for (const avatar of this.#avatars.values()) {
@@ -298,6 +303,7 @@ export class OfficeScene extends Phaser.Scene {
         this.#self = avatar;
         this.#selfId = sessionId;
         this.#predicted = { x: player.x, y: player.y };
+        this.#authority = null;
         this.#facing = player.dir;
         avatar.setPosition(player.x, player.y);
         this.cameras.main.centerOn(player.x, player.y);
@@ -363,29 +369,11 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Correct prediction against authority.
-   *
-   * Small disagreements are eased away over a few frames — snapping on every
-   * patch would make the avatar shimmer, because client and server never agree
-   * to the pixel. A large gap means prediction was simply wrong (a wall we
-   * didn't know about, a long stall) and is taken immediately: a visible jump
-   * beats sliding through furniture.
+   * Note what the server says about us. Acting on it is `#settle`'s job, and
+   * waits until it describes the present rather than a round trip ago.
    */
   #reconcile(player: OfficePlayer): void {
-    const error = Math.hypot(player.x - this.#predicted.x, player.y - this.#predicted.y);
-
-    if (error > RECONCILE_SNAP_PX) {
-      this.#predicted = { x: player.x, y: player.y };
-      this.#path = [];
-      return;
-    }
-
-    if (error <= RECONCILE_TOLERANCE_PX) return;
-
-    this.#predicted = {
-      x: this.#predicted.x + (player.x - this.#predicted.x) * RECONCILE_LERP,
-      y: this.#predicted.y + (player.y - this.#predicted.y) * RECONCILE_LERP,
-    };
+    this.#authority = { x: player.x, y: player.y, moving: player.moving, seq: player.inputSeq };
   }
 
   // --- local prediction ----------------------------------------------------
@@ -417,6 +405,18 @@ export class OfficeScene extends Phaser.Scene {
 
     self.setPosition(this.#predicted.x, this.#predicted.y);
     self.setFacing(this.#facing, moving);
+  }
+
+  /** At rest, close whatever gap is left between prediction and authority. */
+  #settle(deltaSeconds: number): void {
+    const self = this.#self;
+    const authority = this.#authority;
+    const localMoving = this.#intent.x !== 0 || this.#intent.y !== 0 || this.#path.length > 0;
+    if (!self || !canSettle(authority, localMoving, this.#moveSeq)) return;
+    if (authority.x === this.#predicted.x && authority.y === this.#predicted.y) return;
+
+    this.#predicted = settle(this.#predicted, authority, deltaSeconds);
+    self.setPosition(this.#predicted.x, this.#predicted.y);
   }
 
   // --- input ---------------------------------------------------------------
@@ -507,7 +507,8 @@ export class OfficeScene extends Phaser.Scene {
     if (intent.x === this.#sentIntent.x && intent.y === this.#sentIntent.y) return;
 
     this.#sentIntent = intent;
-    this.#room.send(ClientMessage.Input, intent);
+    const payload: InputPayload = { ...intent, seq: ++this.#moveSeq };
+    this.#room.send(ClientMessage.Input, payload);
     if (intent.x !== 0 || intent.y !== 0) this.#clearPath();
   }
 
@@ -526,7 +527,8 @@ export class OfficeScene extends Phaser.Scene {
     // same start tile. Reconciliation covers the cases where they disagree.
     const path = findPath(this.#map, this.#predictedTile(), goal);
     this.#path = path;
-    this.#room.send(ClientMessage.WalkTo, goal);
+    const payload: WalkToPayload = { ...goal, seq: ++this.#moveSeq };
+    this.#room.send(ClientMessage.WalkTo, payload);
     this.#bridge.emit('path', { length: path.length });
   }
 

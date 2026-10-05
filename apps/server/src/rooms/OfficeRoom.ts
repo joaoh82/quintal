@@ -1037,11 +1037,15 @@ export class OfficeRoom extends Room<OfficeState> {
     const intent = normalize({ x: clampAxis(payload?.x), y: clampAxis(payload?.y) });
     sim.intent = intent;
     if (intent.x !== 0 || intent.y !== 0) sim.path = [];
+    this.#ackMove(client.sessionId, payload?.seq);
   }
 
   #onWalkTo(client: Client, payload: WalkToPayload): void {
     const sim = this.#sims.get(client.sessionId);
     if (sim?.agent) return; // agents use agent:move_to, which is rate limited
+    // Read, whether or not it leads anywhere: the browser is waiting to hear
+    // that this command is behind it, not that it worked.
+    this.#ackMove(client.sessionId, payload?.seq);
 
     const x = Number(payload?.x);
     const y = Number(payload?.y);
@@ -1050,6 +1054,13 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
     this.walkTo(client.sessionId, x, y);
+  }
+
+  /** Echo a movement command's count, so prediction knows what we have read. */
+  #ackMove(sessionId: string, seq: unknown): void {
+    const player = this.state.players.get(sessionId);
+    if (!player || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0) return;
+    if (player.inputSeq !== seq) player.inputSeq = seq;
   }
 
   #onStatus(client: Client, status: unknown): void {
