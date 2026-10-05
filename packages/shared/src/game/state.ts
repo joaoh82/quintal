@@ -126,6 +126,14 @@ export class OfficePlayer extends Schema {
    * once and the browser caches it; the state stays small.
    */
   avatar = '';
+  /**
+   * The last movement command (`InputPayload.seq` / `WalkToPayload.seq`) the
+   * office has acted on for this player. It is set by the tick that applied
+   * the command, so it arrives in the same patch as the position that tick
+   * produced. That is how the browser tells a position that is merely late
+   * from one that disagrees with it. Reset to 0 when a seat is resumed.
+   */
+  inputSeq = 0;
 }
 
 defineTypes(OfficePlayer, {
@@ -159,6 +167,7 @@ defineTypes(OfficePlayer, {
   // one shape that cannot make that tab read somebody's avatar as a runtime.
   runtimeId: 'string',
   modelId: 'string',
+  inputSeq: 'number',
 });
 
 /** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */
