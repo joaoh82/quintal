@@ -27,13 +27,13 @@ describe('canSettle', () => {
     assert.equal(canSettle(at({ moving: true }), false, 3), false);
   });
 
-  it('waits until the server has read the last command we sent', () => {
+  it('waits until the server has acted on the last command we sent', () => {
     assert.equal(canSettle(at({ seq: 2 }), false, 3), false);
     assert.equal(canSettle(at({ seq: 3 }), false, 3), true);
   });
 
-  it('trusts a count left over from before a reconnect until we send one', () => {
-    assert.equal(canSettle(at({ seq: 57 }), false, 0), true);
+  it('settles before the first command, once the server agrees on zero', () => {
+    assert.equal(canSettle(at({ seq: 0 }), false, 0), true);
   });
 
   it('has nothing to settle on before the first patch', () => {

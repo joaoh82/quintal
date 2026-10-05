@@ -23,9 +23,6 @@ export interface Authority extends Position {
  * the same place on both sides — the server starts late and stops late by the
  * same latency — so waiting costs nothing but the few pixels a tick boundary
  * can put between them.
- *
- * `sentSeq` of 0 means nothing has been sent since this scene started, which
- * after a reconnect is a server holding a count from the previous one.
  */
 export function canSettle(
   authority: Authority | null,
@@ -33,7 +30,7 @@ export function canSettle(
   sentSeq: number,
 ): authority is Authority {
   if (!authority || localMoving || authority.moving) return false;
-  return sentSeq === 0 || authority.seq === sentSeq;
+  return authority.seq === sentSeq;
 }
 
 /**

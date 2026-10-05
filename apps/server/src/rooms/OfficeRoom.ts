@@ -254,6 +254,12 @@ interface PlayerSim {
    * first thing cancelled when anything real happens.
    */
   idleWalk?: boolean;
+  /**
+   * The last movement command read, not yet published as `inputSeq`. Held
+   * until the tick that acts on it, so the count never reaches the browser
+   * in a patch whose position the command has not produced yet.
+   */
+  pendingSeq?: number;
 }
 
 const STATUS_MAX_LENGTH = 60;
@@ -862,6 +868,9 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       await this.allowReconnection(client, RECONNECTION_SECONDS);
       sim.away = false;
+      // The browser rebuilds its game on resume and counts moves from zero.
+      sim.pendingSeq = undefined;
+      player.inputSeq = 0;
       player.status = agent ? agent.status : '';
       if (agent) {
         audit(agent.id, 'session.connected', {
@@ -1018,6 +1027,11 @@ export class OfficeRoom extends Room<OfficeState> {
       } else if (player.moving) {
         player.moving = false;
       }
+
+      if (sim.pendingSeq !== undefined) {
+        if (player.inputSeq !== sim.pendingSeq) player.inputSeq = sim.pendingSeq;
+        sim.pendingSeq = undefined;
+      }
     }
   }
 
@@ -1056,11 +1070,14 @@ export class OfficeRoom extends Room<OfficeState> {
     this.walkTo(client.sessionId, x, y);
   }
 
-  /** Echo a movement command's count, so prediction knows what we have read. */
+  /**
+   * Note a movement command's count. `#tick` publishes it as `inputSeq` after
+   * acting on it, so prediction knows which position answers which command.
+   */
   #ackMove(sessionId: string, seq: unknown): void {
-    const player = this.state.players.get(sessionId);
-    if (!player || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0) return;
-    if (player.inputSeq !== seq) player.inputSeq = seq;
+    const sim = this.#sims.get(sessionId);
+    if (!sim || typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0) return;
+    sim.pendingSeq = seq;
   }
 
   #onStatus(client: Client, status: unknown): void {

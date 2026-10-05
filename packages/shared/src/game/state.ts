@@ -128,9 +128,10 @@ export class OfficePlayer extends Schema {
   avatar = '';
   /**
    * The last movement command (`InputPayload.seq` / `WalkToPayload.seq`) the
-   * office has read from this player. It arrives in the same patch as the
-   * position it produced, which is how the browser tells a position that is
-   * merely late from one that disagrees with it.
+   * office has acted on for this player. It is set by the tick that applied
+   * the command, so it arrives in the same patch as the position that tick
+   * produced. That is how the browser tells a position that is merely late
+   * from one that disagrees with it. Reset to 0 when a seat is resumed.
    */
   inputSeq = 0;
 }
