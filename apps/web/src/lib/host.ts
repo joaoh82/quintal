@@ -256,8 +256,13 @@ export interface HostBridge {
    * no other voice. When to call it is `game/alerts.ts`'s decision.
    */
   notify(title: string, body: string): Promise<void>;
-  /** How many of my agents are waiting on me, so the tray can say so. */
-  setAttention(waiting: number): Promise<void>;
+  /**
+   * How many of my agents are waiting on me, so the tray can say so, and
+   * when the soonest of them stops waiting (ms since the epoch). The host
+   * zeroes the count itself at that moment, so a page that goes away — to
+   * Settings, say — leaves a number that cannot outlive the cards behind it.
+   */
+  setAttention(waiting: number, until: number | null): Promise<void>;
 
   /**
    * Every server this app knows about, and which one is live.
@@ -433,7 +438,7 @@ function tauriBridge(): HostBridge {
     keepsRunning: () => call<boolean>('keeps_running'),
     setKeepsRunning: (enabled) => call<void>('set_keeps_running', { enabled }),
     notify: (title, body) => call<void>('notify', { title, body }),
-    setAttention: (waiting) => call<void>('set_attention', { waiting }),
+    setAttention: (waiting, until) => call<void>('set_attention', { waiting, until }),
   };
 }
 

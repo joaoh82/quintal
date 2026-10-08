@@ -115,28 +115,26 @@ export function useAlerts(
     };
   }, []);
 
-  // The tray's number. Only the app has a tray; a browser has nothing to tell.
+  // The tray's number, with the soonest deadline so the host can count down
+  // without us. Only the app has a tray; a browser has nothing to tell.
+  //
+  // Nothing is sent on unmount, deliberately. This page unmounts for a visit
+  // to Settings, and zero would be a claim about cards that are still open;
+  // the deadline is what keeps the last number from outliving them.
   const { approvals, myUserId } = conversations;
   useEffect(() => {
     const host = getHost();
     if (!host) return;
-    let last = -1;
+    let last = '';
     const report = (): void => {
-      const waiting = waitingOnMe(approvals, myUserId);
-      if (waiting === last) return;
-      last = waiting;
-      void host.setAttention(waiting).catch(() => {});
+      const { waiting, until } = waitingOnMe(approvals, myUserId);
+      const key = `${waiting}:${until ?? ''}`;
+      if (key === last) return;
+      last = key;
+      void host.setAttention(waiting, until).catch(() => {});
     };
     report();
     const timer = setInterval(report, ATTENTION_TICK_MS);
     return () => clearInterval(timer);
   }, [approvals, myUserId]);
-
-  // Leaving the office page: nobody is waiting on a page that is not there.
-  useEffect(
-    () => () => {
-      void getHost()?.setAttention(0).catch(() => {});
-    },
-    [],
-  );
 }

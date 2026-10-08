@@ -549,8 +549,10 @@ Agents, using the machine token and repos directory this computer already has.
 If it cannot — an unregistered machine, a locked keychain — it opens the window,
 because neither is fixable from a menu.
 
-**Quit Quintal** stops the harness on the way out, by the same path as closing
-the window.
+**Quit Quintal** stops the harness — and the personal office's server — on
+the way out. It is one of the two ways to quit, with the app menu's Quit;
+closing the window is not one, unless you have turned
+[that](#closing-the-window) off.
 
 **Waiting for you.** When one of your agents has a permission card open, the
 item says so instead: its tooltip and the **Open Quintal** line name how many
@@ -603,6 +605,13 @@ that is on screen in a focused window.
 In the office, **N** goes to whoever is waiting: permission cards first,
 oldest first, then conversations where you were addressed. Press it again to
 walk on to the next.
+
+Both of these are the office page's doing, so they only happen while it is
+open — in a window, hidden or not. A visit to Settings pauses them: no alert
+arrives until you are back, and the tray keeps the last count it was given
+until the soonest of those cards would have expired, then drops to zero by
+itself. A card answered from elsewhere during the visit is the one case the
+tray cannot see.
 
 A browser tab can do the same, once you allow notifications for the site —
 ticking the box is what asks. The app needs no permission step of its own

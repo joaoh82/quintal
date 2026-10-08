@@ -177,7 +177,7 @@ pub fn run() {
                 personal: personal.clone(),
                 pending_export: std::sync::Mutex::new(None),
                 fleet: spawn::Fleet::new(),
-                attention: std::sync::atomic::AtomicU32::new(0),
+                attention: std::sync::Mutex::new(background::Attention::default()),
             });
 
             tray::build(app.handle())?;

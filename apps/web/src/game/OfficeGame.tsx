@@ -336,12 +336,23 @@ export default function OfficeGame({
         </div>
       ) : null}
 
-      {(conversations.notice || hint) && !overlayOpen ? (
+      {conversations.notice && !overlayOpen ? (
         <div
           role="status"
           className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
         >
-          {conversations.notice || hint}
+          {conversations.notice}
+        </div>
+      ) : null}
+
+      {/* Above the panel, not hidden by it: N opens the panel, so the one
+          time this has something to say is usually while the panel is up. */}
+      {hint ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
+        >
+          {hint}
         </div>
       ) : null}
 

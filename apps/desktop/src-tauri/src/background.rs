@@ -95,6 +95,44 @@ pub fn hide(window: &tauri::Window) {
     }
 }
 
+/// What the office page last said about agents waiting on this person.
+///
+/// The page is the only thing that knows, and it is not always there: a trip
+/// to Settings unmounts it. Zeroing on the way out made the tray lie for the
+/// whole visit; leaving the number made it lie the other way once the cards
+/// behind it expired. So the page says *how many* and *until when* — the
+/// soonest deadline among them — and the count answers zero on its own past
+/// that moment. A card answered from elsewhere during the visit is the gap
+/// that remains: the number stays until its deadline, at most a few minutes.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Attention {
+    count: u32,
+    /// ms since the epoch. None means "for as long as the page says so".
+    until: Option<f64>,
+}
+
+impl Attention {
+    pub fn new(count: u32, until: Option<f64>) -> Self {
+        Self { count, until }
+    }
+
+    /// How many are waiting at `now`, in ms since the epoch.
+    pub fn waiting(&self, now: f64) -> u32 {
+        match self.until {
+            Some(until) if now >= until => 0,
+            _ => self.count,
+        }
+    }
+}
+
+/// The wall clock, in the units the page uses (`Date.now()`).
+pub fn now_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as f64)
+        .unwrap_or(0.0)
+}
+
 /// Longest title and body a notification is given. The text comes from the
 /// page, and the page is quoting an agent.
 const TITLE_MAX: usize = 80;
@@ -160,6 +198,18 @@ mod tests {
             spawn::read_settings(dir.path()).push_to_talk.as_deref(),
             Some("Ctrl+Alt+T")
         );
+    }
+
+    #[test]
+    fn attention_runs_out_by_itself_at_the_deadline_the_page_gave() {
+        let open_ended = Attention::new(2, None);
+        assert_eq!(open_ended.waiting(1_000.0), 2);
+        assert_eq!(open_ended.waiting(f64::MAX), 2);
+
+        let dated = Attention::new(2, Some(5_000.0));
+        assert_eq!(dated.waiting(4_999.0), 2);
+        assert_eq!(dated.waiting(5_000.0), 0);
+        assert_eq!(Attention::default().waiting(0.0), 0);
     }
 
     #[test]

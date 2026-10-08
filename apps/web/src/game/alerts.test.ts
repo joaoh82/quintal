@@ -206,10 +206,19 @@ describe('what is waiting on me', () => {
     request({ requestId: 'req-2', channelId: 'ch-2', askedAt: NOW + 1, ownerUserId: 'user-other' }),
   );
 
-  it('counts my agents\' open cards and nobody else\'s', () => {
-    assert.equal(waitingOnMe(both, ME, NOW), 1);
-    assert.equal(waitingOnMe(both, '', NOW), 0);
-    assert.equal(waitingOnMe(both, ME, NOW + 400_000), 0, 'an expired card is not waiting');
+  it('counts my agents\' open cards and nobody else\'s, and says when the soonest runs out', () => {
+    assert.deepEqual(waitingOnMe(both, ME, NOW), { waiting: 1, until: NOW + 300_000 });
+    assert.deepEqual(waitingOnMe(both, '', NOW), { waiting: 0, until: null });
+    assert.deepEqual(
+      waitingOnMe(both, ME, NOW + 400_000),
+      { waiting: 0, until: null },
+      'an expired card is not waiting',
+    );
+    const two = receiveApproval(
+      mine,
+      request({ requestId: 'req-3', askedAt: NOW - 60_000, expiresAt: NOW + 240_000 }),
+    );
+    assert.deepEqual(waitingOnMe(two, ME, NOW), { waiting: 2, until: NOW + 240_000 });
   });
 
   it('goes to a card before a mention, and walks on from where I am', () => {

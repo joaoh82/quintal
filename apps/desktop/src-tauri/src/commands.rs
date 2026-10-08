@@ -42,9 +42,10 @@ pub struct HostState {
     /// nobody ever saw and then wipe the key. In memory only — a confirmation
     /// should not survive a restart the export did not.
     pub pending_export: std::sync::Mutex<Option<String>>,
-    /// How many of this person's agents the office says are waiting on them.
-    /// The page's count, kept only so the tray can say so with no window up.
-    pub attention: std::sync::atomic::AtomicU32,
+    /// How many of this person's agents the office says are waiting on them,
+    /// for the tray. Kept here, with its own deadline, so it stays true while
+    /// the office page is not mounted — see `background::Attention`.
+    pub attention: std::sync::Mutex<crate::background::Attention>,
 }
 
 impl HostState {
@@ -543,13 +544,29 @@ pub fn notify(app: tauri::AppHandle, title: String, body: String) {
     crate::background::notify(&app, &title, &body);
 }
 
-/// How many of this person's agents are waiting on them, for the tray.
+/// How many of this person's agents are waiting on them, for the tray, and
+/// when the soonest of those questions runs out (ms since the epoch).
+///
+/// The deadline is what lets the page leave: a count that only the office
+/// page could clear would stay on the tray for a whole visit to Settings,
+/// while the cards behind it expired. With it, the host zeroes the count by
+/// itself once nothing the page reported can still be waiting.
 #[tauri::command]
-pub fn set_attention(app: tauri::AppHandle, state: State<'_, HostState>, waiting: u32) {
-    let previous = state
-        .attention
-        .swap(waiting, std::sync::atomic::Ordering::SeqCst);
-    if previous != waiting {
+pub fn set_attention(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+    waiting: u32,
+    until: Option<f64>,
+) {
+    let next = crate::background::Attention::new(waiting, until);
+    let changed = {
+        let mut current = state.attention.lock().unwrap_or_else(|e| e.into_inner());
+        let changed = current.waiting(crate::background::now_ms())
+            != next.waiting(crate::background::now_ms());
+        *current = next;
+        changed
+    };
+    if changed {
         crate::tray::refresh(&app, &state.fleet.status());
     }
 }

@@ -63,9 +63,11 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
             TOGGLE => toggle_fleet(app),
             SERVERS => switch_server(app),
             QUIT => {
-                // Through `exit`, so the fleet is stopped by the same teardown
-                // that closing the window uses. Killing the process here would
-                // leave the harness running with nothing to stop it.
+                // Through `exit`, which reaches `ExitRequested` and the one
+                // teardown — closing the window no longer does, it hides (see
+                // `background.rs`), so this and the app menu's Quit are the
+                // ways out. Killing the process here would leave the harness
+                // running with nothing to stop it.
                 app.exit(0);
             }
             _ => {}
@@ -118,7 +120,13 @@ fn menu_for(app: &AppHandle, state: &FleetState) -> tauri::Result<Menu<Wry>> {
 /// How many of this person's agents the office says are waiting on them.
 fn waiting(app: &AppHandle) -> u32 {
     app.try_state::<HostState>()
-        .map(|state| state.attention.load(std::sync::atomic::Ordering::SeqCst))
+        .map(|state| {
+            state
+                .attention
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .waiting(crate::background::now_ms())
+        })
         .unwrap_or(0)
 }
 
@@ -156,20 +164,24 @@ fn tooltip(state: &FleetState, waiting: u32) -> String {
 /// keep claiming "running" until somebody clicked it, and the one tooltip that
 /// exists to report a crash would never be seen.
 ///
-/// Cheap: `status()` is a `try_wait` on a child this process owns, and the
-/// menu is only rebuilt when the answer changes.
+/// The same poll keeps the waiting count honest: a deadline passing sends no
+/// event either, and the page that reported the count may be gone.
+///
+/// Cheap: `status()` is a `try_wait` on a child this process owns, the count
+/// is a lock and a comparison, and the menu is only rebuilt when the answer
+/// changes.
 pub fn watch(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let mut last: Option<FleetState> = None;
+        let mut last: Option<(FleetState, u32)> = None;
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
             let Some(state) = app.try_state::<HostState>() else {
                 return;
             };
-            let now = state.fleet.status();
+            let now = (state.fleet.status(), waiting(&app));
             if last.as_ref() != Some(&now) {
-                refresh(&app, &now);
+                refresh(&app, &now.0);
                 last = Some(now);
             }
         }

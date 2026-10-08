@@ -180,11 +180,22 @@ export function admit(
   return { log: { seen, last: { ...log.last, [agent]: now } }, raise: true };
 }
 
-/** How many of my agents are waiting on me right now — the tray's number. */
-export function waitingOnMe(state: ApprovalState, myUserId: string, now = Date.now()): number {
-  if (myUserId === '') return 0;
-  return waitingApprovals(state, now).filter((approval) => approval.ownerUserId === myUserId)
-    .length;
+/**
+ * How many of my agents are waiting on me right now — the tray's number —
+ * and when the soonest of them stops waiting, so the host can count down
+ * without us.
+ */
+export function waitingOnMe(
+  state: ApprovalState,
+  myUserId: string,
+  now = Date.now(),
+): { waiting: number; until: number | null } {
+  if (myUserId === '') return { waiting: 0, until: null };
+  const mine = waitingApprovals(state, now).filter((approval) => approval.ownerUserId === myUserId);
+  return {
+    waiting: mine.length,
+    until: mine.length === 0 ? null : Math.min(...mine.map((approval) => approval.expiresAt)),
+  };
 }
 
 /**
