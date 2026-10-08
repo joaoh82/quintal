@@ -18,6 +18,8 @@ both. The app adds capability; it never adds screens.
 | Detecting which agent CLIs you have | — | ✓ |
 | Running your agents | list, assign, enable, disable | ✓ |
 | Updating itself | — | ✓ |
+| Carrying on with the window closed | — | ✓ |
+| Telling you an agent needs you | a notification, if the browser allows it | ✓ |
 
 The browser is not a degraded client. It is missing exactly the things that
 require a computer you control, and it says so where those things would be.
@@ -317,9 +319,12 @@ when it exists, not something that happens by pointing the app elsewhere.
 
 ### Lifecycle
 
-Closing the window quits the app, and quitting stops the server and the
-fleet by the same path. There is no background mode yet: an office nobody has
-a window on is not running.
+**Closing the window does not quit.** It hides the window; the server, the
+fleet and the office go on behind the menu-bar item, which is where **Open
+Quintal** and **Quit Quintal** are. Quitting — from there, or from the app
+menu — stops the server and the fleet by the same path it always did. See
+[Closing the window](#closing-the-window) for the setting that turns this
+off and for what happens with no tray to come back from.
 
 **A quit closes the server's stdin, and that is the ask.** The app holds the
 write end of that pipe for as long as it lives, so a crash or a force-quit
@@ -547,6 +552,64 @@ because neither is fixable from a menu.
 **Quit Quintal** stops the harness on the way out, by the same path as closing
 the window.
 
+**Waiting for you.** When one of your agents has a permission card open, the
+item says so instead: its tooltip and the **Open Quintal** line name how many
+are waiting, and a dot sits beside the icon where the platform draws one (the
+macOS menu bar, a Linux indicator's label). That outranks how the fleet is,
+because it is the one state here that wants you to do something.
+
+## Closing the window
+
+Closing the window hides it. The office you are in, your agents and — when
+this launch is one — the personal office's server keep running, and Quintal
+stays in the menu bar or system tray. The first time this happens a
+notification says so, once per computer, so a closed window is never mistaken
+for a quit.
+
+The window comes back from **Open Quintal** in the tray menu, from launching
+Quintal again (a second launch hands itself to the first), and on macOS from
+the dock icon.
+
+**Keep Quintal running when the window is closed**, in Settings → Agents, is
+the switch. Off, closing the window quits, as it did before this existed. The
+server picker always quits: with no office chosen there is nothing behind the
+window to keep running.
+
+A Linux session with no tray — no status-notifier host — has nowhere to show
+the item. Quintal cannot tell from the inside, so on such a desktop either
+launch Quintal again to get the window back, or turn the setting off.
+
+What this is not: a service. The fleet and the server are still children of
+the app, so quitting, a crash, a restart for an update or logging out ends
+them. Opening at login, below, is how they are there again in the morning.
+
+## When an agent needs you
+
+The office tells you when one of your agents is waiting and you are not
+looking — the window is behind another, hidden, or on a different
+conversation:
+
+- one of **your** agents asks permission to run something. That card expires
+  in five minutes, so it is the one that matters most;
+- an agent says something **to you** — by `@name`, or in a direct message;
+- one of your agents **finishes** a turn, or fails one.
+
+You get a system notification and a short sound, each of which can be turned
+off under Settings → Profile, **When an agent needs you**, along with the
+finished-turn alerts on their own. The choice is kept on this device. Nothing
+is said about other people's agents, about people, or about a conversation
+that is on screen in a focused window.
+
+In the office, **N** goes to whoever is waiting: permission cards first,
+oldest first, then conversations where you were addressed. Press it again to
+walk on to the next.
+
+A browser tab can do the same, once you allow notifications for the site —
+ticking the box is what asks. The app needs no permission step of its own
+beyond the system's. A notification from the app is not a link: on a desktop
+the system gives the app no click to act on, so open the window and press
+**N**.
+
 ## Opening at login
 
 Off until you ask for it, in Settings → Agents. The office is where your agents
@@ -681,9 +744,10 @@ makes the nest and keeps its `AGENTS.md` current when the fleet starts.
 
 ## Leaving
 
-Closing the window stops the harness — and the personal office's server, when
-this launch is one — and quitting from the tray does the same by the same
-path.
+Quitting stops the harness — and the personal office's server, when this
+launch is one. Closing the window is not quitting, unless you have turned
+[that](#closing-the-window) off; **Quit Quintal** in the tray is, and so is
+the app menu's Quit.
 
 That covers a tidy exit and nothing else. An app that crashes, is force-quit or
 is killed runs no handler at all, and what survives is not an idle process — it

@@ -157,6 +157,13 @@ pub struct Settings {
     /// survive a restart or the same question arrives every launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dismissed_update: Option<String>,
+    /// Whether closing the window leaves Quintal running. None is the
+    /// default, which is yes — see `background::keeps_running`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_running: Option<bool>,
+    /// The one-time notice that a closed window is not a quit has been shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub told_still_running: Option<bool>,
 }
 
 fn settings_path(dir: &Path) -> PathBuf {

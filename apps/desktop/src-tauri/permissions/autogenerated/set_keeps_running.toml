@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-keeps-running"
+description = "Enables the set_keeps_running command without any pre-configured scope."
+commands.allow = ["set_keeps_running"]
+
+[[permission]]
+identifier = "deny-set-keeps-running"
+description = "Denies the set_keeps_running command without any pre-configured scope."
+commands.deny = ["set_keeps_running"]

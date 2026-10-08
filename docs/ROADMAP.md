@@ -97,6 +97,16 @@ knowing whether any of it is working.
   pixel library made for Quintal: real desks, meeting rooms, a cafeteria, a
   hallway, and a garden through the doors.
 
+**October 2026 — an office you do not have to watch**
+
+- **The app outlives its window.** Closing the window hides it; the office,
+  the fleet and the personal office's server carry on behind the tray, and
+  quitting is something you say. A setting puts the old behaviour back.
+- **An agent that needs you says so.** A system notification and a sound when
+  one of your agents asks permission, answers you, or finishes while you are
+  looking elsewhere; the tray shows how many are waiting; `N` goes to the
+  next one.
+
 ## What is next
 
 Roughly in order. Each of these is a few days of work with an agent, not a

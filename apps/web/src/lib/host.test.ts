@@ -93,6 +93,10 @@ describe('getHost', () => {
       'openServerPicker',
       'opensAtLogin',
       'setOpensAtLogin',
+      'keepsRunning',
+      'setKeepsRunning',
+      'notify',
+      'setAttention',
     ] as const) {
       assert.equal(typeof host[method], 'function', `${method} is missing`);
     }

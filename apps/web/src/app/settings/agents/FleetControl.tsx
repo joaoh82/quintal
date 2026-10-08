@@ -35,6 +35,7 @@ export function FleetControl() {
   const [problem, setProblem] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [atLogin, setAtLogin] = useState<boolean | null>(null);
+  const [keepsRunning, setKeepsRunning] = useState<boolean | null>(null);
   const [needsRegistration, setNeedsRegistration] = useState(false);
   const [suggested, setSuggested] = useState('');
   const [knownAs, setKnownAs] = useState<string | null>(null);
@@ -66,6 +67,7 @@ export function FleetControl() {
     if (!host) return;
     // Null until asked, so the checkbox is not drawn in a state nobody chose.
     void host.opensAtLogin().then(setAtLogin).catch(() => setAtLogin(null));
+    void host.keepsRunning().then(setKeepsRunning).catch(() => setKeepsRunning(null));
     void refresh();
     void offerRegistration();
     const timer = setInterval(() => void refresh(), POLL_MS);
@@ -154,6 +156,27 @@ export function FleetControl() {
             }}
           />
           Open Quintal at login, so your agents are running before you are
+        </label>
+      )}
+
+      {keepsRunning === null ? null : (
+        <label className="text-muted-foreground mt-2 flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={keepsRunning}
+            onChange={(event) => {
+              const next = event.target.checked;
+              setKeepsRunning(next);
+              void host
+                ?.setKeepsRunning(next)
+                .catch((error: unknown) => {
+                  setProblem(describeHostFailure(error));
+                  setKeepsRunning(!next);
+                });
+            }}
+          />
+          Keep Quintal running when the window is closed, so your agents carry on —
+          quit from its icon in the menu bar or tray
         </label>
       )}
 

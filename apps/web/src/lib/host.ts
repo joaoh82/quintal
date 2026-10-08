@@ -239,6 +239,27 @@ export interface HostBridge {
   setOpensAtLogin(enabled: boolean): Promise<void>;
 
   /**
+   * Does closing the window leave Quintal running?
+   *
+   * On unless somebody turns it off: the office, the fleet and the personal
+   * office's server keep going behind the tray, and quitting is something you
+   * say from there. Off, closing the window quits, as it always used to.
+   */
+  keepsRunning(): Promise<boolean>;
+  setKeepsRunning(enabled: boolean): Promise<void>;
+
+  /**
+   * Show a system notification.
+   *
+   * What a browser does with the Notification API, done by the host because
+   * a webview's own is not there on every platform and a hidden window has
+   * no other voice. When to call it is `game/alerts.ts`'s decision.
+   */
+  notify(title: string, body: string): Promise<void>;
+  /** How many of my agents are waiting on me, so the tray can say so. */
+  setAttention(waiting: number): Promise<void>;
+
+  /**
    * Every server this app knows about, and which one is live.
    *
    * A server is a Quintal deployment — a URL with an office on it. It is an
@@ -409,6 +430,10 @@ function tauriBridge(): HostBridge {
     setPushToTalkChord: (chord) => call<string>('set_push_to_talk_chord', { chord }),
     opensAtLogin: () => call<boolean>('opens_at_login'),
     setOpensAtLogin: (enabled) => call<void>('set_opens_at_login', { enabled }),
+    keepsRunning: () => call<boolean>('keeps_running'),
+    setKeepsRunning: (enabled) => call<void>('set_keeps_running', { enabled }),
+    notify: (title, body) => call<void>('notify', { title, body }),
+    setAttention: (waiting) => call<void>('set_attention', { waiting }),
   };
 }
 

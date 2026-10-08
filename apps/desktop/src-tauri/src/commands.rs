@@ -42,6 +42,9 @@ pub struct HostState {
     /// nobody ever saw and then wipe the key. In memory only — a confirmation
     /// should not survive a restart the export did not.
     pub pending_export: std::sync::Mutex<Option<String>>,
+    /// How many of this person's agents the office says are waiting on them.
+    /// The page's count, kept only so the tray can say so with no window up.
+    pub attention: std::sync::atomic::AtomicU32,
 }
 
 impl HostState {
@@ -516,6 +519,39 @@ pub fn set_opens_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), Ho
         code: "autostart".into(),
         message: error.to_string(),
     })
+}
+
+/// Whether closing the window leaves Quintal — the office, the fleet — running.
+#[tauri::command]
+pub fn keeps_running(state: State<'_, HostState>) -> bool {
+    crate::background::keeps_running(&state.dir)
+}
+
+#[tauri::command]
+pub fn set_keeps_running(state: State<'_, HostState>, enabled: bool) -> Result<(), HostError> {
+    Ok(crate::background::set_keeps_running(&state.dir, enabled)?)
+}
+
+/// Show a system notification on the page's behalf.
+///
+/// A webview has no notification API worth relying on across three
+/// platforms, and a hidden window has no other way to be heard. What to say
+/// and when is the page's decision — it knows which conversation is in view
+/// — and it is shown as given, clipped.
+#[tauri::command]
+pub fn notify(app: tauri::AppHandle, title: String, body: String) {
+    crate::background::notify(&app, &title, &body);
+}
+
+/// How many of this person's agents are waiting on them, for the tray.
+#[tauri::command]
+pub fn set_attention(app: tauri::AppHandle, state: State<'_, HostState>, waiting: u32) {
+    let previous = state
+        .attention
+        .swap(waiting, std::sync::atomic::Ordering::SeqCst);
+    if previous != waiting {
+        crate::tray::refresh(&app, &state.fleet.status());
+    }
 }
 
 // --- servers ----------------------------------------------------------------

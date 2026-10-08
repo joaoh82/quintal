@@ -64,6 +64,10 @@ tauri-plugin-updater = "2"
 # exits, so two copies can never race over the personal office's database —
 # the lock in `personal.rs` is the belt to this pair of braces.
 tauri-plugin-single-instance = "2"
+# System notifications, shown from this process only: the first time the
+# window is hidden rather than closed, and when the office says one of your
+# agents is waiting. See `background.rs`.
+tauri-plugin-notification = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

@@ -56,7 +56,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
         // macOS only. Elsewhere `TRAY_ICON` is already the coloured tile and
         // this call does nothing.
         .icon_as_template(true)
-        .tooltip(tooltip(&FleetState::Stopped))
+        .tooltip(tooltip(&FleetState::Stopped, 0))
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => show_window(app),
@@ -78,7 +78,12 @@ pub fn refresh(app: &AppHandle, state: &FleetState) {
     let Some(tray) = app.tray_by_id("quintal") else {
         return;
     };
-    let _ = tray.set_tooltip(Some(tooltip(state)));
+    let waiting = waiting(app);
+    let _ = tray.set_tooltip(Some(tooltip(state, waiting)));
+    // Text beside the icon where the platform draws it (the macOS menu bar,
+    // a Linux indicator's label). A tooltip only answers somebody who is
+    // already hovering; this is for the glance.
+    let _ = tray.set_title(if waiting > 0 { Some("●") } else { None });
     if let Ok(menu) = menu_for(app, state) {
         let _ = tray.set_menu(Some(menu));
     }
@@ -89,7 +94,7 @@ fn menu_for(app: &AppHandle, state: &FleetState) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(
         app,
         &[
-            &MenuItem::with_id(app, OPEN, "Open Quintal", true, None::<&str>)?,
+            &MenuItem::with_id(app, OPEN, open_label(waiting(app)), true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -110,7 +115,31 @@ fn menu_for(app: &AppHandle, state: &FleetState) -> tauri::Result<Menu<Wry>> {
     )
 }
 
-fn tooltip(state: &FleetState) -> String {
+/// How many of this person's agents the office says are waiting on them.
+fn waiting(app: &AppHandle) -> u32 {
+    app.try_state::<HostState>()
+        .map(|state| state.attention.load(std::sync::atomic::Ordering::SeqCst))
+        .unwrap_or(0)
+}
+
+fn open_label(waiting: u32) -> String {
+    match waiting {
+        0 => "Open Quintal".into(),
+        1 => "Open Quintal — an agent is waiting for you".into(),
+        n => format!("Open Quintal — {n} agents are waiting for you"),
+    }
+}
+
+fn tooltip(state: &FleetState, waiting: u32) -> String {
+    // Somebody waiting outranks how the fleet is: it is the one state here
+    // that wants a person to do something.
+    if waiting > 0 {
+        return if waiting == 1 {
+            "Quintal — an agent is waiting for you".into()
+        } else {
+            format!("Quintal — {waiting} agents are waiting for you")
+        };
+    }
     match state {
         FleetState::Running { .. } => "Quintal — agents running".into(),
         FleetState::Stopped => "Quintal — agents not running".into(),
@@ -160,7 +189,7 @@ fn switch_server(app: &AppHandle) {
     app.restart();
 }
 
-fn show_window(app: &AppHandle) {
+pub(crate) fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -193,4 +222,30 @@ fn toggle_fleet(app: &AppHandle) {
         show_window(app);
     }
     refresh(app, &state.fleet.status());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn somebody_waiting_outranks_how_the_fleet_is() {
+        let running = FleetState::Running { pid: 1 };
+        assert_eq!(tooltip(&running, 0), "Quintal — agents running");
+        assert_eq!(
+            tooltip(&running, 1),
+            "Quintal — an agent is waiting for you"
+        );
+        assert_eq!(
+            tooltip(&FleetState::Stopped, 3),
+            "Quintal — 3 agents are waiting for you"
+        );
+    }
+
+    #[test]
+    fn the_open_item_says_why_to_open() {
+        assert_eq!(open_label(0), "Open Quintal");
+        assert_eq!(open_label(1), "Open Quintal — an agent is waiting for you");
+        assert_eq!(open_label(2), "Open Quintal — 2 agents are waiting for you");
+    }
 }
