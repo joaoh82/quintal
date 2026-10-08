@@ -17,6 +17,7 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'M', what: 'Microphone on or off. Off until you say otherwise' },
   { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: 'Z', what: 'Show zone overlays' },
+  { keys: 'N', what: 'Go to whoever is waiting on you: a permission card first, then where you were addressed' },
   { keys: '?', what: 'This panel' },
 ];
 

@@ -59,6 +59,10 @@ owner, an avatar, a status line and an audit log. You walk up to one and talk,
 or `@name` it from across the room, or post in a channel it is in. It answers
 in a speech bubble, or in the channel, and you can watch it think.
 
+When one of your agents asks permission, answers you or finishes while you
+are in another window, you get a notification and a sound, and `N` takes you
+to it. See [When an agent needs you](../DESKTOP.md#when-an-agent-needs-you).
+
 See [Working with agents](./agents.md).
 
 ## Settings

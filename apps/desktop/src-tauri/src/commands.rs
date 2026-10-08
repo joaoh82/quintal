@@ -42,6 +42,10 @@ pub struct HostState {
     /// nobody ever saw and then wipe the key. In memory only — a confirmation
     /// should not survive a restart the export did not.
     pub pending_export: std::sync::Mutex<Option<String>>,
+    /// How many of this person's agents the office says are waiting on them,
+    /// for the tray. Kept here, with its own deadline, so it stays true while
+    /// the office page is not mounted — see `background::Attention`.
+    pub attention: std::sync::Mutex<crate::background::Attention>,
 }
 
 impl HostState {
@@ -517,6 +521,55 @@ pub fn set_opens_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), Ho
         code: "autostart".into(),
         message: error.to_string(),
     })
+}
+
+/// Whether closing the window leaves Quintal — the office, the fleet — running.
+#[tauri::command]
+pub fn keeps_running(state: State<'_, HostState>) -> bool {
+    crate::background::keeps_running(&state.dir)
+}
+
+#[tauri::command]
+pub fn set_keeps_running(state: State<'_, HostState>, enabled: bool) -> Result<(), HostError> {
+    Ok(crate::background::set_keeps_running(&state.dir, enabled)?)
+}
+
+/// Show a system notification on the page's behalf.
+///
+/// A webview has no notification API worth relying on across three
+/// platforms, and a hidden window has no other way to be heard. What to say
+/// and when is the page's decision — it knows which conversation is in view
+/// — and it is shown as given, clipped.
+#[tauri::command]
+pub fn notify(app: tauri::AppHandle, title: String, body: String) {
+    crate::background::notify(&app, &title, &body);
+}
+
+/// How many of this person's agents are waiting on them, for the tray, and
+/// when the soonest of those questions runs out (ms since the epoch).
+///
+/// The deadline is what lets the page leave: a count that only the office
+/// page could clear would stay on the tray for a whole visit to Settings,
+/// while the cards behind it expired. With it, the host zeroes the count by
+/// itself once nothing the page reported can still be waiting.
+#[tauri::command]
+pub fn set_attention(
+    app: tauri::AppHandle,
+    state: State<'_, HostState>,
+    waiting: u32,
+    until: Option<f64>,
+) {
+    let next = crate::background::Attention::new(waiting, until);
+    let changed = {
+        let mut current = state.attention.lock().unwrap_or_else(|e| e.into_inner());
+        let changed = current.waiting(crate::background::now_ms())
+            != next.waiting(crate::background::now_ms());
+        *current = next;
+        changed
+    };
+    if changed {
+        crate::tray::refresh(&app, &state.fleet.status());
+    }
 }
 
 // --- servers ----------------------------------------------------------------

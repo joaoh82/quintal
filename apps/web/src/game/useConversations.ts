@@ -168,6 +168,16 @@ export interface Conversations {
   decideApproval: (requestId: string, optionId: ApprovalOptionId) => void;
 }
 
+/**
+ * What is in view. The corner box only ever shows nearby or a channel; a
+ * zone opened in the panel is in view only while the panel is.
+ */
+export function visibleKeys(active: ConversationKey, overlayOpen: boolean): ConversationKey[] {
+  if (overlayOpen) return [active];
+  const { channelId } = parseKey(active);
+  return [channelId ? active : NEARBY];
+}
+
 export interface ConversationsView {
   /**
    * Whether the full panel is up. It decides which conversation is in view —
@@ -220,13 +230,10 @@ export function useConversations(
   channelsRef.current = channels;
   transcriptsRef.current = transcripts;
 
-  // What is in view. The corner box only ever shows nearby or a channel; a
-  // zone opened in the panel is in view only while the panel is.
-  const visible = useMemo<ConversationKey[]>(() => {
-    if (view.overlayOpen) return [active];
-    const { channelId } = parseKey(active);
-    return [channelId ? active : NEARBY];
-  }, [active, view.overlayOpen]);
+  const visible = useMemo<ConversationKey[]>(
+    () => visibleKeys(active, view.overlayOpen),
+    [active, view.overlayOpen],
+  );
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
 

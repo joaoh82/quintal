@@ -251,6 +251,15 @@ pub fn capability(server: Option<&str>, personal: bool) -> String {
         "allow-pick-repos-dir",
         "allow-opens-at-login",
         "allow-set-opens-at-login",
+        // Also a device preference: whether closing the window quits.
+        "allow-keeps-running",
+        "allow-set-keeps-running",
+        // Telling somebody who is not looking that an agent is waiting. The
+        // office supplies the words; this process clips them and shows them,
+        // and learns only a count for the tray. Neither moves a credential —
+        // the worst a hostile page does with them is be noisy.
+        "allow-notify",
+        "allow-set-attention",
         // A device preference, like open-at-login: the chord for this keyboard.
         "allow-push-to-talk-chord",
         "allow-set-push-to-talk-chord",

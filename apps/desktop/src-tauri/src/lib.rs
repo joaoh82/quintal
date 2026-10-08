@@ -12,6 +12,7 @@
 //! Everything past the first screen is identical in both.
 
 pub mod agent_keys;
+pub mod background;
 pub mod commands;
 pub mod identity;
 pub mod links;
@@ -58,6 +59,26 @@ pub fn run() {
         // fixed by the endpoint and public key in the config, and when it is
         // asked is decided by the page — see `update.rs`.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Used from this process only — no notification permission is granted
+        // to the page, which asks through `commands::notify` instead.
+        .plugin(tauri_plugin_notification::init())
+        // Closing the window is not quitting: the office and the fleet keep
+        // running behind the tray unless this machine was told otherwise.
+        // Quit — from the tray or the app menu — never comes through here,
+        // so it still reaches the teardown in `run` below.
+        .on_window_event(|window, event| {
+            let tauri::WindowEvent::CloseRequested { api, .. } = event else {
+                return;
+            };
+            let Some(state) = window.app_handle().try_state::<commands::HostState>() else {
+                return;
+            };
+            let keep = background::keeps_running(&state.dir);
+            if background::on_close(keep, state.server.is_some()) == background::OnClose::Hide {
+                api.prevent_close();
+                background::hide(window);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
             update::check_for_update,
@@ -85,6 +106,10 @@ pub fn run() {
             commands::pick_repos_dir,
             commands::opens_at_login,
             commands::set_opens_at_login,
+            commands::keeps_running,
+            commands::set_keeps_running,
+            commands::notify,
+            commands::set_attention,
             commands::list_servers,
             commands::add_server,
             commands::switch_server,
@@ -152,6 +177,7 @@ pub fn run() {
                 personal: personal.clone(),
                 pending_export: std::sync::Mutex::new(None),
                 fleet: spawn::Fleet::new(),
+                attention: std::sync::Mutex::new(background::Attention::default()),
             });
 
             tray::build(app.handle())?;
@@ -234,10 +260,18 @@ pub fn run() {
             // Closing the window must not leave a harness — or a server —
             // behind. Both are children of this process, and an orphan keeps
             // agents in the office that nobody can see or stop from here.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                if let Some(state) = app.try_state::<commands::HostState>() {
-                    state.stop_everything();
+            match event {
+                tauri::RunEvent::ExitRequested { .. } => {
+                    if let Some(state) = app.try_state::<commands::HostState>() {
+                        state.stop_everything();
+                    }
                 }
+                // A click on the dock icon with the window hidden. Without
+                // this the app is running, visibly, and cannot be opened from
+                // the one place macOS teaches people to open things.
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => tray::show_window(app),
+                _ => {}
             }
         });
 }

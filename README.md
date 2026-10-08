@@ -84,6 +84,11 @@ named, and expires instead of hanging. What a runtime's options actually grant
 was measured rather than assumed — including the runtimes that never ask at
 all. See [Runtime permissions](./docs/RUNTIME-PERMISSIONS.md).
 
+**Told when you are needed.** An agent asking permission, answering you or
+finishing a turn while you are in another window raises a notification and a
+sound, and `N` takes you to it. In the desktop app the office keeps running
+with its window closed, and the tray says how many agents are waiting.
+
 **Your key, your identity.** No accounts, no email, no passwords. You hold a
 keypair; signing in is signing a challenge. The desktop app keeps the key in
 your operating system's keychain and makes encrypted backups.

@@ -9,6 +9,7 @@ Press `?` in the office for this list in place.
 | `WASD` / arrows | Walk |
 | Click | Walk to a tile — the server pathfinds around furniture |
 | `Z` | Show the zone overlays |
+| `N` | Go to whoever is waiting on you: a permission card first, then where you were addressed |
 | `?` | The help panel |
 
 ## Talking

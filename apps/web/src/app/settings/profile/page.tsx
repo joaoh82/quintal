@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 
 import { OverlayKeyField } from './OverlayKeyField';
 import { ActivityDetailField } from './ActivityDetailField';
+import { AlertsField } from './AlertsField';
 import { PushToTalkField } from './PushToTalkField';
 import { ProfileForm } from './ProfileForm';
 import { requestSession } from '@/lib/session';
@@ -50,6 +51,7 @@ export default async function ProfilePage() {
         userId={session.user.id}
         initialLevel={row.activityDetailLevel}
       />
+      <AlertsField />
       <section className="space-y-2 rounded-lg border p-4">
         <h2 className="text-sm font-medium">Appearance</h2>
         <p className="text-muted-foreground text-xs">

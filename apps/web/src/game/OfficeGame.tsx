@@ -12,7 +12,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getOverlayKey } from '@/lib/preferences';
 import { subscribeActivityDetailLevel } from '@/lib/activity-preference';
 
+import { nextWaiting } from './alerts';
 import { gameBridge } from './bridge';
+import type { ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
 import { ChatPanel } from './ui/ChatPanel';
 import { CommsOverlay } from './ui/CommsOverlay';
@@ -20,6 +22,7 @@ import { HelpPanel } from './ui/HelpPanel';
 import { Minimap } from './ui/Minimap';
 import { RosterPanel } from './ui/RosterPanel';
 import { VoiceBar } from './ui/VoiceBar';
+import { useAlerts } from './useAlerts';
 import { useConversations } from './useConversations';
 
 interface Hud {
@@ -90,6 +93,25 @@ export default function OfficeGame({
   const [activityDetailLevel, setActivityDetailLevel] = useState(initialActivityDetailLevel);
 
   const conversations = useConversations(sessionRef, { overlayOpen });
+  const [hint, setHint] = useState('');
+
+  // Go to a conversation in the full panel — the one place every kind of
+  // conversation, a zone included, can be read from anywhere.
+  const { select } = conversations;
+  const openConversation = useCallback(
+    (key: ConversationKey) => {
+      select(key);
+      setOverlayOpen(true);
+    },
+    [select],
+  );
+  useAlerts(conversations, roster, overlayOpen, openConversation);
+
+  useEffect(() => {
+    if (!hint) return;
+    const timer = window.setTimeout(() => setHint(''), 2500);
+    return () => window.clearTimeout(timer);
+  }, [hint]);
 
   // The key is a device preference; read it once the page has a window.
   useEffect(() => setOverlayKey(getOverlayKey()), []);
@@ -115,20 +137,33 @@ export default function OfficeGame({
     };
   }, []);
 
-  // `?` opens help; the overlay key opens the conversations panel. The chat
-  // input stops keydown propagation, so typing either in a sentence never
-  // reaches this.
+  // `?` opens help; the overlay key opens the conversations panel; N goes to
+  // whoever is waiting on you. The chat input stops keydown propagation, so
+  // typing any of them in a sentence never reaches this.
+  const waitingRef = useRef(conversations);
+  waitingRef.current = conversations;
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === '?') setHelpOpen((open) => !open);
       else if (event.key === overlayKey && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         setOverlayOpen((open) => !open);
+      } else if (
+        (event.key === 'n' || event.key === 'N') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !typingElsewhere()
+      ) {
+        const { approvals, unread, myUserId, active } = waitingRef.current;
+        const next = nextWaiting(approvals, unread, myUserId, active);
+        if (next) openConversation(next);
+        else setHint('Nothing else is waiting on you.');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [overlayKey]);
+  }, [overlayKey, openConversation]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -313,6 +348,17 @@ export default function OfficeGame({
         </div>
       ) : null}
 
+      {/* Above the panel, not hidden by it: N opens the panel, so the one
+          time this has something to say is usually while the panel is up. */}
+      {hint ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
+        >
+          {hint}
+        </div>
+      ) : null}
+
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-4 gap-y-1 bg-black/55 px-3 py-2 font-mono text-[11px] text-white/80 backdrop-blur-sm">
         <span className="text-white">{hud.mapName || 'loading…'}</span>
         <span>
@@ -330,7 +376,7 @@ export default function OfficeGame({
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · N next waiting · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
         <button
           type="button"
