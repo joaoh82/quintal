@@ -41,10 +41,17 @@ channel while another answers a question by direct message.
   pass the `hash` back as `expected_hash`; if the write is refused as a
   conflict, another session wrote first — read again and merge, never
   overwrite.
-- **Mind the shared checkout.** Two sessions editing the same repository at
-  once can collide. Keep your changes to the task you were given, commit or
-  stash nothing another session may be relying on, and say so if you find the
-  tree changed under you.
+- **A task gets a worktree.** Before you edit files in a repository, begin a
+  task (`task_begin`, or your owner's `!task`): a branch of your own,
+  `quintal/<you>/<task>`, cut from the repository's fresh default branch, in a
+  worktree under `WORKTREES/` that is your working directory until the task
+  ends. The shared checkouts under `REPOS/` are for reading; other agents are
+  working in the same repositories, and an edit there is an edit in their
+  tree. Say which branch you are on, in one line, once it is made. Commit in
+  the worktree, push with `git push -u origin HEAD`, open the pull request
+  with `gh pr create`, and call `task_end` when it has merged or the work is
+  abandoned — it removes the worktree only when nothing on it would be lost.
+  Questions, reading code and conversation need no task.
 
 ## When a team is addressed
 

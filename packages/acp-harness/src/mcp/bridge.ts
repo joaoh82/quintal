@@ -60,6 +60,14 @@ export interface BridgeHooks {
    * than answering about the wrong directory.
    */
   workspaceInfo?: () => unknown;
+  /**
+   * `task_begin`, `task_end`, `task_status`: a git worktree per task. The
+   * runner owns the book and the agent's working directory, so these go
+   * through it — see `runner/tasks.ts`.
+   */
+  taskBegin?: (repo: string, title: string) => Promise<unknown>;
+  taskEnd?: () => Promise<unknown>;
+  taskStatus?: () => unknown;
 }
 
 export async function startBridge(
@@ -262,6 +270,21 @@ async function dispatch(
         );
       }
       return hooks.workspaceInfo();
+    }
+
+    case 'task_begin': {
+      if (!hooks.taskBegin) throw new Error('task_begin is answered by the harness running this agent, and this tool server was started without one');
+      return hooks.taskBegin(String(call.args.repo ?? ''), String(call.args.title ?? ''));
+    }
+
+    case 'task_end': {
+      if (!hooks.taskEnd) throw new Error('task_end is answered by the harness running this agent, and this tool server was started without one');
+      return hooks.taskEnd();
+    }
+
+    case 'task_status': {
+      if (!hooks.taskStatus) throw new Error('task_status is answered by the harness running this agent, and this tool server was started without one');
+      return hooks.taskStatus();
     }
 
     case 'memory_get':

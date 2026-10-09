@@ -762,6 +762,11 @@ reachable under `REPOS/`. That link points at your **repos directory** —
 `~/projects` unless you choose another with "Change repos folder". The harness
 makes the nest and keeps its `AGENTS.md` current when the fleet starts.
 
+Those checkouts are shared by every agent on the machine, so an agent does not
+edit in them directly: before it changes files in a repository it begins a
+**task**, which gives it a branch of its own in a worktree of its own under
+the nest's `WORKTREES/`. See [Tasks and worktrees](./guide/agents.md#tasks-and-worktrees).
+
 ## Leaving
 
 Quitting stops the harness — and the personal office's server, when this

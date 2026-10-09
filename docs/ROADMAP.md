@@ -106,6 +106,11 @@ knowing whether any of it is working.
   one of your agents asks permission, answers you, or finishes while you are
   looking elsewhere; the tray shows how many are waiting; `N` goes to the
   next one.
+- **A worktree per task.** `!task api: fix the login redirect`, or the agent's
+  own `task_begin` before it edits a repository: a branch cut from the fresh
+  default branch, in a worktree of its own, so two agents in one repository
+  never share a working tree. Ends on `!done` or when the pull request
+  merges, and never deletes work that is nowhere else.
 
 ## What is next
 

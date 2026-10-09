@@ -35,7 +35,20 @@ import {
 } from '@quintal/shared';
 
 import { nestRoot, runtimeIdOf, type AgentConfig } from '../config.js';
-import { writeGuide } from '../nest.js';
+import { reposTarget, writeGuide } from '../nest.js';
+import {
+  TaskError,
+  activeTask,
+  beginTask,
+  describeCleanup,
+  describeTask,
+  endTask,
+  notePullRequest,
+  parseTaskCommand,
+  pullRequestFor,
+  taskReport,
+  type Task,
+} from './tasks.js';
 import { hostLabel } from '../runtimes.js';
 import { workspaceReport, type WorkspaceReport } from './workspace.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
@@ -195,6 +208,11 @@ export class AgentRunner {
    * pushed into a prompt.
    */
   #host: { label: string; reposDir: string } | null = null;
+  /**
+   * The poll that notices a task's pull request merging. Only while a task
+   * is active, and only when `gh` is here to ask.
+   */
+  #prPoll: ReturnType<typeof setInterval> | null = null;
   /**
    * Set when the runtime did not offer the model the owner chose. A standing
    * state, not a moment: it holds the nameplate against the idle reset every
@@ -359,6 +377,14 @@ export class AgentRunner {
     this.#setState('connected');
     this.#publishStatus();
 
+    // A task survives a restart: the book is on disk and the worktree is
+    // there. Say so where the owner looks, and start watching its PR again.
+    const task = this.#task();
+    if (task) {
+      this.#log('info', `resuming task "${task.title}" on ${task.branch}`);
+      this.#watchPullRequest();
+    }
+
     // Not awaited: the agent is connected and usable now, and a slow handshake
     // with its MCP server should hold nobody up. By the time somebody speaks,
     // the expensive half is usually already done.
@@ -368,6 +394,7 @@ export class AgentRunner {
   async stop(): Promise<void> {
     this.#stopping = true;
     this.#setState('stopped');
+    this.#unwatchPullRequest();
     for (const turn of this.#turns.values()) {
       turn.cancelled = true;
       for (const trace of turn.latency ?? []) trace.finish('cancelled');
@@ -404,12 +431,16 @@ export class AgentRunner {
       index,
       config: this.config,
       gateway: this.#gateway,
+      cwd: () => this.cwd(),
       hooks: {
         say: (text) => this.#sayNow(worker, text),
         setStatus: (status) => this.#statusFromTool(worker, status),
         memorySet: (slug, content, expectedHash) =>
           this.#memorySetFromTool(worker, slug, content, expectedHash),
         workspaceInfo: () => this.workspaceInfo(),
+        taskBegin: (repo, title) => this.#taskBeginFromTool(repo, title),
+        taskEnd: () => this.#taskEndFromTool(),
+        taskStatus: () => taskReport(this.#task()),
       },
       onUpdate: (from, params) => this.#onAcpUpdate(from, params),
       onPermission: (from, params) => this.#onPermissionRequest(from, params),
@@ -693,10 +724,10 @@ export class AgentRunner {
    * pays for it — and it is read fresh on every call, so a repository cloned or
    * a directory re-pointed since the session started is in the answer.
    */
-  workspaceInfo(): WorkspaceReport {
+  workspaceInfo(): WorkspaceReport & { task: Record<string, unknown> } {
     const ready = this.#gateway.ready;
-    return workspaceReport({
-      cwd: this.config.cwd,
+    const report = workspaceReport({
+      cwd: this.cwd(),
       scopes: ready?.scopes ?? [],
       identity: {
         agent: ready?.name ?? this.name,
@@ -707,6 +738,155 @@ export class AgentRunner {
       },
       ...(this.#host?.reposDir ? { reposDir: this.#host.reposDir } : {}),
     });
+    return { ...report, task: taskReport(this.#task()) };
+  }
+
+  // --- tasks: a git worktree each --------------------------------------------
+
+  /**
+   * Where this agent works right now: the task's worktree while one is
+   * active, else where it was configured. Every `session/new` asks.
+   */
+  cwd(): string {
+    return this.#task()?.worktree ?? this.config.cwd;
+  }
+
+  /** The active task, read from the book each time: it is small, and a restart must see it. */
+  #task(): Task | null {
+    try {
+      return activeTask(nestRoot(), this.name);
+    } catch (error: unknown) {
+      this.#log('warn', `could not read the task book: ${describe(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * The repositories directory a task's repo is looked up in: what `REPOS/`
+   * in the working directory points at, else what this machine reported.
+   */
+  #reposDir(): string {
+    const linked = reposTarget(this.config.cwd);
+    if (linked) return linked;
+    const own = join(this.config.cwd, 'REPOS');
+    if (existsSync(own)) return own;
+    if (this.#host?.reposDir) return this.#host.reposDir;
+    throw new TaskError('bad_repo', 'this machine has no repositories directory, so there is nothing to begin a task in');
+  }
+
+  /** Begin a task: the owner's `!task`, the model's `task_begin`, and anything else that may. */
+  async beginTask(repo: string, title: string): Promise<Task> {
+    const task = await beginTask({ nest: nestRoot(), agent: this.name, reposDir: this.#reposDir(), repo, title });
+    this.#log('info', `task "${task.title}": ${task.branch} in ${task.worktree}`);
+    this.#watchPullRequest();
+    return task;
+  }
+
+  /** End the active task. `deliveredHead` is the merged PR's head, when that is why. */
+  async endTask(deliveredHead?: string): Promise<{ task: Task; outcome: string; said: string }> {
+    const ended = await endTask({ nest: nestRoot(), agent: this.name, ...(deliveredHead ? { deliveredHead } : {}) });
+    this.#unwatchPullRequest();
+    const said = describeCleanup(ended.task, ended.outcome, ended.unpushed);
+    this.#log('info', `task "${ended.task.title}" ended: ${ended.outcome}`);
+    return { task: ended.task, outcome: ended.outcome, said };
+  }
+
+  /** `task_begin` from the model: the result tells it where to work from now on. */
+  async #taskBeginFromTool(repo: string, title: string): Promise<unknown> {
+    const task = await this.beginTask(repo, title);
+    this.#publishStatus();
+    return {
+      ...taskReport(task),
+      note:
+        `Your task "${task.title}" is on ${task.branch}, cut from ${task.base}, in the worktree ${task.worktree}. ` +
+        'For the rest of this turn, work there by absolute path — this session is still rooted where it ' +
+        'started. Your next turn starts in the worktree. Tell your owner which branch you are on, in one line.',
+    };
+  }
+
+  async #taskEndFromTool(): Promise<unknown> {
+    const ended = await this.endTask();
+    this.#publishStatus();
+    return { outcome: ended.outcome, branch: ended.task.branch, worktree: ended.task.worktree, note: ended.said };
+  }
+
+  /** `!task api: fix the login redirect` */
+  async #taskFromOwner(body: string, scope: string): Promise<void> {
+    const parsed = parseTaskCommand(body);
+    if (!parsed) {
+      this.#speak('`!task <repo>: <what to do>` — the checkout under REPOS/, then the task. `!task api: fix the login redirect`', scope);
+      return;
+    }
+    try {
+      const task = await this.beginTask(parsed.repo, parsed.title);
+      this.#publishStatus();
+      this.#speak(`On it: ${task.branch}, cut from ${task.base}, in a worktree of REPOS/${task.repo}.`, scope);
+    } catch (error: unknown) {
+      this.#speak(`I could not begin that task: ${describe(error)}`, scope);
+    }
+  }
+
+  /** `!done` */
+  async #doneFromOwner(scope: string): Promise<void> {
+    try {
+      const ended = await this.endTask();
+      this.#publishStatus();
+      this.#speak(ended.said, scope);
+    } catch (error: unknown) {
+      this.#speak(
+        error instanceof TaskError && error.code === 'no_task'
+          ? 'I am not on a task.'
+          : `I could not end the task: ${describe(error)}`,
+        scope,
+      );
+    }
+  }
+
+  /**
+   * Notice the task's pull request, and its merge.
+   *
+   * Every two minutes, through `gh` in the worktree. A PR seen for the first
+   * time goes on the task, so the status line and `task_status` can name it;
+   * one that has merged ends the task, with the PR's head counted as
+   * delivered so a squash merge does not leave a worktree behind for nothing.
+   * Without `gh`, or without a PR, the poll finds nothing and says nothing:
+   * the owner's `!done` and the agent's `task_end` are the other two ways out.
+   */
+  #watchPullRequest(): void {
+    if (this.#prPoll) return;
+    this.#prPoll = setInterval(() => void this.#checkPullRequest(), PR_POLL_MS);
+    this.#prPoll.unref?.();
+  }
+
+  #unwatchPullRequest(): void {
+    if (this.#prPoll) clearInterval(this.#prPoll);
+    this.#prPoll = null;
+  }
+
+  async #checkPullRequest(): Promise<void> {
+    const task = this.#task();
+    if (!task) {
+      this.#unwatchPullRequest();
+      return;
+    }
+    const pr = await pullRequestFor(task);
+    if (!pr) return;
+    if (!task.pr || task.pr.number !== pr.number || task.pr.state !== pr.state) {
+      const noted = notePullRequest(nestRoot(), this.name, task.slug, pr);
+      if (noted && !task.pr) {
+        this.#log('info', `task "${task.title}" has PR #${pr.number}`);
+        this.#publishStatus();
+      }
+    }
+    if (pr.state === 'MERGED') {
+      try {
+        const ended = await this.endTask(pr.headRefOid);
+        this.#publishStatus();
+        this.#speak(`PR #${pr.number} merged. ${ended.said}`);
+      } catch (error: unknown) {
+        this.#log('warn', `PR #${pr.number} merged but the task could not be ended: ${describe(error)}`);
+      }
+    }
   }
 
   /**
@@ -902,6 +1082,14 @@ export class AgentRunner {
           return true;
         }
         void this.#writeGuide(match[1], match[2], scope);
+        return true;
+      }
+      case '!task': {
+        void this.#taskFromOwner(parsed.body, scope);
+        return true;
+      }
+      case '!done': {
+        void this.#doneFromOwner(scope);
         return true;
       }
       case '!shutdown': {
@@ -1325,7 +1513,7 @@ export class AgentRunner {
       // owner's word for the whole team, ranked with the rest of the owner's.
       ...this.#currentTeams().map((team) => teamSection(team, ready?.name ?? this.name)),
       '',
-      workspaceSection(this.config.cwd),
+      workspaceSection(this.cwd(), this.#task()),
       // Two authors, kept apart and labelled as such.
       //
       // Instructions come from the owner and are not the agent's to change;
@@ -2366,13 +2554,18 @@ export class AgentRunner {
     const pool = this.#pool;
     const offline = pool !== null && pool.running().length === 0;
 
+    // Idle on a task reads as the task: the branch is what the room wants to
+    // know about an agent that is between turns on it.
+    const task = this.#task();
     const status = latest
       ? (channelIdOf(latest.scope) ? 'working' : latest.status)
       : offline
         ? 'offline'
         : this.#modelRefusal !== null
           ? this.#modelRefusal
-          : 'idle';
+          : task
+            ? `on ${describeTask(task)}`
+            : 'idle';
     const channelIds = [
       ...new Set(
         turns.map((turn) => channelIdOf(turn.scope)).filter((id): id is string => id !== null),
@@ -2516,8 +2709,18 @@ function respondWith(selection: RuntimeSelection): schema.RequestPermissionRespo
  * pulled with `workspace_info` instead, and this section's last line is the
  * pointer that makes that one call happen instead of a shell expedition.
  */
-export function workspaceSection(cwd: string): string {
+export function workspaceSection(cwd: string, task: Task | null = null): string {
   const lines = ['[Workspace]', `Your working directory is ${cwd}.`];
+  if (task) {
+    lines.push(
+      `You are on a task: "${task.title}", branch ${task.branch} of REPOS/${task.repo}, in this worktree. ` +
+        'Commit here; push and open the pull request when it is ready; call task_end when it has merged or is abandoned.',
+    );
+  } else {
+    lines.push(
+      'Before editing files in a repository, begin a task (task_begin) so the work has a branch and worktree of its own. Questions, reading and talk need none.',
+    );
+  }
   if (existsSync(join(cwd, 'AGENTS.md'))) {
     lines.push(
       'Read AGENTS.md there once per session, before other work: it says what is kept there and when to read or write it.',
@@ -2531,6 +2734,9 @@ export function workspaceSection(cwd: string): string {
   );
   return lines.join('\n');
 }
+
+/** How often a task's pull request is asked about. */
+const PR_POLL_MS = 120_000;
 
 /** Session ids are minted per process, so the worker is part of the key. */
 function sessionKey(worker: Worker, sessionId: string): string {

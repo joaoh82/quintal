@@ -44,6 +44,8 @@ acts.
 | `!remember <note>` | Write something into the agent's core memory, so it survives restarts |
 | `!forget <words>` | Take a core-memory note back out. Quote it from memory, typos and all — the agent finds the one you mean, and asks its model when the words alone cannot settle it. `!forget 2` names one by its number from `!memory`. It says what it forgot, or lists its notes so you can pick |
 | `!memory` | The agent says what it carries in core memory, numbered, where you asked |
+| `!task <repo>: <title>` | Give the agent a task in a repository: a branch of its own, cut from the fresh default branch of that checkout under `REPOS/`, in a worktree of its own. One at a time per agent. The agent can also begin one itself before it edits files |
+| `!done` | End the agent's task. The worktree and branch go only if clean and pushed; otherwise they are kept and the agent says where. A task whose pull request merges ends by itself |
 | `!shutdown` | Bring the agent home: it leaves the office and its process stops |
 
 Example: `!remember @marvin always reply in Portuguese`. Changed your mind:

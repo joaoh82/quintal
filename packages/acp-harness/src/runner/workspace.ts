@@ -176,7 +176,7 @@ export function workspaceReport(input: WorkspaceReportInput): WorkspaceReport {
         ALL_SCOPES.filter((scope) => !granted.has(scope)).map((scope) => [scope, SCOPE_MEANING[scope]]),
       ),
       unscoped:
-        'look_around, who_is_here, messages_get, memory_get, memory_set and this tool ' +
+        'look_around, who_is_here, messages_get, memory_get, memory_set, task_begin, task_end, task_status and this tool ' +
         'need no scope: they change nothing anybody else can see.',
     },
     external_access: { verified: 'nothing', note: EXTERNAL_NOTE },

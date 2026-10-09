@@ -93,6 +93,46 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'task_begin',
+    description:
+      'Begin a task before editing files in a repository. Names a checkout under ' +
+      'REPOS/ (as workspace_info lists it: "api", or "group/api") and a short title. ' +
+      'The harness fetches the default branch, cuts a branch of your own from it ' +
+      '(quintal/<you>/<title>) and gives you a worktree for it under WORKTREES/ — ' +
+      'your working directory from now until task_end, so your edits never touch the ' +
+      'shared checkout or another agent\'s work. The result names the worktree: work ' +
+      'there, by absolute path, for the rest of this turn; your later turns start ' +
+      'there. One task at a time. Not for questions, reading code or talk: only when ' +
+      'you are about to change files. Say which branch you are on once it is made.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo: { type: 'string', description: 'A checkout under REPOS/, by name.' },
+        title: { type: 'string', description: 'What the task is, in a few words. Becomes the branch name.' },
+      },
+      required: ['repo', 'title'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'task_end',
+    description:
+      'End your task: when its pull request has merged, or the work is abandoned. ' +
+      'Your working directory goes back to the shared workspace. The worktree is ' +
+      'removed with its branch only if it is clean and everything on it is on the ' +
+      'remote; uncommitted changes or unpushed commits keep it, and the result says ' +
+      'so and where. Commit and push (or open the pull request) before calling this ' +
+      'if you want the work to survive.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'task_status',
+    description:
+      'Which task you are on, if any: its title, repository, branch, worktree and ' +
+      'pull request. Cheaper than workspace_info when that is all you need.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'move_to',
     description:
       'Walk somewhere. Name either a person or a zone. ' +

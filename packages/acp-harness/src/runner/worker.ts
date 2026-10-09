@@ -97,6 +97,12 @@ export interface WorkerOptions {
   gateway: Gateway;
   /** Tool calls that need the turn: bound by the runner, per worker. */
   hooks: BridgeHooks;
+  /**
+   * Where a new session is rooted. The shared workspace, or the worktree of
+   * the task the agent is on — asked at each `session/new`, because a task
+   * can begin and end while the process lives. Defaults to `config.cwd`.
+   */
+  cwd?: () => string;
   onUpdate: (worker: Worker, params: schema.SessionNotification) => void;
   onPermission: (
     worker: Worker,
@@ -327,10 +333,26 @@ export class Worker {
     await bridge?.close();
   }
 
-  /** The ACP session for a scope, creating one if there is none. */
+  /** Where the next session is rooted. */
+  cwd(): string {
+    return this.options.cwd?.() ?? this.options.config.cwd;
+  }
+
+  /**
+   * The ACP session for a scope, creating one if there is none — or if the
+   * one there is was opened somewhere else. A task began or ended since: the
+   * model's file tools resolve against the session's directory, and a
+   * session left rooted in the old place would edit the wrong tree.
+   */
   async sessionFor(scope: string): Promise<string> {
     const existing = this.sessions.get(scope);
-    if (existing) return existing.sessionId;
+    if (existing && (existing.cwd === undefined || existing.cwd === this.cwd())) {
+      return existing.sessionId;
+    }
+    if (existing) {
+      this.#log('info', `session for "${scope}" was rooted in ${existing.cwd}; reopening in ${this.cwd()}`);
+      this.sessions.drop(scope, 'rotate');
+    }
 
     const inflight = this.#creating.get(scope);
     if (inflight) return inflight;
@@ -374,15 +396,16 @@ export class Worker {
             ],
           },
         ];
+    const cwd = this.cwd();
     const created = await proc.newSession({
-      cwd: this.options.config.cwd,
+      cwd,
       mcpServers: tools,
     } as schema.NewSessionRequest);
 
     await this.#applyModel(proc, created);
     await this.#applyPermissionMode(proc, created);
 
-    this.sessions.put(scope, created.sessionId);
+    this.sessions.put(scope, created.sessionId, cwd);
     // A fresh session has been told nothing yet.
     this.unprimed.add(scope);
     this.#log('info', `new session for "${scope}" (${this.sessions.size} live)`);

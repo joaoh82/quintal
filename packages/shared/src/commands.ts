@@ -61,6 +61,18 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
       '`!guide code-review <how to do it>` writes GUIDES/CODE_REVIEW.md in the machine\u2019s shared workspace \u2014 the file every agent there reads before that kind of work \u2014 and adds a pointer to this agent\u2019s core memory. The first word names the guide; the rest is the procedure, kept as written. A guide that already exists gains the text as a dated section rather than being replaced.',
   },
   {
+    name: 'task',
+    summary: 'Give the agent a task in a repository, on a branch of its own',
+    detail:
+      '`!task api: fix the login redirect` — the checkout under REPOS/, then the task. The agent’s harness fetches the default branch, cuts `quintal/<agent>/<task>` from it, and gives the agent a worktree of its own for it, so nothing it does touches your checkout or another agent’s work. One task at a time per agent. The agent can begin one itself before it edits a repository; this is you saying so first.',
+  },
+  {
+    name: 'done',
+    summary: 'End the agent’s task',
+    detail:
+      'Ends the task the agent is on and puts it back in the shared workspace. The worktree and branch are removed only if they are clean and everything is on the remote; uncommitted changes or unpushed commits keep them, and the agent says where. A task whose pull request merges ends by itself.',
+  },
+  {
     name: 'shutdown',
     summary: 'Bring the agent home',
     detail:
