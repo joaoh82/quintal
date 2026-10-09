@@ -161,7 +161,9 @@ describe('a task from the owner and from the model', () => {
     assert.equal(runner.cwd(), task.worktree, 'sessions are rooted in the worktree now');
     assert.ok(existsSync(join(task.worktree, 'README.md')));
     await until(() => fake.said.some((line) => line.includes(task.branch)), 'the agent to name its branch');
-    assert.ok(fake.statuses.some((status) => status.includes(task.branch)), 'the status line names the branch');
+    // Not on the nameplate: a non-empty status is the activity signal, and
+    // an agent on a task for days must still read as idle and wander.
+    assert.ok(!fake.statuses.some((status) => status.includes(task.branch)), 'the status line stays the activity signal');
     assert.match(workspaceSection(runner.cwd(), task), /You are on a task: "fix the login redirect"/);
     assert.equal((runner.workspaceInfo().task as { active: boolean }).active, true);
 
@@ -170,7 +172,27 @@ describe('a task from the owner and from the model', () => {
     assert.equal(activeTask(nest, 'Bob'), null);
     assert.equal(runner.cwd(), nest);
     assert.ok(!existsSync(task.worktree), 'a clean, delivered worktree is removed');
-    assert.equal(fake.statuses.at(-1), '', 'idle again, so the line is cleared');
+  });
+
+  it('two begins at once: one wins, the other is refused, and the book knows exactly one', async () => {
+    const { runner, nest } = await run();
+    const results = await Promise.allSettled([
+      runner.beginTask('api', 'first in'),
+      runner.beginTask('api', 'second in'),
+      runner.beginTask('api', 'third in'),
+    ]);
+    const won = results.filter((r) => r.status === 'fulfilled');
+    const lost = results.filter((r) => r.status === 'rejected');
+    assert.equal(won.length, 1);
+    assert.equal(lost.length, 2);
+    for (const r of lost) assert.match(String((r as PromiseRejectedResult).reason.message), /already on a task/);
+    const task = activeTask(nest, 'Bob')!;
+    assert.ok(task);
+    assert.equal(runner.cwd(), task.worktree);
+    // Nothing orphaned: one worktree on disk, one in the book.
+    const { readdirSync } = await import('node:fs');
+    const onDisk = readdirSync(join(nest, 'WORKTREES', 'bob')).filter((name) => name !== 'tasks.json');
+    assert.deepEqual(onDisk, [task.slug]);
   });
 
   it('refuses a second task, naming the first, and ignores a stranger', async () => {

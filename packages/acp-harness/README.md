@@ -130,21 +130,40 @@ Either one fetches `origin`'s default branch, cuts
 `quintal/<agent>/<task>` from it, and adds a worktree at
 `WORKTREES/<agent>/<task>/` inside the nest. From then until the task ends,
 that worktree is the agent's working directory: sessions opened before are
-reopened there on their next use, `workspace_info` reports it, and the status
-line reads `on quintal/marvin/fix-the-login-redirect` between turns (with
-`· PR #12` once a pull request exists — the harness asks `gh` every two
-minutes). One task per agent at a time; a second is refused, naming the
-first. A task is **never** per agent: a standing worktree per agent is a
+reopened there on their next use, and `workspace_info` and `task_status`
+report it, with the pull request once one exists (the harness asks `gh`
+every two minutes). The status line is left alone — it is the activity
+signal, and an agent on a task for days must still read as idle. One task
+per agent at a time; a second is refused, naming the first, and two begins
+that arrive together are taken one after the other.
+
+A task belongs to the whole agent, not to one conversation. When a task
+begins in a channel, the agent's other conversations — a DM, the room — are
+reopened in the worktree on their next turn too, and told they are on the
+task; they keep the pushed message window but lose their runtime context.
+That is the price of one working directory per agent, and the reason a
+question that needs no code should not start a task. A task is **never** per agent: a standing worktree per agent is a
 long-lived branch that drifts from main the moment somebody else merges. A
 fetch that fails refuses the task rather than cutting from a stale base. A
 checkout with no `origin` branches from its own `HEAD`.
 
 Ending — `!done`, `task_end`, or the pull request merging — never loses work:
 a worktree with uncommitted changes or commits no remote has is kept and the
-owner is told where; a clean one is removed with its branch. A squash-merged
-branch counts as delivered. The book of tasks is `WORKTREES/<agent>/tasks.json`,
-so a task survives a restart; a worktree somebody removed by hand ends its
-task quietly.
+owner is told where; a clean one is removed with its branch — and with it
+anything gitignored in the tree, such as a local `.env`, which is not counted
+as dirty. The branch is cut with `--no-track`, so a bare `git push` from the
+worktree can never aim at `main`; "unpushed" is counted against the branch on
+`origin` once it is there, however it got there. A squash-merged branch
+counts as delivered. Worktrees that were kept are listed by `task_status` and
+`workspace_info` until they are gone, so they do not pile up unseen. The
+book of tasks is `WORKTREES/<agent>/tasks.json`, so a task survives a
+restart; a worktree somebody removed by hand ends its task quietly.
+
+Worktrees go under the nest whatever the agent's `cwd` is. An agent rooted
+elsewhere with `--cwd` gets its worktrees under `~/.quintal/WORKTREES/`
+still, outside the directory its runtime was opened in; a runtime that
+confines file tools to the session's directory will say so when the agent
+tries to edit there.
 
 **Working somewhere else.** A fleet file can still say `"cwd": "/path"` or
 `"repo": "api"` (a name under the repos directory) to root one agent

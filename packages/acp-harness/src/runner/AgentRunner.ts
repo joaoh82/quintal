@@ -41,8 +41,8 @@ import {
   activeTask,
   beginTask,
   describeCleanup,
-  describeTask,
   endTask,
+  keptWorktrees,
   notePullRequest,
   parseTaskCommand,
   pullRequestFor,
@@ -213,6 +213,14 @@ export class AgentRunner {
    * is active, and only when `gh` is here to ask.
    */
   #prPoll: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Begin, end and the merge poll take turns. Turns run in parallel per
+   * conversation, and `!task` is fire-and-forget, so two begins could both
+   * pass the one-task check during a fetch and the last book write would win
+   * — leaving a worktree nothing records. One at a time is already the rule;
+   * this makes it true under load.
+   */
+  #taskLock: Promise<unknown> = Promise.resolve();
   /**
    * Set when the runtime did not offer the model the owner chose. A standing
    * state, not a moment: it holds the nameplate against the idle reset every
@@ -440,7 +448,7 @@ export class AgentRunner {
         workspaceInfo: () => this.workspaceInfo(),
         taskBegin: (repo, title) => this.#taskBeginFromTool(repo, title),
         taskEnd: () => this.#taskEndFromTool(),
-        taskStatus: () => taskReport(this.#task()),
+        taskStatus: () => this.#taskReport(),
       },
       onUpdate: (from, params) => this.#onAcpUpdate(from, params),
       onPermission: (from, params) => this.#onPermissionRequest(from, params),
@@ -738,7 +746,16 @@ export class AgentRunner {
       },
       ...(this.#host?.reposDir ? { reposDir: this.#host.reposDir } : {}),
     });
-    return { ...report, task: taskReport(this.#task()) };
+    return { ...report, task: this.#taskReport() };
+  }
+
+  #taskReport(): Record<string, unknown> {
+    try {
+      return taskReport(this.#task(), keptWorktrees(nestRoot(), this.name));
+    } catch (error: unknown) {
+      this.#log('warn', `could not read the task book: ${describe(error)}`);
+      return taskReport(this.#task());
+    }
   }
 
   // --- tasks: a git worktree each --------------------------------------------
@@ -774,27 +791,37 @@ export class AgentRunner {
     throw new TaskError('bad_repo', 'this machine has no repositories directory, so there is nothing to begin a task in');
   }
 
+  /** Run one task operation after whatever is already running. */
+  #serialised<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.#taskLock.then(operation, operation);
+    this.#taskLock = next.catch(() => {});
+    return next;
+  }
+
   /** Begin a task: the owner's `!task`, the model's `task_begin`, and anything else that may. */
-  async beginTask(repo: string, title: string): Promise<Task> {
-    const task = await beginTask({ nest: nestRoot(), agent: this.name, reposDir: this.#reposDir(), repo, title });
-    this.#log('info', `task "${task.title}": ${task.branch} in ${task.worktree}`);
-    this.#watchPullRequest();
-    return task;
+  beginTask(repo: string, title: string): Promise<Task> {
+    return this.#serialised(async () => {
+      const task = await beginTask({ nest: nestRoot(), agent: this.name, reposDir: this.#reposDir(), repo, title });
+      this.#log('info', `task "${task.title}": ${task.branch} in ${task.worktree}`);
+      this.#watchPullRequest();
+      return task;
+    });
   }
 
   /** End the active task. `deliveredHead` is the merged PR's head, when that is why. */
-  async endTask(deliveredHead?: string): Promise<{ task: Task; outcome: string; said: string }> {
-    const ended = await endTask({ nest: nestRoot(), agent: this.name, ...(deliveredHead ? { deliveredHead } : {}) });
-    this.#unwatchPullRequest();
-    const said = describeCleanup(ended.task, ended.outcome, ended.unpushed);
-    this.#log('info', `task "${ended.task.title}" ended: ${ended.outcome}`);
-    return { task: ended.task, outcome: ended.outcome, said };
+  endTask(deliveredHead?: string): Promise<{ task: Task; outcome: string; said: string }> {
+    return this.#serialised(async () => {
+      const ended = await endTask({ nest: nestRoot(), agent: this.name, ...(deliveredHead ? { deliveredHead } : {}) });
+      this.#unwatchPullRequest();
+      const said = describeCleanup(ended.task, ended.outcome, ended.unpushed);
+      this.#log('info', `task "${ended.task.title}" ended: ${ended.outcome}`);
+      return { task: ended.task, outcome: ended.outcome, said };
+    });
   }
 
   /** `task_begin` from the model: the result tells it where to work from now on. */
   async #taskBeginFromTool(repo: string, title: string): Promise<unknown> {
     const task = await this.beginTask(repo, title);
-    this.#publishStatus();
     return {
       ...taskReport(task),
       note:
@@ -806,7 +833,6 @@ export class AgentRunner {
 
   async #taskEndFromTool(): Promise<unknown> {
     const ended = await this.endTask();
-    this.#publishStatus();
     return { outcome: ended.outcome, branch: ended.task.branch, worktree: ended.task.worktree, note: ended.said };
   }
 
@@ -819,7 +845,6 @@ export class AgentRunner {
     }
     try {
       const task = await this.beginTask(parsed.repo, parsed.title);
-      this.#publishStatus();
       this.#speak(`On it: ${task.branch}, cut from ${task.base}, in a worktree of REPOS/${task.repo}.`, scope);
     } catch (error: unknown) {
       this.#speak(`I could not begin that task: ${describe(error)}`, scope);
@@ -830,7 +855,6 @@ export class AgentRunner {
   async #doneFromOwner(scope: string): Promise<void> {
     try {
       const ended = await this.endTask();
-      this.#publishStatus();
       this.#speak(ended.said, scope);
     } catch (error: unknown) {
       this.#speak(
@@ -871,17 +895,17 @@ export class AgentRunner {
     }
     const pr = await pullRequestFor(task);
     if (!pr) return;
+    // Asked outside the lock; acted on inside it. A `!done` that landed
+    // meanwhile has ended the task, and `endTask` then refuses, which is right.
     if (!task.pr || task.pr.number !== pr.number || task.pr.state !== pr.state) {
       const noted = notePullRequest(nestRoot(), this.name, task.slug, pr);
       if (noted && !task.pr) {
         this.#log('info', `task "${task.title}" has PR #${pr.number}`);
-        this.#publishStatus();
       }
     }
     if (pr.state === 'MERGED') {
       try {
         const ended = await this.endTask(pr.headRefOid);
-        this.#publishStatus();
         this.#speak(`PR #${pr.number} merged. ${ended.said}`);
       } catch (error: unknown) {
         this.#log('warn', `PR #${pr.number} merged but the task could not be ended: ${describe(error)}`);
@@ -2554,18 +2578,13 @@ export class AgentRunner {
     const pool = this.#pool;
     const offline = pool !== null && pool.running().length === 0;
 
-    // Idle on a task reads as the task: the branch is what the room wants to
-    // know about an agent that is between turns on it.
-    const task = this.#task();
     const status = latest
       ? (channelIdOf(latest.scope) ? 'working' : latest.status)
       : offline
         ? 'offline'
         : this.#modelRefusal !== null
           ? this.#modelRefusal
-          : task
-            ? `on ${describeTask(task)}`
-            : 'idle';
+          : 'idle';
     const channelIds = [
       ...new Set(
         turns.map((turn) => channelIdOf(turn.scope)).filter((id): id is string => id !== null),

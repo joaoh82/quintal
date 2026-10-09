@@ -15,6 +15,7 @@ import {
   cleanupDecision,
   describeTask,
   endTask,
+  keptWorktrees,
   notePullRequest,
   parseTaskCommand,
   readBook,
@@ -192,6 +193,12 @@ describe('beginning a task', () => {
     assert.equal(task.startedAt, 42);
   });
 
+  it('gives the branch no upstream until it is pushed, so a bare push can never aim at main', async () => {
+    const { nest, repos } = world();
+    const task = await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'no track' });
+    assert.throws(() => sh(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], task.worktree), 'no upstream yet');
+  });
+
   it('refuses a second task while one is active, naming the first', async () => {
     const { nest, repos } = world();
     await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'first' });
@@ -283,6 +290,29 @@ describe('ending a task', () => {
     sh(['push', '-q', '-u', 'origin', 'HEAD'], task.worktree);
     assert.deepEqual(await worktreeState(task), { dirty: false, unpushed: 0 });
     assert.equal((await endTask({ nest, agent: 'Marvin' })).outcome, 'removed');
+  });
+
+  it('counts against the branch on the remote even when it was pushed without -u', async () => {
+    const { nest, repos } = world();
+    const task = await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'plain push' });
+    writeFileSync(join(task.worktree, 'a.ts'), 'a');
+    sh(['add', '.'], task.worktree);
+    sh(['commit', '-q', '-m', 'a'], task.worktree);
+    sh(['push', '-q', 'origin', 'HEAD'], task.worktree);
+    assert.deepEqual(await worktreeState(task), { dirty: false, unpushed: 0 });
+    assert.equal((await endTask({ nest, agent: 'Marvin' })).outcome, 'removed');
+  });
+
+  it('lists the worktrees it kept, and only while they are still there', async () => {
+    const { nest, repos } = world();
+    assert.deepEqual(keptWorktrees(nest, 'Marvin'), []);
+    const task = await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'leftover' });
+    writeFileSync(join(task.worktree, 'wip'), 'x');
+    await endTask({ nest, agent: 'Marvin' });
+    assert.deepEqual(keptWorktrees(nest, 'Marvin'), [{ branch: task.branch, worktree: task.worktree, outcome: 'kept-dirty' }]);
+    assert.ok('kept_worktrees' in taskReport(null, keptWorktrees(nest, 'Marvin')));
+    rmSync(task.worktree, { recursive: true, force: true });
+    assert.deepEqual(keptWorktrees(nest, 'Marvin'), []);
   });
 
   it('treats a squash-merged branch as delivered, even with the remote branch gone', async () => {

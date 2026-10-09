@@ -161,8 +161,10 @@ standing branch per agent would drift from `main` the moment another agent
 merged.
 
 Begin one with `!task <repo>: <what to do>`, or let the agent begin it with
-its `task_begin` tool when the work calls for it. Its status line shows the
-branch between turns, and the pull request number once there is one. End it
+its `task_begin` tool when the work calls for it. Ask it `task_status`, or
+just ask, for the branch and the pull request. A task belongs to the agent,
+not to the conversation it began in: its other conversations move into the
+worktree on their next turn as well. End it
 with `!done`, or the agent's `task_end` — or let it end itself: when the
 branch's pull request merges, the harness notices and finishes the task.
 Ending removes the worktree and branch only when the tree is clean and

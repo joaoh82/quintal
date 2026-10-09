@@ -227,7 +227,7 @@ export function cleanupDecision(state: { dirty: boolean; unpushed: number }): Cl
 export function describeCleanup(task: Task, outcome: Cleanup, unpushed = 0): string {
   switch (outcome) {
     case 'removed':
-      return `Finished ${task.branch}: the worktree was clean and everything on it is on the remote, so it is gone, branch and all.`;
+      return `Finished ${task.branch}: the worktree was clean and everything on it is on the remote, so it is gone, branch and all (ignored files such as a local .env went with it).`;
     case 'kept-dirty':
       return `Finished ${task.branch}, but its worktree has uncommitted changes, so I kept it at ${task.worktree}. Commit or discard them there and the worktree can go.`;
     case 'kept-unpushed':
@@ -350,7 +350,12 @@ export async function beginTask(input: BeginInput): Promise<Task> {
   const worktree = worktreePath(input.nest, input.agent, slug);
   mkdirSync(dirname(worktree), { recursive: true });
 
-  await exec(['worktree', 'add', '--quiet', '-b', branch, worktree, base], repo.path);
+  // `--no-track`: cut from a remote-tracking ref, git would otherwise make
+  // `origin/main` the new branch's upstream — so `@{u}` would mean main, a
+  // bare `git push` under `push.default=upstream` would push *to* main, and
+  // "unpushed" would be counted against the wrong branch. The branch gets an
+  // upstream when the agent pushes it with `-u`, and not before.
+  await exec(['worktree', 'add', '--quiet', '--no-track', '-b', branch, worktree, base], repo.path);
 
   const task: Task = {
     slug,
@@ -437,11 +442,12 @@ export async function endTask(input: EndInput): Promise<Ended> {
 /**
  * What the worktree holds that nowhere else does.
  *
- * Unpushed is counted against the branch's upstream when it has one, else
- * against the base it was cut from — a branch never pushed has every commit
- * unpushed. With a delivered head, commits reachable from it are delivered
- * too: a squash merge rewrites them, so neither upstream nor base contains
- * them, yet the work is on main.
+ * Unpushed is counted against this branch on `origin` when the remote has
+ * it (fetched first, so a push from elsewhere counts), else against the
+ * branch's upstream if one was set, else against the base it was cut from —
+ * a branch never pushed has every commit unpushed. With a delivered head,
+ * commits reachable from it are delivered too: a squash merge rewrites them,
+ * so neither remote branch nor base contains them, yet the work is on main.
  */
 export async function worktreeState(
   task: Task,
@@ -451,11 +457,22 @@ export async function worktreeState(
   const status = await exec(['status', '--porcelain', '--untracked-files=all'], task.worktree);
   const dirty = status.length > 0;
 
+  // Best effort: offline, the last fetch's view of the remote is what there is.
+  try {
+    await exec(['fetch', '--quiet', '--prune', 'origin'], task.worktree, FETCH_TIMEOUT_MS);
+  } catch {
+    // Counted against what is known.
+  }
   let against: string;
   try {
-    against = await exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], task.worktree);
+    await exec(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${task.branch}`], task.worktree);
+    against = `refs/remotes/origin/${task.branch}`;
   } catch {
-    against = task.base;
+    try {
+      against = await exec(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], task.worktree);
+    } catch {
+      against = task.base;
+    }
   }
   const exclude = [`^${against}`];
   if (deliveredHead) exclude.push(`^${deliveredHead}`);
@@ -523,17 +540,45 @@ export function describeTask(task: Task): string {
   return task.pr ? `${task.branch} · PR #${task.pr.number}` : task.branch;
 }
 
+/**
+ * Worktrees of ended tasks that were kept because they held work nowhere
+ * else, and are still there. Listed so they do not pile up unseen: the
+ * owner can push or discard and remove them, and an agent asked about its
+ * workspace can say they exist.
+ */
+export function keptWorktrees(nest: string, agent: string): { branch: string; worktree: string; outcome: Cleanup }[] {
+  const book = readBook(nest, agent);
+  return Object.values(book.tasks)
+    .filter((task) => task.slug !== book.active && task.outcome !== undefined && task.outcome !== 'removed')
+    .filter((task) => existsSync(task.worktree))
+    .map((task) => ({ branch: task.branch, worktree: task.worktree, outcome: task.outcome! }));
+}
+
 /** The task's parts for `workspace_info` and `task_status`. */
-export function taskReport(task: Task | null): Record<string, unknown> {
+export function taskReport(
+  task: Task | null,
+  kept: ReturnType<typeof keptWorktrees> = [],
+): Record<string, unknown> {
+  const leftovers =
+    kept.length > 0
+      ? {
+          kept_worktrees: kept,
+          kept_note:
+            'Worktrees of finished tasks, kept because they had uncommitted changes or unpushed commits. ' +
+            'Push or discard what is in them, then remove each with `git worktree remove <path>` in its repository.',
+        }
+      : {};
   if (!task) {
     return {
       active: false,
       note:
         'No task is active: you are in the shared workspace. Before editing files in a ' +
         'repository, begin a task with task_begin so your work has its own branch and worktree.',
+      ...leftovers,
     };
   }
   return {
+    ...leftovers,
     active: true,
     title: task.title,
     repo: task.repo,
