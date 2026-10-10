@@ -1195,3 +1195,67 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* What is in the office: the feature list. */
+.everything {
+  padding-block: 100px 90px;
+  border-top: 1px solid var(--line);
+}
+.everything-intro h2 {
+  font-size: 50px;
+  margin-top: 22px;
+}
+.everything-intro .section-description {
+  max-width: 480px;
+}
+.everything-grid {
+  list-style: none;
+  margin: 0 0 36px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.everything-grid li {
+  background: var(--surface);
+  padding: 26px 24px 28px;
+}
+.everything-grid svg {
+  color: var(--green);
+}
+.everything-grid h3 {
+  font-size: 18px;
+  letter-spacing: -0.03em;
+  margin: 16px 0 10px;
+}
+.everything-grid p {
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.everything-grid code {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--card);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+@media (max-width: 1024px) {
+  .everything-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .everything {
+    padding-block: 64px 56px;
+  }
+  .everything-intro h2 {
+    font-size: 34px;
+  }
+  .everything-grid {
+    grid-template-columns: 1fr;
+  }
+}

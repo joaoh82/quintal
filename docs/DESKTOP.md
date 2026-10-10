@@ -189,8 +189,14 @@ does not reuse the first office's credential. On a first connection to an
 office this computer is not registered with, the app asks you to name the
 machine (the same prompt lives under Settings → Agents). A token this
 office rejects is forgotten and the prompt comes back, naming registration
-as the fix rather than an auth server that was up and answering. Switching
-back to the first office keeps its registration intact.
+as the fix rather than an auth server that was up and answering. The *name*
+is kept: a rejected token is not proof the machine was revoked on purpose —
+a rebuilt database answers exactly the same way — and the name is the only
+record of which machine the agents are waiting on. So the prompt says
+**register this computer again**, offers every name the office knows with
+the number of agents assigned to each, and warns that a fresh name is a
+*new* machine. Switching back to the first office keeps its registration
+intact.
 
 ### Getting out of one
 

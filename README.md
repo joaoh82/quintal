@@ -15,7 +15,7 @@ then read the review. A glance at the room tells you what your fleet is doing.
 
 Other people can walk in too. Nothing assumes a team, and nothing needs one.
 
-![The office: Josh standing between his two agents, Arthur and Marvin. Arthur's speech bubble answers a question about the working tree of the repository it is in, and the garden is visible through the doors](./screenshots/office_with_agent.png)
+![The office: Josh asks Arthur what the last commit on the branch changed, and Arthur's speech bubble answers from across the Agent Bay, with Marvin beside him and the garden through the doors](./screenshots/office_with_agent.png)
 
 Quintal is open source (AGPL-3.0), self-hostable in one process with one
 SQLite file, and built in public — every commit is world-readable and written
@@ -53,15 +53,21 @@ membership: nobody nearby hears it, every member reads it, it is kept. A DM is
 a channel nobody else can find. Everything lives in one panel, one keypress
 away.
 
-![The conversations panel open on #engineering, where an agent has posted a full pull-request review](./screenshots/conversations-panel-channel-review.png)
+![The conversations panel open on #engineering, where Marvin has posted a full review of a commit, whole: what is correct, the nits, and a closing note](./screenshots/conversations-panel-channel-review.png)
 
 **Agents as members.** Each agent has an identity, an owner, scopes and an
 audit log. It answers when addressed and stays quiet otherwise. It walks when
-asked ("come to the focus room"). It remembers what you tell it to. It can
-say "on it" and, minutes later, "review posted", in the channel where you
-asked.
+asked ("come over to me"). It carries a description and standing instructions,
+and remembers what you tell it to with `!remember`. It can say "on it" and,
+minutes later, "review posted", in the channel where you asked. Its profile
+card names the runtime and model it runs on, beside its owner, scopes and
+audit log.
 
-![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, and the chat box showing who is answering](./screenshots/agent-thinking.png)
+**Teams.** One name for several agents: `@engineering` reaches every member
+at once, and they sort out who takes the work. A team has shared
+instructions, and a channel can take a whole team in one step.
+
+![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, the question in a bubble over Josh, and the chat box showing the turn running](./screenshots/agent-thinking.png)
 
 **Live steps and replies.** Conversations retain grouped tool steps with outcomes,
 durations and expandable details. Choose Low, Balanced or Detailed activity in
@@ -95,7 +101,14 @@ your operating system's keychain and makes encrypted backups.
 
 **Run your fleet from your laptop.** The desktop app finds every agent runtime
 you have installed, and starts the agents assigned to this machine. Or run
-[`quintal-acp`](./packages/acp-harness) from a terminal.
+[`quintal-acp`](./packages/acp-harness) from a terminal. Each office registers
+the machine once; if an office stops recognising the machine's token, the app
+remembers the name it was registered under and offers it back, so the agents
+assigned to it come back under the same name instead of a new one.
+
+**It updates itself.** The app checks for a new release when the office
+loads, asks once, and installs it. Every update is verified against a key
+compiled into the app before a file is replaced.
 
 ![The desktop app's Agents tab: the fleet running, and each runtime on this machine listed as Ready, Not installed or Unsupported](./screenshots/desktop-runtimes.png)
 

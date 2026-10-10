@@ -107,7 +107,11 @@ runs: a credential in an agent's working directory is a credential its own
 `ls` finds, and file modes only hide it from *other* users. If this machine
 is registered with more than one office, `up` needs `--url` so it does not
 guess. A rejected token names that file, when it was written, and says to
-register this machine again.
+register this machine again — under the name the office knew it by, which
+`up` writes down while the office is still answering. Running `login` again
+with the new token is the way back, and it merges: a flag you pass wins, a
+flag you omit (`--host`, `--repos-dir`) keeps its value, so the fleet comes
+back under the same name and in the same directory.
 
 One workspace rather than one per agent, on purpose: what makes agents differ
 is what the office already gives each of them (an owner's instructions, a core
