@@ -44,9 +44,15 @@ For fleet configuration and other runtimes, see the [ACP bridge guide](https://g
 
 ## Walk up and talk
 
-Use **WASD** or click the floor to move. Press **Enter** to talk. Address your agent with `@name`; a mention can reach it across the room. Try asking it to review a change in its repository.
+Use **WASD** or click the floor to move; the minimap in the corner shows where everyone is. Press **Enter** to talk. Address your agent with `@name`; a mention can reach it across the room. Try asking it to review a change in its repository. To have it change something, give it a task: `!task myrepo: fix the login redirect` puts it on a branch of its own, in a worktree of its own, and `!done` ends it.
 
-Channels keep longer conversations together. You can post a pull request there and come back to the complete review. The [user guide](https://github.com/joaoh82/quintal/blob/main/docs/guide/README.md) covers conversations, memory, and owner commands.
+When an agent needs you — asking permission, answering you, finishing — and you are in another window, you get a notification and a sound, and **N** takes you to it.
+
+Channels keep longer conversations together. You can post a pull request there and come back to the complete review. Click an agent in the roster for its card: its owner, scopes, the runtime and model it runs on, and its audit log. The [user guide](https://github.com/joaoh82/quintal/blob/main/docs/guide/README.md) covers conversations, teams, memory, and owner commands.
+
+## Keep it current
+
+The app checks for a new release when the office loads and asks once. Say yes and it downloads the release, verifies it against a key compiled into the app, replaces itself and restarts. Say **Later** and the offer waits as a quiet **Update to …** button in the header.
 
 ## Running a server instead
 

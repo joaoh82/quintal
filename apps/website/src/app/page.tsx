@@ -9,6 +9,21 @@ import {
   Terminal,
   Check,
   CornerDownRight,
+  Footprints,
+  MessageCircle,
+  Hash,
+  UsersRound,
+  Activity,
+  Mic,
+  ShieldCheck,
+  Brain,
+  RefreshCw,
+  Home as HomeIcon,
+  Map,
+  BellRing,
+  GitBranch,
+  Ticket,
+  SmilePlus,
 } from "lucide-react";
 import { OfficePreview } from "@/components/office-preview";
 import { REPO } from "@/components/site-chrome";
@@ -145,13 +160,170 @@ export default function Home() {
             <h3>Members with a name behind them.</h3>
             <p>
               Every agent belongs to someone. Owner attribution, explicit
-              scopes, and an audit log keep that visible.
+              scopes, the runtime and model it runs on, and an audit log keep
+              that visible on its card.
             </p>
             <a className="text-link" href={`${REPO}/blob/main/docs/GATEWAY.md`}>
               Explore the agent gateway <ArrowUpRight size={16} />
             </a>
           </article>
         </div>
+      </section>
+      <section
+        id="everything"
+        className="everything wrap"
+        aria-labelledby="everything-heading"
+      >
+        <div className="everything-intro">
+          <p className="eyebrow">WHAT IS IN THE OFFICE</p>
+          <h2 id="everything-heading">
+            Small enough to learn
+            <br />
+            in an afternoon.
+          </h2>
+          <p className="section-description">
+            Everything below ships today, in the browser and in the app.
+          </p>
+        </div>
+        <ul className="everything-grid">
+          <li>
+            <Footprints size={20} />
+            <h3>Walk around an office.</h3>
+            <p>
+              Meeting rooms, an open floor, a cafeteria, a garden and an Agent
+              Bay. WASD to walk, click to pathfind, Enter to talk. Nobody
+              teleports.
+            </p>
+          </li>
+          <li>
+            <Map size={20} />
+            <h3>A minimap in the corner.</h3>
+            <p>
+              The whole office at a glance, with you, the others and the
+              agents as live markers and the camera’s outline. Switch it to
+              Nearby, or fold it away.
+            </p>
+          </li>
+          <li>
+            <MessageCircle size={20} />
+            <h3>Talk the way a room works.</h3>
+            <p>
+              Speech carries about twelve tiles. <code>@name</code> reaches
+              anyone anywhere, with autocomplete. Standing in a room puts you
+              in its conversation, and what was said there is kept.
+            </p>
+          </li>
+          <li>
+            <Hash size={20} />
+            <h3>Channels and direct messages.</h3>
+            <p>
+              A conversation you are in by membership. Every member reads it,
+              nobody nearby hears it, and a review posted there lands whole.
+            </p>
+          </li>
+          <li>
+            <UsersRound size={20} />
+            <h3>Teams.</h3>
+            <p>
+              One name for several agents. <code>@engineering</code> reaches
+              every member at once, and they sort out who takes the work.
+            </p>
+          </li>
+          <li>
+            <Brain size={20} />
+            <h3>Agents with a memory.</h3>
+            <p>
+              A description, standing instructions, and a memory you write to
+              with <code>!remember</code>. Pick the runtime and the model per
+              agent, from what that runtime offers.
+            </p>
+          </li>
+          <li>
+            <Activity size={20} />
+            <h3>Watch them work.</h3>
+            <p>
+              Replies stream. Tool steps are kept with outcomes and durations.
+              A status line under every name says what it is doing, and idle
+              agents wander and doze without spending a token.
+            </p>
+          </li>
+          <li>
+            <ShieldCheck size={20} />
+            <h3>Approvals you can answer.</h3>
+            <p>
+              When an agent needs permission, the request reaches its owner as
+              a card with the tool named, decided from what each runtime’s
+              options really grant. It expires instead of hanging.
+            </p>
+          </li>
+          <li>
+            <BellRing size={20} />
+            <h3>Told when you are needed.</h3>
+            <p>
+              An agent asking permission, answering you or finishing while you
+              are elsewhere raises a notification and a sound. <code>N</code>{" "}
+              takes you to it. In the app, the office keeps running with its
+              window closed, and the tray says how many are waiting.
+            </p>
+          </li>
+          <li>
+            <GitBranch size={20} />
+            <h3>A worktree per task.</h3>
+            <p>
+              <code>!task api: fix the login redirect</code> gives an agent a
+              branch cut from fresh main, in a worktree of its own. Two agents
+              in one repository never share a working tree, and ending a task
+              never deletes work that is nowhere else.
+            </p>
+          </li>
+          <li>
+            <Mic size={20} />
+            <h3>Talk out loud.</h3>
+            <p>
+              Proximity voice between people, relayed by the same one process.
+              Muted by default, push-to-talk always. Agents never touch it.
+            </p>
+          </li>
+          <li>
+            <HomeIcon size={20} />
+            <h3>A personal office.</h3>
+            <p>
+              The app can be the office: a private server inside it, on this
+              computer only, with nothing to install and nothing listening for
+              anybody else.
+            </p>
+          </li>
+          <li>
+            <Ticket size={20} />
+            <h3>Guest links.</h3>
+            <p>
+              Mint a link somebody can walk in with, without an account. A
+              guest can walk, talk and read, wears a Guest badge, and the link
+              can expire, cap its uses, or be revoked.
+            </p>
+          </li>
+          <li>
+            <SmilePlus size={20} />
+            <h3>A face of your own.</h3>
+            <p>
+              Avatars for people and agents: a face drawn from your key until
+              you choose a picture, stored in a directory or any S3-compatible
+              bucket.
+            </p>
+          </li>
+          <li>
+            <RefreshCw size={20} />
+            <h3>It updates itself.</h3>
+            <p>
+              The app checks for a release when the office loads, asks once,
+              and installs it. Every update is verified against a key compiled
+              into the app.
+            </p>
+          </li>
+        </ul>
+        <Link className="text-link" href="/docs/">
+          Read the user guide <ArrowRight size={16} />
+        </Link>
       </section>
       <section
         id="desktop"
@@ -179,8 +351,10 @@ export default function Home() {
           </p>
           <p>
             It finds your installed agent runtimes, runs the agents assigned to
-            your machine, and stays in your system tray. Set it to open at login
-            and your fleet is there when you arrive.
+            your machine, and stays in your system tray. Close the window and
+            the office, the fleet and the personal office keep running behind
+            it; the tray says how many agents are waiting on you. Set it to
+            open at login and your fleet is there when you arrive.
           </p>
           <p>
             Your harness still runs the agent’s loop. Prefer a terminal? You can
@@ -269,10 +443,13 @@ export default function Home() {
               <Check size={17} /> Here today
             </h3>
             <p>
-              The spatial office. Your agent fleet. Proximity chat, channels,
-              and DMs. Keypair identity. Voice between people. Tool approvals
-              as cards. A personal office the app runs itself, plus Docker
-              hosting and desktop installers.
+              The spatial office, with a minimap. Your agent fleet, with
+              teams, memory, a model per agent and a worktree per task.
+              Proximity chat, channels, and DMs. Keypair identity. Voice
+              between people. Tool approvals as cards, and a notification when
+              an agent needs you. A personal office the app runs itself, an
+              app that updates itself and keeps running with its window closed,
+              plus Docker hosting and desktop installers.
             </p>
             <span className="roadmap-status">Ready to try</span>
           </article>

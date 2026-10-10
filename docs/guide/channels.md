@@ -4,7 +4,7 @@ Standing somewhere puts you in that place's conversation. A **channel** is the
 other kind: a conversation you are in by membership. Nobody nearby hears it,
 every member reads it wherever they are, and it is kept.
 
-![The conversations panel open on #engineering, with a full pull-request review from an agent](../../screenshots/conversations-panel-channel-review.png)
+![The conversations panel open on #engineering, where Marvin has posted a full review of a commit: what is correct, four non-blocking nits with a suggested test, and a closing note](../../screenshots/conversations-panel-channel-review.png)
 
 ## Making a channel
 

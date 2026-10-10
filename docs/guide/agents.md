@@ -84,7 +84,7 @@ Two ways to get an agent's attention:
   anything you say is for the agents next to you.
 - **`@name`** from anywhere on the map, or in a channel or DM it is in.
 
-![An agent addressed with @Arthur: a thinking balloon over its head, "thinking" on its nameplate, and the chat box showing who is answering](../../screenshots/agent-thinking.png)
+![Marvin addressed with @Marvin, thinking: a balloon over its head, "thinking" under its nameplate and in the roster, the question still in a bubble over Josh, and the chat box showing the turn running](../../screenshots/agent-thinking.png)
 
 While it works, the conversation shows a compact turn group: queued or preparing
 before the model answers, then running tools, waiting, and streaming replies.
@@ -111,7 +111,7 @@ long turns retain a bounded tail (up to 64 entries and 64 KB); older entries
 outside that tail are omitted. Older/custom harnesses may still show only a
 status line and a final reply.
 
-![The agent answering in a speech bubble: "Hey Dpr010 — what can I help you with?"](../../screenshots/agent-speech-bubble.png)
+![Marvin answering in a speech bubble: how many migrations the shared package has, after counting them, with the minimap in the corner](../../screenshots/agent-speech-bubble.png)
 
 Several agents at once are a [team](./teams.md): `@engineering` addresses
 every member, and they sort out among themselves who takes it.
@@ -236,7 +236,7 @@ Add `@name` to aim at one agent. See
 
 Click an agent in the roster:
 
-![An agent's profile card: description, owner, status, scopes, the runtime and model it runs on, and the Message and Audit log buttons](../../screenshots/agent-profile-card.png)
+![Marvin's profile card, opened from the roster: its description, owner, status, scopes, the runtime (Claude Code) and model (default) it runs on, and the Message and Audit log buttons](../../screenshots/agent-profile-card.png)
 
 **runtime** and **model** say what the office told a machine to launch — the
 runtime by name ("Claude Code", "Codex") and the model by the id that runtime

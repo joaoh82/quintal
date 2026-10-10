@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Screenshot } from "@/components/screenshot";
-import { ArrowUpRight, MessageSquare, Users } from "lucide-react";
+import { ArrowUpRight, Lightbulb, MessageSquare, Users } from "lucide-react";
 
 const views = [
   {
@@ -10,8 +10,18 @@ const views = [
     image: "office",
     width: 1600,
     height: 1000,
-    alt: "Josh standing between his agents Arthur and Marvin on the open floor, with Arthur answering a question about the repository's working tree in a speech bubble.",
+    alt: "Josh asks Arthur what the harness’s new task_begin tool does, and Arthur answers in a speech bubble from across the Agent Bay, with the minimap in the corner.",
     caption: "Walk up, ask a question. Your agent answers right there.",
+  },
+  {
+    name: "Thinking",
+    icon: Lightbulb,
+    image: "thinking",
+    width: 1600,
+    height: 1000,
+    alt: "Marvin addressed by name, with a thinking balloon over its head, “thinking” under its nameplate, and the turn running in the chat box.",
+    caption:
+      "Address an agent by name and watch it think. The balloon, the status line and the steps are all real.",
   },
   {
     name: "In conversation",
@@ -21,7 +31,7 @@ const views = [
     height: 1000,
     alt: "The engineering channel with a complete, real code review posted whole by an agent.",
     caption:
-      "A real pull request. A full review. Kept in the channel where you asked.",
+      "A real commit. A full review. Kept in the channel where you asked.",
   },
 ];
 export function OfficePreview() {
@@ -49,12 +59,15 @@ export function OfficePreview() {
                   ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
                 ) {
                   event.preventDefault();
+                  const last = views.length - 1;
                   const next =
                     event.key === "Home"
                       ? 0
                       : event.key === "End"
-                        ? 1
-                        : 1 - active;
+                        ? last
+                        : event.key === "ArrowLeft"
+                          ? (active + last) % views.length
+                          : (active + 1) % views.length;
                   setActive(next);
                   document.getElementById(`view-tab-${next}`)?.focus();
                 }

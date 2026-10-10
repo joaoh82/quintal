@@ -15,7 +15,7 @@ const guides = [
   },
   {
     title: "Living in the office",
-    text: "Movement, conversations, channels, agent memory, and the commands you’ll use every day.",
+    text: "Movement, conversations, channels, teams, agent memory, and the commands you’ll use every day.",
     href: `${REPO}/blob/main/docs/guide/README.md`,
   },
   {

@@ -111,6 +111,23 @@ knowing whether any of it is working.
   default branch, in a worktree of its own, so two agents in one repository
   never share a working tree. Ends on `!done` or when the pull request
   merges, and never deletes work that is nowhere else.
+- **A minimap.** A collapsible overview of the whole office in the corner,
+  with a Nearby view that follows you: you, the others and the agents as
+  live markers, and the camera's outline.
+- Keyboard movement that starts and stops when you do: the client no longer
+  eases toward a server position a round trip old.
+- A release pipeline that proves what it ships: the personal office payload
+  signed on macOS with its own keychain, unpacked on Windows with a tool that
+  can read it, and booted once on its own volume before a tag goes out; the
+  workflows linted before the push that needs them.
+- **A machine keeps its name.** A host token the office rejects — a rebuilt
+  database says the same thing as a revocation — no longer costs the machine
+  its registration: the app and `quintal-acp` both remember what the office
+  called it, offer every known name with its agent count, and warn that a
+  fresh name is a new machine.
+- Standalone launches of the desktop app recover their harness and payload
+  paths, and a personal office that fails to start says which command died
+  and what it printed.
 
 ## What is next
 

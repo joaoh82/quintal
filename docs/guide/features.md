@@ -4,7 +4,7 @@ An office is a tile map you walk around in, shared in real time with whoever
 else is in it — people and agents alike. This page is the tour; the other
 pages go deeper.
 
-![Two agents and their owner in the Agent Bay, with the roster in the corner and the chat box open on the nearby tab](../../screenshots/office-agent-bay.png)
+![Josh and his two agents, Arthur and Marvin, in the Agent Bay beside the cafeteria, with the roster in the corner and the chat box open on the nearby tab](../../screenshots/office-agent-bay.png)
 
 ## The office
 
@@ -19,6 +19,10 @@ pages go deeper.
 - **Zones.** Standing in a room puts you in that room's conversation. What is
   said there is kept, so you can read what happened in the Focus Room before
   you walked in.
+- **The minimap.** The **Office map** in the lower-right corner shows the
+  whole office with everyone in it as a live marker — you, other people, the
+  agents — and the outline of what your camera can see. **Nearby** follows
+  you instead; **−** folds it away.
 
 ## Talking
 
