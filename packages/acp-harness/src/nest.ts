@@ -40,14 +40,14 @@ import { NEST_AGENTS_MD } from './nest-agents.text.js';
  */
 
 /** Created empty, inside the root. `REPOS` is handled apart — see `ensureRepos`. */
-export const NEST_DIRS = ['GUIDES', 'RESEARCH', 'PLANS', '.scratch'] as const;
+export const NEST_DIRS = ['GUIDES', 'RESEARCH', 'PLANS', 'WORKTREES', '.scratch'] as const;
 
 /**
  * Bump when `nest_agents.md` changes in a way existing nests should pick up.
  * The static part of an existing `AGENTS.md` is rewritten only then; between
  * bumps an owner's edits to it survive.
  */
-export const NEST_VERSION = 3;
+export const NEST_VERSION = 4;
 
 const VERSION_FILE = '.nest-version';
 const AGENTS_FILE = 'AGENTS.md';

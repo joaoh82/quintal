@@ -144,6 +144,32 @@ two agents never talk each other into a loop.
   agent's card in Settings → Agents shows and edits the whole thing.
 - **"What did we say about X earlier?"** — it reads the conversation's
   history on demand.
+- **"Fix the login redirect in api"** — before it edits files in a repository
+  it begins a *task*: a branch of its own, cut from that repository's fresh
+  default branch, in a worktree of its own under the nest's `WORKTREES/`, so
+  nothing it does touches your checkout or another agent's work. It tells you
+  the branch. `!task api: fix the login redirect` says so first, yourself.
+  Questions and reading need no task; one task per agent at a time.
+
+### Tasks and worktrees
+
+Every agent on a machine shares the checkouts under `REPOS/`. Two agents
+editing the same repository there would be editing one working tree — one's
+half-finished change is the other's `git status`. A task is the boundary that
+keeps them apart, and it is per task rather than per agent on purpose: a
+standing branch per agent would drift from `main` the moment another agent
+merged.
+
+Begin one with `!task <repo>: <what to do>`, or let the agent begin it with
+its `task_begin` tool when the work calls for it. Ask it `task_status`, or
+just ask, for the branch and the pull request. A task belongs to the agent,
+not to the conversation it began in: its other conversations move into the
+worktree on their next turn as well. End it
+with `!done`, or the agent's `task_end` — or let it end itself: when the
+branch's pull request merges, the harness notices and finishes the task.
+Ending removes the worktree and branch only when the tree is clean and
+everything on it is on the remote; uncommitted changes or unpushed commits
+keep it, and the agent says where it is.
 
 ### Several conversations at once
 
@@ -202,7 +228,8 @@ notices and stops trusting the old one. The full table is in
 ### Owner commands
 
 Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,
-`!remember`, `!forget`, `!memory`, `!shutdown`. Add `@name` to aim at one agent. See
+`!remember`, `!forget`, `!memory`, `!guide`, `!task`, `!done`, `!shutdown`.
+Add `@name` to aim at one agent. See
 [Keys and commands](./keys-and-commands.md).
 
 ## The profile card and the audit log

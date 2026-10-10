@@ -90,8 +90,8 @@ it is missing and keeps its `AGENTS.md` current — the section between the
 managed markers names the office, this machine and the agents assigned to it,
 and lists the guides; the text above the markers is the workspace's own rules,
 rewritten only when the template changes; anything you add below the end
-marker is yours. Inside are `GUIDES/`, `RESEARCH/`, `PLANS/`, `.scratch/`, and
-`REPOS/`.
+marker is yours. Inside are `GUIDES/`, `RESEARCH/`, `PLANS/`, `WORKTREES/`,
+`.scratch/`, and `REPOS/`.
 
 `REPOS/` is a link to your **repos directory** — `~/projects` by default,
 overridable with `--repos-dir`, the `QUINTAL_REPOS_DIR` environment variable,
@@ -114,6 +114,56 @@ is what the office already gives each of them (an owner's instructions, a core
 memory), and a guide one agent writes is exactly what the next one should
 find. Nothing in the nest is ever pushed into a prompt; the agent reads
 `AGENTS.md` once per session and pulls a file when a task calls for it.
+
+### A worktree per task
+
+The checkouts under `REPOS/` are shared by every agent on the machine, so two
+agents changing the same repository would be editing one working tree. A
+**task** is how an agent gets a tree of its own:
+
+```
+!task api: fix the login redirect        # you, in chat
+task_begin(repo: "api", title: "…")      # or the agent, before it edits files
+```
+
+Either one fetches `origin`'s default branch, cuts
+`quintal/<agent>/<task>` from it, and adds a worktree at
+`WORKTREES/<agent>/<task>/` inside the nest. From then until the task ends,
+that worktree is the agent's working directory: sessions opened before are
+reopened there on their next use, and `workspace_info` and `task_status`
+report it, with the pull request once one exists (the harness asks `gh`
+every two minutes). The status line is left alone — it is the activity
+signal, and an agent on a task for days must still read as idle. One task
+per agent at a time; a second is refused, naming the first, and two begins
+that arrive together are taken one after the other.
+
+A task belongs to the whole agent, not to one conversation. When a task
+begins in a channel, the agent's other conversations — a DM, the room — are
+reopened in the worktree on their next turn too, and told they are on the
+task; they keep the pushed message window but lose their runtime context.
+That is the price of one working directory per agent, and the reason a
+question that needs no code should not start a task. A task is **never** per agent: a standing worktree per agent is a
+long-lived branch that drifts from main the moment somebody else merges. A
+fetch that fails refuses the task rather than cutting from a stale base. A
+checkout with no `origin` branches from its own `HEAD`.
+
+Ending — `!done`, `task_end`, or the pull request merging — never loses work:
+a worktree with uncommitted changes or commits no remote has is kept and the
+owner is told where; a clean one is removed with its branch — and with it
+anything gitignored in the tree, such as a local `.env`, which is not counted
+as dirty. The branch is cut with `--no-track`, so a bare `git push` from the
+worktree can never aim at `main`; "unpushed" is counted against the branch on
+`origin` once it is there, however it got there. A squash-merged branch
+counts as delivered. Worktrees that were kept are listed by `task_status` and
+`workspace_info` until they are gone, so they do not pile up unseen. The
+book of tasks is `WORKTREES/<agent>/tasks.json`, so a task survives a
+restart; a worktree somebody removed by hand ends its task quietly.
+
+Worktrees go under the nest whatever the agent's `cwd` is. An agent rooted
+elsewhere with `--cwd` gets its worktrees under `~/.quintal/WORKTREES/`
+still, outside the directory its runtime was opened in; a runtime that
+confines file tools to the session's directory will say so when the agent
+tries to edit there.
 
 **Working somewhere else.** A fleet file can still say `"cwd": "/path"` or
 `"repo": "api"` (a name under the repos directory) to root one agent
@@ -289,6 +339,8 @@ user id, not display name):
 | `!forget <words>` | Take a note out of core memory |
 | `!memory` | The agent says what it carries |
 | `!guide <name> <text>` | Write a procedure into the workspace: `GUIDES/<NAME>.md`, indexed in `AGENTS.md`, with a pointer in this agent's core memory. An existing guide gains the text as a dated section. |
+| `!task <repo>: <title>` | Begin a task: a branch of its own, cut from the fresh default branch of that checkout under `REPOS/`, in its own worktree. See [A worktree per task](#a-worktree-per-task). |
+| `!done` | End the task, keeping the worktree if anything on it is nowhere else |
 | `!shutdown` | The harness exits |
 
 ## Permissions

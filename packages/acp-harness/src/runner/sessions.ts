@@ -24,6 +24,12 @@ export interface SessionRecord {
   scope: string;
   /** ACP session id, from `session/new`. */
   sessionId: string;
+  /**
+   * The working directory it was opened in. A task moves the agent into a
+   * worktree, and a session opened in the shared workspace before that is
+   * rooted in the wrong place: it is recycled on its next use, not reused.
+   */
+  cwd?: string;
   createdAt: number;
   lastUsedAt: number;
   /** Turns completed in this session. Only used for logging. */
@@ -72,7 +78,7 @@ export class SessionStore {
    * Record a newly created session, evicting the least recently used one first
    * if we are at capacity.
    */
-  put(scope: string, sessionId: string): SessionRecord {
+  put(scope: string, sessionId: string, cwd?: string): SessionRecord {
     const existing = this.#sessions.get(scope);
     if (existing) this.#onEvict(existing, 'rotate');
 
@@ -89,6 +95,7 @@ export class SessionStore {
     const record: SessionRecord = {
       scope,
       sessionId,
+      ...(cwd !== undefined ? { cwd } : {}),
       createdAt: this.#now(),
       lastUsedAt: this.#now(),
       turns: 0,

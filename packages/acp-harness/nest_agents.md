@@ -12,7 +12,8 @@ belongs to you and your owner.
 | `GUIDES/` | Procedures your owner stated or confirmed: how to review a PR, how to cut a release. One file per procedure. |
 | `RESEARCH/` | Findings that cost real work and will be needed again: a repo quirk, an API behaviour, a verified fact with its source. |
 | `PLANS/` | Plans for work that spans sessions. |
-| `REPOS/` | The repositories you work in. Work in an existing checkout; clone here only when there is none. `workspace_info` lists what is already here. |
+| `REPOS/` | The repositories you work in. Clone here only when there is none. `workspace_info` lists what is already here. Do not edit in these checkouts directly: begin a task. |
+| `WORKTREES/` | One worktree per task, per agent: `WORKTREES/<you>/<task>/`, made by `task_begin` (or your owner's `!task`) on a branch of its own cut from the repository's fresh default branch. Your working directory while the task lasts. Removed by `task_end` when clean and pushed; kept, and you are told, when not. |
 | `.scratch/` | Disposable working files. Assume it is gone next session. |
 
 ## Reading
