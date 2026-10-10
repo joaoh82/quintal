@@ -85,3 +85,13 @@ Keep the aspect ratio in step with the page: `Screenshot` takes explicit
 and the Open Graph image in `layout.tsx` declares its own size. A source
 retaken at a different shape means changing all three, or the hero is cropped
 and social cards are letterboxed.
+
+## Release-smoke first-launch picker
+
+`release-smoke/macos-arm64-server-picker.png` (and the Intel twin) illustrate
+the first screen in the README quickstart. They must show **Where is your
+office?** with **Create a personal office**, not the old single-field
+**Which server?** form. The Linux release job’s `appimage-smoke` artifact is
+a full-root capture of that screen; crop the window and replace both files.
+A clean-machine macOS DMG install is the better long-term source when one is
+available — keep the filenames until then.

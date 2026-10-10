@@ -134,9 +134,11 @@ The server image is available at `ghcr.io/joaoh82/quintal`; the
    this computer only, and opens it a few seconds later. **Connect to a
    server** joins a deployment somebody is running — see the Docker path
    below for one on this machine — and is where other people and guests
-   come in. You can have both and move between them.
+   come in. You can have both and move between them. “Local” means Quintal
+   and your agents run on this computer; a cloud-backed agent still needs
+   its account and the network.
 
-   ![Quintal’s first-launch server picker, where you add your office URL](./screenshots/release-smoke/macos-arm64-server-picker.png)
+   ![Quintal’s first-launch picker: create a personal office, or connect to a server by URL](./screenshots/release-smoke/macos-arm64-server-picker.png)
 
 3. **Create your identity.** Choose **Create identity**, save your secret key in a
    password manager — there is no reset — and enter your office. The app can

@@ -405,8 +405,9 @@ export default function Home() {
             <div>
               <h3>One process. One SQLite file.</h3>
               <p>
-                Run your own office with Docker. Keep it on your machine, or put
-                it on your server.
+                A personal office runs inside the app. Host people with Docker
+                on this machine or on your server — same process, same database
+                file.
               </p>
               <a
                 className="text-link"

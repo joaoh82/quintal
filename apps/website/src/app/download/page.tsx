@@ -79,6 +79,10 @@ export default function Download() {
           <strong> Create a personal office</strong> runs Quintal privately inside
           the app, on this computer only. <strong>Connect to a server</strong> joins
           a deployment somebody is running. You can have both.</p>
+        <p>&ldquo;Local&rdquo; means Quintal and your agents run on this computer. The
+          models they call are wherever they always were — a cloud-backed agent
+          still needs its account and an internet connection. Neither mode
+          promises offline AI.</p>
         <p>Either way, choose <strong>Create identity</strong> to enter. Save the
           secret key it shows you — there is no reset. A personal office belongs
           to that key alone.</p>
