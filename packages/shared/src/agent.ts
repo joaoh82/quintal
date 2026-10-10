@@ -250,6 +250,12 @@ export const AGENT_EVENT_KINDS = [
   'effect.moved',
   'effect.status_changed',
   'effect.memory_written',
+  /**
+   * The task on its card changed: begun, its pull request seen or moved on,
+   * or ended. Only what its harness said in `agent:task`; the office keeps no
+   * task of its own.
+   */
+  'effect.task_changed',
   /** The office asked this agent for one line to a colleague; the setting was on. */
   'effect.banter',
   /**

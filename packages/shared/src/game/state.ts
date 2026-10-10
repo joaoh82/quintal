@@ -134,6 +134,22 @@ export class OfficePlayer extends Schema {
    * from one that disagrees with it. Reset to 0 when a seat is resumed.
    */
   inputSeq = 0;
+  /**
+   * For agents: the task it is on, as its harness last said in `agent:task`,
+   * flattened because the schema carries no nulls. An empty `taskBranch` is
+   * no task, and `taskPrNumber` 0 is no pull request yet. Read them together
+   * with `agentTaskOf`; write them with `agentTaskFields`.
+   *
+   * Room state only, never persisted: the harness says it again whenever it
+   * connects, and a task with no harness behind it is not a fact worth
+   * showing. Cleared the moment the agent leaves.
+   */
+  taskTitle = '';
+  taskRepo = '';
+  taskBranch = '';
+  taskPrNumber = 0;
+  taskPrUrl = '';
+  taskPrState = '';
 }
 
 defineTypes(OfficePlayer, {
@@ -168,6 +184,13 @@ defineTypes(OfficePlayer, {
   runtimeId: 'string',
   modelId: 'string',
   inputSeq: 'number',
+  // Appended for the same reason as `runtimeId` above.
+  taskTitle: 'string',
+  taskRepo: 'string',
+  taskBranch: 'string',
+  taskPrNumber: 'number',
+  taskPrUrl: 'string',
+  taskPrState: 'string',
 });
 
 /** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */

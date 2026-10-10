@@ -2,6 +2,7 @@ import {
   ClientMessage,
   ServerMessage,
   activityTerminal,
+  agentTaskOf,
   directionFromIntent,
   findPath,
   followPath,
@@ -763,6 +764,7 @@ export class OfficeScene extends Phaser.Scene {
         description: player.description,
         pubkey: player.pubkey,
         avatar: player.avatar,
+        task: player.kind === 'agent' ? agentTaskOf(player) : null,
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
@@ -772,7 +774,7 @@ export class OfficeScene extends Phaser.Scene {
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}:${p.task ? `${p.task.branch}#${p.task.pr?.number ?? ''}${p.task.pr?.state ?? ''}${p.task.pr?.url ?? ''}${p.task.title}` : ''}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;

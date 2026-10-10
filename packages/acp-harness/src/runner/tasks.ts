@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
+import { agentTaskPrState, type AgentTaskPayload } from '@quintal/shared';
+
 /**
  * A git worktree per task.
  *
@@ -533,6 +535,22 @@ export function notePullRequest(nest: string, agent: string, slug: string, pr: P
   const updated: Task = { ...task, pr: { number: pr.number, url: pr.url, state: pr.state } };
   writeBook(nest, agent, { ...book, tasks: { ...book.tasks, [slug]: updated } });
   return updated;
+}
+
+/**
+ * The task as the office's card wants it (`agent:task`), or `null` for none.
+ * No paths: the worktree is this machine's business. A pull request in a
+ * state the office does not know is left off rather than guessed at.
+ */
+export function taskForOffice(task: Task | null): AgentTaskPayload {
+  if (!task) return null;
+  const state = task.pr ? agentTaskPrState(task.pr.state) : null;
+  return {
+    title: task.title,
+    repo: task.repo,
+    branch: task.branch,
+    ...(task.pr && state ? { pr: { number: task.pr.number, url: task.pr.url, state } } : {}),
+  };
 }
 
 /** One line for a status or a card: `quintal/marvin/fix-login · PR #12`. */

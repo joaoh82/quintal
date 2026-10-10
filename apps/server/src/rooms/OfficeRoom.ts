@@ -124,6 +124,8 @@ import {
   type TilePoint,
   type WalkToPayload,
   WORKING_IN_ZONE,
+  agentTaskOf,
+  parseAgentTask,
 } from '@quintal/shared';
 import {
   MemoryConflictError,
@@ -182,6 +184,7 @@ import { SentChannelLists, agentTeamsSignature, channelListSignature } from './c
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import { workingSinceAfter } from './working-since.js';
+import { applyAgentTask } from './agent-task.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -525,6 +528,9 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(AgentMessage.HostReport, (client, payload: AgentHostReportPayload) =>
       this.#onAgentHostReport(client, payload),
     );
+    this.onMessage(AgentMessage.Task, (client, payload: unknown) =>
+      this.#onAgentTask(client, payload),
+    );
 
     void this.#refreshSettings();
     void this.#refreshChannels();
@@ -792,6 +798,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const ready: AgentReadyPayload = {
       activityVersion: 1,
       approvalVersion: 1,
+      taskVersion: 1,
       agentId: identity.id,
       sessionId: client.sessionId,
       name: identity.name,
@@ -835,7 +842,13 @@ export class OfficeRoom extends Room<OfficeState> {
     const player = this.state.players.get(client.sessionId);
     const agent = this.#agents.get(client.sessionId);
 
+    // A task is only shown while there is a harness behind it, so an avatar
+    // held `away` for a reconnect is on nothing in the meantime. A harness
+    // that comes back on a new socket says it again; one that resumes this
+    // seat gets back what it had, since nothing it said was lost.
+    const heldTask = agent && player ? agentTaskOf(player) : null;
     if (agent) {
+      if (player) applyAgentTask(player, null);
       this.#activityPending.delete(client.sessionId);
       for (const entry of this.#activity.values()) {
         if (entry.owner === client.sessionId && !activityTerminal(entry.value.state)) {
@@ -872,6 +885,7 @@ export class OfficeRoom extends Room<OfficeState> {
       sim.pendingSeq = undefined;
       player.inputSeq = 0;
       player.status = agent ? agent.status : '';
+      if (heldTask) applyAgentTask(player, heldTask);
       if (agent) {
         audit(agent.id, 'session.connected', {
           reconnected: true,
@@ -2600,6 +2614,46 @@ export class OfficeRoom extends Room<OfficeState> {
       },
       workspacePath,
     });
+  }
+
+  /**
+   * The task an agent is on, for its card — or `null`, for none.
+   *
+   * Under the `status` scope, like the balloon: it is presence, drawn for
+   * everybody in the room. Room state only — a harness says it again when it
+   * reconnects, so nothing is persisted, and the leave clears it. A payload
+   * that is neither a task nor `null` is refused rather than read as a clear.
+   */
+  #onAgentTask(client: Client, payload: unknown): void {
+    const session = this.#agentSession(client);
+    const player = this.state.players.get(client.sessionId);
+    if (!session || !player) return;
+
+    markSeen(session.identity.id);
+    const task = parseAgentTask(payload);
+    if (task === undefined) {
+      this.#denyAgent(client, session, 'invalid_payload', 'agent:task wants a task or null.');
+      return;
+    }
+    if (!hasScope(session.identity, 'status')) {
+      this.#denyAgent(client, session, 'missing_scope', 'This agent has no "status" scope.');
+      return;
+    }
+
+    if (applyAgentTask(player, task)) {
+      audit(
+        session.identity.id,
+        'effect.task_changed',
+        task
+          ? {
+              title: task.title,
+              repo: task.repo,
+              branch: task.branch,
+              ...(task.pr ? { pr: task.pr.number, prState: task.pr.state } : {}),
+            }
+          : { task: null },
+      );
+    }
   }
 
   #onAgentLookAround(client: Client, payload: AgentLookAroundPayload): void {

@@ -111,6 +111,9 @@ knowing whether any of it is working.
   default branch, in a worktree of its own, so two agents in one repository
   never share a working tree. Ends on `!done` or when the pull request
   merges, and never deletes work that is nowhere else.
+- **Who is on what.** An agent's office card names its task, its branch and
+  its pull request, as a link with its state; its roster row carries a
+  branch mark. Sent by the harness as `agent:task`, never on the status line.
 - **A minimap.** A collapsible overview of the whole office in the corner,
   with a Nearby view that follows you: you, the others and the agents as
   live markers, and the camera's outline.

@@ -1,3 +1,4 @@
+import type { AgentTask } from '../agent-task.js';
 import type { MapZone, OfficeMap, TileRect } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
 import type { VoiceUiState } from '../voice.js';
@@ -66,6 +67,11 @@ export interface RosterEntry {
   pubkey: string;
   /** Humans: the object key of a chosen face, or empty for the derived one. */
   avatar: string;
+  /**
+   * Agents: the task it is on — title, repo, branch and pull request — as its
+   * harness last said. Null when it is on none, and always null for humans.
+   */
+  task: AgentTask | null;
 }
 
 /**
