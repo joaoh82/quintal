@@ -774,7 +774,7 @@ export class OfficeScene extends Phaser.Scene {
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}:${p.task ? `${p.task.branch}#${p.task.pr?.number ?? ''}${p.task.pr?.state ?? ''}${p.task.title}` : ''}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}:${p.task ? `${p.task.branch}#${p.task.pr?.number ?? ''}${p.task.pr?.state ?? ''}${p.task.pr?.url ?? ''}${p.task.title}` : ''}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;

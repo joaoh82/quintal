@@ -779,7 +779,8 @@ Send it when a task begins, when its pull request is first seen or changes
 state, when it ends (`null`), and again whenever you connect — the office
 keeps it in room state only, never in the database, and clears it the moment
 your socket leaves. A task with no harness behind it is not a fact worth
-showing. `quintal-acp` does all of this from its task book (`!task`,
+showing. A client that resumes the same seat with its reconnection token gets
+its task back; a new connection says it again. `quintal-acp` does all of this from its task book (`!task`,
 `task_begin`, `!done`, `task_end` and the PR poll).
 
 The payload is rebuilt at the door, never spread: `title` is plain text,

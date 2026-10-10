@@ -124,6 +124,7 @@ import {
   type TilePoint,
   type WalkToPayload,
   WORKING_IN_ZONE,
+  agentTaskOf,
   parseAgentTask,
 } from '@quintal/shared';
 import {
@@ -841,10 +842,12 @@ export class OfficeRoom extends Room<OfficeState> {
     const player = this.state.players.get(client.sessionId);
     const agent = this.#agents.get(client.sessionId);
 
+    // A task is only shown while there is a harness behind it, so an avatar
+    // held `away` for a reconnect is on nothing in the meantime. A harness
+    // that comes back on a new socket says it again; one that resumes this
+    // seat gets back what it had, since nothing it said was lost.
+    const heldTask = agent && player ? agentTaskOf(player) : null;
     if (agent) {
-      // A task is only shown while there is a harness behind it. One that
-      // comes back says it again; an avatar held `away` for a reconnect is on
-      // nothing in the meantime.
       if (player) applyAgentTask(player, null);
       this.#activityPending.delete(client.sessionId);
       for (const entry of this.#activity.values()) {
@@ -882,6 +885,7 @@ export class OfficeRoom extends Room<OfficeState> {
       sim.pendingSeq = undefined;
       player.inputSeq = 0;
       player.status = agent ? agent.status : '';
+      if (heldTask) applyAgentTask(player, heldTask);
       if (agent) {
         audit(agent.id, 'session.connected', {
           reconnected: true,
