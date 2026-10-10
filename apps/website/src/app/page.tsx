@@ -19,6 +19,11 @@ import {
   Brain,
   RefreshCw,
   Home as HomeIcon,
+  Map,
+  BellRing,
+  GitBranch,
+  Ticket,
+  SmilePlus,
 } from "lucide-react";
 import { OfficePreview } from "@/components/office-preview";
 import { REPO } from "@/components/site-chrome";
@@ -191,6 +196,15 @@ export default function Home() {
             </p>
           </li>
           <li>
+            <Map size={20} />
+            <h3>A minimap in the corner.</h3>
+            <p>
+              The whole office at a glance, with you, the others and the
+              agents as live markers and the camera’s outline. Switch it to
+              Nearby, or fold it away.
+            </p>
+          </li>
+          <li>
             <MessageCircle size={20} />
             <h3>Talk the way a room works.</h3>
             <p>
@@ -243,6 +257,26 @@ export default function Home() {
             </p>
           </li>
           <li>
+            <BellRing size={20} />
+            <h3>Told when you are needed.</h3>
+            <p>
+              An agent asking permission, answering you or finishing while you
+              are elsewhere raises a notification and a sound. <code>N</code>{" "}
+              takes you to it. In the app, the office keeps running with its
+              window closed, and the tray says how many are waiting.
+            </p>
+          </li>
+          <li>
+            <GitBranch size={20} />
+            <h3>A worktree per task.</h3>
+            <p>
+              <code>!task api: fix the login redirect</code> gives an agent a
+              branch cut from fresh main, in a worktree of its own. Two agents
+              in one repository never share a working tree, and ending a task
+              never deletes work that is nowhere else.
+            </p>
+          </li>
+          <li>
             <Mic size={20} />
             <h3>Talk out loud.</h3>
             <p>
@@ -257,6 +291,24 @@ export default function Home() {
               The app can be the office: a private server inside it, on this
               computer only, with nothing to install and nothing listening for
               anybody else.
+            </p>
+          </li>
+          <li>
+            <Ticket size={20} />
+            <h3>Guest links.</h3>
+            <p>
+              Mint a link somebody can walk in with, without an account. A
+              guest can walk, talk and read, wears a Guest badge, and the link
+              can expire, cap its uses, or be revoked.
+            </p>
+          </li>
+          <li>
+            <SmilePlus size={20} />
+            <h3>A face of your own.</h3>
+            <p>
+              Avatars for people and agents: a face drawn from your key until
+              you choose a picture, stored in a directory or any S3-compatible
+              bucket.
             </p>
           </li>
           <li>
@@ -299,10 +351,10 @@ export default function Home() {
           </p>
           <p>
             It finds your installed agent runtimes, runs the agents assigned to
-            your machine, and stays in your system tray. Set it to open at login
-            and your fleet is there when you arrive. Each office registers the
-            machine once, and the app remembers the name even when an office
-            forgets the token.
+            your machine, and stays in your system tray. Close the window and
+            the office, the fleet and the personal office keep running behind
+            it; the tray says how many agents are waiting on you. Set it to
+            open at login and your fleet is there when you arrive.
           </p>
           <p>
             Your harness still runs the agent’s loop. Prefer a terminal? You can
@@ -391,10 +443,12 @@ export default function Home() {
               <Check size={17} /> Here today
             </h3>
             <p>
-              The spatial office. Your agent fleet, with teams, memory and a
-              model per agent. Proximity chat, channels, and DMs. Keypair
-              identity. Voice between people. Tool approvals as cards. A
-              personal office the app runs itself, an app that updates itself,
+              The spatial office, with a minimap. Your agent fleet, with
+              teams, memory, a model per agent and a worktree per task.
+              Proximity chat, channels, and DMs. Keypair identity. Voice
+              between people. Tool approvals as cards, and a notification when
+              an agent needs you. A personal office the app runs itself, an
+              app that updates itself and keeps running with its window closed,
               plus Docker hosting and desktop installers.
             </p>
             <span className="roadmap-status">Ready to try</span>

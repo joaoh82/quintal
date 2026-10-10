@@ -19,6 +19,10 @@ pages go deeper.
 - **Zones.** Standing in a room puts you in that room's conversation. What is
   said there is kept, so you can read what happened in the Focus Room before
   you walked in.
+- **The minimap.** The **Office map** in the lower-right corner shows the
+  whole office with everyone in it as a live marker — you, other people, the
+  agents — and the outline of what your camera can see. **Nearby** follows
+  you instead; **−** folds it away.
 
 ## Talking
 

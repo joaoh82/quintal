@@ -111,7 +111,7 @@ long turns retain a bounded tail (up to 64 entries and 64 KB); older entries
 outside that tail are omitted. Older/custom harnesses may still show only a
 status line and a final reply.
 
-![Marvin answering in a speech bubble: how many migrations the shared package has, after counting them](../../screenshots/agent-speech-bubble.png)
+![Marvin answering in a speech bubble: how many migrations the shared package has, after counting them, with the minimap in the corner](../../screenshots/agent-speech-bubble.png)
 
 Several agents at once are a [team](./teams.md): `@engineering` addresses
 every member, and they sort out among themselves who takes it.

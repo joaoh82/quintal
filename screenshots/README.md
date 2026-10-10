@@ -8,7 +8,7 @@ screenshot.
 | File | What it shows | Used in |
 | --- | --- | --- |
 | `office.png` | The office with people in it: its owner and two agents in the Agent Bay, the cafeteria corner and the garden through the doors | spare |
-| `office_with_agent.png` | Josh asks Arthur what the last commit on the branch changed; Arthur answers in a speech bubble, with Marvin beside him | README, website |
+| `office_with_agent.png` | Josh asks Arthur what the harness's new `task_begin` tool does; Arthur answers in a speech bubble, with the minimap in the corner | README, website |
 | `office-agent-bay.png` | Both agents and their owner in the Agent Bay; roster and the corner chat box with its tabs | guide: features |
 | `agent-thinking.png` | Marvin addressed with `@Marvin`, thinking: the balloon over its head, the status line, the question in a bubble over Josh, and the turn running in the chat box | README, guide: agents, website |
 | `agent-speech-bubble.png` | The same agent answering out loud, in a speech bubble, after counting the migrations it was asked about | guide: agents |
@@ -34,8 +34,9 @@ no JPEG artefacts on the pixel art. Hide the Next.js dev-tools badge
 (`nextjs-portal`) before capturing; it is not part of the app.
 
 The current set was taken on 10 October 2026 against `pnpm dev` with the
-manifests already at the release version, so the header says the number the
-release ships with. Headless Chromium (`chromium --headless=new
+manifests already at the release version (0.7.0), so the header says the
+number the release ships with, and the minimap in the corner is the one that
+shipped with it. Headless Chromium (`chromium --headless=new
 --remote-debugging-port=9222 --window-size=1600,1000
 --force-device-scale-factor=2`) was driven over the DevTools protocol with
 `Emulation.setDeviceMetricsOverride` and `Page.captureScreenshot`; movement

@@ -15,7 +15,7 @@ then read the review. A glance at the room tells you what your fleet is doing.
 
 Other people can walk in too. Nothing assumes a team, and nothing needs one.
 
-![The office: Josh asks Arthur what the last commit on the branch changed, and Arthur's speech bubble answers from across the Agent Bay, with Marvin beside him and the garden through the doors](./screenshots/office_with_agent.png)
+![The office: Josh asks Arthur what the harness's new task_begin tool does, and Arthur's speech bubble answers from across the Agent Bay; the minimap in the corner shows all three of them, and the garden is through the doors](./screenshots/office_with_agent.png)
 
 Quintal is open source (AGPL-3.0), self-hostable in one process with one
 SQLite file, and built in public — every commit is world-readable and written
@@ -42,7 +42,9 @@ the place where it happens.
 
 **Walk around an office.** A tile map with meeting rooms, an open floor and
 an Agent Bay. `WASD` to walk, click to pathfind, `Enter` to talk. Movement is
-server-authoritative, so nobody teleports and nobody outruns a person.
+server-authoritative, so nobody teleports and nobody outruns a person. A
+minimap in the corner shows the whole office, with everyone in it as a live
+marker.
 
 **Talk the way a room works.** Speech carries about twelve tiles. `@name`
 reaches anyone anywhere, with autocomplete. Standing in a room puts you in its

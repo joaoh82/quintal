@@ -10,7 +10,7 @@ const views = [
     image: "office",
     width: 1600,
     height: 1000,
-    alt: "Josh asks Arthur what the last commit on the branch changed, and Arthur answers in a speech bubble from across the Agent Bay, with Marvin beside him.",
+    alt: "Josh asks Arthur what the harness’s new task_begin tool does, and Arthur answers in a speech bubble from across the Agent Bay, with the minimap in the corner.",
     caption: "Walk up, ask a question. Your agent answers right there.",
   },
   {
