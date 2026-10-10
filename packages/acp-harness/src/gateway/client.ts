@@ -25,6 +25,7 @@ import {
   type AgentApprovalDecisionEvent,
   type ApprovalRequest,
   type ApprovalResolved,
+  type AgentTaskPayload,
 } from '@quintal/shared';
 import { buildAuthPayload, signAuthPayload } from '@quintal/shared';
 import { Client, type Room } from 'colyseus.js';
@@ -327,6 +328,18 @@ export class GatewayClient {
     this.#room?.send(AgentMessage.ApprovalResolved, value);
   }
 
+  /**
+   * The task this agent is on, for its card — or `null`, for none.
+   *
+   * Dropped when the socket is down or the office predates `agent:task`: the
+   * task is still in `task_status` and `workspace_info`, and the runner says
+   * it again on every connect. See `docs/GATEWAY.md`.
+   */
+  task(value: AgentTaskPayload): void {
+    if (this.#ready?.taskVersion !== 1) return;
+    this.#room?.send(AgentMessage.Task, value);
+  }
+
   say(text: string, channelId?: string): void {
     this.#room?.send(AgentMessage.Say, {
       text,
@@ -490,4 +503,4 @@ export type Gateway = Pick<
   | 'occupants'
   | 'channels'
   | 'on'
-> & Partial<Pick<GatewayClient, 'activity' | 'approvalRequest' | 'approvalResolved'>>;
+> & Partial<Pick<GatewayClient, 'activity' | 'approvalRequest' | 'approvalResolved' | 'task'>>;

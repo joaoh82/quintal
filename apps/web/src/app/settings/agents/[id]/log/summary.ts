@@ -32,6 +32,11 @@ export function describe(kind: string, payload: unknown): string {
       return String(data.slug ?? '');
     case 'command.messages_get':
       return `${String(data.scope ?? '')} · n=${String(data.n ?? '')}`;
+    case 'effect.task_changed':
+      if (typeof data.branch !== 'string') return 'no task';
+      return `“${String(data.title ?? '')}” · ${data.branch}${
+        typeof data.pr === 'number' ? ` · PR #${data.pr} (${String(data.prState ?? '?')})` : ''
+      }`;
     case 'command.rejected':
       return `${String(data.code ?? '')}: ${String(data.message ?? '')}`;
     case 'session.connected':

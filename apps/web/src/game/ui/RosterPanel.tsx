@@ -2,6 +2,7 @@
 
 import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
 
+import { AgentTaskRow, TaskGlyph } from './AgentTaskRow';
 import { runtimeLines } from './agentRuntime';
 import { Avatar } from '@/components/Avatar';
 import { askingCaveat } from '@/lib/runtime-asking';
@@ -169,6 +170,8 @@ export function RosterPanel({ players, connection, speaking = [], onMessage }: R
                     <span className="truncate text-[10px] text-white/40">
                       {agent.ownerName ? `${agent.ownerName}'s` : ''}
                     </span>
+                    {/* Who is on what, at a glance; the card says which. */}
+                    {agent.task ? <TaskGlyph task={agent.task} /> : null}
                     <span className="ml-auto shrink-0 font-mono text-[10px] text-white/35">
                       {sinceLabel(agent.lastActionAt)}
                     </span>
@@ -255,6 +258,12 @@ function AgentCard({
           <dt className="w-14 shrink-0 text-white/40">status</dt>
           <dd className="font-mono text-white/75">{agent.status || 'idle'}</dd>
         </div>
+        {/*
+          The task, beside the status rather than in it: the status line is
+          the activity signal, and an agent can be on a task for days while
+          idle in between. See `AgentTaskRow`.
+        */}
+        <AgentTaskRow task={agent.task} />
         <div className="flex gap-2">
           <dt className="w-14 shrink-0 text-white/40">scopes</dt>
           <dd className="font-mono text-white/75">

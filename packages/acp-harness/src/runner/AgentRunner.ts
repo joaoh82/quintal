@@ -46,6 +46,7 @@ import {
   notePullRequest,
   parseTaskCommand,
   pullRequestFor,
+  taskForOffice,
   taskReport,
   type Task,
 } from './tasks.js';
@@ -386,10 +387,12 @@ export class AgentRunner {
     this.#publishStatus();
 
     // A task survives a restart: the book is on disk and the worktree is
-    // there. Say so where the owner looks, and start watching its PR again.
+    // there. Say so where the owner looks — the log, and the agent's card —
+    // and start watching its PR again.
     const task = this.#task();
     if (task) {
       this.#log('info', `resuming task "${task.title}" on ${task.branch}`);
+      this.#publishTask(task);
       this.#watchPullRequest();
     }
 
@@ -529,6 +532,9 @@ export class AgentRunner {
       // A new socket knows nothing: send the picture again, whatever it is.
       this.#statusKey = '';
       this.#publishStatus();
+      // The office cleared the card when the old socket went.
+      const task = this.#task();
+      if (task) this.#publishTask(task);
       for (const value of [...this.#activityOutbox.values()]) this.#publishActivity(value);
       for (const activity of [...this.#publicTurns.values(), ...this.#queuedActivity.values()]) activity.flush();
       // A new socket knows nothing about the questions still open, nor about
@@ -803,6 +809,7 @@ export class AgentRunner {
     return this.#serialised(async () => {
       const task = await beginTask({ nest: nestRoot(), agent: this.name, reposDir: this.#reposDir(), repo, title });
       this.#log('info', `task "${task.title}": ${task.branch} in ${task.worktree}`);
+      this.#publishTask(task);
       this.#watchPullRequest();
       return task;
     });
@@ -813,10 +820,23 @@ export class AgentRunner {
     return this.#serialised(async () => {
       const ended = await endTask({ nest: nestRoot(), agent: this.name, ...(deliveredHead ? { deliveredHead } : {}) });
       this.#unwatchPullRequest();
+      this.#publishTask(null);
       const said = describeCleanup(ended.task, ended.outcome, ended.unpushed);
       this.#log('info', `task "${ended.task.title}" ended: ${ended.outcome}`);
       return { task: ended.task, outcome: ended.outcome, said };
     });
+  }
+
+  /**
+   * Put the task on this agent's office card, or take it off with `null`.
+   *
+   * Never the status line: that is the activity signal, and a task outlives
+   * any number of idle stretches. An agent without the `status` scope would
+   * only be refused, so it is not sent at all; the task is still in its tools.
+   */
+  #publishTask(task: Task | null): void {
+    if (!this.#gateway.ready?.scopes.includes('status')) return;
+    this.#gateway.task?.(taskForOffice(task));
   }
 
   /** `task_begin` from the model: the result tells it where to work from now on. */
@@ -870,7 +890,7 @@ export class AgentRunner {
    * Notice the task's pull request, and its merge.
    *
    * Every two minutes, through `gh` in the worktree. A PR seen for the first
-   * time goes on the task, so the status line and `task_status` can name it;
+   * time goes on the task, so the agent's card and `task_status` can name it;
    * one that has merged ends the task, with the PR's head counted as
    * delivered so a squash merge does not leave a worktree behind for nothing.
    * Without `gh`, or without a PR, the poll finds nothing and says nothing:
@@ -878,7 +898,7 @@ export class AgentRunner {
    */
   #watchPullRequest(): void {
     if (this.#prPoll) return;
-    this.#prPoll = setInterval(() => void this.#checkPullRequest(), PR_POLL_MS);
+    this.#prPoll = setInterval(() => void this.checkPullRequest(), PR_POLL_MS);
     this.#prPoll.unref?.();
   }
 
@@ -887,7 +907,8 @@ export class AgentRunner {
     this.#prPoll = null;
   }
 
-  async #checkPullRequest(): Promise<void> {
+  /** One look at the PR. The poll's, and public so a test need not wait two minutes. */
+  async checkPullRequest(): Promise<void> {
     const task = this.#task();
     if (!task) {
       this.#unwatchPullRequest();
@@ -902,6 +923,9 @@ export class AgentRunner {
       if (noted && !task.pr) {
         this.#log('info', `task "${task.title}" has PR #${pr.number}`);
       }
+      // Only while it is still the task: a `!done` between asking `gh` and
+      // here has already taken the card down, and must not be undone.
+      if (noted && this.#task()?.slug === noted.slug) this.#publishTask(noted);
     }
     if (pr.state === 'MERGED') {
       try {

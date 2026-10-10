@@ -77,3 +77,18 @@ suite('a scope being granted or withdrawn', () => {
     );
   });
 });
+
+suite('what a task row says', () => {
+  it('names the task, the branch and the pull request', () => {
+    const row = { title: 'fix the login redirect', repo: 'api', branch: 'quintal/marvin/fix', pr: 12, prState: 'open' };
+    assert.equal(describe('effect.task_changed', row), '“fix the login redirect” · quintal/marvin/fix · PR #12 (open)');
+  });
+
+  it('leaves the pull request out until there is one, and says when the task is over', () => {
+    assert.equal(
+      describe('effect.task_changed', { title: 'fix', repo: 'api', branch: 'quintal/marvin/fix' }),
+      '“fix” · quintal/marvin/fix',
+    );
+    assert.equal(describe('effect.task_changed', { task: null }), 'no task');
+  });
+});

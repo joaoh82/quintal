@@ -1,4 +1,5 @@
 import type { AgentScope } from '../agent.js';
+import type { AgentTask } from '../agent-task.js';
 import type { ChannelRef } from '../conversation.js';
 import type { PlayerKind } from '../player.js';
 
@@ -60,6 +61,12 @@ export const AgentMessage = {
   ApprovalRequest: 'agent:approval_request',
   /** That question has stopped waiting — answered, expired, cancelled or lost. */
   ApprovalResolved: 'agent:approval_resolved',
+  /**
+   * The task this agent is on — title, repo, branch, and its pull request
+   * once there is one — or `null` for none. Shown on its card, never on the
+   * nameplate. Only to an office that says `taskVersion: 1`.
+   */
+  Task: 'agent:task',
 } as const;
 export type AgentMessage = (typeof AgentMessage)[keyof typeof AgentMessage];
 
@@ -83,6 +90,9 @@ export interface AgentEmotePayload {
    */
   ttlMs?: number;
 }
+
+/** `agent:task`: the active task, or `null` when the agent is on none. See `parseAgentTask`. */
+export type AgentTaskPayload = AgentTask | null;
 
 export interface AgentHostReportPayload {
   /** The machine. Hostname is enough to tell a laptop from a build box. */
@@ -250,6 +260,11 @@ export interface AgentReadyPayload {
    * talking to an older office keeps to the text question alone.
    */
   approvalVersion?: 1;
+  /**
+   * Set when this office understands `agent:task`. A harness talking to an
+   * older office does not send it; the task stays in its own tools.
+   */
+  taskVersion?: 1;
   agentId: string;
   sessionId: string;
   name: string;
