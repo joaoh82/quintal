@@ -1,6 +1,6 @@
 {
   "name": "@quintal/personal-payload",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "The production closure the desktop app ships for a personal office: the server, the web app and everything they need at runtime. Nothing here is source; see scripts/build-personal-payload.mjs.",
