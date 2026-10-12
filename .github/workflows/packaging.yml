@@ -48,7 +48,7 @@ permissions:
   contents: read
 
 jobs:
-  # The whole Linux installer path: bundle, repack without libdbus, stage
+  # The whole Linux installer path: bundle, repack without libdbus and libwayland-client, stage
   # against the shared asset contract, then launch the result. Everything here
   # calls the same scripts the release job calls, so the logic cannot drift;
   # only the runner setup around them is restated.
@@ -105,7 +105,7 @@ jobs:
           QUINTAL_TAURI_VERBOSE: '1'
         run: node scripts/build-desktop-release.mjs x86_64-unknown-linux-gnu appimage,deb linux-x64
 
-      - name: Keep AppImage libdbus on the host and install the harness, Node runtime and payload
+      - name: Keep AppImage libdbus and libwayland-client on the host and install the harness, Node runtime and payload
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c

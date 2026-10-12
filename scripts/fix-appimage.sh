@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Keep libdbus on the host for the sync-secret-service backend, and install the
-# harness the AppImage was deliberately bundled without.
+# Keep libdbus on the host for the sync-secret-service backend and
+# libwayland-client for the host's GPU drivers, and install the harness the
+# AppImage was deliberately bundled without.
 set -euo pipefail
 [[ $# -ge 3 && $# -le 5 ]] || { echo 'Usage: fix-appimage.sh <AppImage> <appimagetool> <sidecar> [node-runtime] [payload-dir]' >&2; exit 1; }
 appimage=$(realpath "$1")

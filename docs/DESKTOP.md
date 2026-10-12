@@ -82,7 +82,8 @@ download, then choose **More info → Run anyway** if offered.
 ### Linux
 
 Choose the x64 AppImage or Debian package. Both need a Secret Service provider
-such as GNOME Keyring for key storage; AppImage also requires host `libdbus-1-3`.
+such as GNOME Keyring for key storage; AppImage also requires host `libdbus-1-3`
+and `libwayland-client0`.
 
 ```bash
 chmod +x Quintal-linux-x64.AppImage

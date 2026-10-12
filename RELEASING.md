@@ -214,8 +214,10 @@ app to Applications:
 xattr -dr com.apple.quarantine /Applications/Quintal.app
 ```
 
-The Linux AppImage requires **host libdbus** (`libdbus-1-3` on Debian/Ubuntu);
-the release removes its bundled copy and repacks with a checksum-pinned
+The Linux AppImage requires **host libdbus** and **host libwayland-client**
+(`libdbus-1-3` and `libwayland-client0` on Debian/Ubuntu). The release removes
+both bundled copies — an older bundled libwayland-client keeps WebKit off the
+GPU on newer hosts, painting the office canvas on the CPU — and repacks with a checksum-pinned
 appimagetool, preserving the original AppImage runtime and installing the
 harness into `usr/bin`. The keyring backend also needs a Secret Service
 provider, such as GNOME Keyring. A .deb installation resolves its declared system
@@ -284,7 +286,7 @@ a planned production version tag for a sabotage test.
 - The Linux release and packaging jobs extract the actual AppImage and launch
   its AppRun under Xvfb with fresh app data. They require OCR of **Your office**
   or **personal office**, check the packaged sidecar's `--help`, and refuse an
-  AppImage containing libdbus. After the picker closes, the same AppRun must
+  AppImage containing libdbus or libwayland-client. After the picker closes, the same AppRun must
   pass the 19 personal-office checks, including server crash recovery and
   force-quit cleanup. The `appimage-smoke` (release) and
   `packaging-appimage-smoke` artifacts contain the screenshot, OCR text and
