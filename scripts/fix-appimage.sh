@@ -18,6 +18,13 @@ offset=$("$appimage" --appimage-offset)
 [[ "$offset" =~ ^[0-9]+$ && "$offset" -gt 0 ]]
 head -c "$offset" "$appimage" > runtime
 find squashfs-root -name 'libdbus-1.so*' -print -delete
+# And libwayland-client, which the host's EGL and GBM drivers are built
+# against. The 22.04 copy linuxdeploy bundles is older than they are, and with
+# it WebKit cannot allocate a DMA-BUF on a newer host — X11 included — so it
+# falls back to painting every frame of the office canvas on the CPU. Pinned a
+# core and made walking lag on Arch with NVIDIA and AMD; the host's newer copy
+# serves the bundled GTK just as well.
+find squashfs-root -name 'libwayland-client.so*' -print -delete
 # linuxdeploy aborts on the Bun-compiled harness — see build-desktop-release.mjs
 # — so it is bundled here instead, under the name the app spawns and beside the
 # executable that spawns it.
