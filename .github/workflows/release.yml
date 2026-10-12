@@ -157,7 +157,7 @@ jobs:
       - name: Personal office smoke (Windows skip)
         if: runner.os == 'Windows'
         run: node scripts/personal-office-smoke.mjs
-      - name: Keep AppImage libdbus on the host and install the harness, Node runtime and payload
+      - name: Keep AppImage libdbus and libwayland-client on the host and install the harness, Node runtime and payload
         if: runner.os == 'Linux'
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
@@ -171,7 +171,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # fix-appimage.sh rewrites the AppImage *after* Tauri bundled and
-          # signed it — dropping libdbus and installing the harness. The
+          # signed it — dropping libdbus and libwayland-client and installing the harness. The
           # signature Tauri produced therefore covers a binary nobody ships:
           # an update verified against it would fail, and if it somehow passed
           # it would hand Linux users back the AppImage the repack exists to

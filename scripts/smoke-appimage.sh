@@ -38,6 +38,11 @@ if find squashfs-root -name 'libdbus-1.so*' | grep -q .; then
   echo 'AppImage unexpectedly bundles libdbus' >&2
   exit 1
 fi
+# And on its libwayland-client: see fix-appimage.sh for what the bundled one costs.
+if find squashfs-root -name 'libwayland-client.so*' | grep -q .; then
+  echo 'AppImage unexpectedly bundles libwayland-client' >&2
+  exit 1
+fi
 unset QUINTAL_SERVER_URL QUINTAL_OFFICE_URL
 export HOME="$scratch/home" XDG_DATA_HOME="$scratch/data" XDG_CONFIG_HOME="$scratch/config" XDG_CACHE_HOME="$scratch/cache"
 mkdir -p "$HOME"
