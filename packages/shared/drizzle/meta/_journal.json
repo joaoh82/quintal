@@ -225,6 +225,13 @@
       "when": 1789568162443,
       "tag": "0031_user_activity_detail",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792745921477,
+      "tag": "0032_agent_mcp_servers",
+      "breakpoints": true
     }
   ]
 }

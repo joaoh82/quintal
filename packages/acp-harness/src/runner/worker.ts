@@ -103,6 +103,18 @@ export interface WorkerOptions {
    * can begin and end while the process lives. Defaults to `config.cwd`.
    */
   cwd?: () => string;
+  /**
+   * The owner's MCP servers, resolved for this machine (`mcp-servers.ts`).
+   * Asked at each session, beside `quintal-tools`; a change reaches open
+   * sessions through a reload.
+   */
+  mcpServers?: () => schema.McpServer[];
+  /** An MCP server's sign-in URL, for the owner to open. See `AgentProcess`. */
+  onUrlElicitation?: (
+    worker: Worker,
+    params: { sessionId?: string; elicitationId: string; url: string; message: string },
+  ) => Promise<'accept' | 'decline'>;
+  onElicitationComplete?: (worker: Worker, elicitationId: string) => void;
   onUpdate: (worker: Worker, params: schema.SessionNotification) => void;
   onPermission: (
     worker: Worker,
@@ -156,6 +168,20 @@ export class Worker {
   adapter: AdapterIdentity | null = null;
   /** Given up on: it will not be claimed again and counts against the pool. */
   dead = false;
+  /**
+   * Running one of the runtime's own commands (`localCommand`) rather than a
+   * turn: not idle, so nothing claims it, but no turn either.
+   */
+  maintenance = false;
+  /**
+   * The owner's server list this process last checked sign-in for, by
+   * fingerprint — once per process and list. Cleared with every start.
+   */
+  mcpCheckedFor: string | null = null;
+  /** Slash commands the runtime offered (`available_commands_update`). */
+  readonly commands = new Set<string>();
+  /** Sessions whose output is being read here rather than spoken: see `localCommand`. */
+  readonly #captures = new Map<string, { text: string }>();
 
   #process: AgentProcess | null = null;
   #bridge: BridgeHandle | null = null;
@@ -182,7 +208,7 @@ export class Worker {
 
   /** Free to take a turn. A worker still starting counts: the turn waits on it. */
   get idle(): boolean {
-    return this.turn === null && !this.dead;
+    return this.turn === null && !this.dead && !this.maintenance;
   }
 
   /**
@@ -244,8 +270,26 @@ export class Worker {
     const proc = new AgentProcess({
       command: this.options.config.command,
       cwd: this.options.config.cwd,
-      onUpdate: (params) => this.options.onUpdate(this, params),
+      onUpdate: (params) => {
+        const update = params.update as { sessionUpdate?: string; availableCommands?: unknown; content?: unknown };
+        if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
+          for (const command of update.availableCommands as Array<{ name?: unknown }>) {
+            if (typeof command?.name === 'string') this.commands.add(command.name);
+          }
+        }
+        const capture = this.#captures.get(params.sessionId);
+        if (capture) {
+          const content = update.content as { type?: string; text?: string } | undefined;
+          if (update.sessionUpdate === 'agent_message_chunk' && content?.type === 'text') capture.text += content.text ?? '';
+          return;
+        }
+        this.options.onUpdate(this, params);
+      },
       onPermission: (params) => this.options.onPermission(this, params),
+      ...(this.options.onUrlElicitation
+        ? { onUrlElicitation: (params: Parameters<NonNullable<WorkerOptions['onUrlElicitation']>>[1]) => this.options.onUrlElicitation!(this, params) }
+        : {}),
+      onElicitationComplete: (id) => this.options.onElicitationComplete?.(this, id),
       onStderr: (line) => {
         this.#log('warn', `[${this.options.config.harness}] ${line}`);
         if (line.includes('cannot be launched inside another')) {
@@ -293,6 +337,8 @@ export class Worker {
     this.sessions.clear();
     this.unprimed.clear();
     this.#creating.clear();
+    this.commands.clear();
+    this.mcpCheckedFor = null;
     this.#log(
       'info',
       `${info.agentInfo?.name ?? this.options.config.harness} ready (ACP v${String(info.protocolVersion)})`,
@@ -389,6 +435,11 @@ export class Worker {
       | { loadSession?: boolean; sessionCapabilities?: { resume?: unknown } | null }
       | undefined;
     return Boolean(capabilities?.sessionCapabilities?.resume) || capabilities?.loadSession === true;
+  }
+
+  /** Whether the runtime takes MCP servers over HTTP — `initialize` said so, or it did not. */
+  get mcpHttp(): boolean {
+    return this.#process?.initialized?.agentCapabilities?.mcpCapabilities?.http === true;
   }
 
   /** Where the next session is rooted. */
@@ -489,6 +540,7 @@ export class Worker {
           { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
         ],
       },
+      ...(this.options.mcpServers?.() ?? []),
     ];
   }
 
@@ -614,6 +666,23 @@ export class Worker {
 
   cancel(sessionId: string): void {
     this.#process?.cancel(sessionId);
+  }
+
+  /**
+   * One of the runtime's own slash commands — `/mcp` — run in a session and
+   * read back here instead of spoken. Such a command is answered by the
+   * runtime itself, not the model: no tokens, a fraction of a second. The
+   * caller holds `maintenance` so no turn claims the worker meanwhile.
+   */
+  async localCommand(sessionId: string, text: string): Promise<string> {
+    const capture = { text: '' };
+    this.#captures.set(sessionId, capture);
+    try {
+      await this.prompt({ sessionId, prompt: [{ type: 'text', text }] } as schema.PromptRequest);
+      return capture.text;
+    } finally {
+      this.#captures.delete(sessionId);
+    }
   }
 
   /** Forget a scope's session, so the next turn there starts fresh. */

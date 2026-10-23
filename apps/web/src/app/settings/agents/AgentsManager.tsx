@@ -21,6 +21,7 @@ import {
 import type { AgentListEntry } from '@quintal/shared/db';
 import Link from 'next/link';
 
+import { AgentMcpForm } from './AgentMcpForm';
 import { RegisterKey } from './RegisterKey';
 import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
@@ -649,6 +650,23 @@ function AgentRow({
             Scopes — <span className="font-mono">{agent.scopes.join(', ') || 'none'}</span>
           </summary>
           <AgentScopesForm agent={agent} />
+        </details>
+      ) : null}
+
+      {/* Its own MCP servers. Summarised in the trigger because "does it have
+          Slack?" is the question somebody opens this to answer. */}
+      {canRevoke && agent.revokedAt === null ? (
+        <details className="w-full pt-1">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            Tools (MCP) —{' '}
+            <span className="font-mono">
+              {agent.mcpServers.map((server) => server.name).join(', ') || 'none'}
+            </span>
+            {agent.mcpStatus.some((entry) => entry.state === 'sign_in') ? (
+              <span className="text-amber-600"> · sign-in needed</span>
+            ) : null}
+          </summary>
+          <AgentMcpForm agent={agent} />
         </details>
       ) : null}
 

@@ -24,6 +24,16 @@
  *                       whose address and token arrived with session/new
  *   FAKE_MODELS         "a,b,c": advertise a model config option; first is current
  *   FAKE_MODELS_GROUPED advertise the options grouped, as some adapters do
+ *   FAKE_MCP_HTTP       advertise mcpCapabilities.http
+ *   FAKE_ELICIT_URL     after session/new, ask the client to open this URL — an MCP
+ *                       server's sign-in, as claude-agent-acp does — for FAKE_ELICIT_SERVER
+ *                       (default "slack");
+ *                       the client's answer is recorded as _test/elicitation_response
+ *   FAKE_ELICIT_COMPLETE then say the sign-in finished (elicitation/complete)
+ *   FAKE_MCP_COMMAND    offer the /mcp command, and answer "/mcp" with FAKE_MCP_LISTING and
+ *                       "/mcp reconnect <name>" with FAKE_MCP_RECONNECT — locally, as
+ *                       claude-agent-acp does; with FAKE_ELICIT_ON_RECONNECT the reconnect
+ *                       is what asks for the sign-in (FAKE_ELICIT_URL), not session/new
  *   FAKE_RESUME         advertise sessionCapabilities.resume and answer session/resume
  *                       for any id, the way claude-agent-acp picks a stored session up
  */
@@ -147,6 +157,7 @@ async function handle(message) {
         agentCapabilities: {
           loadSession: false,
           promptCapabilities: {},
+          ...(process.env.FAKE_MCP_HTTP ? { mcpCapabilities: { http: true } } : {}),
           ...(process.env.FAKE_RESUME ? { sessionCapabilities: { resume: {} } } : {}),
         },
         agentInfo: { name: 'fake-acp-agent', version: '1.0.0' },
@@ -179,6 +190,13 @@ async function handle(message) {
         ];
       }
       respond(id, session);
+      if (process.env.FAKE_MCP_COMMAND) {
+        notify('session/update', {
+          sessionId: session.sessionId,
+          update: { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'mcp', description: 'MCP servers' }] },
+        });
+      }
+      if (process.env.FAKE_ELICIT_URL && !process.env.FAKE_ELICIT_ON_RECONNECT) await elicit(session.sessionId);
       return;
     }
 
@@ -200,6 +218,20 @@ async function handle(message) {
       return;
 
     case 'session/prompt': {
+      const said = params?.prompt?.[0]?.text ?? '';
+      if (process.env.FAKE_MCP_COMMAND && said.startsWith('/mcp')) {
+        const reconnect = said.startsWith('/mcp reconnect');
+        notify('session/update', {
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: (reconnect ? process.env.FAKE_MCP_RECONNECT : process.env.FAKE_MCP_LISTING) ?? '' },
+          },
+        });
+        respond(id, { stopReason: 'end_turn' });
+        if (reconnect && process.env.FAKE_ELICIT_ON_RECONNECT) await elicit(params.sessionId);
+        return;
+      }
       prompts += 1;
       if (prompts > crashAfter) process.exit(1);
 
@@ -320,4 +352,20 @@ async function handle(message) {
         });
       }
   }
+}
+
+/** Ask the client to open FAKE_ELICIT_URL — an MCP server's sign-in — and record its answer. */
+async function elicit(sessionId) {
+  const elicitationId = `elicit-${sessionId}`;
+  const answer = await request('elicitation/create', {
+    mode: 'url',
+    sessionId,
+    elicitationId,
+    url: process.env.FAKE_ELICIT_URL,
+    message: `Authenticate with MCP server ${process.env.FAKE_ELICIT_SERVER ?? 'slack'}`,
+  });
+  if (process.env.FAKE_RECORD) {
+    appendFileSync(process.env.FAKE_RECORD, `${JSON.stringify({ method: '_test/elicitation_response', params: answer })}\n`);
+  }
+  if (process.env.FAKE_ELICIT_COMPLETE) notify('elicitation/complete', { elicitationId });
 }

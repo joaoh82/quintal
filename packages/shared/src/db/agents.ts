@@ -19,6 +19,13 @@ import {
   type AgentScope,
 } from '../agent.js';
 import { verifyAttestation } from '../attestation.js';
+import {
+  mcpServersFingerprint,
+  parseMcpStatus,
+  validateMcpServers,
+  type AgentMcpServer,
+  type McpServerStatus,
+} from '../mcp.js';
 import { displayName, isPubkeyHex } from '../identity.js';
 import type { Database } from './client.js';
 import { agentEvents, agentMemory, agents, memberships, users } from './schema.js';
@@ -609,6 +616,10 @@ export interface AgentListEntry {
   workspacePath: string;
   /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
   pubkey: string | null;
+  /** Its owner's MCP servers. Sealed values stay sealed. */
+  mcpServers: AgentMcpServer[];
+  /** What its harness last reported about them. */
+  mcpStatus: McpServerStatus[];
   createdAt: number;
   lastSeenAt: number | null;
   revokedAt: number | null;
@@ -640,6 +651,8 @@ export async function listAgentsForWorkspace(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
+      mcpServers: agents.mcpServers,
+      mcpStatus: agents.mcpStatus,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -653,6 +666,8 @@ export async function listAgentsForWorkspace(
     ...row,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
+    mcpServers: storedMcpServers(row.mcpServers),
+    mcpStatus: parseMcpStatus(row.mcpStatus) ?? [],
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
     revokedAt: row.revokedAt?.getTime() ?? null,
@@ -685,6 +700,8 @@ export async function findAgentById(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
+      mcpServers: agents.mcpServers,
+      mcpStatus: agents.mcpStatus,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -701,6 +718,8 @@ export async function findAgentById(
     ...rest,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
+    mcpServers: storedMcpServers(row.mcpServers),
+    mcpStatus: parseMcpStatus(row.mcpStatus) ?? [],
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
     revokedAt: row.revokedAt?.getTime() ?? null,
@@ -1160,4 +1179,73 @@ export async function listAgentMemorySlugs(
     bytes: Buffer.byteLength(row.content, 'utf8'),
     updatedAt: row.updatedAt.getTime(),
   }));
+}
+
+// --- MCP servers -------------------------------------------------------------
+
+/**
+ * A stored list, read back. Checked again on the way out: the column is only
+ * ever written through `setAgentMcpServers`, but a list that stopped passing
+ * validation — a rule tightened since — reaches nobody rather than reaching
+ * the runtime unchecked.
+ */
+function storedMcpServers(value: unknown): AgentMcpServer[] {
+  const checked = validateMcpServers(value ?? []);
+  return checked.ok ? checked.servers : [];
+}
+
+/** Replace an agent's MCP servers. Throws with a sentence a person can act on. */
+export async function setAgentMcpServers(
+  db: Database,
+  agentId: string,
+  servers: unknown,
+  changedByUserId: string,
+): Promise<AgentMcpServer[]> {
+  const checked = validateMcpServers(servers);
+  if (!checked.ok) throw new Error(checked.error);
+  const rows = await db
+    .select({ mcpServers: agents.mcpServers })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+  const before = storedMcpServers(current.mcpServers);
+
+  await db.update(agents).set({ mcpServers: checked.servers }).where(eq(agents.id, agentId));
+  // Names and transports only: an argument or a URL can carry a token as
+  // easily as a sealed variable can, and the event log is not the place.
+  await recordAgentEvent(db, agentId, 'agent.mcp_servers_changed', {
+    before: before.map((server) => `${server.name} (${server.transport})`),
+    after: checked.servers.map((server) => `${server.name} (${server.transport})`),
+    changedByUserId,
+  });
+  return checked.servers;
+}
+
+/** The MCP servers of these agents, for the room to push when they change. */
+export async function mcpServersForAgents(
+  db: Database,
+  agentIds: readonly string[],
+): Promise<Map<string, { servers: AgentMcpServer[]; fingerprint: string }>> {
+  const found = new Map<string, { servers: AgentMcpServer[]; fingerprint: string }>();
+  if (agentIds.length === 0) return found;
+  const rows = await db
+    .select({ id: agents.id, mcpServers: agents.mcpServers })
+    .from(agents)
+    .where(sql`${agents.id} in ${agentIds}`);
+  for (const row of rows) {
+    const servers = storedMcpServers(row.mcpServers);
+    found.set(row.id, { servers, fingerprint: mcpServersFingerprint(servers) });
+  }
+  return found;
+}
+
+/** What the harness said about them. Replaces the last report whole. */
+export async function setAgentMcpStatus(
+  db: Database,
+  agentId: string,
+  status: McpServerStatus[],
+): Promise<void> {
+  await db.update(agents).set({ mcpStatus: status }).where(eq(agents.id, agentId));
 }

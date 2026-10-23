@@ -54,6 +54,15 @@ export function describe(kind: string, payload: unknown): string {
       ];
       return moved.length > 0 ? moved.join(' ') : 'no change';
     }
+    case 'agent.mcp_servers_changed': {
+      const before = asList(data.before);
+      const after = asList(data.after);
+      const moved = [
+        ...after.filter((server) => !before.includes(server)).map((server) => `+${server}`),
+        ...before.filter((server) => !after.includes(server)).map((server) => `-${server}`),
+      ];
+      return moved.length > 0 ? moved.join(' ') : 'edited';
+    }
     case 'agent.credential_registered':
       return `${shortKey(data.pubkey)}${describeRegistrar(data.via)}`;
     case 'session.revoked':

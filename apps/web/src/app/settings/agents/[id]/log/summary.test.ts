@@ -49,6 +49,17 @@ suite('what a registration row says', () => {
   });
 });
 
+suite('MCP servers being changed', () => {
+  it('says which servers came and went, by name only', () => {
+    assert.equal(
+      describe('agent.mcp_servers_changed', { before: ['files (stdio)'], after: ['files (stdio)', 'slack (http)'] }),
+      '+slack (http)',
+    );
+    assert.equal(describe('agent.mcp_servers_changed', { before: ['slack (http)'], after: [] }), '-slack (http)');
+    assert.equal(describe('agent.mcp_servers_changed', { before: ['a (http)'], after: ['a (http)'] }), 'edited');
+  });
+});
+
 suite('a scope being granted or withdrawn', () => {
   it('says what moved, so the log answers "when did this stop"', () => {
     assert.equal(

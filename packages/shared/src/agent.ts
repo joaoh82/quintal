@@ -227,6 +227,8 @@ export const AGENT_EVENT_KINDS = [
    * to run things?" needs an answer with a name and a time against it.
    */
   'agent.scopes_changed',
+  /** Its owner changed which MCP servers it is given. Names only: arguments can hold tokens. */
+  'agent.mcp_servers_changed',
   /** A keypair was registered for it (credentials v2), replacing any before. */
   'agent.credential_registered',
   /** Its owner changed or cleared one of its memory slugs from the settings page. */

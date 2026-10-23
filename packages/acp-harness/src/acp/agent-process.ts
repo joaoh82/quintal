@@ -32,6 +32,14 @@ export interface AgentProcessOptions {
   onPermission: (
     params: schema.RequestPermissionRequest,
   ) => Promise<schema.RequestPermissionResponse>;
+  /**
+   * The agent wants the user to open a URL — an MCP server's sign-in, the
+   * one kind Quintal answers. Without it the client does not offer URL
+   * elicitation, and the runtime keeps a server that needs sign-in signed out.
+   */
+  onUrlElicitation?: (params: { sessionId?: string; elicitationId: string; url: string; message: string }) => Promise<'accept' | 'decline'>;
+  /** The URL flow finished on the runtime's side: the sign-in landed. */
+  onElicitationComplete?: (elicitationId: string) => void;
   /** Anything the agent writes to stderr — harness diagnostics, not chat. */
   onStderr?: (line: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
@@ -100,6 +108,24 @@ export class AgentProcess {
       },
       requestPermission: (params: schema.RequestPermissionRequest) =>
         this.options.onPermission(params),
+      unstable_createElicitation: async (params: schema.CreateElicitationRequest) => {
+        const request = params as { mode?: string; url?: string; elicitationId?: string; sessionId?: string; message?: string };
+        // A form is a question for the user mid-turn; the office has cards
+        // for tool approvals and nothing for free-form forms yet.
+        if (request.mode !== 'url' || !request.url || !request.elicitationId || !this.options.onUrlElicitation) {
+          return { action: 'decline' } as schema.CreateElicitationResponse;
+        }
+        const action = await this.options.onUrlElicitation({
+          elicitationId: request.elicitationId,
+          url: request.url,
+          message: request.message ?? '',
+          ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+        });
+        return { action } as schema.CreateElicitationResponse;
+      },
+      unstable_completeElicitation: (params: schema.CompleteElicitationNotification) => {
+        this.options.onElicitationComplete?.(params.elicitationId);
+      },
     };
 
     const connection = new ClientSideConnection(() => client, stream);
@@ -107,7 +133,12 @@ export class AgentProcess {
 
     const initialize = await connection.initialize({
       protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+      clientCapabilities: {
+        fs: { readTextFile: false, writeTextFile: false },
+        // Unstable in ACP, and not in the SDK's type yet; claude-agent-acp reads
+        // it to decide whether to hand an MCP server's sign-in URL over at all.
+        ...(this.options.onUrlElicitation ? { elicitation: { url: {} } } : {}),
+      },
       clientInfo: { name: 'quintal-acp', version: '0.0.1' },
     } as schema.InitializeRequest);
 

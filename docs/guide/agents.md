@@ -227,10 +227,34 @@ reports about itself. If a runtime changes underneath a measurement, Quintal
 notices and stops trusting the old one. The full table is in
 [Runtime permissions](../RUNTIME-PERMISSIONS.md).
 
+### Giving it tools
+
+An agent's card has a **Tools (MCP)** section: the MCP servers it gets, on
+whichever machine runs it. Add Slack by its URL (`https://mcp.slack.com/mcp`),
+or a local server by its command, and the agent's runtime reloads with it
+within seconds — keeping every conversation where it was.
+
+- **Signing in.** A hosted server that uses OAuth puts a **Sign in** link on
+  the card once the agent starts it, and the agent tells the conversation it
+  is waiting. Open the link on the machine that runs the agent: the sign-in
+  finishes there, and the agent's runtime keeps the token. The link is only
+  ever on your card — whoever completes it is whose account the agent uses.
+- **Secrets.** An API key or a token header is sealed in your browser to the
+  agent's own key before it leaves. The office stores what only the agent can
+  open, so it cannot be shown again; to change it, remove the server and add
+  it again.
+- **Local servers** run a program on the agent's machine, so they start only
+  for an agent with the **run** scope. The card says when one was left out,
+  and why.
+
+Ask the agent what tools it has and it can tell you — its `workspace_info`
+lists them with their state. `!reload` (or asking it to reload its tools) is
+still there for a server added on the machine itself, with `claude mcp add`.
+
 ### Owner commands
 
 Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,
-`!remember`, `!forget`, `!memory`, `!guide`, `!task`, `!done`, `!shutdown`.
+`!reload`, `!remember`, `!forget`, `!memory`, `!guide`, `!task`, `!done`, `!shutdown`.
 Add `@name` to aim at one agent. See
 [Keys and commands](./keys-and-commands.md).
 

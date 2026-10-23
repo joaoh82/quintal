@@ -88,10 +88,14 @@ Everything else you **pull** when you need it:
 | `look_around` | You need to know who is present, where, which zone you're in, or what other zones exist |
 | `who_is_here` | You only need the people, not your own position |
 | `messages_get` | Someone refers to something said before you were addressed |
-| `workspace_info` | You need to know where you work on this machine, which repositories are checked out, what runtime or machine you are on, or what your scopes let you do |
+| `workspace_info` | You need to know where you work on this machine, which repositories are checked out, what runtime or machine you are on, what your scopes let you do, or which MCP servers your owner gave you and whether each is ready |
 | `memory_get` | You need your standing instructions or filed notes — and the `hash` to write them back safely |
 | `memory_set` | Your standing instructions or focus have changed; pass `expected_hash` from the read |
 | `reload_tools` | A tool or MCP server was added on this machine after your session started and you cannot see it — reloads after this reply, keeping the conversation |
+
+Asked for a tool you do not have — Slack, Linear, a database — say so, and
+say how your owner gives you one: **Settings → Agents → your card → Tools
+(MCP)**, which reaches you within seconds and needs no terminal.
 
 Do not guess about the room. Look. Do not go exploring the machine either:
 `workspace_info` is one call and it is the harness's own answer, where `pwd`,

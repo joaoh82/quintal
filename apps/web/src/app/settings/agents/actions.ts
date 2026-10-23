@@ -30,6 +30,7 @@ import {
   setAgentLaunch,
   setAgentMaxSessions,
   setAgentProfile,
+  setAgentMcpServers,
   setAgentScopes,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
@@ -301,6 +302,52 @@ export async function saveAgentScopesAction(
     agentId,
     withdrewRun: before.includes('run') && !after.includes('run'),
   };
+}
+
+export interface SaveAgentMcpServersState {
+  ok: boolean;
+  error?: string;
+  agentId?: string;
+}
+
+/**
+ * Replace an agent's MCP servers, as the Tools section edits them — whole,
+ * since the list is small and a whole list cannot half-apply.
+ *
+ * Secret values arrive already sealed to the agent's key by the browser;
+ * this never sees them in the clear, and validation refuses a value that
+ * claims to be sealed and is not. The running agent hears of the change on
+ * the room's next settings refresh and reloads its runtime with it, keeping
+ * its conversations.
+ */
+export async function saveAgentMcpServersAction(
+  _previous: SaveAgentMcpServersState,
+  formData: FormData,
+): Promise<SaveAgentMcpServersState> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) return { ok: false, error: 'No such agent.', agentId };
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    return { ok: false, error: 'That is not your agent to change.', agentId };
+  }
+
+  let servers: unknown;
+  try {
+    servers = JSON.parse(String(formData.get('servers') ?? '[]'));
+  } catch {
+    return { ok: false, error: 'The server list did not arrive intact.', agentId };
+  }
+  try {
+    await setAgentMcpServers(db, agentId, servers, session.user.id);
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not save.', agentId };
+  }
+
+  revalidatePath('/settings/agents');
+  return { ok: true, agentId };
 }
 
 export interface SaveAgentMemoryState {
