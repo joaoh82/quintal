@@ -37,6 +37,12 @@ export const AGENT_COMMANDS: readonly AgentCommand[] = [
       'Drops the conversation context here and begins a new one. Use it when an agent has gone in circles, or before switching it to unrelated work.',
   },
   {
+    name: 'reload',
+    summary: 'Reload the agent\u2019s tools, keeping the conversation',
+    detail:
+      'Restarts the agent\u2019s runtime so it reads its configuration again \u2014 an MCP server you added on its machine after it started (`claude mcp add`, say) is invisible to it until then \u2014 and picks every conversation back up where it was. A turn in flight finishes first. The agent says when it is back. The agent can do the same itself when you ask it to.',
+  },
+  {
     name: 'remember',
     summary: 'Write something into the agent\u2019s core memory',
     detail:

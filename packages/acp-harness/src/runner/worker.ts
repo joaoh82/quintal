@@ -14,7 +14,7 @@ import { pickModel } from '../models.js';
 import { mcpServerArgs } from './mcp-args.js';
 import { askingMode, mayNeverAsk } from './approvals.js';
 import { isThrowawayScope } from './scopes.js';
-import { SessionStore } from './sessions.js';
+import { SessionStore, type SessionRecord } from './sessions.js';
 
 /**
  * One runtime process, and what it holds.
@@ -131,6 +131,14 @@ export class Worker {
    * tends to arrive.
    */
   readonly #creating = new Map<string, Promise<string>>();
+  /**
+   * Sessions the last `reload()` left behind, by scope: reattached on their
+   * next use with `session/resume`, so the conversation carries on in the
+   * new process with everything it had said and been told.
+   */
+  readonly #resumable = new Map<string, SessionRecord>();
+  /** Processes `reload()` stopped on purpose: their exit is not a crash. */
+  readonly #replaced = new WeakSet<AgentProcess>();
 
   /** The turn this worker is running, or null when idle. Set by the runner. */
   turn: Turn | null = null;
@@ -242,6 +250,9 @@ export class Worker {
       },
       onExit: (code) => {
         exited(new Error(`agent process exited (${code ?? 'signal'})`));
+        // A process `reload()` replaced, exiting after its successor started:
+        // the sessions and the worker are the new one's now.
+        if (this.#replaced.has(proc)) return;
         // Every session belonged to the process that just went away.
         this.sessions.clear();
         this.unprimed.clear();
@@ -333,6 +344,45 @@ export class Worker {
     await bridge?.close();
   }
 
+  /**
+   * Restart the runtime process so it reads its configuration again — an
+   * MCP server added on this machine after the process started is invisible
+   * to it until then — and keep the conversations: every session that was
+   * spoken in is reattached on its next use instead of opened afresh.
+   *
+   * Only for an idle worker; the caller waits for a turn to end first. The
+   * new start is under way before this returns, so a turn that claims the
+   * worker meanwhile waits on it through `ready()`.
+   */
+  reload(): Promise<void> {
+    for (const record of this.sessions.records()) {
+      if (!this.unprimed.has(record.scope)) this.#resumable.set(record.scope, record);
+    }
+    const old = this.#process;
+    this.#process = null;
+    if (old) {
+      this.#replaced.add(old);
+      old.stop();
+    }
+    this.sessions.clear();
+    this.unprimed.clear();
+    this.#creating.clear();
+    this.#starting = this.#start();
+    return this.#starting;
+  }
+
+  /**
+   * Whether this runtime can pick a stored session back up. Without it a
+   * reload still reads the new configuration, but every conversation starts
+   * a fresh session and keeps only the message window the runner pushes.
+   */
+  get canResume(): boolean {
+    const capabilities = this.#process?.initialized?.agentCapabilities as
+      | { loadSession?: boolean; sessionCapabilities?: { resume?: unknown } | null }
+      | undefined;
+    return Boolean(capabilities?.sessionCapabilities?.resume) || capabilities?.loadSession === true;
+  }
+
   /** Where the next session is rooted. */
   cwd(): string {
     return this.options.cwd?.() ?? this.options.config.cwd;
@@ -357,13 +407,81 @@ export class Worker {
     const inflight = this.#creating.get(scope);
     if (inflight) return inflight;
 
-    const creation = this.#createSession(scope);
+    const saved = this.#resumable.get(scope);
+    this.#resumable.delete(scope);
+    const creation =
+      saved && saved.cwd === this.cwd() && this.canResume
+        ? this.#resumeSession(saved).catch((error: unknown) => {
+            this.#log(
+              'warn',
+              `could not resume the session for "${scope}" (${error instanceof Error ? error.message : String(error)}); starting a new one`,
+            );
+            return this.#createSession(scope);
+          })
+        : this.#createSession(scope);
     this.#creating.set(scope, creation);
     try {
       return await creation;
     } finally {
       this.#creating.delete(scope);
     }
+  }
+
+  /**
+   * A session from before a reload, reattached in this process. The runtime
+   * re-reads its own configuration as it does — that is the point — and the
+   * conversation, the standing instructions included, is still in it, so it
+   * is not primed again. Model and permission mode are set again: they were
+   * set on the old process, and a runtime may reopen on its defaults.
+   */
+  async #resumeSession(saved: SessionRecord): Promise<string> {
+    const proc = this.#process;
+    if (!proc) throw new Error('agent is not running');
+    const params = {
+      sessionId: saved.sessionId,
+      cwd: this.cwd(),
+      mcpServers: this.#mcpServers(saved.scope),
+    };
+    const capabilities = proc.initialized?.agentCapabilities as
+      | { sessionCapabilities?: { resume?: unknown } | null }
+      | undefined;
+    // `session/load` replays the whole conversation as updates first. No turn
+    // owns this session yet, so the runner drops every one of them.
+    const resumed = capabilities?.sessionCapabilities?.resume
+      ? await proc.resumeSession(params as schema.ResumeSessionRequest)
+      : await proc.loadSession(params as schema.LoadSessionRequest);
+    if (this.#process !== proc) throw new Error('agent restarted while resuming');
+    const created = { ...resumed, sessionId: saved.sessionId } as schema.NewSessionResponse;
+
+    await this.#applyModel(proc, created);
+    await this.#applyPermissionMode(proc, created);
+
+    this.sessions.put(saved.scope, saved.sessionId, this.cwd());
+    this.#log('info', `resumed session for "${saved.scope}" (${this.sessions.size} live)`);
+    return saved.sessionId;
+  }
+
+  /** The tools a session in this scope is handed. */
+  #mcpServers(scope: string): schema.McpServer[] {
+    const bridge = this.#bridge;
+    if (!bridge) throw new Error('agent is not running');
+    // A banter session gets no tools: the one turn it lives for is a line
+    // to a colleague, and a model with `say` and `move_to` in reach while
+    // being asked for a joke is a model that can wander off or mention
+    // somebody mid-joke. Cheaper, too — no MCP subprocess, no handshake.
+    // The same for a `!forget` put to the model: it picks a number.
+    if (isThrowawayScope(scope)) return [];
+    return [
+      {
+        name: 'quintal-tools',
+        command: process.execPath,
+        args: mcpServerArgs(),
+        env: [
+          { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
+          { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
+        ],
+      },
+    ];
   }
 
   /**
@@ -375,32 +493,15 @@ export class Worker {
    */
   async #createSession(scope: string): Promise<string> {
     const proc = this.#process;
-    const bridge = this.#bridge;
-    if (!proc || !bridge) throw new Error('agent is not running');
+    if (!proc) throw new Error('agent is not running');
 
-    // A banter session gets no tools: the one turn it lives for is a line
-    // to a colleague, and a model with `say` and `move_to` in reach while
-    // being asked for a joke is a model that can wander off or mention
-    // somebody mid-joke. Cheaper, too — no MCP subprocess, no handshake.
-    // The same for a `!forget` put to the model: it picks a number.
-    const tools = isThrowawayScope(scope)
-      ? []
-      : [
-          {
-            name: 'quintal-tools',
-            command: process.execPath,
-            args: mcpServerArgs(),
-            env: [
-              { name: 'QUINTAL_BRIDGE_URL', value: bridge.url },
-              { name: 'QUINTAL_BRIDGE_TOKEN', value: bridge.token },
-            ],
-          },
-        ];
     const cwd = this.cwd();
     const created = await proc.newSession({
       cwd,
-      mcpServers: tools,
+      mcpServers: this.#mcpServers(scope),
     } as schema.NewSessionRequest);
+    // Reloaded underneath: a session of the old process is no use to anyone.
+    if (this.#process !== proc) throw new Error('agent restarted while opening a session');
 
     await this.#applyModel(proc, created);
     await this.#applyPermissionMode(proc, created);

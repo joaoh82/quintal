@@ -270,6 +270,16 @@ listing is one level deep and bounded, and an `origin` URL is reduced to
 A checkout is local configuration, not proof of current access to the remote;
 verifying that is a deliberate, authenticated step the agent takes itself.
 
+`reload_tools` — and the owner's `!reload` — answer a different gap. A
+runtime reads its configuration when its process starts, so an MCP server
+added on the machine afterwards (`claude mcp add slack …`, signed in) is
+invisible to every conversation it is already having. The harness restarts
+the runtime process, once the turn in flight has ended, and reattaches each
+conversation with ACP `session/resume` (or `session/load`), so the agent keeps
+the thread and gains the tool. A runtime that can do neither still gets the
+new configuration; its conversations start fresh sessions, with the pushed
+message window as their only memory of what was said.
+
 This split is the design. Stuffing the map, the roster and the full history into
 every prompt is the obvious approach and it makes agents worse *and* more
 expensive.

@@ -63,6 +63,10 @@ export class SessionStore {
     return [...this.#sessions.keys()];
   }
 
+  records(): SessionRecord[] {
+    return [...this.#sessions.values()];
+  }
+
   /** Whether a session exists for this scope — without touching its recency. */
   has(scope: string): boolean {
     return this.#sessions.has(scope);

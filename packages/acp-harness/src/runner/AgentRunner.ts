@@ -249,6 +249,14 @@ export class AgentRunner {
    * you were working" is only true of the session that was working.
    */
   readonly #steerPending = new Set<string>();
+  /**
+   * Workers that owe a reload, and what to call once they can take one: a
+   * reload asked for mid-turn — the model's `reload_tools` always is — waits
+   * for that turn to end rather than killing the process under it.
+   */
+  readonly #reloadPending = new Map<Worker, () => void>();
+  /** The reload under way, so a second ask joins it instead of killing its start. */
+  #reloading: Promise<boolean> | null = null;
   readonly #publicTurns = new Map<number, PublicTurn>();
   /** Bounded replay outbox, including turns completed during a socket outage. */
   readonly #activityOutbox = new Map<string, AgentActivity>();
@@ -452,6 +460,7 @@ export class AgentRunner {
         taskBegin: (repo, title) => this.#taskBeginFromTool(repo, title),
         taskEnd: () => this.#taskEndFromTool(),
         taskStatus: () => this.#taskReport(),
+        reloadTools: () => this.#reloadFromTool(worker),
       },
       onUpdate: (from, params) => this.#onAcpUpdate(from, params),
       onPermission: (from, params) => this.#onPermissionRequest(from, params),
@@ -856,6 +865,87 @@ export class AgentRunner {
     return { outcome: ended.outcome, branch: ended.task.branch, worktree: ended.task.worktree, note: ended.said };
   }
 
+  /**
+   * `reload_tools` from the model. The turn that asked is still running on
+   * this worker, so the reload waits for it; the result says so, because a
+   * model told "reloaded" would try the new tool in this same turn and not
+   * find it.
+   */
+  #reloadFromTool(worker: Worker): unknown {
+    const scope = worker.turn?.scope ?? this.#scopeOf();
+    void this.#reloadAndSay(scope);
+    return {
+      reloading: 'when this turn ends',
+      note:
+        'Your runtime restarts as soon as this reply is finished, reading its configuration again, ' +
+        'and picks this conversation back up where it is. Tools added on this machine since your ' +
+        'session started are there from your next turn — not in this one. Finish your reply in one ' +
+        'line; the harness says when the reload is done.',
+    };
+  }
+
+  /** A reload, then one line where it was asked: whoever asked is waiting to try the new tool. */
+  async #reloadAndSay(scope: string): Promise<void> {
+    const resumed = await this.reload();
+    this.#speak(
+      resumed
+        ? 'Tools reloaded; this conversation carries on where it was.'
+        : 'Tools reloaded. My runtime cannot pick a session back up, so this conversation starts a fresh one — I still have the recent messages.',
+      scope,
+    );
+    this.prewarm(scope);
+  }
+
+  /**
+   * Restart every runtime process this agent has, so each reads its
+   * configuration again — an MCP server added with `claude mcp add` after
+   * the process started is otherwise invisible to it for as long as it
+   * lives — and reattach the conversations in the new processes, so nobody
+   * loses the thread to get a tool.
+   *
+   * Idle workers go now; a busy one goes when its turn ends. Resolves when
+   * all of them are back, with whether the runtime could resume sessions.
+   */
+  reload(): Promise<boolean> {
+    if (this.#reloading) return this.#reloading;
+    const workers = (this.#pool?.workers() ?? []).filter(
+      (worker) => !worker.dead && (worker.running || worker.turn !== null),
+    );
+    const reloading = Promise.all(
+      workers.map(
+        (worker) =>
+          new Promise<void>((resolve) => {
+            const go = () => void this.#reloadWorker(worker).finally(resolve);
+            if (worker.turn) this.#reloadPending.set(worker, go);
+            else go();
+          }),
+      ),
+    ).then(() => workers.every((worker) => worker.dead || worker.canResume));
+    this.#reloading = reloading;
+    void reloading.finally(() => {
+      if (this.#reloading === reloading) this.#reloading = null;
+    });
+    this.#log('info', `reloading ${workers.length === 1 ? 'the runtime' : `${workers.length} runtime processes`}`);
+    return reloading;
+  }
+
+  async #reloadWorker(worker: Worker): Promise<void> {
+    if (this.#stopping) return;
+    this.#sweepApprovals((pending) => pending.workerIndex === worker.index, 'interrupted');
+    try {
+      await worker.reload();
+      this.#log('info', 'agent reloaded');
+    } catch (error: unknown) {
+      worker.dead = true;
+      if (this.#stopping) return;
+      this.#log('error', `reload failed: ${describe(error)}`);
+      this.#noteIfNothingLeft();
+    }
+    this.#settleState();
+    this.#publishStatus();
+    this.#drain();
+  }
+
   /** `!task api: fix the login redirect` */
   async #taskFromOwner(body: string, scope: string): Promise<void> {
     const parsed = parseTaskCommand(body);
@@ -1097,6 +1187,10 @@ export class AgentRunner {
         this.prewarm(scope);
         return true;
       }
+      case '!reload': {
+        void this.#reloadAndSay(scope);
+        return true;
+      }
       case '!remember': {
         if (parsed.body.length === 0) {
           this.#log('warn', '!remember needs something to remember');
@@ -1321,6 +1415,11 @@ export class AgentRunner {
       if (turn.sessionId !== null) this.#turnBySession.delete(sessionKey(worker, turn.sessionId));
       this.#inFlight.delete(scope);
       worker.turn = null;
+      // Before the drain, so a turn that claims this worker next waits for
+      // the new process rather than running on the old one.
+      const reload = this.#reloadPending.get(worker);
+      this.#reloadPending.delete(worker);
+      reload?.();
       this.#settleState();
       this.#publishStatus();
       // Anything that arrived for this scope while it was working is a
