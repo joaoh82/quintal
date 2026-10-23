@@ -96,6 +96,13 @@ Or install the Debian package:
 sudo apt install ./Quintal-linux-x64.deb
 ```
 
+On a Wayland session the AppImage opens a native Wayland window. Releases
+up to v0.8.0 forced X11, so the office ran under XWayland, where WebKit could
+not hand its frames to the GPU and painted every one on the CPU — a core
+pinned and an avatar that lagged its own keys. If a Wayland start misbehaves
+on your compositor, `GDK_BACKEND=x11 ./Quintal-linux-x64.AppImage` puts it back
+under XWayland.
+
 Linux releases are unsigned. Check `SHA256SUMS.txt` against your download.
 Maintainers: see [RELEASING.md](../RELEASING.md) for `just release`, signing
 secrets, stable download names and retries.

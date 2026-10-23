@@ -50,6 +50,7 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { Avatar } from '../avatar';
+import { predictionStep } from '../clock';
 import { canSettle, settle, type Authority } from '../reconcile';
 import { Speech } from '../speech';
 import {
@@ -212,8 +213,11 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  override update(time: number, deltaMs: number): void {
-    const deltaSeconds = deltaMs / 1000;
+  override update(time: number): void {
+    // Not the delta Phaser passes: that one is smoothed and capped for
+    // animation, and against a server that walks on the wall clock it loses
+    // time on every slow frame. See `predictionStep`.
+    const deltaSeconds = predictionStep(this.game.loop.rawDelta);
 
     this.#readKeyboard();
     this.#predict(deltaSeconds);
@@ -470,6 +474,31 @@ export class OfficeScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.#walkTo(pointer.worldX, pointer.worldY);
+    });
+
+    // A key held when the window loses focus never sends its keyup. Phaser
+    // resets the keys on blur, but the stop is only *sent* from `update`, and
+    // a window that is hidden has no next frame: the server walked on into
+    // the nearest wall and the avatar came back somewhere else. So the stop
+    // goes out from the event itself. A hidden window pauses the loop too,
+    // so a route clicked before looking away is walked on resume for as long
+    // as the loop was paused — the server never stopped walking it.
+    const release = (): void => {
+      keyboard.resetKeys();
+      this.#setIntent({ x: 0, y: 0 });
+    };
+    const catchUp = (pausedMs: number): void => {
+      // Uncapped, unlike a frame: the route bounds it, however long we were away.
+      if (this.#path.length > 0) this.#predict(Math.max(0, pausedMs) / 1000);
+    };
+    const events = this.game.events;
+    events.on(Phaser.Core.Events.BLUR, release);
+    events.on(Phaser.Core.Events.HIDDEN, release);
+    events.on(Phaser.Core.Events.RESUME, catchUp);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      events.off(Phaser.Core.Events.BLUR, release);
+      events.off(Phaser.Core.Events.HIDDEN, release);
+      events.off(Phaser.Core.Events.RESUME, catchUp);
     });
   }
 
