@@ -185,8 +185,16 @@ export class Worker {
     return this.turn === null && !this.dead;
   }
 
+  /**
+   * Holds this scope's conversation: a live session, or one a reload left
+   * to resume here. The pool claims by this, so after a reload a
+   * conversation goes back to the worker that can pick it up rather than to
+   * whichever is free and would start it over.
+   */
   hasSession(scope: string): boolean {
-    return this.sessions.has(scope);
+    if (this.sessions.has(scope)) return true;
+    const saved = this.#resumable.get(scope);
+    return saved !== undefined && saved.cwd === this.cwd();
   }
 
   /**
@@ -612,7 +620,10 @@ export class Worker {
   dropSession(scope: string, reason: 'lru' | 'rotate' = 'rotate'): boolean {
     const dropped = this.sessions.drop(scope, reason);
     this.unprimed.delete(scope);
-    return dropped !== undefined;
+    // One a reload saved counts too: `!rotate` means start over, and a saved
+    // session left here would be resumed on the very next turn.
+    const saved = this.#resumable.delete(scope);
+    return dropped !== undefined || saved;
   }
 
   #log(level: 'info' | 'warn' | 'error', message: string): void {

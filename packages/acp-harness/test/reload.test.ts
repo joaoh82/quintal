@@ -7,6 +7,8 @@ import { afterEach, describe, it } from 'node:test';
 
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner } from '../src/runner/AgentRunner.js';
+import { Pool } from '../src/runner/pool.js';
+import { Worker, type Turn } from '../src/runner/worker.js';
 import type { AgentConfig } from '../src/config.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url));
@@ -186,5 +188,79 @@ describe('reloading an agent’s tools', () => {
     assert.ok(reply >= 0, 'the turn that asked must finish');
     assert.ok(reply < said.findIndex((line) => line.startsWith('Tools reloaded')));
     assert.equal(count(record, 'initialize'), 2);
+  });
+});
+
+/**
+ * What a reload leaves behind for each worker: the sessions it will resume.
+ * Two things must follow from that — the pool sends a conversation back to
+ * the worker that holds it, and `!rotate` forgets it there too.
+ */
+describe('sessions a reload saved', () => {
+  const workers: Worker[] = [];
+
+  afterEach(async () => {
+    await Promise.all(workers.splice(0).map((worker) => worker.stop()));
+    for (const name of ['FAKE_RECORD', 'FAKE_RESUME']) delete process.env[name];
+  });
+
+  function pool(dir: string): Pool {
+    return new Pool(2, (index) => {
+      const worker = new Worker({
+        index,
+        config: config(dir),
+        gateway: {} as Gateway,
+        hooks: {},
+        onUpdate: () => {},
+        onPermission: async () => ({ outcome: { outcome: 'cancelled' } }) as never,
+        onExit: () => {},
+        log: () => {},
+      });
+      workers.push(worker);
+      return worker;
+    });
+  }
+
+  /** A conversation on each of two workers, spoken in, then reloaded. */
+  async function twoReloaded() {
+    const dir = mkdtempSync(join(tmpdir(), 'reload-pool-'));
+    const record = join(dir, 'record.jsonl');
+    process.env.FAKE_RECORD = record;
+    process.env.FAKE_RESUME = '1';
+    const agents = pool(dir);
+    const first = agents.claim('channel-a')!;
+    first.turn = {} as Turn;
+    const second = agents.claim('channel-b')!;
+    second.turn = {} as Turn;
+    assert.notEqual(first, second);
+    await Promise.all([first.ready(), second.ready()]);
+    await first.sessionFor('channel-a');
+    await second.sessionFor('channel-b');
+    // Spoken in: only a session that was told something is worth resuming.
+    first.unprimed.delete('channel-a');
+    second.unprimed.delete('channel-b');
+    first.turn = null;
+    second.turn = null;
+    await Promise.all([first.reload(), second.reload()]);
+    return { agents, first, second, record };
+  }
+
+  it('sends a conversation back to the worker that can resume it', async () => {
+    const { agents, first, second, record } = await twoReloaded();
+    assert.equal(agents.claim('channel-b'), second, 'not to whichever worker is free first');
+    assert.equal(agents.claim('channel-a'), first);
+    assert.equal(agents.idle('channel-b'), second, 'pre-warming follows the same rule');
+    await second.sessionFor('channel-b');
+    assert.equal(count(record, 'session/resume'), 1);
+    assert.equal(count(record, 'session/new'), 2, 'only the two from before the reload');
+  });
+
+  it('forgets a saved session when the owner rotates that conversation', async () => {
+    const { second, record } = await twoReloaded();
+    assert.equal(second.dropSession('channel-b', 'rotate'), true);
+    assert.equal(second.hasSession('channel-b'), false);
+    await second.sessionFor('channel-b');
+    assert.equal(count(record, 'session/resume'), 0, '!rotate means start over, not resume');
+    assert.equal(count(record, 'session/new'), 3);
   });
 });
