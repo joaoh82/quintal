@@ -26,6 +26,18 @@ find squashfs-root -name 'libdbus-1.so*' -print -delete
 # core and made walking lag on Arch with NVIDIA and AMD; the host's newer copy
 # serves the bundled GTK just as well.
 find squashfs-root -name 'libwayland-client.so*' -print -delete
+# And the window itself goes on Wayland where there is one. Older bundlers'
+# GTK hook forced GDK_BACKEND=x11 to dodge a crash the bundled libwayland
+# used to cause (tauri-apps/tauri#8541); with that library gone the crash is
+# gone too, and what the forced X11 left behind was an office under XWayland
+# that WebKit could not composite on the GPU — every frame painted on the CPU,
+# a core pinned, the avatar lagging its own keys. Tauri CLI 2.12's hook no
+# longer sets it (tauri-apps/tauri#16062); this keeps an older hook honest.
+hook=squashfs-root/apprun-hooks/linuxdeploy-plugin-gtk.sh
+if [[ -f "$hook" ]] && grep -q '^export GDK_BACKEND=' "$hook"; then
+  echo "Removing the forced GDK_BACKEND from $hook" >&2
+  sed -i '/^export GDK_BACKEND=/d' "$hook"
+fi
 # linuxdeploy aborts on the Bun-compiled harness — see build-desktop-release.mjs
 # — so it is bundled here instead, under the name the app spawns and beside the
 # executable that spawns it.
