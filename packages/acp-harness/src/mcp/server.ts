@@ -133,6 +133,16 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'reload_tools',
+    description:
+      'Restart your runtime so it loads its tools again, keeping this conversation. ' +
+      'Use it when a tool or MCP server was added on this machine after your session ' +
+      'started — someone ran `claude mcp add` and signed in, say — and you cannot see it. ' +
+      'The restart happens when your current reply ends: the new tools are there from your ' +
+      'next turn, not this one.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'move_to',
     description:
       'Walk somewhere. Name either a person or a zone. ' +

@@ -24,6 +24,8 @@
  *                       whose address and token arrived with session/new
  *   FAKE_MODELS         "a,b,c": advertise a model config option; first is current
  *   FAKE_MODELS_GROUPED advertise the options grouped, as some adapters do
+ *   FAKE_RESUME         advertise sessionCapabilities.resume and answer session/resume
+ *                       for any id, the way claude-agent-acp picks a stored session up
  */
 import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -142,7 +144,11 @@ async function handle(message) {
     case 'initialize':
       respond(id, {
         protocolVersion: 1,
-        agentCapabilities: { loadSession: false, promptCapabilities: {} },
+        agentCapabilities: {
+          loadSession: false,
+          promptCapabilities: {},
+          ...(process.env.FAKE_RESUME ? { sessionCapabilities: { resume: {} } } : {}),
+        },
         agentInfo: { name: 'fake-acp-agent', version: '1.0.0' },
         authMethods: [],
       });
@@ -173,6 +179,19 @@ async function handle(message) {
         ];
       }
       respond(id, session);
+      return;
+    }
+
+    case 'session/resume': {
+      if (!process.env.FAKE_RESUME) {
+        send({ jsonrpc: '2.0', id, error: { code: -32601, message: `no such method: ${method}` } });
+        return;
+      }
+      const env = params?.mcpServers?.[0]?.env ?? [];
+      const url = env.find((entry) => entry.name === 'QUINTAL_BRIDGE_URL')?.value;
+      const token = env.find((entry) => entry.name === 'QUINTAL_BRIDGE_TOKEN')?.value;
+      if (url && token) bridge = { url, token };
+      respond(id, {});
       return;
     }
 

@@ -41,6 +41,7 @@ acts.
 | --- | --- |
 | `!cancel` | Stop the turn in flight |
 | `!rotate` | Start a fresh session for this zone or channel — the agent forgets the conversation so far, not its memory |
+| `!reload` | Reload the agent's tools: its runtime restarts, reads its configuration again — picking up an MCP server you added on its machine after it started — and carries on every conversation where it was. A turn in flight finishes first; the agent says when it is back. Asking the agent in plain words ("reload your tools") does the same |
 | `!remember <note>` | Write something into the agent's core memory, so it survives restarts |
 | `!forget <words>` | Take a core-memory note back out. Quote it from memory, typos and all — the agent finds the one you mean, and asks its model when the words alone cannot settle it. `!forget 2` names one by its number from `!memory`. It says what it forgot, or lists its notes so you can pick |
 | `!memory` | The agent says what it carries in core memory, numbered, where you asked |

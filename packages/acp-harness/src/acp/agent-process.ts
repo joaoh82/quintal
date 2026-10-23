@@ -119,6 +119,31 @@ export class AgentProcess {
     return this.#requireConnection().newSession(params);
   }
 
+  /**
+   * Reattach a session the agent stored, without replaying it to us.
+   * Only for an agent that advertised `sessionCapabilities.resume`.
+   */
+  async resumeSession(params: schema.ResumeSessionRequest): Promise<schema.ResumeSessionResponse> {
+    const connection = this.#requireConnection();
+    if (typeof connection.resumeSession !== 'function') {
+      throw new Error('this ACP connection does not support session/resume');
+    }
+    return connection.resumeSession(params);
+  }
+
+  /**
+   * Reattach a session the agent stored, the older way: the agent replays
+   * the conversation as `session/update`s first. Only for an agent that
+   * advertised `loadSession`.
+   */
+  async loadSession(params: schema.LoadSessionRequest): Promise<schema.LoadSessionResponse> {
+    const connection = this.#requireConnection();
+    if (typeof connection.loadSession !== 'function') {
+      throw new Error('this ACP connection does not support session/load');
+    }
+    return (await connection.loadSession(params)) ?? {};
+  }
+
   async prompt(params: schema.PromptRequest): Promise<schema.PromptResponse> {
     return this.#requireConnection().prompt(params);
   }

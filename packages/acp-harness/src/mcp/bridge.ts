@@ -68,6 +68,11 @@ export interface BridgeHooks {
   taskBegin?: (repo: string, title: string) => Promise<unknown>;
   taskEnd?: () => Promise<unknown>;
   taskStatus?: () => unknown;
+  /**
+   * `reload_tools`: restart the runtime so it reads its configuration again,
+   * keeping the conversation. Only the runner can — it owns the processes.
+   */
+  reloadTools?: () => unknown;
 }
 
 export async function startBridge(
@@ -285,6 +290,11 @@ async function dispatch(
     case 'task_status': {
       if (!hooks.taskStatus) throw new Error('task_status is answered by the harness running this agent, and this tool server was started without one');
       return hooks.taskStatus();
+    }
+
+    case 'reload_tools': {
+      if (!hooks.reloadTools) throw new Error('reload_tools is answered by the harness running this agent, and this tool server was started without one');
+      return hooks.reloadTools();
     }
 
     case 'memory_get':

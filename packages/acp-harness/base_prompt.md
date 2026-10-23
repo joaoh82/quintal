@@ -91,6 +91,7 @@ Everything else you **pull** when you need it:
 | `workspace_info` | You need to know where you work on this machine, which repositories are checked out, what runtime or machine you are on, or what your scopes let you do |
 | `memory_get` | You need your standing instructions or filed notes — and the `hash` to write them back safely |
 | `memory_set` | Your standing instructions or focus have changed; pass `expected_hash` from the read |
+| `reload_tools` | A tool or MCP server was added on this machine after your session started and you cannot see it — reloads after this reply, keeping the conversation |
 
 Do not guess about the room. Look. Do not go exploring the machine either:
 `workspace_info` is one call and it is the harness's own answer, where `pwd`,
