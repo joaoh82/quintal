@@ -406,6 +406,18 @@ export const agents = sqliteTable(
      * owner's name follows it around.
      */
     workspacePath: text('workspace_path').notNull().default(''),
+    /**
+     * The owner's MCP servers for this agent, as `AgentMcpServer[]` — see
+     * `mcp.ts`. Secret values in it are sealed to the agent's key; the office
+     * cannot read them. Delivered in `agent:ready` and pushed on change.
+     */
+    mcpServers: text('mcp_servers', { mode: 'json' }).$type<unknown>().notNull().default([]),
+    /**
+     * What its harness last said about those servers, as `McpServerStatus[]`:
+     * handed to the runtime, skipped and why, or waiting for the owner to
+     * sign in — with the URL to do it. Shown only on the owner's settings page.
+     */
+    mcpStatus: text('mcp_status', { mode: 'json' }).$type<unknown>().notNull().default([]),
 
     // --- how a host should launch this agent, when the office defines it ---
     //

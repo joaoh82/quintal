@@ -26,6 +26,8 @@ import {
   type ApprovalRequest,
   type ApprovalResolved,
   type AgentTaskPayload,
+  type AgentMcpServersEvent,
+  type McpServerStatus,
 } from '@quintal/shared';
 import { buildAuthPayload, signAuthPayload } from '@quintal/shared';
 import { Client, type Room } from 'colyseus.js';
@@ -54,6 +56,8 @@ export interface GatewayEvents {
   error: (error: AgentErrorPayload) => void;
   /** The owner answered an approval card. Named by request id, never by tool. */
   approvalDecision: (decision: AgentApprovalDecisionEvent) => void;
+  /** The owner changed this agent's MCP servers; the whole new list. */
+  mcpServers: (event: AgentMcpServersEvent) => void;
   /** The socket dropped. `code` 4000 means we or the server closed on purpose. */
   closed: (code: number) => void;
 }
@@ -269,6 +273,9 @@ export class GatewayClient {
       AgentServerMessage.ApprovalDecision,
       (decision: AgentApprovalDecisionEvent) => this.#handlers.approvalDecision?.(decision),
     );
+    room.onMessage(AgentServerMessage.McpServers, (event: AgentMcpServersEvent) =>
+      this.#handlers.mcpServers?.(event),
+    );
     room.onMessage(AgentServerMessage.Error, (error: AgentErrorPayload) =>
       this.#handlers.error?.(error),
     );
@@ -338,6 +345,15 @@ export class GatewayClient {
   task(value: AgentTaskPayload): void {
     if (this.#ready?.taskVersion !== 1) return;
     this.#room?.send(AgentMessage.Task, value);
+  }
+
+  /**
+   * How the owner's MCP servers stand on this machine, for their settings
+   * page. Dropped when the office predates MCP servers.
+   */
+  mcpStatus(servers: McpServerStatus[]): void {
+    if (this.#ready?.mcpVersion !== 1) return;
+    this.#room?.send(AgentMessage.McpStatus, { servers });
   }
 
   say(text: string, channelId?: string): void {
@@ -503,4 +519,4 @@ export type Gateway = Pick<
   | 'occupants'
   | 'channels'
   | 'on'
-> & Partial<Pick<GatewayClient, 'activity' | 'approvalRequest' | 'approvalResolved' | 'task'>>;
+> & Partial<Pick<GatewayClient, 'activity' | 'approvalRequest' | 'approvalResolved' | 'task' | 'mcpStatus'>>;

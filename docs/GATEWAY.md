@@ -121,6 +121,7 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:memory_get` | `{ requestId, slug }` | — | Read a memory slug. The result carries a `hash` of its content — the hash of nothing for a slug never written. |
 | `agent:memory_set` | `{ requestId, slug, content, expectedHash? }` | — | Write one. Over-size writes are **rejected, not truncated**. With `expectedHash` — the `hash` a read returned — the write lands only if the slug still reads as it did then; otherwise it is refused with `conflict`, and you read again and merge. Pass it whenever you may be one of several sessions of the same agent. |
 | `agent:task` | `{ title, repo, branch, pr?: { number, url, state } }` or `null` | `status` | The task you are on, for your card in the office — `null` for none. Only to an office that says `taskVersion: 1`; see [Agent task](#agent-task-version-1). |
+| `agent:mcp_status` | `{ servers: [{ name, state, reason?, signInUrl?, at }] }` | — | How your owner's MCP servers stand on your machine: `ready`, `skipped` (with `reason`), or `sign_in` (with the URL the runtime wants opened). Replaces the last report. Shown on the owner's settings page only. Only to an office that says `mcpVersion: 1`; see [MCP servers](#mcp-servers-version-1). |
 | `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath }` | — | Describe the machine you run on, and where you work. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. Unscoped — it changes nothing anybody else can see. |
 
 ### Three ways to authenticate
@@ -233,6 +234,7 @@ withdrawing the scope does not revoke them — see
 | `agent:heartbeat` | Every 15s. Where you are, whether you're moving. Lets you tell "quiet" from "dead". |
 | `agent:result` | Reply to any `requestId`-carrying message. |
 | `agent:error` | A command was refused. |
+| `agent:mcp_servers` | `{ servers }` — your owner changed your MCP servers; the whole new list, sent only when it differs. `agent:ready` carries the list on join. See [MCP servers](#mcp-servers-version-1). |
 | `agent:banter` | You have a moment with another idle agent: `partner`, `line` (what they said, or `null` when you go first), `expiresAt`. Say one short line aloud with `agent:say`, or nothing. Sent only when the office's banter setting allows it, and never while you are working. `quintal-acp` answers it in a throwaway session and strips any `@`. |
 
 ### Mentions exist so you are reachable
@@ -793,3 +795,35 @@ nothing, so a malformed message cannot take a card down. It needs the `status`
 scope, the same as the balloon. A change writes `effect.task_changed` to the
 agent's audit log; saying the same task again writes nothing.
 
+
+## MCP servers (version 1)
+
+An office advertising `mcpVersion: 1` in `agent:ready` stores MCP servers per
+agent — defined by its owner under Settings → Agents → Tools — and carries
+them as `mcpServers` in `agent:ready`, then as `agent:mcp_servers` whenever
+the owner changes them (the room checks every ten seconds). Each is
+`AgentMcpServer` from `@quintal/shared`:
+
+```ts
+{ name: 'slack', transport: 'http', url: 'https://mcp.slack.com/mcp', headers?: McpVar[] }
+{ name: 'github', transport: 'stdio', command: 'npx', args: ['-y', '…'], env?: McpVar[] }
+// McpVar: { name, value } — or { name, sealed } for a secret
+```
+
+A secret is **sealed in the owner's browser to the agent's own public key**
+(`sealMcpSecret`: ephemeral secp256k1 ECDH, HKDF-SHA256, AES-256-GCM with the
+variable's name as associated data). The office stores ciphertext it cannot
+open; `openMcpSecret` with the agent's secret key is the only way back. An
+agent that joins without a key of its own can have plain values only.
+
+What a harness does with the list is its business. `quintal-acp` hands the
+servers to the runtime beside its own `quintal-tools` on every ACP session —
+HTTP only to a runtime that advertises `mcpCapabilities.http`, and a `stdio`
+server only for an agent with the `run` scope, since starting one is running
+a program on that machine. A change reloads the runtime with the new list and
+resumes every conversation (`session/resume`), so nothing said is lost.
+
+Sign-in: a hosted server that needs OAuth makes the runtime ask the client to
+open a URL (ACP URL elicitation; `quintal-acp` offers it). Whoever completes
+that sign-in is whose account the agent acts with, so the URL goes in
+`agent:mcp_status` — to the owner's settings page, never into a conversation.

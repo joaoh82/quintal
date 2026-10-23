@@ -149,6 +149,8 @@ import {
   removeChannelMember,
   getDb,
   getOfficeSettings,
+  mcpServersForAgents,
+  setAgentMcpStatus,
   mentionsOf,
   openDm,
   recentMessages,
@@ -161,7 +163,15 @@ import {
   type StoredMessage,
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
-import { EarshotTracker, tileBeside, type AgentCredentialKind, type EarshotPlayer } from '@quintal/shared';
+import {
+  EarshotTracker,
+  parseMcpStatus,
+  tileBeside,
+  type AgentCredentialKind,
+  type AgentMcpServer,
+  type AgentMcpServersEvent,
+  type EarshotPlayer,
+} from '@quintal/shared';
 
 import { agentBelongsToOffice, mayEnterOffice } from '../auth/office.js';
 
@@ -345,6 +355,8 @@ export class OfficeRoom extends Room<OfficeState> {
    * and a request is answered whatever was sent before it. See `channel-list.ts`.
    */
   readonly #channelsSent = new SentChannelLists();
+  /** The MCP server list each connected agent was last given, by fingerprint. */
+  readonly #mcpSent = new Map<string, string>();
   /**
    * sessionId -> the zone they are reading live from elsewhere. One per
    * person: a transcript you have open, not a wiretap on the office.
@@ -531,12 +543,16 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(AgentMessage.Task, (client, payload: unknown) =>
       this.#onAgentTask(client, payload),
     );
+    this.onMessage(AgentMessage.McpStatus, (client, payload: unknown) =>
+      this.#onAgentMcpStatus(client, payload),
+    );
 
     void this.#refreshSettings();
     void this.#refreshChannels();
     this.#settingsTimer = setInterval(() => {
       void this.#refreshSettings();
       void this.#refreshChannels();
+      void this.#refreshMcpServers();
     }, 10_000);
 
     this.#heartbeatTimer = setInterval(() => {
@@ -678,9 +694,12 @@ export class OfficeRoom extends Room<OfficeState> {
     };
   }
 
-  override onJoin(client: Client, _options: OfficeRoomOptions, auth: JoinAuth): void {
+  override async onJoin(client: Client, _options: OfficeRoomOptions, auth: JoinAuth): Promise<void> {
     if (auth.kind === 'agent') {
-      this.#joinAsAgent(client, auth.identity, auth.credential);
+      // Read before `agent:ready`, so the runtime's first session already has
+      // them: arriving a moment later they would cost a reload.
+      const mcp = await this.#readMcpServers([auth.identity.id]);
+      this.#joinAsAgent(client, auth.identity, auth.credential, mcp.get(auth.identity.id));
       return;
     }
 
@@ -750,7 +769,12 @@ export class OfficeRoom extends Room<OfficeState> {
     return false;
   }
 
-  #joinAsAgent(client: Client, identity: AgentIdentity, credential: AgentCredentialKind): void {
+  #joinAsAgent(
+    client: Client,
+    identity: AgentIdentity,
+    credential: AgentCredentialKind,
+    mcp: { servers: AgentMcpServer[]; fingerprint: string } | undefined,
+  ): void {
     // Agents wake up in the Agent Bay, not the human lobby. Where a worker
     // stands says what it is as loudly as any badge.
     const spawn = this.#agentSpawn();
@@ -799,6 +823,8 @@ export class OfficeRoom extends Room<OfficeState> {
       activityVersion: 1,
       approvalVersion: 1,
       taskVersion: 1,
+      mcpVersion: 1,
+      mcpServers: mcp?.servers ?? [],
       agentId: identity.id,
       sessionId: client.sessionId,
       name: identity.name,
@@ -829,6 +855,7 @@ export class OfficeRoom extends Room<OfficeState> {
       },
     };
     client.send(AgentServerMessage.Ready, ready);
+    if (mcp) this.#mcpSent.set(client.sessionId, mcp.fingerprint);
     this.#sendRoster(client.sessionId);
 
     logger.info(
@@ -1399,6 +1426,57 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     // Anyone whose list changed hears about it; anyone whose list did not, does not.
     for (const sessionId of this.state.players.keys()) this.#sendChannels(sessionId);
+  }
+
+  async #readMcpServers(agentIds: string[]): Promise<Map<string, { servers: AgentMcpServer[]; fingerprint: string }>> {
+    try {
+      return await mcpServersForAgents(getDb(), agentIds);
+    } catch (error: unknown) {
+      logger.error('[office] could not read MCP servers', error);
+      return new Map();
+    }
+  }
+
+  /**
+   * Tell each connected agent when its owner changed its MCP servers.
+   *
+   * On the settings timer, like channels: the settings page writes the
+   * database and nothing else, and there is no other way from there to here.
+   * Ten seconds is the delay between saving Slack on the settings page and
+   * the agent's runtime reloading with it.
+   */
+  async #refreshMcpServers(): Promise<void> {
+    const sessions = [...this.#agents.entries()];
+    if (sessions.length === 0) return;
+    const found = await this.#readMcpServers([...new Set(sessions.map(([, identity]) => identity.id))]);
+    for (const [sessionId, identity] of sessions) {
+      const mcp = found.get(identity.id);
+      if (!mcp || this.#mcpSent.get(sessionId) === mcp.fingerprint) continue;
+      const client = this.clients.getById(sessionId);
+      if (!client) continue;
+      this.#mcpSent.set(sessionId, mcp.fingerprint);
+      client.send(AgentServerMessage.McpServers, { servers: mcp.servers } satisfies AgentMcpServersEvent);
+    }
+  }
+
+  /**
+   * The harness saying how its owner's MCP servers stand on its machine.
+   * Stored for the owner's settings page — the sign-in URL in it is for the
+   * owner and nobody else, so it is never broadcast to the room.
+   */
+  #onAgentMcpStatus(client: Client, payload: unknown): void {
+    const session = this.#agentSession(client);
+    if (!session) return;
+    markSeen(session.identity.id);
+    const status = parseMcpStatus(payload);
+    if (!status) {
+      this.#denyAgent(client, session, 'invalid_payload', 'agent:mcp_status wants { servers: [...] }.');
+      return;
+    }
+    const agentId = session.identity.id;
+    void setAgentMcpStatus(getDb(), agentId, status).catch((error: unknown) => {
+      logger.error(`[agent] MCP status write failed for ${agentId}`, error);
+    });
   }
 
   /** The channels and DMs one person or agent is in, as they should see them. */
@@ -3402,6 +3480,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#chatLimiter.forget(sessionId);
     this.#readLimiter.forget(sessionId);
     this.#channelsSent.forget(sessionId);
+    this.#mcpSent.delete(sessionId);
     // Their cursors stay while any session of theirs does — two tabs are one
     // reader — and go with the last one. The database keeps the durable copy.
     if (leaving !== undefined && !this.#hasSessionFor(leaving)) {

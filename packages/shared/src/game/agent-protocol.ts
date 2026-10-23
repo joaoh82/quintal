@@ -1,6 +1,7 @@
 import type { AgentScope } from '../agent.js';
 import type { AgentTask } from '../agent-task.js';
 import type { ChannelRef } from '../conversation.js';
+import type { AgentMcpServer, McpServerStatus } from '../mcp.js';
 import type { PlayerKind } from '../player.js';
 
 /**
@@ -67,6 +68,12 @@ export const AgentMessage = {
    * nameplate. Only to an office that says `taskVersion: 1`.
    */
   Task: 'agent:task',
+  /**
+   * How the owner's MCP servers stand on this machine: handed to the
+   * runtime, skipped and why, or waiting for the owner to sign in. Replaces
+   * the last report whole. Only to an office that says `mcpVersion: 1`.
+   */
+  McpStatus: 'agent:mcp_status',
 } as const;
 export type AgentMessage = (typeof AgentMessage)[keyof typeof AgentMessage];
 
@@ -223,6 +230,11 @@ export const AgentServerMessage = {
    * the question and make sure nothing else has settled it first.
    */
   ApprovalDecision: 'agent:approval_decision',
+  /**
+   * The owner changed this agent's MCP servers. The whole list, as
+   * `agent:ready` carries it; sent only when it differs from the last one.
+   */
+  McpServers: 'agent:mcp_servers',
 } as const;
 export type AgentServerMessage =
   (typeof AgentServerMessage)[keyof typeof AgentServerMessage];
@@ -265,6 +277,13 @@ export interface AgentReadyPayload {
    * older office does not send it; the task stays in its own tools.
    */
   taskVersion?: 1;
+  /** Set when this office stores MCP servers and understands `agent:mcp_status`. */
+  mcpVersion?: 1;
+  /**
+   * The MCP servers its owner gave it, for the harness to hand the runtime
+   * beside its own tools. Secret values are sealed to the agent's key.
+   */
+  mcpServers?: AgentMcpServer[];
   agentId: string;
   sessionId: string;
   name: string;
@@ -546,3 +565,13 @@ export const AGENT_HEARTBEAT_MS = 15_000;
  * of its key being revoked, not instantly.
  */
 export const AGENT_REVOCATION_POLL_MS = 5_000;
+
+/** `agent:mcp_servers`. */
+export interface AgentMcpServersEvent {
+  servers: AgentMcpServer[];
+}
+
+/** `agent:mcp_status`. */
+export interface AgentMcpStatusPayload {
+  servers: McpServerStatus[];
+}

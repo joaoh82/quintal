@@ -30,7 +30,10 @@ import {
   setAgentLaunch,
   setAgentMaxSessions,
   setAgentProfile,
+  readAgentMcp,
+  setAgentMcpServers,
   setAgentScopes,
+  type AgentMcpView,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -301,6 +304,66 @@ export async function saveAgentScopesAction(
     agentId,
     withdrewRun: before.includes('run') && !after.includes('run'),
   };
+}
+
+export interface SaveAgentMcpServersState {
+  ok: boolean;
+  error?: string;
+  agentId?: string;
+}
+
+/**
+ * Replace an agent's MCP servers, as the Tools section edits them — whole,
+ * since the list is small and a whole list cannot half-apply.
+ *
+ * Secret values arrive already sealed to the agent's key by the browser;
+ * this never sees them in the clear, and validation refuses a value that
+ * claims to be sealed and is not. The running agent hears of the change on
+ * the room's next settings refresh and reloads its runtime with it, keeping
+ * its conversations.
+ */
+export async function saveAgentMcpServersAction(
+  _previous: SaveAgentMcpServersState,
+  formData: FormData,
+): Promise<SaveAgentMcpServersState> {
+  const session = await requireSession();
+  const db = getDb();
+
+  const agentId = String(formData.get('agentId') ?? '');
+  const agent = await findAgentById(db, agentId);
+  if (!agent) return { ok: false, error: 'No such agent.', agentId };
+  if (!(await canAdministerAgent(db, session.user.id, agent))) {
+    return { ok: false, error: 'That is not your agent to change.', agentId };
+  }
+
+  let servers: unknown;
+  try {
+    servers = JSON.parse(String(formData.get('servers') ?? '[]'));
+  } catch {
+    return { ok: false, error: 'The server list did not arrive intact.', agentId };
+  }
+  try {
+    await setAgentMcpServers(db, agentId, servers, session.user.id);
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not save.', agentId };
+  }
+
+  revalidatePath('/settings/agents');
+  return { ok: true, agentId };
+}
+
+/**
+ * An agent's MCP servers and their status, for the Tools card to check back
+ * on while it waits: the runtime reports a sign-in link seconds after a save,
+ * and a sign-in finishes on another machine. Owner-only, like the card — a
+ * pending sign-in URL decides whose account the agent will act with.
+ */
+export async function readAgentMcpAction(agentId: string): Promise<AgentMcpView | null> {
+  const session = await requireSession();
+  const db = getDb();
+  const agent = await findAgentById(db, agentId);
+  if (!agent || !(await canAdministerAgent(db, session.user.id, agent))) return null;
+  return (await readAgentMcp(db, [agentId])).get(agentId) ?? null;
 }
 
 export interface SaveAgentMemoryState {

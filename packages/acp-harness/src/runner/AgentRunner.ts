@@ -32,6 +32,10 @@ import {
   type ApprovalResolution,
   type ApprovalResolved,
   type ApprovalVia,
+  mcpServersFingerprint,
+  validateMcpServers,
+  type AgentMcpServer,
+  type McpServerStatus,
 } from '@quintal/shared';
 
 import { nestRoot, runtimeIdOf, type AgentConfig } from '../config.js';
@@ -90,6 +94,12 @@ import {
 import { isHarnessNotice, statusForTool, toBubbles, toPosts } from './outbound.js';
 import { Pool } from './pool.js';
 import {
+  parseMcpListing,
+  parseReconnectFailures,
+  resolveMcpServers,
+  type ResolvedMcpServers,
+} from './mcp-servers.js';
+import {
   LOBBY_SCOPE,
   banterScope,
   channelIdOf,
@@ -98,11 +108,18 @@ import {
   isBanterScope,
   isForgetScope,
   isSpatialScope,
+  isThrowawayScope,
 } from './scopes.js';
 import { ModelRefusedError, Worker, type Turn } from './worker.js';
 
 export { mcpServerArgs } from './mcp-args.js';
 export { forgetLines } from './forget.js';
+
+/** Long enough for a hosted MCP server to say it needs auth; longer each retry. */
+function mcpCheckDelayMs(attempt: number): number {
+  const base = Number(process.env.QUINTAL_MCP_CHECK_MS ?? 8000);
+  return (Number.isFinite(base) && base >= 0 ? base : 8000) * (attempt + 1);
+}
 
 /**
  * One agent, alive in one office.
@@ -257,6 +274,18 @@ export class AgentRunner {
   readonly #reloadPending = new Map<Worker, () => void>();
   /** The reload under way, so a second ask joins it instead of killing its start. */
   #reloading: Promise<boolean> | null = null;
+  /** The owner's MCP servers, as the office last sent them. */
+  #mcpDefined: AgentMcpServer[] = [];
+  /** …and as this machine can hand them over: opened, or skipped with a reason. */
+  #mcpResolved: ResolvedMcpServers = { servers: [], skipped: [] };
+  /** Null until the office has said anything, so the first list is never "no change". */
+  #mcpFingerprint: string | null = null;
+  /** Changes applied one at a time: two lists racing would leave either. */
+  #mcpApplying: Promise<void> = Promise.resolve();
+  /** Servers waiting on the owner to sign in, by name: the URL and the runtime's id for the flow. */
+  readonly #mcpSignIn = new Map<string, { url: string; elicitationId: string; at: number }>();
+  /** Servers the runtime itself could not bring up, with its reason. Cleared by a new list. */
+  #mcpRuntimeFailures = new Map<string, string>();
   readonly #publicTurns = new Map<number, PublicTurn>();
   /** Bounded replay outbox, including turns completed during a socket outage. */
   readonly #activityOutbox = new Map<string, AgentActivity>();
@@ -378,6 +407,9 @@ export class AgentRunner {
   async start(): Promise<void> {
     this.#stopping = false;
     await this.#connectGateway();
+    // The owner's servers came with `agent:ready`; the first session is
+    // opened with them, not reloaded into them a moment later.
+    await this.#mcpApplying;
 
     // The office has now said how many. The pool is sized once, here: a
     // running agent cannot change it, which is why the supervisor restarts
@@ -393,6 +425,7 @@ export class AgentRunner {
 
     this.#setState('connected');
     this.#publishStatus();
+    this.#reportMcp();
 
     // A task survives a restart: the book is on disk and the worktree is
     // there. Say so where the owner looks — the log, and the agent's card —
@@ -462,6 +495,12 @@ export class AgentRunner {
         taskStatus: () => this.#taskReport(),
         reloadTools: () => this.#reloadFromTool(worker),
       },
+      // HTTP servers only to a runtime that said it takes them: an ACP agent
+      // handed a transport it never advertised may refuse the whole session.
+      mcpServers: () =>
+        this.#mcpResolved.servers.filter((server) => worker.mcpHttp || !('type' in server && server.type === 'http')),
+      onUrlElicitation: (from, params) => this.#onMcpSignIn(from, params),
+      onElicitationComplete: (from, elicitationId) => this.#onMcpSignInClosed(from, elicitationId),
       onUpdate: (from, params) => this.#onAcpUpdate(from, params),
       onPermission: (from, params) => this.#onPermissionRequest(from, params),
       onExit: (from, code) => void this.#onWorkerExit(from, code),
@@ -476,7 +515,11 @@ export class AgentRunner {
         'info',
         `in the office as ${ready.name} (${ready.ownerName}'s), ${ready.zoneId ?? 'open floor'}`,
       );
+      // On every connect: a list changed while the socket was down arrives
+      // here, not as an `agent:mcp_servers`.
+      if (ready.mcpVersion === 1) this.#onMcpServers(ready.mcpServers ?? []);
     });
+    this.#gateway.on('mcpServers', (event) => this.#onMcpServers(event.servers));
     this.#gateway.on('chat', (message) => this.#onChat(message, message.distance));
     this.#gateway.on('mention', (message) => this.#onMention(message));
     this.#gateway.on('channelChat', (message) => this.#onChannelChat(message));
@@ -747,7 +790,10 @@ export class AgentRunner {
    * pays for it — and it is read fresh on every call, so a repository cloned or
    * a directory re-pointed since the session started is in the answer.
    */
-  workspaceInfo(): WorkspaceReport & { task: Record<string, unknown> } {
+  workspaceInfo(): WorkspaceReport & {
+    task: Record<string, unknown>;
+    mcp_servers: Array<Pick<McpServerStatus, 'name' | 'state' | 'reason'>>;
+  } {
     const ready = this.#gateway.ready;
     const report = workspaceReport({
       cwd: this.cwd(),
@@ -761,7 +807,231 @@ export class AgentRunner {
       },
       ...(this.#host?.reposDir ? { reposDir: this.#host.reposDir } : {}),
     });
-    return { ...report, task: this.#taskReport() };
+    return {
+      ...report,
+      task: this.#taskReport(),
+      // Without the sign-in URL: the agent says "Slack is waiting for you to
+      // sign in", and the link stays on the owner's settings page.
+      mcp_servers: this.#mcpStatus().map(({ name, state, reason }) => ({ name, state, ...(reason ? { reason } : {}) })),
+    };
+  }
+
+  // --- the owner's MCP servers -------------------------------------------------
+
+  #onMcpServers(servers: unknown): void {
+    this.#mcpApplying = this.#mcpApplying.then(() => this.#applyMcpServers(servers)).catch((error: unknown) => {
+      this.#log('warn', `could not apply the MCP servers: ${describe(error)}`);
+    });
+  }
+
+  /**
+   * A new list from the office: open what is sealed, skip what this machine
+   * may not run, and — when it differs from what the runtime has — reload,
+   * so conversations already under way gain the servers without losing the
+   * thread. That is the whole point of defining them in the office: nobody
+   * should have to touch this machine to give the agent Slack.
+   */
+  async #applyMcpServers(input: unknown): Promise<void> {
+    const checked = validateMcpServers(input);
+    if (!checked.ok) this.#log('warn', `ignoring the MCP servers from the office: ${checked.error}`);
+    const servers = checked.ok ? checked.servers : [];
+    const fingerprint = mcpServersFingerprint(servers);
+    if (fingerprint === this.#mcpFingerprint) return;
+    const first = this.#mcpFingerprint === null;
+    this.#mcpFingerprint = fingerprint;
+
+    const credential = this.#credential();
+    this.#mcpDefined = servers;
+    this.#mcpResolved = await resolveMcpServers(servers, {
+      secretKey: credential?.kind === 'keypair' ? credential.secretKey : null,
+      mayRun: this.#gateway.ready?.scopes?.includes('run') ?? false,
+      http: true,
+    });
+    for (const name of this.#mcpSignIn.keys()) {
+      if (!servers.some((server) => server.name === name)) this.#mcpSignIn.delete(name);
+    }
+    this.#mcpRuntimeFailures = new Map();
+    for (const { name, reason } of this.#mcpResolved.skipped) this.#log('warn', `MCP server "${name}" left out: ${reason}`);
+    if (servers.length > 0 || !first) {
+      this.#log('info', `MCP servers: ${servers.map((server) => server.name).join(', ') || 'none'}`);
+    }
+    this.#reportMcp();
+
+    // The first list arrives before anything runs. Any later one is a change
+    // to sessions that already exist, which only a reload reaches.
+    if (!first && this.#pool) {
+      await this.reload();
+      this.#reportMcp();
+      // Warm a session now rather than at the next message: the runtime only
+      // tries a server — and asks for its sign-in — inside a session, and the
+      // owner who just added it is looking at the card waiting for the link.
+      this.prewarm();
+    }
+  }
+
+  #credential(): ReturnType<typeof credentialFor> | null {
+    try {
+      return credentialFor(this.config);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Each defined server as it stands here, for the owner's page and `workspace_info`. */
+  #mcpStatus(): McpServerStatus[] {
+    const http = this.#pool?.running()[0]?.mcpHttp;
+    return this.#mcpDefined.map((server): McpServerStatus => {
+      const at = Date.now();
+      const skipped = this.#mcpResolved.skipped.find((entry) => entry.name === server.name);
+      if (skipped) return { name: server.name, state: 'skipped', reason: skipped.reason, at };
+      if (server.transport === 'http' && http === false) {
+        return { name: server.name, state: 'skipped', reason: 'this runtime does not take MCP servers over HTTP', at };
+      }
+      const failed = this.#mcpRuntimeFailures.get(server.name);
+      if (failed) return { name: server.name, state: 'skipped', reason: `the runtime could not connect: ${failed}`, at };
+      const signIn = this.#mcpSignIn.get(server.name);
+      if (signIn) return { name: server.name, state: 'sign_in', signInUrl: signIn.url, at: signIn.at };
+      return { name: server.name, state: 'ready', at };
+    });
+  }
+
+  /**
+   * Ask the runtime, once per process and server list, which of the owner's
+   * hosted servers need signing in — and start the sign-in for those.
+   *
+   * claude-agent-acp checks at session start, but a hosted server is still
+   * connecting then (it takes seconds to say it needs auth), so that check
+   * finds nothing and the sign-in never starts. Its own `/mcp reconnect`
+   * starts it reliably, and the URL arrives through the same elicitation as
+   * ever. `/mcp` is answered by the runtime, not the model: no tokens, and a
+   * fraction of a second of the worker's time, taken only while it is idle.
+   *
+   * Only for a runtime that offers `/mcp`; any other is left to its own ways.
+   */
+  #scheduleMcpCheck(worker: Worker, attempt = 0): void {
+    const fingerprint = this.#mcpFingerprint;
+    if (fingerprint === null) return;
+    if (attempt === 0) {
+      if (worker.mcpCheckedFor === fingerprint) return;
+      if (!this.#mcpDefined.some((server) => server.transport === 'http')) return;
+      worker.mcpCheckedFor = fingerprint;
+    }
+    const timer = setTimeout(() => void this.#checkMcp(worker, fingerprint, attempt), mcpCheckDelayMs(attempt));
+    timer.unref?.();
+  }
+
+  async #checkMcp(worker: Worker, fingerprint: string, attempt: number): Promise<void> {
+    if (this.#stopping || worker.dead || !worker.running || this.#mcpFingerprint !== fingerprint) return;
+    if (worker.mcpCheckedFor !== fingerprint) return;
+    if (!worker.commands.has('mcp')) return;
+    const session = worker.sessions.records().find((record) => !isThrowawayScope(record.scope));
+    if (!session) return;
+    if (!worker.idle) {
+      // Busy with a turn: try again once it has had time to finish.
+      if (attempt < 10) this.#scheduleMcpCheck(worker, attempt + 1);
+      return;
+    }
+    const ours = new Set(
+      this.#mcpResolved.servers.flatMap((server) => ('type' in server && server.type === 'http' ? [server.name] : [])),
+    );
+    let stillConnecting = false;
+    worker.maintenance = true;
+    try {
+      const listing = parseMcpListing(await worker.localCommand(session.sessionId, '/mcp'));
+      // Not one whose sign-in is already open: the runtime started that one
+      // itself, and a second reconnect would only mint a second link.
+      const waiting = [...ours].filter(
+        (name) => listing.get(name)?.group === 'needs-auth' && !this.#mcpSignIn.has(name),
+      );
+      for (const name of ours) {
+        const entry = listing.get(name);
+        if (entry?.group === 'failed') this.#mcpRuntimeFailures.set(name, entry.detail ?? 'failed');
+        if (entry?.group === 'pending') stillConnecting = true;
+      }
+      for (const name of waiting) {
+        const failures = parseReconnectFailures(await worker.localCommand(session.sessionId, `/mcp reconnect ${name}`));
+        const why = failures.get(name);
+        // "Server status: needs-auth" is the reconnect starting the sign-in, not failing.
+        if (why && !/needs-auth/.test(why)) this.#mcpRuntimeFailures.set(name, why);
+      }
+      if (waiting.length > 0 || this.#mcpRuntimeFailures.size > 0) {
+        const failed = [...this.#mcpRuntimeFailures.keys()];
+        this.#log(
+          'info',
+          `MCP sign-in started for ${waiting.filter((name) => !failed.includes(name)).join(', ') || 'none'}; ` +
+            `could not connect: ${failed.join(', ') || 'none'}`,
+        );
+      }
+    } catch (error: unknown) {
+      this.#log('warn', `could not ask the runtime about its MCP servers: ${describe(error)}`);
+    } finally {
+      worker.maintenance = false;
+      this.#reportMcp();
+      this.#drain();
+    }
+    // A server still connecting is asked about again, a little later.
+    if (stillConnecting && attempt < 3) this.#scheduleMcpCheck(worker, attempt + 1);
+  }
+
+  #reportMcp(): void {
+    this.#gateway.mcpStatus?.(this.#mcpStatus());
+  }
+
+  /**
+   * The runtime needs the owner to sign in to one of their servers — an
+   * OAuth URL, from ACP URL elicitation. The URL goes to the owner's settings
+   * page and nowhere else: whoever completes that sign-in is whose account
+   * the agent will act with, so it must never be posted where others can
+   * click it. The conversation hears only that it is waiting, and where.
+   *
+   * Accepted at once: the runtime keeps its own callback listener open and
+   * finishes on its own when the owner does.
+   */
+  async #onMcpSignIn(
+    worker: Worker,
+    params: { sessionId?: string; elicitationId: string; url: string; message: string },
+  ): Promise<'accept' | 'decline'> {
+    // claude-agent-acp says "Authenticate with MCP server <name>"; anything
+    // else is matched against the names the owner gave.
+    const named = /MCP server (\S+)/.exec(params.message)?.[1];
+    const server =
+      this.#mcpDefined.find((entry) => entry.name === named) ??
+      this.#mcpDefined.find((entry) => params.message.includes(entry.name));
+    if (!server) {
+      this.#log('warn', `declined a sign-in request that names none of the owner's MCP servers: ${params.message}`);
+      return 'decline';
+    }
+    const known = this.#mcpSignIn.has(server.name);
+    this.#mcpSignIn.set(server.name, { url: params.url, elicitationId: params.elicitationId, at: Date.now() });
+    this.#log('info', `MCP server "${server.name}" is waiting for the owner to sign in`);
+    this.#reportMcp();
+    if (!known) {
+      const scope = worker.sessions.records().find((record) => record.sessionId === params.sessionId)?.scope;
+      if (scope && !isThrowawayScope(scope)) {
+        this.#speak(
+          `${server.name} needs signing in before I can use it — the link is on my settings page, under Tools.`,
+          scope,
+        );
+      }
+    }
+    return 'accept';
+  }
+
+  /**
+   * The runtime closed a sign-in. Not proof it worked: claude-agent-acp
+   * closes one the same way when the flow is abandoned — its process
+   * stopping, say. So the link comes down, and the runtime is asked again:
+   * a server still waiting gets a fresh link, one that connected reads ready.
+   */
+  #onMcpSignInClosed(worker: Worker, elicitationId: string): void {
+    for (const [name, signIn] of this.#mcpSignIn) {
+      if (signIn.elicitationId !== elicitationId) continue;
+      this.#mcpSignIn.delete(name);
+      this.#log('info', `MCP sign-in for "${name}" closed`);
+      this.#reportMcp();
+      worker.mcpCheckedFor = null;
+      this.#scheduleMcpCheck(worker);
+    }
   }
 
   #taskReport(): Record<string, unknown> {
@@ -908,6 +1178,8 @@ export class AgentRunner {
    */
   reload(): Promise<boolean> {
     if (this.#reloading) return this.#reloading;
+    // A sign-in link belongs to the process that minted it; the new one mints its own.
+    this.#mcpSignIn.clear();
     const workers = (this.#pool?.workers() ?? []).filter(
       (worker) => !worker.dead && (worker.running || worker.turn !== null),
     );
@@ -1616,7 +1888,9 @@ export class AgentRunner {
   async #sessionOn(worker: Worker, scope: string): Promise<string> {
     if (this.#modelRefusal !== null) throw new Error(this.#modelRefusal);
     try {
-      return await worker.sessionFor(scope);
+      const session = await worker.sessionFor(scope);
+      this.#scheduleMcpCheck(worker);
+      return session;
     } catch (error: unknown) {
       if (error instanceof ModelRefusedError) {
         this.#modelRefusal = `no model "${error.wanted}" here`;
