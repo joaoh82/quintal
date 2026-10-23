@@ -218,6 +218,16 @@ describe('an agent’s own MCP servers', () => {
     assert.deepEqual(resumed.map((server) => server.name), ['quintal-tools', 'slack']);
   });
 
+  it('opens a session after the owner’s change, so a sign-in can start before anyone speaks', async () => {
+    const { handlers, record } = await run({ secretKey: generateSecretKey(), scopes: ['chat'], env: { FAKE_MCP_HTTP: '1' }, servers: [] });
+    await until(() => calls(record, 'session/new').length === 1, 'the warm session at start');
+    handlers.mcpServers?.({ servers: [{ name: 'linear', transport: 'http', url: 'https://mcp.linear.app/mcp' }] });
+    await until(() => calls(record, 'initialize').length === 2, 'the runtime to reload');
+    await until(() => calls(record, 'session/new').length === 2, 'a session in the new process, with nobody speaking');
+    const servers = calls(record, 'session/new')[1]?.params?.mcpServers ?? [];
+    assert.deepEqual(servers.map((server) => server.name), ['quintal-tools', 'linear']);
+  });
+
   it('leaves the same list alone when the office says it again', async () => {
     const servers: AgentMcpServer[] = [{ name: 'slack', transport: 'http', url: 'https://mcp.slack.com/mcp' }];
     const { handlers, record } = await run({ secretKey: generateSecretKey(), scopes: ['chat'], servers });

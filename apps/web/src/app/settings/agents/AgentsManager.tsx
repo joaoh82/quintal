@@ -18,10 +18,10 @@ import {
   type AgentScope,
   type RuntimeStatus,
 } from '@quintal/shared';
-import type { AgentListEntry } from '@quintal/shared/db';
+import type { AgentListEntry, AgentMcpView } from '@quintal/shared/db';
 import Link from 'next/link';
 
-import { AgentMcpForm } from './AgentMcpForm';
+import { AgentMcpSection } from './AgentMcpForm';
 import { RegisterKey } from './RegisterKey';
 import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
@@ -67,6 +67,11 @@ interface AgentsManagerProps {
   officeParallelism: number;
   /** By agent id, for the agents this person may edit. */
   memories: Record<string, AgentMemoryView>;
+  /**
+   * Their MCP servers and status, by agent id — likewise only for agents this
+   * person may edit. Kept off `agents` because that list reaches every member.
+   */
+  mcp: Record<string, AgentMcpView>;
   currentUserId: string;
   /** The key the signed-in person signs with — what an attestation is made with. */
   currentUserPubkey: string;
@@ -159,6 +164,7 @@ export function AgentsManager({
   agents,
   officeParallelism,
   memories,
+  mcp,
   currentUserId,
   currentUserPubkey,
   canAdministerAll,
@@ -411,6 +417,7 @@ export function AgentsManager({
                 canRevoke={canAdministerAll || agent.ownerUserId === currentUserId}
                 ownerPubkey={agent.ownerUserId === currentUserId ? currentUserPubkey : null}
                 memory={memories[agent.id]}
+                mcp={mcp[agent.id]}
                 machines={machines}
                 hosts={hosts}
                 officeParallelism={officeParallelism}
@@ -452,6 +459,7 @@ function AgentRow({
   canRevoke,
   ownerPubkey = null,
   memory,
+  mcp,
   machines,
   hosts,
   officeParallelism,
@@ -462,6 +470,8 @@ function AgentRow({
   officeParallelism: number;
   /** What it carries, when this person may edit it. */
   memory?: AgentMemoryView | undefined;
+  /** Its MCP servers and their status, when this person may edit it. */
+  mcp?: AgentMcpView | undefined;
   /**
    * The signed-in person's key when they own this agent, else null. Only an
    * owner can vouch for an agent — an admin may revoke it, but cannot sign
@@ -655,20 +665,7 @@ function AgentRow({
 
       {/* Its own MCP servers. Summarised in the trigger because "does it have
           Slack?" is the question somebody opens this to answer. */}
-      {canRevoke && agent.revokedAt === null ? (
-        <details className="w-full pt-1">
-          <summary className="text-muted-foreground cursor-pointer text-xs">
-            Tools (MCP) —{' '}
-            <span className="font-mono">
-              {agent.mcpServers.map((server) => server.name).join(', ') || 'none'}
-            </span>
-            {agent.mcpStatus.some((entry) => entry.state === 'sign_in') ? (
-              <span className="text-amber-600"> · sign-in needed</span>
-            ) : null}
-          </summary>
-          <AgentMcpForm agent={agent} />
-        </details>
-      ) : null}
+      {canRevoke && agent.revokedAt === null && mcp ? <AgentMcpSection agent={agent} mcp={mcp} /> : null}
 
       {/* What `!remember` put there, and what the agent wrote itself: read it,
           change it, or take a line out. The chat box has `!forget` for the

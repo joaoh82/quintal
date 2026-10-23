@@ -8,6 +8,8 @@ import {
   listAgentsForWorkspace,
   listHostTokens,
   listHostsForWorkspace,
+  readAgentMcp,
+  type AgentMcpView,
 } from '@quintal/shared/db';
 import { redirect } from 'next/navigation';
 
@@ -64,6 +66,16 @@ export default async function AgentsSettingsPage() {
       }),
   );
 
+  // MCP servers and their sign-in links, likewise only for agents this person
+  // could edit — and as a prop of their own, because `agents` reaches every
+  // member's browser and a pending sign-in URL decides whose account the
+  // agent will act with.
+  const editable = agents
+    .filter((agent) => agent.revokedAt === null)
+    .filter((agent) => canAdministerAll || agent.ownerUserId === session.user.id)
+    .map((agent) => agent.id);
+  const mcp: Record<string, AgentMcpView> = Object.fromEntries(await readAgentMcp(db, editable));
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-muted-foreground max-w-2xl text-sm">
@@ -95,6 +107,7 @@ export default async function AgentsSettingsPage() {
         currentUserPubkey={session.user.pubkey}
         canAdministerAll={canAdministerAll}
         memories={memories}
+        mcp={mcp}
         machines={machines.filter((row) => row.revokedAt === null).map((row) => row.label)}
         hosts={hosts.map((host) => ({ label: host.label, runtimes: host.runtimes }))}
       />

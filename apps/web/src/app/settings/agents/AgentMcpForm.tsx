@@ -8,13 +8,13 @@ import {
   type McpTransport,
   type McpVar,
 } from '@quintal/shared';
-import type { AgentListEntry } from '@quintal/shared/db';
-import { startTransition, useActionState, useState } from 'react';
+import type { AgentListEntry, AgentMcpView } from '@quintal/shared/db';
+import { startTransition, useActionState, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-import { saveAgentMcpServersAction, type SaveAgentMcpServersState } from './actions';
+import { readAgentMcpAction, saveAgentMcpServersAction, type SaveAgentMcpServersState } from './actions';
 
 /**
  * The agent's own MCP servers: Slack, Linear, a local tool.
@@ -27,7 +27,22 @@ import { saveAgentMcpServersAction, type SaveAgentMcpServersState } from './acti
  * agent's own public key before it is sent. The office stores ciphertext it
  * cannot read; only the agent's harness can open it. Which is also why a
  * secret cannot be shown again here: edit it by entering it anew.
+ *
+ * The status comes from the agent, not from the save: the room passes a new
+ * list on within ten seconds, the runtime reloads, and a sign-in link
+ * arrives after that — then disappears when the sign-in finishes on the
+ * agent's machine. So while something is still settling, the card checks
+ * back every few seconds instead of leaving the owner to reload the page.
  */
+
+/**
+ * How often the card checks back; for how long after opening or saving it
+ * may; and for how long after a save it does even when everything reads
+ * ready — "handed to the runtime" comes first, a sign-in link seconds later.
+ */
+const WATCH_EVERY_MS = 4_000;
+const WATCH_FOR_MS = 10 * 60_000;
+const SETTLE_FOR_MS = 60_000;
 
 interface VarDraft {
   name: string;
@@ -37,10 +52,21 @@ interface VarDraft {
 
 const EMPTY_VAR: VarDraft = { name: '', value: '', secret: true };
 
-export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
+export function AgentMcpSection({ agent, mcp }: { agent: AgentListEntry; mcp: AgentMcpView }) {
   const [state, formAction, pending] = useActionState(saveAgentMcpServersAction, {
     ok: false,
   } as SaveAgentMcpServersState);
+  const [view, setView] = useState(mcp);
+  // A save revalidates the page: the new list arrives as a prop.
+  useEffect(() => setView(mcp), [mcp]);
+  /**
+   * The status as it was when the owner last saved, or null when it has moved
+   * on since. Until it moves, it describes the old list — every server reads
+   * "not picked up yet" rather than claiming a state from before the change.
+   */
+  const [stale, setStale] = useState<string | null>(null);
+  const [watchUntil, setWatchUntil] = useState(() => Date.now() + WATCH_FOR_MS);
+  const [settleUntil, setSettleUntil] = useState(() => Date.now() + SETTLE_FOR_MS);
   const mine = state.agentId === agent.id;
   const [localError, setLocalError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -55,7 +81,35 @@ export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
 
   const canSeal = agent.pubkey !== null;
   const busy = pending || sealing;
-  const status = new Map(agent.mcpStatus.map((entry) => [entry.name, entry]));
+  const status = new Map(stale === null ? view.status.map((entry) => [entry.name, entry]) : []);
+  const waiting =
+    stale !== null ||
+    view.servers.some((server) => {
+      const entry = status.get(server.name);
+      return entry === undefined || entry.state === 'sign_in';
+    });
+  // Read by the timer on every tick, so it neither restarts on each render
+  // nor goes quiet in the minute after a save when all reads ready.
+  const waitingRef = useRef(waiting);
+  waitingRef.current = waiting;
+
+  useEffect(() => {
+    if (view.servers.length === 0 && stale === null) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (now > watchUntil) {
+        clearInterval(timer);
+        return;
+      }
+      if (document.hidden || (!waitingRef.current && now > settleUntil)) return;
+      void readAgentMcpAction(agent.id).then((next) => {
+        if (!next) return;
+        setView(next);
+        setStale((before) => (before !== null && JSON.stringify(next.status) !== before ? null : before));
+      });
+    }, WATCH_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [agent.id, view.servers.length, stale, watchUntil, settleUntil]);
 
   function save(servers: AgentMcpServer[]): boolean {
     const checked = validateMcpServers(servers);
@@ -64,6 +118,9 @@ export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
       return false;
     }
     setLocalError(null);
+    setStale(JSON.stringify(view.status));
+    setWatchUntil(Date.now() + WATCH_FOR_MS);
+    setSettleUntil(Date.now() + SETTLE_FOR_MS);
     const form = new FormData();
     form.set('agentId', agent.id);
     form.set('servers', JSON.stringify(checked.servers));
@@ -72,7 +129,7 @@ export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
   }
 
   function remove(server: string) {
-    save(agent.mcpServers.filter((entry) => entry.name !== server));
+    save(view.servers.filter((entry) => entry.name !== server));
   }
 
   async function add(event: React.FormEvent) {
@@ -99,7 +156,7 @@ export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
               ...(args.trim() ? { args: args.split('\n').map((arg) => arg.trim()).filter(Boolean) } : {}),
               ...(sealed.length ? { env: sealed } : {}),
             };
-      if (save([...agent.mcpServers, server])) {
+      if (save([...view.servers, server])) {
         setAdding(false);
         setName('');
         setUrl('');
@@ -117,159 +174,170 @@ export function AgentMcpForm({ agent }: { agent: AgentListEntry }) {
   const error = localError ?? (mine ? state.error : undefined);
 
   return (
-    <div className="mt-2 flex flex-col gap-3">
-      {agent.mcpServers.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          No MCP servers yet. Add one and {agent.name} has it within seconds, on whichever machine runs it.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {agent.mcpServers.map((server) => (
-            <li key={server.name} className="flex flex-col gap-1 rounded border px-2 py-1.5 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-medium">{server.name}</span>
-                <span className="text-muted-foreground truncate font-mono">
-                  {server.transport === 'http' ? server.url : [server.command, ...(server.args ?? [])].join(' ')}
-                </span>
-                <span className="ml-auto" />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => remove(server.name)}
-                >
-                  Remove
-                </Button>
-              </div>
-              <ServerStatus status={status.get(server.name)} />
-            </li>
-          ))}
-        </ul>
-      )}
+    <details className="w-full pt-1">
+      {/* Summarised in the trigger because "does it have Slack?" is the
+          question somebody opens this to answer. */}
+      <summary className="text-muted-foreground cursor-pointer text-xs">
+        Tools (MCP) —{' '}
+        <span className="font-mono">{view.servers.map((server) => server.name).join(', ') || 'none'}</span>
+        {[...status.values()].some((entry) => entry.state === 'sign_in') ? (
+          <span className="text-amber-600"> · sign-in needed</span>
+        ) : null}
+      </summary>
+      <div className="mt-2 flex flex-col gap-3">
+        {view.servers.length === 0 ? (
+          <p className="text-muted-foreground text-xs">
+            No MCP servers yet. Add one and {agent.name} has it within seconds, on whichever machine runs it.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {view.servers.map((server) => (
+              <li key={server.name} className="flex flex-col gap-1 rounded border px-2 py-1.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-medium">{server.name}</span>
+                  <span className="text-muted-foreground truncate font-mono">
+                    {server.transport === 'http' ? server.url : [server.command, ...(server.args ?? [])].join(' ')}
+                  </span>
+                  <span className="ml-auto" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => remove(server.name)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+                <ServerStatus status={status.get(server.name)} />
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {adding ? (
-        <form onSubmit={add} className="flex flex-col gap-2 rounded border px-2 py-2">
-          <fieldset className="flex gap-3 text-xs">
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={transport === 'http'} onChange={() => setTransport('http')} />
-              Hosted (URL)
-            </label>
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={transport === 'stdio'} onChange={() => setTransport('stdio')} />
-              Local command
-            </label>
-          </fieldset>
-          <Input placeholder="name, e.g. slack" value={name} onChange={(event) => setName(event.target.value)} />
-          {transport === 'http' ? (
-            <>
-              <Input
-                placeholder="https://mcp.slack.com/mcp"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-              <p className="text-muted-foreground text-xs">
-                Most hosted servers sign in with OAuth: the link appears here once {agent.name} starts it. A
-                server that wants a token instead takes it as a header below.
-              </p>
-            </>
-          ) : (
-            <>
-              <Input
-                placeholder="command, e.g. npx"
-                value={command}
-                onChange={(event) => setCommand(event.target.value)}
-              />
-              <textarea
-                className="border-input min-h-16 rounded-md border bg-transparent px-3 py-1.5 font-mono text-xs"
-                placeholder={'arguments, one per line\n-y\n@modelcontextprotocol/server-github'}
-                value={args}
-                onChange={(event) => setArgs(event.target.value)}
-              />
-              {agent.scopes.includes('run') ? null : (
-                <p className="text-xs text-amber-600">
-                  A local server runs a program on {agent.name}&rsquo;s machine, so it is started only once{' '}
-                  {agent.name} has the <span className="font-mono">run</span> scope.
+        {adding ? (
+          <form onSubmit={add} className="flex flex-col gap-2 rounded border px-2 py-2">
+            <fieldset className="flex gap-3 text-xs">
+              <label className="flex items-center gap-1">
+                <input type="radio" checked={transport === 'http'} onChange={() => setTransport('http')} />
+                Hosted (URL)
+              </label>
+              <label className="flex items-center gap-1">
+                <input type="radio" checked={transport === 'stdio'} onChange={() => setTransport('stdio')} />
+                Local command
+              </label>
+            </fieldset>
+            <Input placeholder="name, e.g. slack" value={name} onChange={(event) => setName(event.target.value)} />
+            {transport === 'http' ? (
+              <>
+                <Input
+                  placeholder="https://mcp.slack.com/mcp"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Most hosted servers sign in with OAuth: the link appears here once {agent.name} starts it. A
+                  server that wants a token instead takes it as a header below.
                 </p>
-              )}
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                <Input
+                  placeholder="command, e.g. npx"
+                  value={command}
+                  onChange={(event) => setCommand(event.target.value)}
+                />
+                <textarea
+                  className="border-input min-h-16 rounded-md border bg-transparent px-3 py-1.5 font-mono text-xs"
+                  placeholder={'arguments, one per line\n-y\n@modelcontextprotocol/server-github'}
+                  value={args}
+                  onChange={(event) => setArgs(event.target.value)}
+                />
+                {agent.scopes.includes('run') ? null : (
+                  <p className="text-xs text-amber-600">
+                    A local server runs a program on {agent.name}&rsquo;s machine, so it is started only once{' '}
+                    {agent.name} has the <span className="font-mono">run</span> scope.
+                  </p>
+                )}
+              </>
+            )}
 
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium">
-              {transport === 'http' ? 'Headers' : 'Environment variables'}
-            </span>
-            {vars.map((entry, index) => (
-              <div key={index} className="flex items-center gap-1.5">
-                <Input
-                  className="font-mono"
-                  placeholder={transport === 'http' ? 'Authorization' : 'API_KEY'}
-                  value={entry.name}
-                  onChange={(event) =>
-                    setVars(vars.map((other, at) => (at === index ? { ...other, name: event.target.value } : other)))
-                  }
-                />
-                <Input
-                  type={entry.secret ? 'password' : 'text'}
-                  placeholder="value"
-                  value={entry.value}
-                  onChange={(event) =>
-                    setVars(vars.map((other, at) => (at === index ? { ...other, value: event.target.value } : other)))
-                  }
-                />
-                <label className="flex items-center gap-1 text-xs" title={canSeal ? '' : 'Register a key for this agent first'}>
-                  <input
-                    type="checkbox"
-                    checked={entry.secret && canSeal}
-                    disabled={!canSeal}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium">
+                {transport === 'http' ? 'Headers' : 'Environment variables'}
+              </span>
+              {vars.map((entry, index) => (
+                <div key={index} className="flex items-center gap-1.5">
+                  <Input
+                    className="font-mono"
+                    placeholder={transport === 'http' ? 'Authorization' : 'API_KEY'}
+                    value={entry.name}
                     onChange={(event) =>
-                      setVars(vars.map((other, at) => (at === index ? { ...other, secret: event.target.checked } : other)))
+                      setVars(vars.map((other, at) => (at === index ? { ...other, name: event.target.value } : other)))
                     }
                   />
-                  secret
-                </label>
-              </div>
-            ))}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="self-start"
-              onClick={() => setVars([...vars, { ...EMPTY_VAR, secret: canSeal }])}
-            >
-              + {transport === 'http' ? 'header' : 'variable'}
-            </Button>
-            <p className="text-muted-foreground text-xs">
-              {canSeal
-                ? `A secret is sealed in this browser to ${agent.name}’s own key: the office stores what only ${agent.name} can open, and it cannot be shown here again.`
-                : `${agent.name} has no key of its own yet, so values are stored as written. Register a key to keep secrets sealed.`}
-            </p>
-          </div>
+                  <Input
+                    type={entry.secret ? 'password' : 'text'}
+                    placeholder="value"
+                    value={entry.value}
+                    onChange={(event) =>
+                      setVars(vars.map((other, at) => (at === index ? { ...other, value: event.target.value } : other)))
+                    }
+                  />
+                  <label className="flex items-center gap-1 text-xs" title={canSeal ? '' : 'Register a key for this agent first'}>
+                    <input
+                      type="checkbox"
+                      checked={entry.secret && canSeal}
+                      disabled={!canSeal}
+                      onChange={(event) =>
+                        setVars(vars.map((other, at) => (at === index ? { ...other, secret: event.target.checked } : other)))
+                      }
+                    />
+                    secret
+                  </label>
+                </div>
+              ))}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="self-start"
+                onClick={() => setVars([...vars, { ...EMPTY_VAR, secret: canSeal }])}
+              >
+                + {transport === 'http' ? 'header' : 'variable'}
+              </Button>
+              <p className="text-muted-foreground text-xs">
+                {canSeal
+                  ? `A secret is sealed in this browser to ${agent.name}’s own key: the office stores what only ${agent.name} can open, and it cannot be shown here again.`
+                  : `${agent.name} has no key of its own yet, so values are stored as written. Register a key to keep secrets sealed.`}
+              </p>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Button type="submit" size="sm" variant="outline" disabled={busy}>
-              {busy ? 'Saving…' : 'Add server'}
-            </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setAdding(false)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <Button type="button" size="sm" variant="outline" className="self-start" onClick={() => setAdding(true)}>
-          Add an MCP server
-        </Button>
-      )}
+            <div className="flex items-center gap-2">
+              <Button type="submit" size="sm" variant="outline" disabled={busy}>
+                {busy ? 'Saving…' : 'Add server'}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <Button type="button" size="sm" variant="outline" className="self-start" onClick={() => setAdding(true)}>
+            Add an MCP server
+          </Button>
+        )}
 
-      {mine && state.ok && !localError ? (
-        <span className="text-xs text-emerald-600">Saved — {agent.name} reloads with it within seconds.</span>
-      ) : null}
-      {error ? (
-        <span className="text-destructive text-xs" role="alert">
-          {error}
-        </span>
-      ) : null}
-    </div>
+        {mine && state.ok && !localError ? (
+          <span className="text-xs text-emerald-600">Saved — {agent.name} reloads with it within seconds.</span>
+        ) : null}
+        {error ? (
+          <span className="text-destructive text-xs" role="alert">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </details>
   );
 }
 

@@ -616,10 +616,6 @@ export interface AgentListEntry {
   workspacePath: string;
   /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
   pubkey: string | null;
-  /** Its owner's MCP servers. Sealed values stay sealed. */
-  mcpServers: AgentMcpServer[];
-  /** What its harness last reported about them. */
-  mcpStatus: McpServerStatus[];
   createdAt: number;
   lastSeenAt: number | null;
   revokedAt: number | null;
@@ -651,8 +647,6 @@ export async function listAgentsForWorkspace(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
-      mcpServers: agents.mcpServers,
-      mcpStatus: agents.mcpStatus,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -666,8 +660,6 @@ export async function listAgentsForWorkspace(
     ...row,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
-    mcpServers: storedMcpServers(row.mcpServers),
-    mcpStatus: parseMcpStatus(row.mcpStatus) ?? [],
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
     revokedAt: row.revokedAt?.getTime() ?? null,
@@ -700,8 +692,6 @@ export async function findAgentById(
       enabled: agents.enabled,
       workspacePath: agents.workspacePath,
       pubkey: agents.pubkey,
-      mcpServers: agents.mcpServers,
-      mcpStatus: agents.mcpStatus,
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
@@ -718,8 +708,6 @@ export async function findAgentById(
     ...rest,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
-    mcpServers: storedMcpServers(row.mcpServers),
-    mcpStatus: parseMcpStatus(row.mcpStatus) ?? [],
     createdAt: row.createdAt.getTime(),
     lastSeenAt: row.lastSeenAt?.getTime() ?? null,
     revokedAt: row.revokedAt?.getTime() ?? null,
@@ -1237,6 +1225,38 @@ export async function mcpServersForAgents(
   for (const row of rows) {
     const servers = storedMcpServers(row.mcpServers);
     found.set(row.id, { servers, fingerprint: mcpServersFingerprint(servers) });
+  }
+  return found;
+}
+
+/** An agent's MCP servers and what its harness last said about them, for its settings card. */
+export interface AgentMcpView {
+  /** Sealed values stay sealed; plain ones are as the owner typed them. */
+  servers: AgentMcpServer[];
+  /** Carries the pending OAuth sign-in URL, when there is one. */
+  status: McpServerStatus[];
+}
+
+/**
+ * The MCP side of these agents — read apart from `AgentListEntry` on purpose.
+ *
+ * That list goes to every member's browser: the agents page, the channel and
+ * team pickers. This does not: a pending sign-in URL is whose account the
+ * agent will act with, and a plain header or variable is the owner's
+ * configuration. Call it only for agents the viewer may administer.
+ */
+export async function readAgentMcp(
+  db: Database,
+  agentIds: readonly string[],
+): Promise<Map<string, AgentMcpView>> {
+  const found = new Map<string, AgentMcpView>();
+  if (agentIds.length === 0) return found;
+  const rows = await db
+    .select({ id: agents.id, mcpServers: agents.mcpServers, mcpStatus: agents.mcpStatus })
+    .from(agents)
+    .where(sql`${agents.id} in ${agentIds}`);
+  for (const row of rows) {
+    found.set(row.id, { servers: storedMcpServers(row.mcpServers), status: parseMcpStatus(row.mcpStatus) ?? [] });
   }
   return found;
 }

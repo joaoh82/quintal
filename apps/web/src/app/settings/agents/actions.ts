@@ -30,8 +30,10 @@ import {
   setAgentLaunch,
   setAgentMaxSessions,
   setAgentProfile,
+  readAgentMcp,
   setAgentMcpServers,
   setAgentScopes,
+  type AgentMcpView,
 } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
@@ -348,6 +350,20 @@ export async function saveAgentMcpServersAction(
 
   revalidatePath('/settings/agents');
   return { ok: true, agentId };
+}
+
+/**
+ * An agent's MCP servers and their status, for the Tools card to check back
+ * on while it waits: the runtime reports a sign-in link seconds after a save,
+ * and a sign-in finishes on another machine. Owner-only, like the card — a
+ * pending sign-in URL decides whose account the agent will act with.
+ */
+export async function readAgentMcpAction(agentId: string): Promise<AgentMcpView | null> {
+  const session = await requireSession();
+  const db = getDb();
+  const agent = await findAgentById(db, agentId);
+  if (!agent || !(await canAdministerAgent(db, session.user.id, agent))) return null;
+  return (await readAgentMcp(db, [agentId])).get(agentId) ?? null;
 }
 
 export interface SaveAgentMemoryState {

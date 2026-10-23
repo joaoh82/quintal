@@ -862,6 +862,10 @@ export class AgentRunner {
     if (!first && this.#pool) {
       await this.reload();
       this.#reportMcp();
+      // Warm a session now rather than at the next message: the runtime only
+      // tries a server — and asks for its sign-in — inside a session, and the
+      // owner who just added it is looking at the card waiting for the link.
+      this.prewarm();
     }
   }
 
