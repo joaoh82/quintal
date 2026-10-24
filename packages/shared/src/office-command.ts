@@ -1,4 +1,4 @@
-import { normaliseAgentInstructions } from './agent.js';
+import { normalisePromptProse } from './agent.js';
 import { isAgentCommand, type ParsedCommand } from './commands.js';
 import type { ChannelActor } from './conversation.js';
 import { tidyDisplayText } from './workspace.js';
@@ -54,6 +54,13 @@ export interface OfficeCommandRef {
 export const OFFICE_COMMAND_NAME_MAX_LENGTH = 32;
 export const OFFICE_COMMAND_SUMMARY_MAX_LENGTH = 120;
 export const OFFICE_COMMAND_ARGUMENT_HINT_MAX_LENGTH = 60;
+/**
+ * Far more than an agent's own instructions (`AGENT_INSTRUCTIONS_MAX_LENGTH`):
+ * those ride on every priming turn, while a command's are sent only on the
+ * turn it starts — and a brief worth keeping, a review checklist say, runs
+ * to pages.
+ */
+export const OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH = 16_000;
 
 const COMMAND_NAME = /^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u;
 
@@ -90,8 +97,10 @@ export function normaliseOfficeCommandArgumentHint(input: unknown): string {
     : '';
 }
 
-/** Same rules and cap as an agent's own instructions: they land in the same prompt. */
-export const normaliseOfficeCommandInstructions = normaliseAgentInstructions;
+/** Same rules as an agent's own instructions — they land in the same prompt — with a cap of their own. */
+export function normaliseOfficeCommandInstructions(input: unknown): string {
+  return normalisePromptProse(input, OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH);
+}
 
 /** Any member may make one. A guest is passing through and has no agents to brief. */
 export function mayCreateOfficeCommands(actor: ChannelActor): boolean {

@@ -348,6 +348,11 @@ export function normaliseAgentDescription(input: unknown): string {
  * nobody to defend them from here — the cap is about cost and legibility.
  */
 export function normaliseAgentInstructions(input: unknown): string {
+  return normalisePromptProse(input, AGENT_INSTRUCTIONS_MAX_LENGTH);
+}
+
+/** `normaliseAgentInstructions` with a cap of the caller's: the same prose rules. */
+export function normalisePromptProse(input: unknown, maxLength: number): string {
   if (typeof input !== 'string') return '';
   const cleaned = input
     .replace(/\r\n?/g, '\n')
@@ -358,9 +363,7 @@ export function normaliseAgentInstructions(input: unknown): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   const points = Array.from(cleaned);
-  return points.length > AGENT_INSTRUCTIONS_MAX_LENGTH
-    ? points.slice(0, AGENT_INSTRUCTIONS_MAX_LENGTH).join('')
-    : cleaned;
+  return points.length > maxLength ? points.slice(0, maxLength).join('') : cleaned;
 }
 
 /** Agent names are shown next to human ones, so hold them to the same shape. */

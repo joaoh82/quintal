@@ -40,7 +40,8 @@ A command has:
   `!review <link>` is enough.
 - **Instructions for whoever it reaches** — what the command asks. They reach
   each agent as a `[Command]` section of its prompt, beside the line, with
-  the name of whoever made the command.
+  the name of whoever made the command. Up to 16,000 characters: room for a
+  whole checklist, since they are sent only on the turn the command starts.
 
 ## Using one
 
