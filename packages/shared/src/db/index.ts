@@ -6,6 +6,7 @@ export * from './agents.js';
 export * from './challenges.js';
 export * from './channels.js';
 export * from './client.js';
+export * from './commands.js';
 export * from './env.js';
 export * from './host-tokens.js';
 export * from './hosts.js';

@@ -6,8 +6,11 @@ import {
   applyCommand,
   applyMention,
   commandQueryAt,
+  findOfficeCommand,
   mentionQueryAt,
+  officeCommandUsage,
   parseAgentCommand,
+  type OfficeCommandRef,
   type RosterEntry,
   teamPickerSubtitle,
   type TeamRef,
@@ -44,6 +47,8 @@ export interface ChatInputProps {
   joinable: JoinTarget[];
   /** The office's teams, offered under `@` beside the people. */
   teams?: TeamRef[];
+  /** The office's own `!` commands, offered under `!` after the built-in ones. */
+  commands?: OfficeCommandRef[];
   /** True while the input owns the keyboard. */
   focused: boolean;
   onSend: (text: string) => void;
@@ -72,6 +77,7 @@ export function ChatInput({
   roster,
   joinable,
   teams,
+  commands,
   focused,
   onSend,
   onFocusChange,
@@ -127,14 +133,25 @@ export function ChatInput({
       return [];
     }
     if (command) {
-      return AGENT_COMMANDS.filter((entry) => entry.name.startsWith(command.query)).map(
-        (entry) => ({
+      const builtIn: PickerItem[] = AGENT_COMMANDS.filter((entry) =>
+        entry.name.startsWith(command.query),
+      ).map((entry) => ({
+        kind: 'command',
+        key: `!${entry.name}`,
+        name: entry.name,
+        summary: entry.summary,
+      }));
+      // The office's own after the built-ins, and with how to use them: the
+      // argument a command wants is the thing nobody remembers.
+      const office: PickerItem[] = (commands ?? [])
+        .filter((entry) => entry.name.startsWith(command.query))
+        .map((entry) => ({
           kind: 'command',
-          key: `!${entry.name}`,
+          key: `office:${entry.id}`,
           name: entry.name,
-          summary: entry.summary,
-        }),
-      );
+          summary: [entry.summary, officeCommandUsage(entry)].filter(Boolean).join(' — '),
+        }));
+      return [...builtIn, ...office];
     }
     if (!mention) return [];
     // Teams first: one word that reaches several agents is the thing worth
@@ -163,7 +180,7 @@ export function ChatInput({
         status: entry.status ?? undefined,
       }));
     return [...named, ...people].slice(0, 6);
-  }, [slash, command, mention, roster, joinable, teams]);
+  }, [slash, command, mention, roster, joinable, teams, commands]);
 
   const open = candidates.length > 0;
 
@@ -174,8 +191,9 @@ export function ChatInput({
    */
   const unknownCommand = useMemo(() => {
     const parsed = parseAgentCommand(draft);
-    return parsed && !parsed.known ? parsed.name : null;
-  }, [draft]);
+    if (!parsed || parsed.known || findOfficeCommand(parsed, commands ?? [])) return null;
+    return parsed.name;
+  }, [draft, commands]);
 
   useEffect(() => setHighlighted(0), [slash?.query, command?.query, mention?.query]);
 
@@ -297,8 +315,8 @@ export function ChatInput({
       {unknownCommand ? (
         <p className="border-t border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[10px] text-amber-200/90">
           <span className="font-mono">!{unknownCommand}</span> isn&rsquo;t a command. Try{' '}
-          {AGENT_COMMANDS.map((entry) => `!${entry.name}`).join(', ')} — or delete the ! to say it
-          out loud.
+          {[...AGENT_COMMANDS, ...(commands ?? [])].map((entry) => `!${entry.name}`).join(', ')} —
+          or delete the ! to say it out loud.
         </p>
       ) : null}
 

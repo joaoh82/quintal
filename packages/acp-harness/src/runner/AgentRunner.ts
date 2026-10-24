@@ -705,6 +705,26 @@ export class AgentRunner {
     // Never answer yourself.
     if (message.fromUserId === ready.agentId) return;
 
+    // One of the office's own commands: an ordinary turn with the office's
+    // brief on it. Not an owner command — anyone may use one, because it asks
+    // for nothing a plain line could not. The office says whether it was
+    // aimed at us; aimed at nobody, it is for whoever a plain line would be.
+    if (message.command !== undefined) {
+      if (!message.command.addressed && !this.#addressesMe(message, distance, ready.name)) return;
+      this.#enqueue(scope, {
+        fromUserId: message.fromUserId,
+        fromName: message.fromName,
+        fromKind: message.fromKind,
+        text: message.text,
+        distance,
+        sentAt: message.sentAt,
+        requestId: message.requestId,
+        viaTeam: message.viaTeam,
+        command: message.command,
+      });
+      return;
+    }
+
     if (this.#handleOwnerCommand(message, scope)) return;
 
     // "@me yes" / "@me no" answers an outstanding permission question rather
@@ -1328,12 +1348,31 @@ export class AgentRunner {
       text: message.text,
       distance: 0,
       sentAt: message.sentAt,
+      // So `!cancel @engineering` reaches a member the way it does nearby.
+      ...(message.viaTeam ? { viaTeam: message.viaTeam } : {}),
     };
     this.#remember(scope, asChat);
 
     const ready = this.#gateway.ready;
     if (!ready) return;
     if (message.fromUserId === ready.agentId) return;
+    // An office command the office says named us: see `#onChat`. One that
+    // did not name us carries no command, and is the quiet below.
+    if (message.command !== undefined && message.mentioned) {
+      this.#enqueue(scope, {
+        fromUserId: message.fromUserId,
+        fromName: message.fromName,
+        fromKind: message.fromKind,
+        text: message.text,
+        distance: null,
+        channel: message.channel,
+        sentAt: message.sentAt,
+        requestId: message.requestId,
+        viaTeam: message.viaTeam,
+        command: message.command,
+      });
+      return;
+    }
     if (this.#handleOwnerCommand(asChat, scope)) return;
     // The question was asked here, so the answer arrives here.
     if (this.#answersPermission(asChat, ready, scope)) return;
@@ -1407,8 +1446,16 @@ export class AgentRunner {
     }
 
     // An untargeted command is for every agent that heard it — useful for
-    // "everyone stop", ruinous by accident. `!shutdown @claude` stops one.
-    if (parsed.target !== null && parsed.target !== ready.name.toLowerCase()) return true;
+    // "everyone stop", ruinous by accident. `!shutdown @claude` stops one;
+    // `!cancel @engineering` stops the members of a team, which the office
+    // says we are one of.
+    if (
+      parsed.target !== null &&
+      parsed.target !== ready.name.toLowerCase() &&
+      parsed.target !== message.viaTeam?.name.toLowerCase()
+    ) {
+      return true;
+    }
 
     // Swallow a typo rather than passing it to the model: the office would
     // otherwise pay for a turn to be told the message means nothing. The chat

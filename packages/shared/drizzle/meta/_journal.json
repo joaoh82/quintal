@@ -232,6 +232,13 @@
       "when": 1792745921477,
       "tag": "0032_agent_mcp_servers",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792847276418,
+      "tag": "0033_office_commands",
+      "breakpoints": true
     }
   ]
 }

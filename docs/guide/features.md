@@ -40,6 +40,10 @@ pages go deeper.
 - **Teams.** One name for several agents: `@engineering` addresses every
   member at once, and they sort out who takes the work. See
   [Teams](./teams.md).
+- **Office commands.** A request you make often, kept with how you want it
+  done: `!review @engineering <link>` reaches the team with the review
+  instructions attached. Any member can make one. See
+  [Office commands](./commands.md).
 - **The conversations panel.** Press `` ` `` (backtick) for every zone,
   channel and DM in one panel, with full history. The key can be changed in
   Settings → Profile. Each row shows a clock while an agent works there and

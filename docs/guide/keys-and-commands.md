@@ -49,6 +49,8 @@ acts.
 | `!done` | End the agent's task. The worktree and branch go only if clean and pushed; otherwise they are kept and the agent says where. A task whose pull request merges ends by itself |
 | `!shutdown` | Bring the agent home: it leaves the office and its process stops |
 
+`@name` can be a team: `!cancel @engineering` stops every agent of yours on it.
+
 Example: `!remember @marvin always reply in Portuguese`. Changed your mind:
 `!forget @marvin the portuguese thing` — or `!memory`, then `!forget @marvin 2`.
 
@@ -58,6 +60,14 @@ per line; delete a line and save to make it forget, save it empty to clear it
 — and the notes the agent filed for itself are listed by name with a *Forget*
 button each. An edit there restarts the agent within about fifteen seconds so
 it reads the new version.
+
+## Office commands
+
+Commands the people in your office made, under **Settings → Commands** —
+`!review @engineering <link>`, say. The `!` picker offers them after the
+ones above. Unlike those, anyone may use them: each is a message with a
+standing brief attached, and reaches whoever you name, or the command's
+default when you name nobody. See [Office commands](./commands.md).
 
 ## Permission questions
 

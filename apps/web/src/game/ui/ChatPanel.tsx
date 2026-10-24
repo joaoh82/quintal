@@ -174,6 +174,7 @@ export function ChatPanel({
         roster={roster}
         joinable={joinTargets(conversations.channels, conversations.available)}
         teams={conversations.teams}
+        commands={conversations.commands}
         focused={focused}
         onSend={send}
         onFocusChange={onFocusChange}
