@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  AGENT_INSTRUCTIONS_MAX_LENGTH,
   OFFICE_COMMAND_ARGUMENT_HINT_MAX_LENGTH,
+  OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH,
   OFFICE_COMMAND_NAME_MAX_LENGTH,
   OFFICE_COMMAND_SUMMARY_MAX_LENGTH,
   mayCreateOfficeCommands,
@@ -163,9 +163,9 @@ function CommandFields({
         <span className="mb-1 block font-medium">Instructions for whoever it reaches</span>
         <textarea
           name="instructions"
-          rows={4}
+          rows={8}
           defaultValue={command?.instructions}
-          maxLength={AGENT_INSTRUCTIONS_MAX_LENGTH}
+          maxLength={OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH}
           placeholder={
             'Check out the branch and read the whole diff. Run the tests. Comment on the pull request with what would break, then what is merely untidy, and approve only if nothing would break.'
           }

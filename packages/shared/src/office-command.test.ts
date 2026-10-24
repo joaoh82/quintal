@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { AGENT_INSTRUCTIONS_MAX_LENGTH } from './agent.js';
 import { parseAgentCommand } from './commands.js';
 import {
   findOfficeCommand,
@@ -8,7 +9,9 @@ import {
   isReservedCommandName,
   mayCreateOfficeCommands,
   mayEditOfficeCommand,
+  normaliseOfficeCommandInstructions,
   normaliseOfficeCommandName,
+  OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH,
   officeCommandUsage,
   type OfficeCommandRef,
 } from './office-command.js';
@@ -97,5 +100,18 @@ describe('how a command is written out', () => {
       }),
       '!review [@reviewers] <pull request link>',
     );
+  });
+});
+
+describe('office command instructions', () => {
+  it('keeps a brief far longer than an agent’s own instructions, lines intact', () => {
+    const brief = Array.from({ length: 200 }, (_, i) => `${i + 1}. Check the thing that breaks.`).join('\n');
+    assert.ok(brief.length > AGENT_INSTRUCTIONS_MAX_LENGTH);
+    assert.equal(normaliseOfficeCommandInstructions(brief), brief);
+  });
+
+  it('is still capped, by code point', () => {
+    const long = '🙂'.repeat(OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH + 5);
+    assert.equal(Array.from(normaliseOfficeCommandInstructions(long)).length, OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH);
   });
 });
