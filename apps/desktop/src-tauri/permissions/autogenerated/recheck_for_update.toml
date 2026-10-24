@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-recheck-for-update"
+description = "Enables the recheck_for_update command without any pre-configured scope."
+commands.allow = ["recheck_for_update"]
+
+[[permission]]
+identifier = "deny-recheck-for-update"
+description = "Denies the recheck_for_update command without any pre-configured scope."
+commands.deny = ["recheck_for_update"]

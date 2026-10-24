@@ -15,15 +15,19 @@ import { useUpdateOffer } from '@/lib/use-update';
  * as a button and waits, for as long as it takes.
  *
  * `compact` is the quiet one: it never opens itself, which is what makes it
- * safe to put on a settings page somebody opened to do something else.
+ * safe to put on a settings page somebody opened to do something else. With
+ * nothing on offer it is a **Check for updates** button instead, so an app
+ * left open for days does not have to be restarted to find a release — and
+ * what that finds opens, declined before or not, because it was asked for.
  *
  * Nothing here renders in a browser. `useUpdateOffer` has no host to ask, so
  * the offer stays `none` — a tab cannot replace an application, and pretending
  * otherwise would be a button that lies.
  */
 export function UpdateNotice({ compact = false }: { compact?: boolean }) {
-  const { offer, dismiss } = useUpdateOffer();
+  const { offer, dismiss, canCheck, check } = useUpdateOffer();
   const [open, setOpen] = useState(false);
+  const [checked, setChecked] = useState<'idle' | 'checking' | 'current' | 'failed'>('idle');
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [problem, setProblem] = useState('');
@@ -50,7 +54,53 @@ export function UpdateNotice({ compact = false }: { compact?: boolean }) {
     };
   }, []);
 
-  if (offer.kind === 'none') return null;
+  const checkNow = async () => {
+    setProblem('');
+    setChecked('checking');
+    try {
+      const found = await check();
+      if (found.kind === 'none') {
+        setChecked('current');
+      } else {
+        setChecked('idle');
+        setOpen(true);
+      }
+    } catch (cause) {
+      setChecked('failed');
+      // Not a `HostError` is, in practice, a host from before this button:
+      // it does not have the command, and its one check was at launch.
+      setProblem(
+        isHostError(cause)
+          ? cause.message
+          : 'This copy of Quintal cannot check from here. Quit and reopen it to check.',
+      );
+    }
+  };
+
+  if (offer.kind === 'none') {
+    if (!compact || !canCheck) return null;
+    return (
+      <span className="flex items-center gap-2">
+        {checked === 'current' ? (
+          <span className="text-muted-foreground text-xs" role="status">
+            Up to date
+          </span>
+        ) : checked === 'failed' ? (
+          <span className="max-w-64 text-xs text-red-600 dark:text-red-400" role="alert">
+            {problem}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void checkNow()}
+          disabled={checked === 'checking'}
+          className="hover:bg-accent rounded-md border px-2.5 py-1 text-xs disabled:opacity-60"
+        >
+          {checked === 'checking' ? 'Checking…' : 'Check for updates'}
+        </button>
+      </span>
+    );
+  }
   const { update } = offer;
 
   const install = async () => {

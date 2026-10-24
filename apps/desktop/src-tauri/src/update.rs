@@ -95,23 +95,26 @@ pub async fn ensure_checked(app: &AppHandle) -> Option<Available> {
     if let Some(answer) = app.state::<Checked>().0.lock().unwrap().clone() {
         return answer;
     }
-    let answer = look(app).await;
+    // The unasked check is the silent one: every failure is "nothing to say".
+    let answer = look(app).await.unwrap_or_else(|error| {
+        eprintln!("[quintal] {error}");
+        None
+    });
     *app.state::<Checked>().0.lock().unwrap() = Some(answer.clone());
     answer
 }
 
-/// One request to the configured endpoint. Every failure is `None`.
-async fn look(app: &AppHandle) -> Option<Available> {
-    let updater = match app.updater_builder().timeout(CHECK_TIMEOUT).build() {
-        Ok(updater) => updater,
-        Err(error) => {
-            // Configuration, not weather: no endpoint or no public key. Worth
-            // saying loudly in the log because it can never come right on its
-            // own, unlike a network that is merely down.
-            eprintln!("[quintal] the updater is not configured: {error}");
-            return None;
-        }
-    };
+/// One request to the configured endpoint: what it offers, or why it could
+/// not be asked.
+async fn look(app: &AppHandle) -> Result<Option<Available>, String> {
+    // Configuration, not weather, when this fails: no endpoint or no public
+    // key. It can never come right on its own, unlike a network that is
+    // merely down.
+    let updater = app
+        .updater_builder()
+        .timeout(CHECK_TIMEOUT)
+        .build()
+        .map_err(|error| format!("the updater is not configured: {error}"))?;
 
     match updater.check().await {
         Ok(Some(update)) => {
@@ -127,23 +130,20 @@ async fn look(app: &AppHandle) -> Option<Available> {
                     "[quintal] ignoring prerelease {} offered to stable {}",
                     update.version, update.current_version
                 );
-                return None;
+                return Ok(None);
             }
             let (can_install, blocked) = installability();
-            Some(Available {
+            Ok(Some(Available {
                 version: update.version.clone(),
                 current: update.current_version.clone(),
                 notes: update.body.clone(),
                 date: update.date.map(|date| date.to_string()),
                 can_install,
                 blocked,
-            })
+            }))
         }
-        Ok(None) => None,
-        Err(error) => {
-            eprintln!("[quintal] could not check for an update: {error}");
-            None
-        }
+        Ok(None) => Ok(None),
+        Err(error) => Err(format!("could not check for an update: {error}")),
     }
 }
 
@@ -241,6 +241,29 @@ fn writable(dir: &Path) -> bool {
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Option<Available> {
     ensure_checked(&app).await
+}
+
+/// Ask again, now, because somebody pressed **Check for updates**.
+///
+/// The other half of "asked at most once per run": an app left open for days
+/// would otherwise only learn of a release by being quit and opened again.
+/// Unlike the check on launch this one was asked for, so it is not silent —
+/// "could not ask" comes back as an error rather than passing for "nothing
+/// newer", which would tell somebody offline that they are up to date. What
+/// it finds replaces the remembered answer, so `dismiss_update` and the
+/// offer the page shows agree about which version is on the table.
+#[tauri::command]
+pub async fn recheck_for_update(app: AppHandle) -> Result<Option<Available>, HostError> {
+    let answer = look(&app).await.map_err(|message| {
+        eprintln!("[quintal] {message}");
+        HostError {
+            code: "update_failed".into(),
+            message: "Could not reach the update server. Check your connection and try again."
+                .into(),
+        }
+    })?;
+    *app.state::<Checked>().0.lock().unwrap() = Some(answer.clone());
+    Ok(answer)
 }
 
 /// What the page needs to know beyond the offer itself.

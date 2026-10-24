@@ -227,6 +227,7 @@ pub fn capability(server: Option<&str>, personal: bool) -> String {
         // screen in the app that the browser cannot have, which `docs/DESKTOP.md`
         // rules out.
         "allow-check-for-update",
+        "allow-recheck-for-update",
         "allow-install-update",
         "allow-update-state",
         "allow-dismiss-update",
