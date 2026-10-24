@@ -4,7 +4,13 @@ import { describe, it } from 'node:test';
 import { addressedNames } from '@quintal/shared';
 import type { OfficeCommandSummary } from '@quintal/shared/db';
 
-import { commandCallFor, readCommandLine, unheardNotice } from './commands.js';
+import {
+  commandCallFor,
+  commandReach,
+  commandTaken,
+  readCommandLine,
+  unheardNotice,
+} from './commands.js';
 import { resolveMentions } from './mentions.js';
 
 /**
@@ -104,5 +110,54 @@ describe('reading an office command', () => {
     assert.equal(deliver('!tweet @claude x', [command()]).line, null);
     assert.equal(deliver('!cancel @claude', [command({ name: 'cancel' })]).line, null);
     assert.equal(deliver('please !review this', [command()]).line, null);
+  });
+});
+
+describe('a command in a direct message', () => {
+  // A DM with Claude: the room reaches the other party with every line,
+  // named or not. What `#deliverChannelChat` does, short of sending.
+  const arthur = [josh, claude];
+  function inDm(text: string, commands: OfficeCommandSummary[]) {
+    const named = addressedNames(text, [...arthur.map((m) => m.name), ...teams.map((t) => t.name)]);
+    const line = readCommandLine(text, 'human', commands, named);
+    assert.ok(line);
+    const resolved = resolveMentions(line.named, arthur, teams, josh.id);
+    const namedReach = new Map(resolved.reached);
+    if (!resolved.reached.has(claude.id)) resolved.reached.set(claude.id, {});
+    return commandCallFor(line, commandReach(line, namedReach, resolved.reached).get(claude.id));
+  }
+
+  it('naming nobody, is for the other party', () => {
+    assert.equal(inDm('!review https://x', [command()])?.addressed, true);
+  });
+
+  it('naming somebody who is not here, is for nobody — not the other party', () => {
+    assert.equal(inDm('!review @nobody https://x', [command()]), undefined);
+    assert.equal(inDm('!review @codex https://x', [command()]), undefined);
+  });
+
+  it('with a default somewhere else, is for the default — not the other party', () => {
+    const elsewhere = command({ defaultTarget: { kind: 'agent', id: codex.id, name: 'Codex' } });
+    assert.equal(inDm('!review https://x', [elsewhere]), undefined);
+    const here = command({ defaultTarget: { kind: 'agent', id: claude.id, name: 'Claude' } });
+    assert.equal(inDm('!review https://x', [here])?.addressed, true);
+  });
+});
+
+describe('whether an agent takes a command it was sent', () => {
+  const near = { woken: false, withinEarshot: true, walkUpRadius: 3 };
+  const unaddressed = commandCallFor(deliver('!review https://x', [command()]).line!, undefined)!;
+  const { line, resolved } = deliver('!review @claude https://x', [command()]);
+  const addressed = commandCallFor(line!, resolved.reached.get(claude.id))!;
+
+  it('unaddressed, only as a walk-up — the way the harness decides', () => {
+    assert.equal(commandTaken(unaddressed, { ...near, distance: 2 }), true);
+    assert.equal(commandTaken(unaddressed, { ...near, distance: 3 }), true);
+    assert.equal(commandTaken(unaddressed, { ...near, distance: 8 }), false, 'in earshot, not asked');
+  });
+
+  it('addressed, wherever it arrives', () => {
+    assert.equal(commandTaken(addressed, { ...near, distance: 8 }), true);
+    assert.equal(commandTaken(addressed, { ...near, withinEarshot: false, woken: true, distance: 40 }), true);
   });
 });

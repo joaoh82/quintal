@@ -91,6 +91,40 @@ export function commandCallFor(
 }
 
 /**
+ * Who a command is for, out of who the line reaches.
+ *
+ * Usually the same thing. In a direct message every line reaches the other
+ * party whether or not it names them — but a command that was aimed, by
+ * name or by its default, is for whoever it was aimed at: `!review @nobody`
+ * in a DM with Arthur is a typo, not a request of Arthur. The implicit
+ * reach stands in only when the command names nobody.
+ */
+export function commandReach<T>(
+  line: CommandLine,
+  named: ReadonlyMap<string, T>,
+  implicit: ReadonlyMap<string, T>,
+): ReadonlyMap<string, T> {
+  return line.aimed ? named : implicit;
+}
+
+/**
+ * Will the agent start a turn for this call? The room counts a command
+ * heard only when it will, so that "reached no agent" is said exactly when
+ * nothing happens.
+ *
+ * Mirrors the harness: an addressed call is taken wherever it arrives; an
+ * unaddressed one only as a walk-up — earshot carries the line, but an agent
+ * eight tiles off hears it as conversation, not as being asked.
+ */
+export function commandTaken(
+  call: AgentCommandCall,
+  delivery: { woken: boolean; withinEarshot: boolean; distance: number; walkUpRadius: number },
+): boolean {
+  if (call.addressed) return delivery.woken || delivery.withinEarshot;
+  return delivery.withinEarshot && delivery.distance <= delivery.walkUpRadius;
+}
+
+/**
  * Said to the sender when no agent took the command — a name that is not an
  * agent here, a team with nobody in this conversation, or nobody named and
  * nobody near. Otherwise the line sits in the transcript looking asked.

@@ -201,7 +201,13 @@ import {
 } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
-import { commandCallFor, readCommandLine, unheardNotice } from './commands.js';
+import {
+  commandCallFor,
+  commandReach,
+  commandTaken,
+  readCommandLine,
+  unheardNotice,
+} from './commands.js';
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { voiceRelay } from '../voice/index.js';
@@ -1354,7 +1360,17 @@ export class OfficeRoom extends Room<OfficeState> {
         if (woken) this.#wakeHops.woken(listenerId, SPATIAL, hop);
         const via = woken && reach?.viaTeam ? { viaTeam: reach.viaTeam } : {};
         const call = commandLine ? commandCallFor(commandLine, reach) : undefined;
-        if (call && (woken || withinEarshot)) commandHeard = true;
+        if (
+          call &&
+          commandTaken(call, {
+            woken,
+            withinEarshot,
+            distance: round(distance),
+            walkUpRadius: this.#settings.walkUpRadiusTiles,
+          })
+        ) {
+          commandHeard = true;
+        }
         const command = call ? { command: call } : {};
         if (withinEarshot) {
           target.send(AgentServerMessage.NearbyChat, {
@@ -1809,6 +1825,8 @@ export class OfficeRoom extends Room<OfficeState> {
     ]);
     const commandLine = readCommandLine(text, speaker.kind, this.#commands, named);
     const resolved = resolveMentions(commandLine?.named ?? named, audience, teams, speaker.userId);
+    // Before the DM's implicit address is added: see `commandReach`.
+    const namedReach = new Map(resolved.reached);
     if (channel.kind === 'dm') {
       for (const member of channel.members.values()) {
         if (member.id !== speaker.userId && !resolved.reached.has(member.id)) {
@@ -1850,7 +1868,13 @@ export class OfficeRoom extends Room<OfficeState> {
         const reach = resolved.reached.get(listener.userId);
         const via = reach?.viaTeam;
         // Only to a member it woke: in a channel nothing else starts a turn.
-        const call = woken && commandLine ? commandCallFor(commandLine, reach) : undefined;
+        const call =
+          woken && commandLine
+            ? commandCallFor(
+                commandLine,
+                commandReach(commandLine, namedReach, resolved.reached).get(listener.userId),
+              )
+            : undefined;
         if (call) commandHeard = true;
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
