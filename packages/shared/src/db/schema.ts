@@ -751,6 +751,35 @@ export const teamMembers = sqliteTable(
 );
 
 /**
+ * The office's own `!` commands: `!review` and its standing brief.
+ *
+ * An office object, like a team, made by any member. The name is unique per
+ * office (stored lowercase, as it is parsed) and may not be a built-in verb's
+ * — checked in `db/commands.ts`. The default target is one of an agent or a
+ * team, never both, and goes with whichever it named: a command whose
+ * reviewers were dissolved goes back to reaching whoever the line names.
+ */
+export const officeCommands = sqliteTable(
+  'office_commands',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    summary: text('summary').notNull().default(''),
+    argumentHint: text('argument_hint').notNull().default(''),
+    instructions: text('instructions').notNull().default(''),
+    defaultAgentId: text('default_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+    defaultTeamId: text('default_team_id').references(() => teams.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [uniqueIndex('office_commands_name_idx').on(table.workspaceId, table.name)],
+);
+
+/**
  * One thing somebody said.
  *
  * Kept, which the room's chat buffer never was: an office that forgets every

@@ -375,6 +375,8 @@ export interface AgentChatEvent {
    * as by name — the office's word, so the harness need not know the teams.
    */
   viaTeam?: AgentViaTeam;
+  /** Set when the line was one of the office's own `!` commands. */
+  command?: AgentCommandCall;
 }
 
 /**
@@ -399,6 +401,8 @@ export interface AgentChannelChatEvent {
   mentioned: boolean;
   /** Set when `mentioned` is true because a team this agent is on was named. */
   viaTeam?: AgentViaTeam;
+  /** Set when the line was one of the office's own `!` commands and `mentioned` is true. */
+  command?: AgentCommandCall;
 }
 
 /**
@@ -413,6 +417,34 @@ export interface AgentViaTeam {
   name: string;
   /** The other members the line reached, by name. Not this agent. */
   members: string[];
+}
+
+/**
+ * A line that was one of the office's own commands — `!review @engineering
+ * <link>` — with what the command asks, so the agent need not know the
+ * office's commands to follow one. See `office-command.ts`.
+ *
+ * Attached only to lines a person typed: an agent that typed one is talking
+ * about it, and two agents briefing each other through commands is a loop
+ * the hop limit would have to catch rather than one that never starts.
+ */
+export interface AgentCommandCall {
+  /** Without the `!`. */
+  name: string;
+  /** What the command asks of whoever it reaches. Becomes a `[Command]` section in the prompt. */
+  instructions: string;
+  /** Everything after the verb and its `@target`, verbatim. May be empty. */
+  args: string;
+  /** Who made the command, by name, so the agent can say whose brief it followed. */
+  definedBy: string;
+  /**
+   * True when the office aimed the line at this agent — by its name, a team
+   * it is on, or the command's default target when the line named nobody.
+   * False when the line was aimed at nobody: then it is for whoever a plain
+   * line said here would be for. A line aimed at somebody else carries no
+   * command at all; for this agent it is just conversation.
+   */
+  addressed: boolean;
 }
 
 /** A team this agent is on, as it is told on connect. */
@@ -449,6 +481,8 @@ export interface AgentMentionEvent {
   sentAt: number;
   /** Set when the name said was a team's, and this agent is on it. */
   viaTeam?: AgentViaTeam;
+  /** Set when the line was one of the office's own `!` commands. */
+  command?: AgentCommandCall;
 }
 
 export interface AgentOccupant {

@@ -1,4 +1,4 @@
-import type { AgentTeam, ChannelRef, TeamRef } from '@quintal/shared';
+import type { AgentTeam, ChannelRef, OfficeCommandRef, TeamRef } from '@quintal/shared';
 
 /**
  * A fingerprint of what one person sees of channels: the ones they are in,
@@ -35,6 +35,20 @@ export function channelListSignature(
     .map((team) => `${team.id}:${team.name}:${team.members.map((member) => member.id).join('+')}`)
     .join(',');
   return `${part(channels)}|${part(available)}|${teamPart}`;
+}
+
+/**
+ * A fingerprint of the office's commands as a person is told them: a new
+ * one, or a changed hint or default, is a change the picker has to hear
+ * about. Instructions are not in it because a person is not sent them.
+ */
+export function officeCommandsSignature(commands: readonly OfficeCommandRef[]): string {
+  return commands
+    .map(
+      (command) =>
+        `${command.id}:${command.name}:${command.summary}:${command.argumentHint}:${command.defaultTarget?.id ?? ''}:${command.defaultTarget?.name ?? ''}`,
+    )
+    .join(',');
 }
 
 /**

@@ -1,12 +1,14 @@
 'use client';
 
-import { AGENT_COMMANDS } from '@quintal/shared';
+import { AGENT_COMMANDS, officeCommandUsage, type OfficeCommandRef } from '@quintal/shared';
 import { useEffect } from 'react';
 
 interface HelpPanelProps {
   onClose: () => void;
   /** The conversations-panel key as configured on this device. */
   overlayKey: string;
+  /** The office's own `!` commands. */
+  commands?: OfficeCommandRef[];
 }
 
 const KEYS: { keys: string; what: string }[] = [
@@ -34,7 +36,7 @@ const SLASH: { keys: string; what: string }[] = [
  * about it suggests that `!cancel` exists. Discoverability for a typed
  * convention has to be built; it is never inferred.
  */
-export function HelpPanel({ onClose, overlayKey }: HelpPanelProps) {
+export function HelpPanel({ onClose, overlayKey, commands = [] }: HelpPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -121,6 +123,28 @@ export function HelpPanel({ onClose, overlayKey }: HelpPanelProps) {
             </div>
           ))}
         </dl>
+
+        <h3 className="mt-5 mb-1.5 text-xs font-semibold text-white/85">This office&rsquo;s commands</h3>
+        <p className="mb-2 text-xs leading-relaxed text-white/55">
+          Made by the people here, under{' '}
+          <a href="/settings/commands" className="text-emerald-300 underline-offset-2 hover:underline">
+            Settings → Commands
+          </a>
+          . Each is a message with a standing brief: anyone may use one, and it reaches whoever you
+          name — an agent or a team — or the command&rsquo;s default when you name nobody.
+        </p>
+        {commands.length === 0 ? (
+          <p className="text-xs text-white/40">None yet.</p>
+        ) : (
+          <dl className="space-y-2 text-xs">
+            {commands.map((command) => (
+              <div key={command.id}>
+                <dt className="font-mono text-amber-300">{officeCommandUsage(command)}</dt>
+                <dd className="text-white/55">{command.summary}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
     </div>
   );

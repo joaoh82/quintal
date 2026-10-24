@@ -145,6 +145,9 @@ import {
   listTeamsForWorkspace,
   teamRef,
   type TeamSummary,
+  listOfficeCommandsForWorkspace,
+  officeCommandRef,
+  type OfficeCommandSummary,
   listPeopleForWorkspace,
   removeChannelMember,
   getDb,
@@ -190,9 +193,15 @@ import {
   type AgentSession,
 } from '../agents/gateway.js';
 import { authenticateAgentKeypair } from '../agents/keypair.js';
-import { SentChannelLists, agentTeamsSignature, channelListSignature } from './channel-list.js';
+import {
+  SentChannelLists,
+  agentTeamsSignature,
+  channelListSignature,
+  officeCommandsSignature,
+} from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
+import { commandCallFor, readCommandLine, unheardNotice } from './commands.js';
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { voiceRelay } from '../voice/index.js';
@@ -344,6 +353,12 @@ export class OfficeRoom extends Room<OfficeState> {
    * against them; an agent is told which it is on when it connects.
    */
   #teams: readonly TeamSummary[] = [];
+  /**
+   * The office's own `!` commands, refreshed with the channels. A line that
+   * is one carries its instructions to the agents it reaches; a person is
+   * sent the list for the picker.
+   */
+  #commands: readonly OfficeCommandSummary[] = [];
   /**
    * Per agent, per conversation: the hop of the line that last woke it, so
    * its reply can be stamped one further and a chain of agents naming each
@@ -1305,7 +1320,11 @@ export class OfficeRoom extends Room<OfficeState> {
       ...audience.map((member) => member.name),
       ...teams.map((team) => team.name),
     ]);
-    const resolved = resolveMentions(named, audience, teams, speaker.userId);
+    // `!review <link>` with nobody named goes to the command's default, as
+    // if it had been said.
+    const commandLine = readCommandLine(text, speaker.kind, this.#commands, named);
+    const resolved = resolveMentions(commandLine?.named ?? named, audience, teams, speaker.userId);
+    let commandHeard = false;
     const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, SPATIAL));
     const wakes = mayWake(hop, this.#settings.mentionMaxHops);
     const owed = this.#collectReplyDebt(sessionId, sentAt);
@@ -1334,6 +1353,9 @@ export class OfficeRoom extends Room<OfficeState> {
         if (speaker.kind === 'human' || woken) this.#noteActivity(listenerId, true);
         if (woken) this.#wakeHops.woken(listenerId, SPATIAL, hop);
         const via = woken && reach?.viaTeam ? { viaTeam: reach.viaTeam } : {};
+        const call = commandLine ? commandCallFor(commandLine, reach) : undefined;
+        if (call && (woken || withinEarshot)) commandHeard = true;
+        const command = call ? { command: call } : {};
         if (withinEarshot) {
           target.send(AgentServerMessage.NearbyChat, {
             from: sessionId,
@@ -1345,6 +1367,7 @@ export class OfficeRoom extends Room<OfficeState> {
             sentAt,
             ...(requestId ? { requestId } : {}),
             ...via,
+            ...command,
           } satisfies AgentChatEvent);
         } else if (woken) {
           target.send(AgentServerMessage.Mention, {
@@ -1356,6 +1379,7 @@ export class OfficeRoom extends Room<OfficeState> {
             sentAt,
             ...(requestId ? { requestId } : {}),
             ...via,
+            ...command,
           } satisfies AgentMentionEvent);
         }
       } else {
@@ -1377,6 +1401,9 @@ export class OfficeRoom extends Room<OfficeState> {
       'team_members_absent',
       absentNotice(resolved.absent, 'the office right now'),
     );
+    if (commandLine && !commandHeard) {
+      this.#sendNotice(sessionId, 'command_unheard', unheardNotice(commandLine));
+    }
 
     // Anyone reading this zone from elsewhere. Sent even to somebody who also
     // heard it in earshot: the two arrive on different messages and land in
@@ -1408,13 +1435,15 @@ export class OfficeRoom extends Room<OfficeState> {
   async #refreshChannels(): Promise<void> {
     try {
       const db = getDb();
-      const [channels, latest, teams] = await Promise.all([
+      const [channels, latest, teams, commands] = await Promise.all([
         channelMembershipForWorkspace(db, this.#workspaceId),
         latestMessageAtByConversation(db, this.#workspaceId),
         listTeamsForWorkspace(db, this.#workspaceId),
+        listOfficeCommandsForWorkspace(db, this.#workspaceId),
       ]);
       this.#channels = channels;
       this.#teams = teams;
+      this.#commands = commands;
       // A line delivered here is known before the database has it; the
       // later of the two is the truth.
       for (const [id, at] of latest) {
@@ -1550,10 +1579,11 @@ export class OfficeRoom extends Room<OfficeState> {
     // hear it. A person is told every team, for the picker.
     const isAgent = this.#agents.has(sessionId);
     const teams = this.#teams.map(teamRef);
+    const commands = this.#commands.map(officeCommandRef);
     const agentTeams = isAgent ? this.#teamsFor(player.userId) : [];
     const signature = isAgent
       ? `${channelListSignature(channels, [])}|${agentTeamsSignature(agentTeams)}`
-      : channelListSignature(channels, available, teams);
+      : `${channelListSignature(channels, available, teams)}|${officeCommandsSignature(commands)}`;
     if (!this.#channelsSent.offer(sessionId, signature)) return;
 
     if (isAgent) {
@@ -1562,7 +1592,12 @@ export class OfficeRoom extends Room<OfficeState> {
         teams: agentTeams,
       } satisfies AgentChannelsEvent);
     } else {
-      client.send(ServerMessage.Channels, { channels, available, teams } satisfies ChannelsPayload);
+      client.send(ServerMessage.Channels, {
+        channels,
+        available,
+        teams,
+        commands,
+      } satisfies ChannelsPayload);
     }
   }
 
@@ -1772,7 +1807,8 @@ export class OfficeRoom extends Room<OfficeState> {
       ...audience.map((member) => member.name),
       ...teams.map((team) => team.name),
     ]);
-    const resolved = resolveMentions(named, audience, teams, speaker.userId);
+    const commandLine = readCommandLine(text, speaker.kind, this.#commands, named);
+    const resolved = resolveMentions(commandLine?.named ?? named, audience, teams, speaker.userId);
     if (channel.kind === 'dm') {
       for (const member of channel.members.values()) {
         if (member.id !== speaker.userId && !resolved.reached.has(member.id)) {
@@ -1781,6 +1817,7 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     }
     const mentioned = new Set(resolved.reached.keys());
+    let commandHeard = false;
     // Whether naming anybody may start a turn — see `hops.ts`.
     const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, channel.id));
     const wakes = mayWake(hop, this.#settings.mentionMaxHops);
@@ -1810,12 +1847,17 @@ export class OfficeRoom extends Room<OfficeState> {
           this.#noteActivity(listenerId, true);
           this.#wakeHops.woken(listenerId, channel.id, hop);
         }
-        const via = resolved.reached.get(listener.userId)?.viaTeam;
+        const reach = resolved.reached.get(listener.userId);
+        const via = reach?.viaTeam;
+        // Only to a member it woke: in a channel nothing else starts a turn.
+        const call = woken && commandLine ? commandCallFor(commandLine, reach) : undefined;
+        if (call) commandHeard = true;
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
           ...line,
           mentioned: woken,
           ...(woken && via ? { viaTeam: via } : {}),
+          ...(call ? { command: call } : {}),
         } satisfies AgentChannelChatEvent);
       } else {
         target.send(ServerMessage.ChannelChat, {
@@ -1847,6 +1889,9 @@ export class OfficeRoom extends Room<OfficeState> {
         channel.kind === 'dm' ? 'this conversation' : channelLabel(channel),
       ),
     );
+    if (commandLine && !commandHeard) {
+      this.#sendNotice(sessionId, 'command_unheard', unheardNotice(commandLine));
+    }
 
     void this.#keepIn(channel.id, {
       fromId: speaker.userId,

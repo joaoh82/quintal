@@ -237,6 +237,7 @@ for (const [path, marker] of [
   ['/settings/guests', 'Links you have made'],
   ['/settings/channels', 'New channel'],
   ['/settings/teams', 'New team'],
+  ['/settings/commands', 'New command'],
 ]) {
   await page(path, cookie, path, marker);
 }

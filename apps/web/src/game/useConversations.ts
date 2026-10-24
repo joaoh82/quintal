@@ -8,6 +8,7 @@ import {
   type ChatBroadcastPayload,
   type MapZone,
   type PublicApprovalRequest,
+  type OfficeCommandRef,
   type TeamRef,
 } from '@quintal/shared';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
@@ -132,6 +133,8 @@ export interface Conversations {
   available: ChannelRef[];
   /** The office's teams: names that reach several agents at once. */
   teams: TeamRef[];
+  /** The office's own `!` commands, for the picker and the help panel. */
+  commands: OfficeCommandRef[];
   /** Every zone on the map, once the map has loaded. */
   zones: MapZone[];
   /** The zone we stand in. */
@@ -197,6 +200,7 @@ export function useConversations(
   const [channels, setChannels] = useState<ChannelRef[]>([]);
   const [available, setAvailable] = useState<ChannelRef[]>([]);
   const [teams, setTeams] = useState<TeamRef[]>([]);
+  const [commands, setCommands] = useState<OfficeCommandRef[]>([]);
   const [zones, setZones] = useState<MapZone[]>([]);
   const [myZone, setMyZone] = useState<string>(FLOOR_ZONE_ID);
   const [active, setActive] = useState<ConversationKey>(NEARBY);
@@ -408,7 +412,7 @@ export function useConversations(
         const key = channelId ? channelKey(channelId) : zoneId ? zoneKey(zoneId) : NEARBY;
         patch(key, (t) => mergeHistoryPage(t, messages, hasMore));
       }),
-      gameBridge.on('channels', ({ channels: mine, available: open, teams: named }) => {
+      gameBridge.on('channels', ({ channels: mine, available: open, teams: named, commands: verbs }) => {
         setChannels(mine);
         setTranscripts(previous => Object.fromEntries(Object.entries(previous).filter(([key]) => {
           const { channelId } = parseKey(key as ConversationKey);
@@ -416,6 +420,7 @@ export function useConversations(
         })));
         setAvailable(open);
         setTeams(named ?? []);
+        setCommands(verbs ?? []);
         // Anything said in them since you last looked is waiting.
         setReadState((state) => caughtUp(state, mine, visibleRef.current));
         // The channel `/join` just asked for: it is ours now, so go there.
@@ -598,6 +603,7 @@ export function useConversations(
     channels,
     available,
     teams,
+    commands,
     zones,
     myZone,
     active,

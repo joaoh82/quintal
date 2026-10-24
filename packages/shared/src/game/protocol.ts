@@ -1,5 +1,6 @@
 import type { ChannelRef } from '../conversation.js';
 import type { TeamRef } from '../team.js';
+import type { OfficeCommandRef } from '../office-command.js';
 import type { Direction, PlayerKind } from '../player.js';
 
 /**
@@ -192,6 +193,8 @@ export interface ChannelsPayload {
    * moment it is ready to hear it.
    */
   teams?: TeamRef[];
+  /** The office's own `!` commands, for the picker and the help panel. Absent from an office that predates them. */
+  commands?: OfficeCommandRef[];
 }
 
 export interface DmOpenPayload {
@@ -255,8 +258,11 @@ export interface ErrorPayload {
 }
 
 export interface NoticePayload {
-  /** `team_members_absent`: a team you named has members outside this conversation. */
-  code: 'team_members_absent';
+  /**
+   * `team_members_absent`: a team you named has members outside this conversation.
+   * `command_unheard`: an office command you sent reached no agent.
+   */
+  code: 'team_members_absent' | 'command_unheard';
   message: string;
 }
 

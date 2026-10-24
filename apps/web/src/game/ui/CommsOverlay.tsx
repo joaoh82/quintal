@@ -348,6 +348,7 @@ export function CommsOverlay({
             roster={roster}
             joinable={joinTargets(conversations.channels, available)}
             teams={conversations.teams}
+            commands={conversations.commands}
             focused
             autoFocus
             onSend={conversations.send}

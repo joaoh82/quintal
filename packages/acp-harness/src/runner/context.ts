@@ -1,6 +1,7 @@
 import {
   channelLabel,
   type AgentChatEvent,
+  type AgentCommandCall,
   type AgentTeam,
   type AgentViaTeam,
   type ChannelRef,
@@ -46,6 +47,12 @@ export interface Trigger {
    * it were the only one asked.
    */
   viaTeam?: AgentViaTeam;
+  /**
+   * Set when the line was one of the office's own `!` commands: what the
+   * command asks, which the line itself does not say — `!review <link>` is
+   * all the person typed.
+   */
+  command?: AgentCommandCall;
   /**
    * Set when this is not a message at all but the office's invitation to
    * banter: `line` is what the partner said (null when we go first), and
@@ -238,7 +245,49 @@ export function buildEnvelope(input: EnvelopeInput): string {
     }
   }
 
+  // After the line, not before: it is what the line means, and read first it
+  // would be a brief with nothing yet to apply it to. Once per command however
+  // many lines in the batch used it.
+  const commands = new Map<string, Trigger>();
+  for (const trigger of input.triggers) {
+    if (trigger.command !== undefined && !commands.has(trigger.command.name)) {
+      commands.set(trigger.command.name, trigger);
+    }
+  }
+  for (const trigger of commands.values()) {
+    lines.push('');
+    lines.push(commandSection(trigger.command!, trigger.fromName));
+  }
+
   return lines.join('\n');
+}
+
+/**
+ * What an office command asks, said beside the line that used it.
+ *
+ * Whose brief it is goes in the heading: the office's, made by a person,
+ * not the speaker's own words — the agent should follow it the way it
+ * follows a team's instructions, and can say whose it was if asked why it
+ * did the work that way. The argument is repeated on its own line because
+ * the line it came in is `!review @engineering <link>`, and the model should
+ * not have to parse a command to find the link.
+ */
+export function commandSection(command: AgentCommandCall, fromName: string): string {
+  const instructions = command.instructions.trim();
+  const args = command.args.trim();
+  const by = command.definedBy.trim();
+  return [
+    `[Command !${command.name}${by.length > 0 ? ` — set up in this office by ${by}` : ''}]`,
+    `${fromName} used !${command.name}. ${
+      instructions.length > 0
+        ? 'This is what it asks of whoever it reaches:'
+        : 'It carries no instructions of its own; do what the line asks.'
+    }`,
+    instructions,
+    args.length > 0 ? `What they gave it: ${args}` : 'They gave it nothing after the command.',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
 }
 
 /**

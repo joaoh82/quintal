@@ -403,7 +403,11 @@ export default function OfficeGame({
       ) : null}
 
       {helpOpen ? (
-        <HelpPanel onClose={() => setHelpOpen(false)} overlayKey={overlayKey} />
+        <HelpPanel
+          onClose={() => setHelpOpen(false)}
+          overlayKey={overlayKey}
+          commands={conversations.commands}
+        />
       ) : null}
     </div>
   );
