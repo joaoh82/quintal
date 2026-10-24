@@ -11,6 +11,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "app_version",
             "check_for_update",
+            "recheck_for_update",
             "install_update",
             "update_state",
             "dismiss_update",

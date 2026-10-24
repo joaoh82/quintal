@@ -115,6 +115,12 @@ is one. Say yes and it downloads the release, replaces itself and restarts. Say
 quiet **Update to …** button in the office and settings headers, and stays
 there until you take it or a newer version arrives.
 
+It checks once per launch. To check again without restarting, press **Check
+for updates** in the settings header: a newer version opens the same offer —
+even one you said **Later** to — and otherwise it says **Up to date**. Unlike
+the check on launch, this one tells you when it could not reach the update
+server.
+
 Every payload is verified against a public key compiled into the app before a
 single file is replaced, so an update can only come from a Quintal release that
 was signed with the matching private key.

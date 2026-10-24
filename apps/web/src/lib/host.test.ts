@@ -67,6 +67,8 @@ describe('getHost', () => {
     const host = getHost();
     assert.ok(host);
     for (const method of [
+      'checkForUpdate',
+      'recheckForUpdate',
       'hasIdentity',
       'getPublicKey',
       'signChallenge',

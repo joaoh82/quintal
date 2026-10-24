@@ -118,6 +118,13 @@ export interface HostBridge {
    */
   checkForUpdate(): Promise<Available | null>;
   /**
+   * Ask again, now — the **Check for updates** button. Unlike `checkForUpdate`
+   * this asks every time, and a failure rejects rather than passing for
+   * "nothing newer": somebody who asked deserves to know it did not work.
+   * A host older than this command rejects too.
+   */
+  recheckForUpdate(): Promise<Available | null>;
+  /**
    * Download it, install it, and come back up on the new version.
    *
    * The app restarts itself, so nothing after this resolves. What gets
@@ -402,6 +409,7 @@ function tauriBridge(): HostBridge {
   return {
     appVersion: () => call<string>('app_version'),
     checkForUpdate: () => call<Available | null>('check_for_update'),
+    recheckForUpdate: () => call<Available | null>('recheck_for_update'),
     installUpdate: () => call<void>('install_update'),
     updateState: () => call<UpdateStatus>('update_state'),
     dismissUpdate: () => call<string>('dismiss_update'),
