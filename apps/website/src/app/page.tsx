@@ -78,6 +78,7 @@ export default function Home() {
         <div className="runtime-names">
           <span>Claude Code</span>
           <span>Codex</span>
+          <span>Cursor</span>
           <span>Goose</span>
           <span>Gemini CLI</span>
           <span>opencode</span>

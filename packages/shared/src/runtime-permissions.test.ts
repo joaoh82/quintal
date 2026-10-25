@@ -81,6 +81,9 @@ describe('what a runtime option is established to grant', () => {
     // unknown, and it must not read as "Quintal approves its tools".
     assert.equal(permissionProfile('codex')!.asks, 'never_observed');
     assert.ok(permissionProfile('codex')!.externalGrants);
+    // Cursor likewise: nine prompts across its three modes, not one request.
+    assert.equal(permissionProfile('cursor')!.asks, 'never_observed');
+    assert.ok(permissionProfile('cursor')!.externalGrants);
   });
 });
 

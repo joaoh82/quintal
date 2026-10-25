@@ -116,9 +116,16 @@ export const RUNTIMES: readonly RuntimeSpec[] = [
   {
     id: 'cursor',
     label: 'Cursor',
+    // The installer links both `agent` and `cursor-agent` to the same CLI;
+    // the long name is looked for because `agent` is too generic a thing to
+    // find on a PATH and call Cursor.
     bin: 'cursor-agent',
-    acp: { kind: 'none' },
-    evidence: 'No ACP subcommand or flag; headless mode speaks its own stream-JSON. Verified 2026-08-07.',
+    // Hidden from `--help`, which is why this entry said `none` until
+    // 2026-10-25: the command is registered with `hidden: true`. Documented
+    // at https://cursor.com/docs/cli/acp.
+    acp: { kind: 'native', args: ['acp'] },
+    evidence:
+      'Ships a hidden `acp` subcommand. Answered `initialize` (protocol 1) and `session/new` carrying a stdio MCP server, and advertised a `model` config option with 46 choices, as Cursor CLI 2026.10.19. Verified 2026-10-25.',
     install: 'https://cursor.com/cli',
   },
 ] as const;

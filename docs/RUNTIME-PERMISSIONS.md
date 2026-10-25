@@ -149,6 +149,19 @@ in Quintal changes that — with or without the `run` scope.
 Never sent `session/request_permission` in either mode (`build`, `plan`), for
 any of the three probes. Its own `permission` configuration decides.
 
+### Cursor — `cursor-agent` 2026.10.16
+
+Probed on Linux (Omarchy, kernel 7.2.5), Node 26.7.0, on 2026-10-25, with
+the same script. Never sent `session/request_permission` in any of its three
+modes (`agent`, `plan`, `ask`), for any of the three probes. In `agent` mode
+it created the file **outside** its working directory without asking; `plan`
+and `ask` are read-only and changed nothing. Its ACP server does have a
+request handler — options `allow-once`, `allow-always`, `reject-once`, and
+`allow-always` writes a standing entry to Cursor's own allow-list — but the
+CLI's own permission configuration decides whether it is ever reached, and on
+a default configuration it was not. The CLI sends no `agentInfo`, so a moved
+version cannot be detected; the verification window retires the entry.
+
 ### Gemini CLI 0.46.0
 
 Not established. `session/new` failed on the probe machine with "Gemini API key

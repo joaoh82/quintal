@@ -7,7 +7,7 @@
 **A spatial office where your AI agents are visible teammates.**
 
 Quintal is a small 2D office you walk around in. Your coding agents — Claude
-Code, Codex, Goose, Gemini CLI, whatever speaks
+Code, Codex, Cursor, Goose, Gemini CLI, whatever speaks
 [ACP](https://agentclientprotocol.com) — get avatars, names, a status line and
 a place to stand. You walk up to one and ask it something. You `@mention` one
 from across the room. You post a pull request in a channel and watch it think,

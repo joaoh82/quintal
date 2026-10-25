@@ -4,7 +4,7 @@ ACP is young and its implementations differ. This file records what was
 actually observed, on real harnesses, with dates and versions — not what the
 spec says should happen.
 
-**Last verified: 2026-08-07**, against `@agentclientprotocol/sdk@1.3.0`,
+**Last verified: 2026-10-25**, against `@agentclientprotocol/sdk@1.3.0`,
 protocol version `1`.
 
 | Harness | Package | Version | `initialize` | `session/new` | Our MCP server | Verified |
@@ -13,6 +13,7 @@ protocol version `1`.
 | Claude Code (old) | `@zed-industries/claude-code-acp` | 0.16.2 | ✅ | ⚠️ see below | ✅ accepted | **yes** |
 | Codex | `@agentclientprotocol/codex-acp` | 1.1.13 | ✅ | ✅ | ✅ accepted | **yes** |
 | Goose | `goose acp` | — | — | — | — | **no — not installed** |
+| Cursor | `cursor-agent acp` | 2026.10.16 / .19 | ✅ | ✅ | ✅ accepted | **yes** |
 | Scripted fake | `test/fixtures/fake-acp-agent.mjs` | — | ✅ | ✅ | ✅ | yes (CI) |
 
 Every row marked verified was exercised by spawning the real binary and
@@ -120,6 +121,41 @@ working directory without asking. opencode 1.4.3 likewise never asked, in
 either mode, for a write, a shell command or a write outside the workspace.
 Verified 2026-09-24. Quintal's approval cards cannot reach either runtime;
 their own settings are the only control.
+
+### 9. Cursor speaks ACP, and hides it
+
+Cursor's CLI registers `acp` as a *hidden* command — `agent --help` (and
+`cursor-agent --help`; the installer links both names to one binary) never
+lists it, which is why this catalogue said "no ACP surface" from 2026-08-07
+until it was found in the bundle. It is documented at
+<https://cursor.com/docs/cli/acp> and Zed drives it the same way.
+
+Verified 2026-10-25 on Linux against Cursor CLI 2026.10.19 (handshake and
+session creation) and 2026.10.16 (the permission probe, nine prompt turns):
+
+- `initialize` answers protocol `1`, advertises `loadSession`, image prompts
+  and the `cursor_login` auth method, and sends **no `agentInfo`** — so the
+  adapter identity the host report carries is null for Cursor, and the
+  permission catalogue's "has the adapter moved" check cannot see it move.
+  `cursor-agent --version` is the only version signal.
+- `session/new` requires the CLI to be signed in (`agent login`), accepts a
+  stdio MCP server in the shape above (finding 4) — it spawned the probe's
+  server and completed the MCP `initialize` exchange — and answers with
+  `modes` (`agent`, `plan`, `ask`), `models` and `configOptions`. The model
+  option is `{ id: "model", category: "model" }` with 46 choices, read by the
+  same code path as the other adapters (`id` rather than `configId`).
+- `session/set_mode` accepts `agent`, `plan` and `ask`. `plan` and `ask` are
+  read-only, so they are the modes for an agent that must not change anything;
+  there is no "ask before changes" mode like Claude Code's Manual.
+- Like Codex and opencode (finding 8), it **never asked** over ACP: nine
+  prompts across `agent`, `plan` and `ask` produced no
+  `session/request_permission`, and in `agent` mode it wrote a file outside
+  its working directory without asking. Its request handler exists (option
+  ids `allow-once`, `allow-always`, `reject-once`) behind the CLI's own
+  permission configuration. See
+  [docs/RUNTIME-PERMISSIONS.md](../../docs/RUNTIME-PERMISSIONS.md).
+- Cursor's docs say team-level MCP servers from its dashboard are not loaded
+  in ACP mode. Project and user `.cursor/mcp.json` servers are.
 
 ### 6. Goose is unverified
 
