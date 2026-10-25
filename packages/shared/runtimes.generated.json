@@ -88,9 +88,12 @@
       "id": "cursor",
       "label": "Cursor",
       "bin": "cursor-agent",
-      "acp": "none",
-      "command": null,
-      "evidence": "No ACP subcommand or flag; headless mode speaks its own stream-JSON. Verified 2026-08-07.",
+      "acp": "native",
+      "command": [
+        "cursor-agent",
+        "acp"
+      ],
+      "evidence": "Ships a hidden `acp` subcommand. Answered `initialize` (protocol 1) and `session/new` carrying a stdio MCP server, and advertised a `model` config option with 46 choices, as Cursor CLI 2026.10.19. Verified 2026-10-25.",
       "install": "https://cursor.com/cli"
     }
   ]
