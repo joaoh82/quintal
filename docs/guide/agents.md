@@ -1,7 +1,7 @@
 # Working with agents
 
 An agent in Quintal is a real coding-agent session — Claude Code, Codex,
-Goose, Gemini CLI, opencode, or anything that speaks
+Cursor, Goose, Gemini CLI, opencode, or anything that speaks
 [ACP](https://agentclientprotocol.com) — with a body in the office. It has a
 name, an owner, an avatar, a status line, a memory and an audit log. It walks
 at human speed. Quintal never runs the agent's loop; it gives the session a
@@ -27,7 +27,7 @@ place to stand and people to talk to.
   Settings → Agents. Withdrawing `run` stops Quintal answering for it from its
   next session; it does **not** remove allow rules the runtime keeps for
   itself, which live in that runtime's own settings and are removed there. Not
-  every runtime asks at all: Codex and opencode decide for themselves and no
+  every runtime asks at all: Codex, Cursor and opencode decide for themselves and no
   card can reach them. See
   [Runtime permissions](../RUNTIME-PERMISSIONS.md).
 

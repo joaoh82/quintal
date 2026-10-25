@@ -27,6 +27,7 @@ describe('the runtime catalogue', () => {
   it('builds a native command from the CLI itself', () => {
     assert.deepEqual(acpCommandFor(runtimeById('goose')!), ['goose', 'acp']);
     assert.deepEqual(acpCommandFor(runtimeById('gemini')!), ['gemini', '--experimental-acp']);
+    assert.deepEqual(acpCommandFor(runtimeById('cursor')!), ['cursor-agent', 'acp']);
   });
 
   it('builds an adapter command through npx, which installs nothing', () => {
@@ -39,7 +40,6 @@ describe('the runtime catalogue', () => {
 
   it('returns null for a runtime with no ACP surface, rather than a command that fails later', () => {
     assert.equal(acpCommandFor(runtimeById('grok')!), null);
-    assert.equal(acpCommandFor(runtimeById('cursor')!), null);
   });
 
   it('does not consider an installed-but-unsupported runtime usable', () => {

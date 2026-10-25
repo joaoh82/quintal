@@ -298,6 +298,21 @@ const OPENCODE: RuntimePermissionProfile = {
   verifiedAgainst: { name: 'opencode', version: '1.4.3' },
 };
 
+const CURSOR: RuntimePermissionProfile = {
+  runtimeId: 'cursor',
+  asks: 'never_observed',
+  notes:
+    'Never sent `session/request_permission` in any of its three modes (`agent`, `plan`, `ask`) for a file write, a shell command, or a write outside the working directory. In `agent` mode it created the file **outside** its working directory without asking; `plan` and `ask` are read-only and changed nothing. Its ACP server does carry a request handler — options `allow-once`, `allow-always`, `reject-once` — gated by the CLI\'s own permission configuration, so a machine configured to ask may send requests this catalogue has not measured; those get the protocol defaults, and "Allow always" is never offered.',
+  options: [],
+  externalGrants:
+    'Cursor decides from its own permissions (`~/.cursor/cli-config.json`, a project `.cursor/cli.json`), and an `allow-always` answered to it writes a standing allow-list entry there. Quintal neither reads nor writes them.',
+  verifiedAt: '2026-10-25',
+  // The CLI sends no `agentInfo` at `initialize`, so this is what
+  // `cursor-agent --version` printed on the probe machine; `adapterMoved`
+  // can never see it move and the window alone retires the entry.
+  verifiedAgainst: { name: 'cursor-agent', version: '2026.10.16-e3cb207' },
+};
+
 const GEMINI: RuntimePermissionProfile = {
   runtimeId: 'gemini',
   asks: 'unknown',
@@ -322,6 +337,7 @@ const GOOSE: RuntimePermissionProfile = {
 export const RUNTIME_PERMISSIONS: readonly RuntimePermissionProfile[] = [
   CLAUDE_CODE,
   CODEX,
+  CURSOR,
   GEMINI,
   GOOSE,
   OMP,
