@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { eq } from 'drizzle-orm';
+
+import {
+  isOfficeCommandName,
+  isReservedCommandName,
+  normaliseOfficeCommandArgumentHint,
+  normaliseOfficeCommandInstructions,
+  normaliseOfficeCommandName,
+  normaliseOfficeCommandSummary,
+} from '../office-command.js';
 import { createAgent, revokeAgent } from './agents.js';
 import {
   OfficeCommandError,
@@ -11,8 +21,12 @@ import {
   officeCommandRef,
   updateOfficeCommand,
 } from './commands.js';
+import type { Database } from './client.js';
+import { officeCommands } from './schema.js';
+import { STARTER_OFFICE_COMMANDS } from './starter-commands.js';
 import { createTeam, deleteTeam } from './teams.js';
 import { createTestDb, createTestUser } from './testing.js';
+import { ensurePersonalWorkspace } from './workspaces.js';
 
 /**
  * An office command is a word and a brief. What must hold: the word means
@@ -21,9 +35,16 @@ import { createTestDb, createTestUser } from './testing.js';
  * the command reaching whoever the line names rather than nobody.
  */
 
+/** Somebody with an office of their own, cleared of the commands it starts with. */
+async function member(db: Database, name: string) {
+  const user = await createTestUser(db, name);
+  await db.delete(officeCommands).where(eq(officeCommands.workspaceId, user.workspaceId));
+  return user;
+}
+
 async function office(name: string) {
   const db = await createTestDb();
-  const owner = await createTestUser(db, name);
+  const owner = await member(db, name);
   const agent = (agentName: string) =>
     createAgent(db, {
       workspaceId: owner.workspaceId,
@@ -80,7 +101,7 @@ describe('making a command', () => {
 
   it('lets two offices each have their own !review', async () => {
     const ana = await office('Ana');
-    const bo = await createTestUser(ana.db, 'Bo');
+    const bo = await member(ana.db, 'Bo');
     await createOfficeCommand(ana.db, { workspaceId: ana.owner.workspaceId, name: 'review', createdBy: ana.owner.id });
     await createOfficeCommand(ana.db, { workspaceId: bo.workspaceId, name: 'review', createdBy: bo.id });
   });
@@ -191,7 +212,7 @@ describe('changing a command', () => {
 
   it('deletes only in its own office', async () => {
     const ana = await office('Ana');
-    const bo = await createTestUser(ana.db, 'Bo');
+    const bo = await member(ana.db, 'Bo');
     const review = await createOfficeCommand(ana.db, {
       workspaceId: ana.owner.workspaceId,
       name: 'review',
@@ -202,5 +223,47 @@ describe('changing a command', () => {
     assert.ok(await getOfficeCommand(ana.db, ana.owner.workspaceId, review.id));
     await deleteOfficeCommand(ana.db, ana.owner.workspaceId, review.id);
     assert.equal(await getOfficeCommand(ana.db, ana.owner.workspaceId, review.id), null);
+  });
+});
+
+describe('a new office', () => {
+  it('starts with the starter commands, credited to nobody and aimed at nobody', async () => {
+    const db = await createTestDb();
+    const ana = await createTestUser(db, 'Ana');
+    const commands = await listOfficeCommandsForWorkspace(db, ana.workspaceId);
+
+    assert.deepEqual(
+      commands.map((command) => command.name),
+      STARTER_OFFICE_COMMANDS.map((command) => command.name).sort(),
+    );
+    const review = commands.find((command) => command.name === 'review');
+    assert.ok(review);
+    assert.equal(review.summary, 'Review a pull request');
+    assert.equal(review.argumentHint, '<pull request link>');
+    assert.match(review.instructions, /publish the review directly on the GitHub pull request/);
+    assert.equal(review.defaultTarget, null);
+    assert.equal(review.createdBy, null);
+    assert.equal(review.createdByName, '');
+  });
+
+  it('keeps every starter intact under the limits a command is held to', async () => {
+    for (const starter of STARTER_OFFICE_COMMANDS) {
+      assert.equal(normaliseOfficeCommandName(starter.name), starter.name);
+      assert.ok(isOfficeCommandName(starter.name) && !isReservedCommandName(starter.name));
+      assert.equal(normaliseOfficeCommandSummary(starter.summary), starter.summary);
+      assert.equal(normaliseOfficeCommandArgumentHint(starter.argumentHint), starter.argumentHint);
+      assert.equal(normaliseOfficeCommandInstructions(starter.instructions), starter.instructions);
+    }
+  });
+
+  it('does not bring a deleted one back on the next sign-in', async () => {
+    const db = await createTestDb();
+    const ana = await createTestUser(db, 'Ana');
+    const [review] = await listOfficeCommandsForWorkspace(db, ana.workspaceId);
+    assert.ok(review);
+    await deleteOfficeCommand(db, ana.workspaceId, review.id);
+
+    await ensurePersonalWorkspace(db, { userId: ana.id, name: 'Ana', pubkey: ana.pubkey });
+    assert.deepEqual(await listOfficeCommandsForWorkspace(db, ana.workspaceId), []);
   });
 });

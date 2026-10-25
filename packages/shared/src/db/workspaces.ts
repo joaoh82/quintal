@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 
 import type { Database } from './client.js';
 import { memberships, users, workspaces, type Workspace } from './schema.js';
+import { addStarterOfficeCommands } from './starter-commands.js';
 import { displayNameFromPubkey } from '../identity.js';
 import {
   normaliseWorkspaceName,
@@ -88,6 +89,7 @@ export async function ensurePersonalWorkspace(
     userId: input.userId,
     role: 'owner',
   });
+  await addStarterOfficeCommands(db, workspace.id);
 
   return workspace;
 }
