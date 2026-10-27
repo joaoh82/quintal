@@ -787,6 +787,10 @@ edit in them directly: before it changes files in a repository it begins a
 **task**, which gives it a branch of its own in a worktree of its own under
 the nest's `WORKTREES/`. See [Tasks and worktrees](./guide/agents.md#tasks-and-worktrees).
 
+Agents on this computer stop when it sleeps. To keep a fleet running with the
+laptop closed, run the harness as a service on a machine that stays on: see
+[A fleet that stays up](./FLEET.md).
+
 ## Leaving
 
 Quitting stops the harness — and the personal office's server, when this

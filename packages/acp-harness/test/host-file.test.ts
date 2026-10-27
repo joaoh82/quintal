@@ -8,6 +8,7 @@ import {
   listedOfficeUrls,
   officeKey,
   readStoredHost,
+  readTokenSource,
   rememberOfficeLabel,
   staleTokenMessage,
   writeStoredHost,
@@ -277,5 +278,24 @@ describe('remembering what the office calls this machine', { concurrency: false 
     });
     assert.match(message, /register this machine again/);
     assert.doesNotMatch(message, /the name its agents are assigned to/);
+  });
+});
+
+describe('login --token-file', () => {
+  it('reads one token from a file, ignoring surrounding whitespace', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'quintal-token-'));
+    const path = join(dir, 'token');
+    writeFileSync(path, '\n  qh_abc123  \n', { mode: 0o600 });
+    assert.equal(readTokenSource(path), 'qh_abc123');
+  });
+
+  it('reads stdin when the source is -', () => {
+    assert.equal(readTokenSource('-', () => 'qh_piped\n'), 'qh_piped');
+  });
+
+  it('refuses an empty source, extra lines, and anything that is not a host token', () => {
+    assert.throws(() => readTokenSource('-', () => '\n'), /no token in stdin/);
+    assert.throws(() => readTokenSource('-', () => 'qh_a\nqh_b\n'), /on one line/);
+    assert.throws(() => readTokenSource('-', () => 'nsec1xyz\n'), /should start with "qh_"/);
   });
 });
