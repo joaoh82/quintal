@@ -16,6 +16,7 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'Click', what: 'Walk to a tile — the server pathfinds around furniture' },
   { keys: 'Enter', what: 'Take the keyboard and type' },
   { keys: 'Esc', what: 'Give the keyboard back to the office' },
+  { keys: '↑ / ↓ (typing)', what: 'Scroll back and forth through what you sent' },
   { keys: 'M', what: 'Microphone on or off. Off until you say otherwise' },
   { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: 'Z', what: 'Show zone overlays' },
