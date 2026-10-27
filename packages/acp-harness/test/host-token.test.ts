@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, utimesSync } from 'node:fs';
+import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
@@ -66,5 +68,35 @@ describe('a host token the office turns down', () => {
   it('still refuses a token that is not one before asking the office', async () => {
     const error = await rejection(fetchFleet({ ...base, token: 'nope' }, null));
     assert.match(error.message, /starts with/);
+  });
+});
+
+describe('an office that cannot be reached', () => {
+  const base: StoredHost = { token: 'qh_abc', url: 'http://office.internal:3999' };
+
+  it('names the office and the reason instead of "fetch failed"', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' }),
+      });
+    }) as typeof globalThis.fetch;
+    try {
+      const error = await rejection(fetchFleet(base, null));
+      assert.match(error.message, /could not reach the office at http:\/\/office\.internal:3999/);
+      assert.match(error.message, /UND_ERR_CONNECT_TIMEOUT: .*firewall/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('says nothing is listening when the connection is refused, for real', async () => {
+    // A loopback port that was just freed: refused at once, no mock in the way.
+    const server = createServer();
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    const { port } = server.address() as AddressInfo;
+    await new Promise((done) => server.close(done));
+    const error = await rejection(fetchFleet({ ...base, url: `http://127.0.0.1:${port}` }, null));
+    assert.match(error.message, new RegExp(`127\\.0\\.0\\.1:${port} \\(ECONNREFUSED: nothing is listening there\\)`));
   });
 });

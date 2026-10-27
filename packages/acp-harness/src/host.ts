@@ -446,6 +446,31 @@ export function staleTokenMessage(host: StoredHost): string {
   );
 }
 
+/** What to say when the office cannot be reached at all. */
+export function unreachableMessage(officeUrl: string, error: unknown): string {
+  const cause =
+    error instanceof Error && error.cause && typeof error.cause === 'object'
+      ? (error.cause as { code?: unknown; message?: unknown })
+      : null;
+  const code = typeof cause?.code === 'string' ? cause.code : null;
+  const detail =
+    code ??
+    (typeof cause?.message === 'string' ? cause.message : null) ??
+    (error instanceof Error ? error.message : String(error));
+  const hint =
+    code === 'ENOTFOUND' || code === 'EAI_AGAIN'
+      ? 'the name does not resolve from this machine'
+      : code === 'ECONNREFUSED'
+        ? 'nothing is listening there'
+        : code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'ETIMEDOUT'
+          ? 'the connection timed out, which is usually a firewall or a wrong address'
+          : null;
+  return (
+    `could not reach the office at ${officeUrl} (${detail}${hint ? `: ${hint}` : ''}). ` +
+    'Check the URL this machine was registered with, and that this machine can open it.'
+  );
+}
+
 /**
  * Ask the office what this machine should be running.
  *
@@ -466,9 +491,18 @@ export async function fetchFleet(
   const url = new URL('/api/host/fleet', host.url);
   if (label !== null) url.searchParams.set('host', label);
 
-  const response = await fetch(url, {
-    headers: { authorization: `Bearer ${host.token}` },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { authorization: `Bearer ${host.token}` },
+    });
+  } catch (error: unknown) {
+    // Node's own words here are "fetch failed", which names neither the
+    // office nor the reason. The reason is in `cause` (ECONNREFUSED,
+    // ENOTFOUND, a connect timeout), and on a headless box it is the only
+    // clue whether the URL is wrong or a firewall is in the way.
+    throw new ConfigError(unreachableMessage(host.url, error));
+  }
 
   if (response.status === 401) {
     throw new ConfigError(staleTokenMessage(host));
