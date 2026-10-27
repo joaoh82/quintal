@@ -24,8 +24,8 @@ curl -fsSL https://raw.githubusercontent.com/joaoh82/quintal/main/scripts/provis
 
 It asks for the machine token (`qh_…`). Get one in your office at
 `/settings/agents` → *Machines*: give the machine a name and press *Register
-machine*; the token is shown once. Ignore the `npx` line printed under it
-(the package is not on npm) and take only the token. To script it, write the token to a `0600` file
+machine*; the token is shown once. Copy only the token: the command printed
+with it is for a machine that already has the harness. To script it, write the token to a `0600` file
 and pass `--token-file /path`, or pipe it in with `--token-file -` (the script
 itself then has to come from a file rather than through `curl | bash`). It never
 takes the token as an argument, where `ps` and your shell history would keep it.
