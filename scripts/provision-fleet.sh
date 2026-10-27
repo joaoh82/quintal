@@ -129,8 +129,10 @@ if [ -z "$ref" ]; then
   [ -n "$ref" ] || die "no release tags in $REPO_URL"
 fi
 before="$(git -C "$src" rev-parse HEAD)"
-git -C "$src" checkout --quiet --force "$ref" 2>/dev/null \
-  || git -C "$src" checkout --quiet --force "origin/$ref" \
+# A branch is taken from origin each time, detached: a local branch would stay
+# where the first run left it and never update.
+git -C "$src" checkout --quiet --force --detach "origin/$ref" 2>/dev/null \
+  || git -C "$src" checkout --quiet --force --detach "$ref" \
   || die "no such ref: $ref"
 after="$(git -C "$src" rev-parse HEAD)"
 
