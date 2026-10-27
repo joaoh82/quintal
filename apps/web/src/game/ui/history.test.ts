@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { HISTORY_LIMIT, NOT_RECALLING, remember, step } from './history.js';
+import { HISTORY_LIMIT, NOT_RECALLING, edited, remember, step } from './history.js';
 
 describe('remembering sent lines', () => {
   it('keeps them in order, without repeating the last one', () => {
@@ -40,6 +40,19 @@ describe('Up and Down', () => {
     const draft = step(history, newer.recall, newer.text, false)!;
     assert.equal(draft.text, 'half-typed');
     assert.deepEqual(draft.recall, NOT_RECALLING);
+  });
+
+  it('gives back the line you were writing after you edit a recalled one', () => {
+    const back = step(history, NOT_RECALLING, 'hello wor', true)!;
+    const typed = edited(back.recall);
+    const down = step(history, typed, 'third!', false)!;
+    assert.equal(down.text, 'hello wor');
+    assert.deepEqual(down.recall, NOT_RECALLING);
+
+    // Up again from the edit, then all the way down, still ends there.
+    const again = step(history, typed, 'third!', true)!;
+    assert.equal(again.text, 'third');
+    assert.equal(step(history, again.recall, again.text, false)!.text, 'hello wor');
   });
 
   it('does nothing with no history, or Down while typing', () => {

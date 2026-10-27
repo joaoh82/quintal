@@ -17,7 +17,7 @@ import {
 } from '@quintal/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { NOT_RECALLING, remember, step, type Recall } from './history';
+import { NOT_RECALLING, edited, remember, step, type Recall } from './history';
 import { matchJoinTargets, type JoinTarget } from './join';
 import { SLASH_COMMANDS, slashQueryAt } from './slash';
 
@@ -360,8 +360,9 @@ export function ChatInput({
         onChange={(event) => {
           setDraft(event.target.value);
           setCaret(event.target.selectionStart ?? event.target.value.length);
-          // An edited line is a new draft: Up starts again from the newest.
-          setRecall(NOT_RECALLING);
+          // An edited line ends the browsing, but Down still gives back the
+          // line you were writing before it.
+          setRecall(edited);
         }}
         onSelect={syncCaret}
         onClick={syncCaret}

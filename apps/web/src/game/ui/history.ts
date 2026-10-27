@@ -13,11 +13,23 @@ export const HISTORY_LIMIT = 100;
 export interface Recall {
   /** Index into the history, or null while you are typing your own line. */
   index: number | null;
-  /** What you were typing before the first Up, for Down to give back. */
-  stash: string;
+  /**
+   * What you were typing before the first Up, for Down to give back. Null once
+   * there is nothing to give back.
+   */
+  stash: string | null;
 }
 
-export const NOT_RECALLING: Recall = { index: null, stash: '' };
+export const NOT_RECALLING: Recall = { index: null, stash: null };
+
+/**
+ * Typing into a recalled line stops the browsing — the picker comes back, and
+ * Up starts again from the newest — but keeps what you were writing before it,
+ * so Down still gives that back instead of losing it.
+ */
+export function edited(recall: Recall): Recall {
+  return { index: null, stash: recall.stash };
+}
 
 /** The history with `text` added, unless it repeats the line before it. */
 export function remember(history: readonly string[], text: string): string[] {
@@ -39,16 +51,23 @@ export function step(
     if (recall.index === null) {
       const last = history.length - 1;
       if (last < 0) return null;
-      return { recall: { index: last, stash: draft }, text: history[last] ?? '' };
+      // Up from an edited recalled line is still scratch work: keep the line
+      // you were writing before any of it.
+      const stash = recall.stash ?? draft;
+      return { recall: { index: last, stash }, text: history[last] ?? '' };
     }
     if (recall.index === 0) return null;
     const index = recall.index - 1;
     return { recall: { ...recall, index }, text: history[index] ?? '' };
   }
 
-  if (recall.index === null) return null;
-  // Past the newest line is the one you were writing.
-  if (recall.index >= history.length - 1) return { recall: NOT_RECALLING, text: recall.stash };
+  // Past the newest line, or out of an edited one, is the line you were writing.
+  if (recall.index === null) {
+    return recall.stash === null ? null : { recall: NOT_RECALLING, text: recall.stash };
+  }
+  if (recall.index >= history.length - 1) {
+    return { recall: NOT_RECALLING, text: recall.stash ?? '' };
+  }
   const index = recall.index + 1;
   return { recall: { ...recall, index }, text: history[index] ?? '' };
 }
