@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { interactableAt } from '../map.js';
-import { buildWalkableGrid, parseTiledMap, type TiledMap } from './tiled.js';
+import { buildWalkableGrid, parseTiledMap, type TiledMap, type TiledObject } from './tiled.js';
 
 /**
  * The parser's job is to fail loudly. A map is authored by hand in Tiled, so a
@@ -40,7 +40,7 @@ const object = (
   height: 32,
   ...overrides,
 });
-const identity = <T extends { id: number; name: string; type: string; x: number; y: number; width: number; height: number; point?: boolean; properties?: Array<{ name: string; type: string; value: string }> }>(o: T) => o;
+const identity = <T extends TiledObject>(o: T) => o;
 
 describe('buildWalkableGrid', () => {
   it('blocks on walls and authored collision, but not on the floor', () => {
