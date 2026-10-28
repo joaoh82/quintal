@@ -139,6 +139,7 @@ import {
   BoardItemError,
   createBoardItem,
   deleteBoardItem,
+  getBoardItem,
   listBoardAgentsForWorkspace,
   listBoardItemsForWorkspace,
   updateBoardItem,
@@ -214,6 +215,7 @@ import {
   officeCommandsSignature,
 } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
+import { LatestRead } from './latest-read.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import {
   commandCallFor,
@@ -389,10 +391,13 @@ export class OfficeRoom extends Room<OfficeState> {
   #boardSignature = '';
   /** The first read of the board, so a `board_get` that beats it still gets an answer. */
   #boardLoaded: Promise<void> | null = null;
+  /** Reads of the board may overlap; only the newest started may land. */
+  readonly #boardReads = new LatestRead();
   /**
-   * sessionId -> a person's role in the office, read once per session.
-   * The board is sent with "where you stand" so the panel can hide what the
-   * office would refuse, and that must not cost a query per send.
+   * sessionId -> a person's role in the office, as last read. The board is
+   * sent with "where you stand" so the panel can hide what the office would
+   * refuse, and that must not cost a query per send. It is a hint for the
+   * panel only: every write reads the membership afresh, and corrects this.
    */
   readonly #roles = new Map<string, MembershipRole | null>();
   /**
@@ -1670,12 +1675,16 @@ export class OfficeRoom extends Room<OfficeState> {
    * written here shows up now.
    */
   async #refreshBoard(): Promise<void> {
+    // A read started before a write committed may finish after the read
+    // started after it. Only the newest read lands, whichever finishes first.
+    const ticket = this.#boardReads.start();
     try {
       const db = getDb();
       const [items, agents] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
       ]);
+      if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
       this.#boardAgents = agents;
     } catch (error: unknown) {
@@ -1688,7 +1697,7 @@ export class OfficeRoom extends Room<OfficeState> {
     for (const sessionId of this.state.players.keys()) void this.#sendBoard(sessionId);
   }
 
-  /** A person's role here, read once per session. Null for a guest. */
+  /** A person's role here as last read, for sending the board. Null for a guest. */
   async #roleFor(sessionId: string, player: OfficePlayer): Promise<MembershipRole | null> {
     const known = this.#roles.get(sessionId);
     if (known !== undefined) return known;
@@ -1715,13 +1724,26 @@ export class OfficeRoom extends Room<OfficeState> {
     await this.#sendBoard(client.sessionId);
   }
 
-  /** The person behind a board message, if they may write on it. Refuses for them otherwise. */
+  /**
+   * The person behind a board message, if they may write on it. Refuses for
+   * them otherwise.
+   *
+   * The membership is read now, not taken from the cache, like every other
+   * action in the room: someone removed from the office, or demoted, loses
+   * the pen at once rather than on their next connection. The cache is
+   * corrected from what was read, and the board sent again if their standing
+   * changed, so the panel catches up too.
+   */
   async #boardWriter(client: Client): Promise<{ player: OfficePlayer; role: MembershipRole } | null> {
     const player = this.state.players.get(client.sessionId);
     if (!player || this.#agents.has(client.sessionId)) return null;
-    const role = await this.#roleFor(client.sessionId, player);
+    const { role } = await this.#actorFor(player);
+    if (this.#roles.get(client.sessionId) !== role) {
+      this.#roles.set(client.sessionId, role);
+      void this.#sendBoard(client.sessionId);
+    }
     if (!mayWriteBoard({ role })) {
-      this.#sendError(client, 'unauthorised', 'Guests can read the board, not write on it.');
+      this.#sendError(client, 'unauthorised', 'Only members of this office write on the board; guests read it.');
       return null;
     }
     return { player, role: role as MembershipRole };
@@ -1779,7 +1801,9 @@ export class OfficeRoom extends Room<OfficeState> {
     const writer = await this.#boardWriter(client);
     if (!writer) return;
     const itemId = typeof payload?.itemId === 'string' ? payload.itemId : '';
-    const item = this.#boardItems.find((candidate) => candidate.id === itemId);
+    // The row, not the cache: who wrote a note decides who may take it down,
+    // and the cache may be a read behind.
+    const item = itemId ? await getBoardItem(getDb(), this.#workspaceId, itemId) : null;
     if (!item) {
       this.#sendError(client, 'not_found', 'No such note on this board.');
       return;

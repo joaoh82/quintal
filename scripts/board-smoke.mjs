@@ -4,19 +4,29 @@
  * Signs in with a fresh key, asks for a game ticket, joins the office room
  * and sends the four board messages — `board_get`, `board_create`,
  * `board_update`, `board_delete` — checking what the office says back each
- * time. Also proves a guest reads the board and is refused a pen, which no
- * unit test on the row module can see: that rule lives in the room.
+ * time.
+ *
+ * Then a second person is let into the office by writing their membership
+ * row straight into the database, and that row is changed under them while
+ * they stay connected: admin, then member, then gone. The office must notice
+ * each time, without a reconnect. That rule lives in the room, where no unit
+ * test on the row module can see it.
  *
  *   node scripts/board-smoke.mjs [baseUrl]
  *
- * Needs a server already running (`pnpm dev` or `pnpm start`).
+ * Needs a server already running (`pnpm dev` or `pnpm start`) on the same
+ * database this script opens: `DATABASE_URL`, or the default
+ * `data/quintal.db` at the repo root.
  */
+import { randomUUID } from 'node:crypto';
+
 import {
   buildAuthPayload,
   generateSecretKey,
   getPublicKeyHex,
   signAuthPayload,
 } from '@quintal/shared';
+import { getClient } from '@quintal/shared/db';
 
 const base = (process.argv[2] ?? 'http://localhost:3000').replace(/\/$/, '');
 
@@ -160,8 +170,66 @@ try {
   check(tunnel && tunnel.number > chair.number, 'a number is never reused', `${chair.number} then ${tunnel?.number}`);
   me.room.send('board_delete', { itemId: tunnel.id });
   await me.next('board');
+
+  await standingChangesMidSession();
 } finally {
   await me.room.leave();
+}
+
+/**
+ * A second person's standing changes while they stay in the room. Every
+ * write reads the membership afresh, so each change is felt at once: an
+ * admin takes down my note; demoted to member, they are refused my next
+ * one; removed, they are refused a pen at all — and the board they are
+ * sent says so.
+ */
+async function standingChangesMidSession() {
+  const db = getClient();
+  const guest = await signIn();
+  const theirs = await ticket(guest.cookie);
+  const membershipId = randomUUID();
+  await db.execute({
+    sql: 'INSERT INTO memberships (id, workspace_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)',
+    args: [membershipId, workspaceId, theirs.user.id, 'admin', Date.now()],
+  });
+  const setRole = (role) =>
+    db.execute({ sql: 'UPDATE memberships SET role = ? WHERE id = ?', args: [role, membershipId] });
+
+  const them = await enter({ token: theirs.token, workspaceId });
+  try {
+    them.room.send('board_get', {});
+    const seen = await them.next('board');
+    check(seen.you?.role === 'admin', 'an admin let in by their row is told so', JSON.stringify(seen.you));
+
+    me.room.send('board_create', { title: 'Oil the door' });
+    const [, withDoor] = await Promise.all([me.next('board'), them.next('board')]);
+    const door = withDoor.items.find((item) => item.title === 'Oil the door');
+    them.room.send('board_delete', { itemId: door.id });
+    const afterDoor = await them.next('board');
+    check(!afterDoor.items.some((item) => item.id === door.id), 'an admin takes down a note they did not write');
+
+    me.room.send('board_create', { title: 'Water the plants' });
+    const [, withPlants] = await Promise.all([me.next('board'), them.next('board')]);
+    const plants = withPlants.items.find((item) => item.title === 'Water the plants');
+
+    await setRole('member');
+    them.room.send('board_delete', { itemId: plants.id });
+    const [refusedDelete, demoted] = await Promise.all([them.next('error'), them.next('board')]);
+    check(refusedDelete.code === 'unauthorised', 'demoted mid-session, they may not take down my note', refusedDelete.message);
+    check(demoted.you?.role === 'member', 'and the board they are sent says member now', JSON.stringify(demoted.you));
+
+    await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
+    them.room.send('board_create', { title: 'Still here?' });
+    const [refusedCreate, removed] = await Promise.all([them.next('error'), them.next('board')]);
+    check(refusedCreate.code === 'unauthorised', 'removed mid-session, they are refused a pen', refusedCreate.message);
+    check(removed.you?.role === null, 'and the board they are sent says guest', JSON.stringify(removed.you));
+
+    me.room.send('board_delete', { itemId: plants.id });
+    await me.next('board');
+  } finally {
+    await them.room.leave();
+    await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
+  }
 }
 
 if (failures.length > 0) {
