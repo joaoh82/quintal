@@ -125,34 +125,51 @@ if [ ! -d "$src/.git" ]; then
 fi
 git -C "$src" fetch --quiet --tags --force origin
 if [ -z "$ref" ]; then
-  ref="$(git -C "$src" tag --list 'v*' --sort=-v:refname | head -n 1)"
+  # Final releases only: version sort ranks v0.1.2-rc.1 above v0.1.2, and a
+  # machine that took the rc would stay on it after the release.
+  ref="$(git -C "$src" tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
   [ -n "$ref" ] || die "no release tags in $REPO_URL"
+  # Registration needs `login --token-file`. Until a release has it, build
+  # main rather than a harness this script cannot register with.
+  if ! git -C "$src" grep -q -e '--token-file' "$ref" -- packages/acp-harness/src/cli.ts; then
+    say "$ref predates login --token-file; building main until a release has it"
+    ref="main"
+  fi
 fi
-before="$(git -C "$src" rev-parse HEAD)"
 # A branch is taken from origin each time, detached: a local branch would stay
 # where the first run left it and never update.
 git -C "$src" checkout --quiet --force --detach "origin/$ref" 2>/dev/null \
   || git -C "$src" checkout --quiet --force --detach "$ref" \
   || die "no such ref: $ref"
-after="$(git -C "$src" rev-parse HEAD)"
+head="$(git -C "$src" rev-parse HEAD)"
 
+# The commit the CLI on disk was built from, written only after a build
+# succeeds. HEAD alone is not that: a failed build leaves HEAD moved and the
+# old dist/ in place, and the next run would call it current.
 cli="$src/packages/acp-harness/dist/cli.js"
-if [ "$before" != "$after" ] || [ ! -f "$cli" ]; then
+stamp="$PREFIX/built-commit"
+if [ ! -f "$cli" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$head" ]; then
   say "Building quintal-acp at $ref"
+  rm -f "$stamp"
   (
     cd "$src"
     npx -y "$PNPM" install --frozen-lockfile --filter quintal-acp... >/dev/null
     npx -y "$PNPM" --filter @quintal/shared build >/dev/null
     npx -y "$PNPM" --filter quintal-acp build >/dev/null
   )
+  [ -f "$cli" ] || die "the build did not produce $cli"
+  printf '%s\n' "$head" > "$stamp"
 else
   say "quintal-acp is already at $ref"
 fi
-[ -f "$cli" ] || die "the build did not produce $cli"
 
+# The node chosen now, by absolute path. `env node` would search PATH, and
+# the unit puts the agent user's writable ~/.local/bin first: a `node` there
+# would run in place of this root-owned harness.
+node_bin="$(command -v node)" || die "node is not installed"
 cat > /usr/local/bin/quintal-acp <<EOF
 #!/bin/sh
-exec /usr/bin/env node "$cli" "\$@"
+exec $node_bin "$cli" "\$@"
 EOF
 chmod 0755 /usr/local/bin/quintal-acp
 
@@ -169,6 +186,9 @@ if [ -z "$token" ] && [ ! -s "$config_dir/host.json" ]; then
   fi
   [ -n "$token" ] || die "no machine token: pass --token-file <path> or --token-file -"
 fi
+
+quintal-acp --help 2>/dev/null | grep -q -e '--token-file' \
+  || die "the harness at $ref has no login --token-file, which registering needs; use a newer --ref"
 
 if [ -n "$token" ]; then
   [ -n "$url" ] || die "--url is required with a token: a token belongs to one office"
@@ -192,6 +212,10 @@ if [ ! -f "$env_file" ]; then
 fi
 
 unit="/etc/systemd/system/$SERVICE.service"
+# WorkingDirectory is not the home directory: `up` prefers a fleet file in its
+# working directory (quintal.fleet.json, .quintal/fleet.json) over the office,
+# and the agents can write anywhere under home. $PREFIX is root-owned, so
+# nobody running as $user can plant one there.
 up=(up)
 [ -n "$url" ] && up+=(--url "$url")
 # A re-run without --url keeps the unit it wrote before, and the office in it.
@@ -204,7 +228,7 @@ After=network-online.target
 
 [Service]
 User=$user
-WorkingDirectory=$home
+WorkingDirectory=$PREFIX
 Environment=HOME=$home
 Environment=PATH=$home/.local/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-$env_file

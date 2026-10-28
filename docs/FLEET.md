@@ -36,7 +36,7 @@ What it does:
 | --- | --- |
 | Packages | `git`, `curl`, Node 22 (from NodeSource, if the system's is older than 20), and `gh` |
 | A user | `quintal`, unprivileged, with a home directory; agents run as this user and nothing else |
-| The harness | Built from the newest release tag into `/opt/quintal-fleet/src`, owned by root, with `/usr/local/bin/quintal-acp` pointing at it |
+| The harness | Built from the newest release tag (final releases only, never an `-rc`) into `/opt/quintal-fleet/src`, owned by root, with `/usr/local/bin/quintal-acp` pointing at it |
 | Registration | `quintal-acp login --token-file -` as that user, so the token lands in `~quintal/.config/quintal/host.json`, mode `0600` |
 | The service | `quintal-fleet.service`: `quintal-acp up`, `Restart=always`, started now and at boot |
 
@@ -48,6 +48,11 @@ credentials.
 **Updating** is the same line again. It moves to the newest release, rebuilds
 if that changed anything, and restarts the fleet. The token, the user and the
 runtimes you signed in to are left as they are. `--ref <tag>` pins a version.
+
+Registering needs `quintal-acp login --token-file`, which v0.13.0 and earlier
+do not have. Until a release includes it, the script builds `main` instead of
+the newest tag and says so; a `--ref` older than that stops before
+registering rather than leaving a fleet that cannot sign in.
 
 ```bash
 systemctl status quintal-fleet       # is it up
@@ -120,7 +125,7 @@ when it exits. The unit the script writes is a fair template:
 ```ini
 [Service]
 User=quintal
-WorkingDirectory=/home/quintal
+WorkingDirectory=/opt/quintal-fleet
 Environment=HOME=/home/quintal
 Environment=PATH=/home/quintal/.local/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-/etc/quintal-fleet.env
@@ -130,5 +135,10 @@ RestartSec=5
 ```
 
 `up` stops its agents on `SIGTERM`, so `systemctl stop` brings them home
-cleanly. Leave a `quintal.fleet.json` out of the working directory unless you
-mean it: `up` prefers a local fleet file to what the office assigns.
+cleanly. The working directory is root-owned on purpose: `up` prefers a
+fleet file there (`quintal.fleet.json` or `.quintal/fleet.json`) to what the
+office assigns, and the agents' home directory, nest included, is somewhere
+they can write. Running `up` from home would let an agent decide what the
+fleet runs at the next restart. For the same reason the wrapper names `node`
+by absolute path rather than searching a `PATH` that starts with
+`~/.local/bin`.
