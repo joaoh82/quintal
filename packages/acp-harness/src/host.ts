@@ -373,6 +373,28 @@ interface FleetResponse {
 }
 
 /**
+ * The token `login --token-file` names: a path, or `-` for stdin.
+ *
+ * `--token qh_…` puts the credential in argv, where `ps` and shell history
+ * see it. On a shared or headless machine that is the wrong place, so a
+ * provisioning script pipes it in or points at a `0600` file instead. One
+ * line, trimmed; anything else in the file is a mistake worth refusing
+ * rather than a token to guess at.
+ */
+export function readTokenSource(source: string, stdin: () => string = () => readFileSync(0, 'utf8')): string {
+  const raw = source === '-' ? stdin() : readFileSync(source, 'utf8');
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+  const where = source === '-' ? 'stdin' : source;
+  if (lines.length === 0) throw new ConfigError(`no token in ${where}`);
+  if (lines.length > 1) throw new ConfigError(`${where} should hold the token alone, on one line`);
+  const token = lines[0]!;
+  if (!token.startsWith(HOST_TOKEN_PREFIX)) {
+    throw new ConfigError(`the token in ${where} should start with "${HOST_TOKEN_PREFIX}"`);
+  }
+  return token;
+}
+
+/**
  * What to say when the office turns a token down.
  *
  * A 401 has two very different causes and the same shape on the wire: the token
@@ -424,6 +446,31 @@ export function staleTokenMessage(host: StoredHost): string {
   );
 }
 
+/** What to say when the office cannot be reached at all. */
+export function unreachableMessage(officeUrl: string, error: unknown): string {
+  const cause =
+    error instanceof Error && error.cause && typeof error.cause === 'object'
+      ? (error.cause as { code?: unknown; message?: unknown })
+      : null;
+  const code = typeof cause?.code === 'string' ? cause.code : null;
+  const detail =
+    code ??
+    (typeof cause?.message === 'string' ? cause.message : null) ??
+    (error instanceof Error ? error.message : String(error));
+  const hint =
+    code === 'ENOTFOUND' || code === 'EAI_AGAIN'
+      ? 'the name does not resolve from this machine'
+      : code === 'ECONNREFUSED'
+        ? 'nothing is listening there'
+        : code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'ETIMEDOUT'
+          ? 'the connection timed out, which is usually a firewall or a wrong address'
+          : null;
+  return (
+    `could not reach the office at ${officeUrl} (${detail}${hint ? `: ${hint}` : ''}). ` +
+    'Check the URL this machine was registered with, and that this machine can open it.'
+  );
+}
+
 /**
  * Ask the office what this machine should be running.
  *
@@ -444,9 +491,18 @@ export async function fetchFleet(
   const url = new URL('/api/host/fleet', host.url);
   if (label !== null) url.searchParams.set('host', label);
 
-  const response = await fetch(url, {
-    headers: { authorization: `Bearer ${host.token}` },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { authorization: `Bearer ${host.token}` },
+    });
+  } catch (error: unknown) {
+    // Node's own words here are "fetch failed", which names neither the
+    // office nor the reason. The reason is in `cause` (ECONNREFUSED,
+    // ENOTFOUND, a connect timeout), and on a headless box it is the only
+    // clue whether the URL is wrong or a firewall is in the way.
+    throw new ConfigError(unreachableMessage(host.url, error));
+  }
 
   if (response.status === 401) {
     throw new ConfigError(staleTokenMessage(host));

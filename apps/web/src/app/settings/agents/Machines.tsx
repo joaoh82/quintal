@@ -67,7 +67,7 @@ export function Machines({
           </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="bg-background flex-1 overflow-x-auto rounded border px-3 py-2 font-mono text-[11px]">
-              npx quintal-acp login --token {state.token} --url {typeof window === 'undefined' ? '' : window.location.origin}
+              quintal-acp login --token {state.token} --url {typeof window === 'undefined' ? '' : window.location.origin}
             </code>
             <Button
               type="button"
@@ -75,7 +75,7 @@ export function Machines({
               size="sm"
               onClick={() => {
                 void navigator.clipboard.writeText(
-                  `npx quintal-acp login --token ${state.token ?? ''} --url ${window.location.origin}`,
+                  `quintal-acp login --token ${state.token ?? ''} --url ${window.location.origin}`,
                 );
                 setCopied(true);
               }}
@@ -84,9 +84,19 @@ export function Machines({
             </Button>
           </div>
           <p className="text-muted-foreground mt-2 text-[11px]">
-            Working inside the Quintal repo? The package isn&rsquo;t published yet,
-            so use <code className="font-mono">just acp login</code> with the same
-            flags — <code className="font-mono">npx</code> will 404.
+            <code className="font-mono">quintal-acp</code> isn&rsquo;t on npm, so
+            build it first: <code className="font-mono">pnpm acp login</code> with the
+            same flags from a Quintal checkout, or, for a server that keeps your
+            agents running with your computer off, the{' '}
+            <a
+              className="underline"
+              href="https://github.com/joaoh82/quintal/blob/main/docs/FLEET.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              fleet setup script
+            </a>
+            , which asks for this token itself.
           </p>
           <p className="text-muted-foreground mt-2 text-[11px]">
             Shown once, like an agent key — only a hash is stored. Treat it as more

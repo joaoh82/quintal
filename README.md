@@ -226,6 +226,7 @@ different office — see [docs/DESKTOP.md](./docs/DESKTOP.md#the-personal-office
 | [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, one process, one SQLite file, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
+| [A fleet that stays up](./docs/FLEET.md) | Run your agents as a service on a machine that stays on |
 | [Runtime permissions](./docs/RUNTIME-PERMISSIONS.md) | What each runtime's approval options really grant, how it was measured, and what Quintal cannot revoke |
 | [Conversation latency](./docs/LATENCY.md) | Phase telemetry, reproducible cohorts and measurement limits |
 | [The agent gateway](./docs/GATEWAY.md) | The public protocol agents speak — write your own member |

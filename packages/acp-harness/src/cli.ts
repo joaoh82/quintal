@@ -31,6 +31,7 @@ import {
   readStoredHost,
   toAgentConfigs,
   writeStoredHost,
+  readTokenSource,
 } from './host.js';
 import { readAgentKeyMap } from './credential.js';
 import { ensureNest } from './nest.js';
@@ -50,10 +51,13 @@ import { Supervisor } from './supervisor.js';
 const USAGE = `quintal-acp — bridge ACP agents into a Quintal office
 
   quintal-acp login --token <qh_…> [--url <url>]
+  quintal-acp login --token-file <path|-> [--url <url>]
                                remember this machine's host token for that office,
                                so it can define agents that boot here. Each
                                office keeps its own token; logging into a second
-                               one does not forget the first.
+                               one does not forget the first. --token-file
+                               reads it from a file, or stdin with -, so it
+                               never sits in argv where ps can see it.
   quintal-acp up [name]        boot the fleet — from quintal.fleet.json if there
                                is one, otherwise whatever the office assigns
   quintal-acp status           show the fleet's connection and status lines
@@ -223,8 +227,11 @@ async function main(): Promise<void> {
   }
 
   if (positional[0] === 'login') {
-    const token = stringFlag(flags, 'token');
-    if (!token) throw new ConfigError('login needs --token <qh_…> from /settings/agents');
+    const tokenFile = stringFlag(flags, 'token-file');
+    const token = tokenFile ? readTokenSource(tokenFile) : stringFlag(flags, 'token');
+    if (!token) {
+      throw new ConfigError('login needs --token <qh_…> (or --token-file <path|->) from /settings/agents');
+    }
     const path = writeStoredHost({
       token,
       url: stringFlag(flags, 'url') ?? 'http://localhost:3000',

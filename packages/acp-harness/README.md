@@ -56,6 +56,11 @@ restarting the agents that did not change.
 The token is a *machine* credential: it can act as any agent you assign to that
 machine. Get one, and revoke one, at `/settings/agents`.
 
+`--token-file <path>` reads the token from a file instead, and `--token-file -`
+from stdin, so it never sits in argv where `ps` and shell history keep it. To
+run a fleet as a service on a machine that stays on, see
+[A fleet that stays up](../../docs/FLEET.md).
+
 ### Which runtimes you have
 
 ACP is JSON-RPC over stdio: Quintal spawns a subprocess and talks to it. There
