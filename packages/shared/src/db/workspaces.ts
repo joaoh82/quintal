@@ -79,6 +79,7 @@ export async function ensurePersonalWorkspace(
     id: randomUUID(),
     name: personalWorkspaceName(displayName),
     slug: await uniqueSlug(db, displayName),
+    boardCounter: 0,
     createdAt: new Date(),
   };
 

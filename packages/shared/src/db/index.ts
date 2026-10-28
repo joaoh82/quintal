@@ -17,6 +17,7 @@ export * from './migrate.js';
 export * from './reads.js';
 export * from './schema.js';
 export * from './avatars.js';
+export * from './board.js';
 export * from './settings.js';
 export * from './starter-commands.js';
 export * from './teams.js';

@@ -1,4 +1,10 @@
-import { RECONNECTION_SECONDS, type ApprovalOptionId, type OfficeState } from '@quintal/shared';
+import {
+  RECONNECTION_SECONDS,
+  type ApprovalOptionId,
+  type BoardCreatePayload,
+  type BoardUpdatePayload,
+  type OfficeState,
+} from '@quintal/shared';
 import type { Room } from 'colyseus.js';
 // Namespace import, not default: Phaser's ESM build (`module` entry, which is
 // what the bundler picks) has no default export, and webpack warns on every
@@ -52,6 +58,10 @@ export interface OfficeSession {
    * same person's other devices show the same unread.
    */
   markRead(channelId: string, at: number): void;
+  /** Write on the office board. The office answers everybody with `board`, or us with a `notice`. */
+  createBoardItem(note: BoardCreatePayload): void;
+  updateBoardItem(patch: BoardUpdatePayload): void;
+  deleteBoardItem(itemId: string): void;
   /** The microphone switch. Off by default; M in the office. */
   toggleMute(): void;
   /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
@@ -326,6 +336,15 @@ export async function createGame(
     },
     markRead(channelId, at) {
       scene()?.markRead(channelId, at);
+    },
+    createBoardItem(note) {
+      scene()?.createBoardItem(note);
+    },
+    updateBoardItem(patch) {
+      scene()?.updateBoardItem(patch);
+    },
+    deleteBoardItem(itemId) {
+      scene()?.deleteBoardItem(itemId);
     },
     toggleMute() {
       voice?.toggleMute();

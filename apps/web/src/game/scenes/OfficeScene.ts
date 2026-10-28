@@ -14,6 +14,10 @@ import {
   toTile,
   zoneAt,
   FLOOR_ZONE_ID,
+  type BoardCreatePayload,
+  type BoardDeletePayload,
+  type BoardMessagePayload,
+  type BoardUpdatePayload,
   type ChannelChatPayload,
   type ChannelChatSendPayload,
   type ChannelJoinPayload,
@@ -319,11 +323,15 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage(ServerMessage.Earshot, (earshot: EarshotPayload) => {
       this.#bridge.emit('earshot', earshot);
     });
+    room.onMessage(ServerMessage.Board, (board: BoardMessagePayload) => {
+      this.#bridge.emit('board', board);
+    });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
     room.send(ClientMessage.HistoryGet, {});
     room.send(ClientMessage.ChannelsGet, {});
     room.send(ClientMessage.EarshotGet, {});
+    room.send(ClientMessage.BoardGet, {});
 
     // Schema callbacks go through a proxy in 0.16 rather than living on the
     // schema instances themselves.
@@ -658,6 +666,19 @@ export class OfficeScene extends Phaser.Scene {
 
   leaveChannel(channelId: string): void {
     this.#room.send(ClientMessage.ChannelLeave, { channelId } satisfies ChannelLeavePayload);
+  }
+
+  /** The board. Each of these is answered with a `board` event for everybody, or a `notice` for us. */
+  createBoardItem(note: BoardCreatePayload): void {
+    this.#room.send(ClientMessage.BoardCreate, note);
+  }
+
+  updateBoardItem(patch: BoardUpdatePayload): void {
+    this.#room.send(ClientMessage.BoardUpdate, patch);
+  }
+
+  deleteBoardItem(itemId: string): void {
+    this.#room.send(ClientMessage.BoardDelete, { itemId } satisfies BoardDeletePayload);
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { AgentTask } from '../agent-task.js';
+import type { BoardPayload } from '../board.js';
 import type { MapZone, OfficeMap, TileRect } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
 import type { VoiceUiState } from '../voice.js';
@@ -150,6 +151,8 @@ export type GameEvents = {
   earshot: EarshotPayload;
   /** The voice client changed: socket, mic, who is speaking. */
   voice: VoiceUiState;
+  /** The office board, whole: first reported, or changed by anybody. */
+  board: BoardPayload;
 };
 
 export type GameEventName = keyof GameEvents;

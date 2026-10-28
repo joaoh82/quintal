@@ -6,6 +6,7 @@
  */
 export * from './agent.js';
 export * from './attestation.js';
+export * from './board.js';
 export * from './bodies.js';
 export * from './constants.js';
 export * from './conversation.js';

@@ -7,6 +7,7 @@ import {
   type RosterEntry,
   type VoiceUiState,
 } from '@quintal/shared';
+import { Pin } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getOverlayKey } from '@/lib/preferences';
@@ -16,6 +17,7 @@ import { nextWaiting } from './alerts';
 import { gameBridge } from './bridge';
 import type { ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
+import { BoardPanel } from './ui/BoardPanel';
 import { ChatPanel } from './ui/ChatPanel';
 import { CommsOverlay } from './ui/CommsOverlay';
 import { HelpPanel } from './ui/HelpPanel';
@@ -23,6 +25,7 @@ import { Minimap } from './ui/Minimap';
 import { RosterPanel } from './ui/RosterPanel';
 import { VoiceBar } from './ui/VoiceBar';
 import { useAlerts } from './useAlerts';
+import { useBoard } from './useBoard';
 import { useConversations } from './useConversations';
 
 interface Hud {
@@ -88,11 +91,13 @@ export default function OfficeGame({
   const [chatFocused, setChatFocused] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [overlayKey, setOverlayKey] = useState('`');
   const [voice, setVoice] = useState<VoiceUiState | null>(null);
   const [activityDetailLevel, setActivityDetailLevel] = useState(initialActivityDetailLevel);
 
   const conversations = useConversations(sessionRef, { overlayOpen });
+  const board = useBoard(sessionRef);
   const [hint, setHint] = useState('');
 
   // Go to a conversation in the full panel — the one place every kind of
@@ -137,9 +142,10 @@ export default function OfficeGame({
     };
   }, []);
 
-  // `?` opens help; the overlay key opens the conversations panel; N goes to
-  // whoever is waiting on you. The chat input stops keydown propagation, so
-  // typing any of them in a sentence never reaches this.
+  // `?` opens help; the overlay key opens the conversations panel; B opens
+  // the board; N goes to whoever is waiting on you. The chat input and the
+  // board stop keydown propagation, so typing any of them in a sentence
+  // never reaches this.
   const waitingRef = useRef(conversations);
   waitingRef.current = conversations;
   useEffect(() => {
@@ -148,6 +154,14 @@ export default function OfficeGame({
       else if (event.key === overlayKey && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         setOverlayOpen((open) => !open);
+      } else if (
+        (event.key === 'b' || event.key === 'B') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !typingElsewhere()
+      ) {
+        setBoardOpen((open) => !open);
       } else if (
         (event.key === 'n' || event.key === 'N') &&
         !event.metaKey &&
@@ -252,7 +266,7 @@ export default function OfficeGame({
    * stays out of the way.
    */
   useEffect(() => {
-    if (overlayOpen) return;
+    if (overlayOpen || boardOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' && !chatFocused) {
         event.preventDefault();
@@ -283,12 +297,12 @@ export default function OfficeGame({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [chatFocused, overlayOpen]);
+  }, [chatFocused, overlayOpen, boardOpen]);
 
   // One place decides whether the office or a text box owns the keyboard.
   useEffect(() => {
-    sessionRef.current?.setInputCaptured(chatFocused || overlayOpen);
-  }, [chatFocused, overlayOpen]);
+    sessionRef.current?.setInputCaptured(chatFocused || overlayOpen || boardOpen);
+  }, [chatFocused, overlayOpen, boardOpen]);
 
   const openDm = useCallback(
     (entry: RosterEntry) => conversations.openDm({ memberId: entry.identityId }),
@@ -296,6 +310,15 @@ export default function OfficeGame({
   );
 
   const closeOverlay = useCallback(() => setOverlayOpen(false), []);
+  const closeBoard = useCallback(() => setBoardOpen(false), []);
+  // From a note to the agent it is for: the board closes and the DM opens.
+  const messageAgentFromBoard = useCallback(
+    (agentId: string) => {
+      setBoardOpen(false);
+      conversations.openDm({ memberId: agentId });
+    },
+    [conversations],
+  );
 
   const reconnecting = connection === 'reconnecting' || connection === 'connecting';
 
@@ -376,8 +399,17 @@ export default function OfficeGame({
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · N next waiting · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · N next waiting · B board · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
+        <button
+          type="button"
+          onClick={() => setBoardOpen(true)}
+          aria-label="Office board (B)"
+          title="Office board (B)"
+          className="pointer-events-auto flex h-[22px] items-center rounded border border-white/20 px-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          <Pin size={12} aria-hidden />
+        </button>
         <button
           type="button"
           onClick={() => setHelpOpen(true)}
@@ -399,6 +431,16 @@ export default function OfficeGame({
             conversations.select('nearby');
           }}
           activityDetailLevel={activityDetailLevel}
+        />
+      ) : null}
+
+      {boardOpen ? (
+        <BoardPanel
+          board={board}
+          roster={roster}
+          notice={conversations.notice ?? ''}
+          onClose={closeBoard}
+          onMessageAgent={messageAgentFromBoard}
         />
       ) : null}
 

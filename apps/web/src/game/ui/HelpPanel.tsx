@@ -20,6 +20,7 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'Space (hold)', what: 'Push-to-talk: heard while held, whatever the mic switch says' },
   { keys: 'Z', what: 'Show zone overlays' },
   { keys: 'N', what: 'Go to whoever is waiting on you: a permission card first, then where you were addressed' },
+  { keys: 'B', what: 'The office board: tasks and issues on post-its, who they are for, and where they stand' },
   { keys: '?', what: 'This panel' },
 ];
 
