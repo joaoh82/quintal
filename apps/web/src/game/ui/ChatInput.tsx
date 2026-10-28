@@ -17,6 +17,7 @@ import {
 } from '@quintal/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { NOT_RECALLING, edited, remember, step, type Recall } from './history';
 import { matchJoinTargets, type JoinTarget } from './join';
 import { SLASH_COMMANDS, slashQueryAt } from './slash';
 
@@ -39,6 +40,13 @@ type PickerItem =
   | { kind: 'slash'; key: string; text: string; summary: string }
   /** A team: one name for several agents. `summary` is `team · 3 agents`. */
   | { kind: 'team'; key: string; name: string; summary: string; members: string };
+
+/**
+ * What you sent, for Up and Down. Module-level so the corner box and the
+ * overlay share one history and it survives either remounting; gone on reload,
+ * which is the point — chat has a transcript, this is only for retyping.
+ */
+let sentLines: string[] = [];
 
 export interface ChatInputProps {
   /** Everyone in the room, for @ autocomplete. */
@@ -91,6 +99,7 @@ export function ChatInput({
   const [draft, setDraft] = useState('');
   const [caret, setCaret] = useState(0);
   const [highlighted, setHighlighted] = useState(0);
+  const [recall, setRecall] = useState<Recall>(NOT_RECALLING);
 
   const slash = useMemo(() => slashQueryAt(draft, caret), [draft, caret]);
   // A command wins over a mention: `!shutdown @claude` should complete the verb
@@ -182,7 +191,9 @@ export function ChatInput({
     return [...named, ...people].slice(0, 6);
   }, [slash, command, mention, roster, joinable, teams, commands]);
 
-  const open = candidates.length > 0;
+  // A recalled `/join eng` would otherwise open its picker and take Up and
+  // Down away from the history. Typing brings the picker back.
+  const open = candidates.length > 0 && recall.index === null;
 
   /**
    * A typo'd command would otherwise be sent as ordinary chat, wake every agent
@@ -238,9 +249,26 @@ export function ChatInput({
   const submit = (): void => {
     const text = draft.trim();
     if (unknownCommand) return;
-    if (text.length > 0) onSend(text);
+    if (text.length > 0) {
+      onSend(text);
+      sentLines = remember(sentLines, text);
+    }
     setDraft('');
     setCaret(0);
+    setRecall(NOT_RECALLING);
+  };
+
+  const browse = (older: boolean): boolean => {
+    const next = step(sentLines, recall, draft, older);
+    if (!next) return false;
+    setRecall(next.recall);
+    setDraft(next.text);
+    setCaret(next.text.length);
+    // The caret goes to the end, as a shell's does, once React has written it.
+    requestAnimationFrame(() => {
+      inputRef.current?.setSelectionRange(next.text.length, next.text.length);
+    });
+    return true;
   };
 
   return (
@@ -332,6 +360,9 @@ export function ChatInput({
         onChange={(event) => {
           setDraft(event.target.value);
           setCaret(event.target.selectionStart ?? event.target.value.length);
+          // An edited line ends the browsing, but Down still gives back the
+          // line you were writing before it.
+          setRecall(edited);
         }}
         onSelect={syncCaret}
         onClick={syncCaret}
@@ -381,13 +412,16 @@ export function ChatInput({
             }
           }
 
-          if (event.key === 'Enter') {
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            if (browse(event.key === 'ArrowUp')) event.preventDefault();
+          } else if (event.key === 'Enter') {
             event.preventDefault();
             submit();
           } else if (event.key === 'Escape') {
             event.preventDefault();
             setDraft('');
             setCaret(0);
+            setRecall(NOT_RECALLING);
             onEscape();
           }
         }}
