@@ -10,6 +10,7 @@ import {
 
 import { AGENT_SCOPES } from '../agent.js';
 import { ACTIVITY_DETAIL_LEVELS } from '../activity.js';
+import { BOARD_COLORS, BOARD_STATUSES } from '../board.js';
 import { CONVERSATION_KINDS } from '../conversation.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
@@ -196,6 +197,15 @@ export const workspaces = sqliteTable('workspaces', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  /**
+   * How many notes the board has ever had: the next one is `#(this + 1)`.
+   *
+   * A counter rather than `max(number) + 1`, because a number is said out
+   * loud — "#12 is the chair" — and a note taken down must not hand its
+   * number to the next one written. Taken in one statement, so two notes
+   * written in the same instant get two numbers.
+   */
+  boardCounter: integer('board_counter').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .default(now)
     .notNull(),
@@ -777,6 +787,48 @@ export const officeCommands = sqliteTable(
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },
   (table) => [uniqueIndex('office_commands_name_idx').on(table.workspaceId, table.name)],
+);
+
+/**
+ * A note on the office board: a task, an issue, a thing somebody should do.
+ *
+ * An office object like a team or a command, numbered per office so people
+ * can say "#12" and mean one thing. The assignee is an agent — people are
+ * asked, agents are assigned — and goes with the agent if it is deleted. Who
+ * wrote it is one of a person or an agent, never both: an agent asked to
+ * "make a ticket for this" is its author, and the person who asked is in
+ * the conversation where they asked.
+ *
+ * `labels` is a JSON array of strings: a handful of short chips, read and
+ * written whole, never queried by.
+ */
+export const boardItems = sqliteTable(
+  'board_items',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    number: integer('number').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    status: text('status', { enum: BOARD_STATUSES }).notNull().default('open'),
+    color: text('color', { enum: BOARD_COLORS }).notNull().default('yellow'),
+    labels: text('labels').notNull().default('[]'),
+    assigneeAgentId: text('assignee_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+    createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdByAgentId: text('created_by_agent_id').references(() => agents.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    // The number is the office's count: unique here, and the backstop for
+    // two notes written in the same instant.
+    uniqueIndex('board_items_number_idx').on(table.workspaceId, table.number),
+    index('board_items_status_idx').on(table.workspaceId, table.status),
+  ],
 );
 
 /**

@@ -28,6 +28,7 @@ describe('the conversations panel key', () => {
   it('cannot be the key that goes to whoever is waiting', () => {
     assert.equal(isBindableKey('n'), false);
     assert.equal(isBindableKey('N'), false);
+    assert.equal(isBindableKey('b'), false, 'the board');
     assert.equal(isBindableKey('`'), true);
   });
 });

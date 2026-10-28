@@ -1,3 +1,4 @@
+import type { BoardCreateInput, BoardPayload, BoardUpdateInput } from '../board.js';
 import type { ChannelRef } from '../conversation.js';
 import type { TeamRef } from '../team.js';
 import type { OfficeCommandRef } from '../office-command.js';
@@ -51,6 +52,14 @@ export const ClientMessage = {
    * only by the exact `requestId` on the card in front of them.
    */
   ApprovalDecide: 'approval_decide',
+  /** The office board, whole. Answered with `board`, and again whenever it changes. */
+  BoardGet: 'board_get',
+  /** Put a note on the board. Members only. Answered with `board` for everyone. */
+  BoardCreate: 'board_create',
+  /** Change a note: move it, retitle it, hand it to an agent. Members only. */
+  BoardUpdate: 'board_update',
+  /** Take a note down. Whoever wrote it, or an admin. */
+  BoardDelete: 'board_delete',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -94,6 +103,8 @@ export const ServerMessage = {
    * in this channel, say.
    */
   Notice: 'notice',
+  /** The office board. In reply to `board_get`, and to everybody whenever it changes. */
+  Board: 'board',
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -265,6 +276,19 @@ export interface NoticePayload {
   code: 'team_members_absent' | 'command_unheard';
   message: string;
 }
+
+/** `board_create`: the note, as `parseBoardCreate` reads it. */
+export type BoardCreatePayload = Partial<BoardCreateInput> & { title: string };
+
+/** `board_update`: the item and only the fields that change, as `parseBoardUpdate` reads it. */
+export type BoardUpdatePayload = BoardUpdateInput;
+
+export interface BoardDeletePayload {
+  itemId: string;
+}
+
+/** `board`: the whole board. See `BoardPayload`. */
+export type BoardMessagePayload = BoardPayload;
 
 /** Options passed to `joinOrCreate`. */
 export interface JoinOptions {

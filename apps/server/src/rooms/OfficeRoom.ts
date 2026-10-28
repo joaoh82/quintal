@@ -126,8 +126,23 @@ import {
   WORKING_IN_ZONE,
   agentTaskOf,
   parseAgentTask,
+  mayDeleteBoardItem,
+  mayWriteBoard,
+  parseBoardCreate,
+  parseBoardUpdate,
+  type BoardAgentRef,
+  type BoardDeletePayload,
+  type BoardItemRef,
+  type BoardMessagePayload,
 } from '@quintal/shared';
 import {
+  BoardItemError,
+  createBoardItem,
+  deleteBoardItem,
+  getBoardItem,
+  listBoardAgentsForWorkspace,
+  listBoardItemsForWorkspace,
+  updateBoardItem,
   MemoryConflictError,
   MemoryLimitError,
   MemorySlugError,
@@ -200,6 +215,7 @@ import {
   officeCommandsSignature,
 } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
+import { LatestRead } from './latest-read.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import {
   commandCallFor,
@@ -366,6 +382,25 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   #commands: readonly OfficeCommandSummary[] = [];
   /**
+   * The office board, refreshed with the channels and after every change
+   * made here. Sent whole: it is a wall of notes, not a feed.
+   */
+  #boardItems: readonly BoardItemRef[] = [];
+  #boardAgents: readonly BoardAgentRef[] = [];
+  /** What the board looked like when it was last sent, so an unchanged one is not sent again. */
+  #boardSignature = '';
+  /** The first read of the board, so a `board_get` that beats it still gets an answer. */
+  #boardLoaded: Promise<void> | null = null;
+  /** Reads of the board may overlap; only the newest started may land. */
+  readonly #boardReads = new LatestRead();
+  /**
+   * sessionId -> a person's role in the office, as last read. The board is
+   * sent with "where you stand" so the panel can hide what the office would
+   * refuse, and that must not cost a query per send. It is a hint for the
+   * panel only: every write reads the membership afresh, and corrects this.
+   */
+  readonly #roles = new Map<string, MembershipRole | null>();
+  /**
    * Per agent, per conversation: the hop of the line that last woke it, so
    * its reply can be stamped one further and a chain of agents naming each
    * other stops where `AGENT_MENTION_MAX_HOPS` says. See `hops.ts`.
@@ -515,6 +550,16 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.ApprovalDecide, (client, payload: unknown) =>
       this.#onApprovalDecide(client, payload),
     );
+    this.onMessage(ClientMessage.BoardGet, (client) => void this.#onBoardGet(client));
+    this.onMessage(ClientMessage.BoardCreate, (client, payload: unknown) =>
+      void this.#onBoardCreate(client, payload),
+    );
+    this.onMessage(ClientMessage.BoardUpdate, (client, payload: unknown) =>
+      void this.#onBoardUpdate(client, payload),
+    );
+    this.onMessage(ClientMessage.BoardDelete, (client, payload: BoardDeletePayload) =>
+      void this.#onBoardDelete(client, payload),
+    );
 
     // --- agent protocol (docs/GATEWAY.md) ---
     this.onMessage('agent:activity', (client, payload: unknown) => {
@@ -570,10 +615,12 @@ export class OfficeRoom extends Room<OfficeState> {
 
     void this.#refreshSettings();
     void this.#refreshChannels();
+    this.#boardLoaded = this.#refreshBoard();
     this.#settingsTimer = setInterval(() => {
       void this.#refreshSettings();
       void this.#refreshChannels();
       void this.#refreshMcpServers();
+      void this.#refreshBoard();
     }, 10_000);
 
     this.#heartbeatTimer = setInterval(() => {
@@ -1615,6 +1662,163 @@ export class OfficeRoom extends Room<OfficeState> {
         commands,
       } satisfies ChannelsPayload);
     }
+  }
+
+  // --- the board -----------------------------------------------------------
+
+  /**
+   * Read the board again, and tell every person in the room if it changed.
+   *
+   * On the settings cadence and after every change made here, like the
+   * channels: a note written from somewhere else — a settings page, a CLI,
+   * an agent on another socket — shows up within ten seconds, and one
+   * written here shows up now.
+   */
+  async #refreshBoard(): Promise<void> {
+    // A read started before a write committed may finish after the read
+    // started after it. Only the newest read lands, whichever finishes first.
+    const ticket = this.#boardReads.start();
+    try {
+      const db = getDb();
+      const [items, agents] = await Promise.all([
+        listBoardItemsForWorkspace(db, this.#workspaceId),
+        listBoardAgentsForWorkspace(db, this.#workspaceId),
+      ]);
+      if (!this.#boardReads.isLatest(ticket)) return;
+      this.#boardItems = items;
+      this.#boardAgents = agents;
+    } catch (error: unknown) {
+      logger.error('[office] could not read the board', error);
+      return;
+    }
+    const signature = JSON.stringify([this.#boardItems, this.#boardAgents]);
+    if (signature === this.#boardSignature) return;
+    this.#boardSignature = signature;
+    for (const sessionId of this.state.players.keys()) void this.#sendBoard(sessionId);
+  }
+
+  /** A person's role here as last read, for sending the board. Null for a guest. */
+  async #roleFor(sessionId: string, player: OfficePlayer): Promise<MembershipRole | null> {
+    const known = this.#roles.get(sessionId);
+    if (known !== undefined) return known;
+    const actor = await this.#actorFor(player);
+    this.#roles.set(sessionId, actor.role);
+    return actor.role;
+  }
+
+  /** The board as this person sees it. Agents are not sent it: theirs is the gateway's business. */
+  async #sendBoard(sessionId: string): Promise<void> {
+    const client = this.clients.getById(sessionId);
+    const player = this.state.players.get(sessionId);
+    if (!client || !player || this.#agents.has(sessionId)) return;
+    const role = await this.#roleFor(sessionId, player);
+    client.send(ServerMessage.Board, {
+      items: this.#boardItems as BoardItemRef[],
+      agents: this.#boardAgents as BoardAgentRef[],
+      you: { userId: player.userId, role },
+    } satisfies BoardMessagePayload);
+  }
+
+  async #onBoardGet(client: Client): Promise<void> {
+    if (this.#boardLoaded) await this.#boardLoaded;
+    await this.#sendBoard(client.sessionId);
+  }
+
+  /**
+   * The person behind a board message, if they may write on it. Refuses for
+   * them otherwise.
+   *
+   * The membership is read now, not taken from the cache, like every other
+   * action in the room: someone removed from the office, or demoted, loses
+   * the pen at once rather than on their next connection. The cache is
+   * corrected from what was read, and the board sent again if their standing
+   * changed, so the panel catches up too.
+   */
+  async #boardWriter(client: Client): Promise<{ player: OfficePlayer; role: MembershipRole } | null> {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.#agents.has(client.sessionId)) return null;
+    const { role } = await this.#actorFor(player);
+    if (this.#roles.get(client.sessionId) !== role) {
+      this.#roles.set(client.sessionId, role);
+      void this.#sendBoard(client.sessionId);
+    }
+    if (!mayWriteBoard({ role })) {
+      this.#sendError(client, 'unauthorised', 'Only members of this office write on the board; guests read it.');
+      return null;
+    }
+    return { player, role: role as MembershipRole };
+  }
+
+  #boardRefused(client: Client, error: unknown): void {
+    if (error instanceof BoardItemError) {
+      const code = error.reason === 'not_found' ? 'not_found' : 'invalid_payload';
+      this.#sendError(client, code, error.message);
+      return;
+    }
+    logger.error('[office] board write failed', error);
+    this.#sendError(client, 'invalid_payload', 'The board could not be written.');
+  }
+
+  async #onBoardCreate(client: Client, payload: unknown): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const note = parseBoardCreate(payload);
+    if (!note) {
+      this.#sendError(client, 'invalid_payload', 'A note needs a title, a known column and a known colour.');
+      return;
+    }
+    try {
+      await createBoardItem(getDb(), {
+        workspaceId: this.#workspaceId,
+        ...note,
+        createdBy: { userId: writer.player.userId },
+      });
+    } catch (error: unknown) {
+      this.#boardRefused(client, error);
+      return;
+    }
+    await this.#refreshBoard();
+  }
+
+  async #onBoardUpdate(client: Client, payload: unknown): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const patch = parseBoardUpdate(payload);
+    if (!patch) {
+      this.#sendError(client, 'invalid_payload', 'Name the note and what changes about it.');
+      return;
+    }
+    try {
+      await updateBoardItem(getDb(), { workspaceId: this.#workspaceId, ...patch });
+    } catch (error: unknown) {
+      this.#boardRefused(client, error);
+      return;
+    }
+    await this.#refreshBoard();
+  }
+
+  async #onBoardDelete(client: Client, payload: BoardDeletePayload): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const itemId = typeof payload?.itemId === 'string' ? payload.itemId : '';
+    // The row, not the cache: who wrote a note decides who may take it down,
+    // and the cache may be a read behind.
+    const item = itemId ? await getBoardItem(getDb(), this.#workspaceId, itemId) : null;
+    if (!item) {
+      this.#sendError(client, 'not_found', 'No such note on this board.');
+      return;
+    }
+    if (!mayDeleteBoardItem({ userId: writer.player.userId, role: writer.role }, item)) {
+      this.#sendError(client, 'unauthorised', 'Only whoever wrote a note, or an admin, may take it down.');
+      return;
+    }
+    try {
+      await deleteBoardItem(getDb(), this.#workspaceId, item.id);
+    } catch (error: unknown) {
+      this.#boardRefused(client, error);
+      return;
+    }
+    await this.#refreshBoard();
   }
 
   /** The teams as a mention resolves against them. */
@@ -3542,6 +3746,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const record = this.#idle.get(sessionId);
     if (record?.talk) this.#endTalkWith(record.talk.partner, sessionId);
     this.#idle.delete(sessionId);
+    this.#roles.delete(sessionId);
     this.state.players.delete(sessionId);
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
