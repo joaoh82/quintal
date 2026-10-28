@@ -18,7 +18,17 @@ export interface AgentTask {
   branch: string;
   /** The branch's pull request, once the harness has seen one. */
   pr?: AgentTaskPullRequest;
+  /**
+   * The office board note this task is for, by its number — `#12` — when the
+   * agent was handed one. The office links the note to the branch and moves
+   * it along as the pull request does. Absent when the task is nobody's note.
+   */
+  item?: number;
 }
+
+/** The ledger's word on a task: on it, or finished with. */
+export const AGENT_TASK_STATUSES = ['active', 'ended'] as const;
+export type AgentTaskStatus = (typeof AGENT_TASK_STATUSES)[number];
 
 export interface AgentTaskPullRequest {
   number: number;
@@ -94,7 +104,12 @@ export function parseAgentTask(value: unknown): AgentTask | null | undefined {
     pr = pullRequest(v.pr);
     if (!pr) return undefined;
   }
-  return { title, repo: v.repo, branch: v.branch, ...(pr ? { pr } : {}) };
+  let item: number | null = null;
+  if (v.item !== undefined && v.item !== null) {
+    if (typeof v.item !== 'number' || !Number.isSafeInteger(v.item) || v.item <= 0) return undefined;
+    item = v.item;
+  }
+  return { title, repo: v.repo, branch: v.branch, ...(pr ? { pr } : {}), ...(item ? { item } : {}) };
 }
 
 /**
@@ -109,6 +124,8 @@ export interface AgentTaskFields {
   taskPrNumber: number;
   taskPrUrl: string;
   taskPrState: string;
+  /** The board note's number, or 0 for none. */
+  taskItem: number;
 }
 
 /** Read an agent's task back out of room state, or null when it is on none. */
@@ -123,6 +140,7 @@ export function agentTaskOf(fields: AgentTaskFields): AgentTask | null {
     ...(fields.taskPrNumber > 0 && state && url
       ? { pr: { number: fields.taskPrNumber, url, state } }
       : {}),
+    ...(fields.taskItem > 0 ? { item: fields.taskItem } : {}),
   };
 }
 
@@ -135,5 +153,6 @@ export function agentTaskFields(task: AgentTask | null): AgentTaskFields {
     taskPrNumber: task?.pr?.number ?? 0,
     taskPrUrl: task?.pr?.url ?? '',
     taskPrState: task?.pr?.state ?? '',
+    taskItem: task?.item ?? 0,
   };
 }

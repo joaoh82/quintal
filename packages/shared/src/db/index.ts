@@ -2,6 +2,7 @@
  * Server-only database surface. Never import this from a client component —
  * use `@quintal/shared` for the types and constants the browser needs.
  */
+export * from './agent-tasks.js';
 export * from './agents.js';
 export * from './challenges.js';
 export * from './channels.js';

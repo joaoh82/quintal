@@ -1,3 +1,4 @@
+import type { AgentTaskPullRequest } from './agent-task.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -58,6 +59,20 @@ export interface BoardAuthorRef {
 }
 
 /** An item as a client sees it. */
+/**
+ * The task an agent is on, or was on, for a note: the ledger's latest row
+ * that names it. What the card's "in review" badge and the drawer's branch
+ * line are drawn from.
+ */
+export interface BoardItemTask {
+  agent: { id: string; name: string };
+  repo: string;
+  branch: string;
+  pr: AgentTaskPullRequest | null;
+  /** True while the harness still says it is on it. */
+  active: boolean;
+}
+
 export interface BoardItemRef {
   id: string;
   /** `#12`: the office's own count, never reused. */
@@ -72,6 +87,8 @@ export interface BoardItemRef {
   createdBy: BoardAuthorRef | null;
   createdAt: number;
   updatedAt: number;
+  /** The branch and pull request an agent took it to, if any. */
+  task: BoardItemTask | null;
 }
 
 /** An agent an item could be for, online or not. */

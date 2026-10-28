@@ -65,6 +65,8 @@ export interface Task {
   outcome?: Cleanup;
   /** The pull request for the branch, once one is seen. */
   pr?: { number: number; url: string; state: string };
+  /** The office board note this task is for, by number, when the agent was handed one. */
+  item?: number;
 }
 
 export interface TaskBook {
@@ -124,16 +126,29 @@ export function worktreePath(nest: string, agent: string, slug: string): string 
 /**
  * `!task api: fix the login redirect` → the repo and the title. The colon
  * is the separator because a title can have spaces and a repo name cannot.
- * Without one, the first word is the repo and the rest is the title.
+ * Without one, the first word is the repo and the rest is the title. A
+ * board note's number at either end of the title — `!task api: #12 fix the
+ * login redirect` — names the note the task is for, and leaves the title.
  */
-export function parseTaskCommand(body: string): { repo: string; title: string } | null {
+export function parseTaskCommand(body: string): { repo: string; title: string; item?: number } | null {
   const text = body.trim();
   if (text.length === 0) return null;
   const colon = /^([^\s:]+)\s*:\s*(.+)$/s.exec(text);
-  if (colon) return { repo: colon[1]!, title: colon[2]!.trim() };
-  const space = /^(\S+)\s+(.+)$/s.exec(text);
-  if (space) return { repo: space[1]!, title: space[2]!.trim() };
-  return null;
+  const space = colon ? null : /^(\S+)\s+(.+)$/s.exec(text);
+  const found = colon ?? space;
+  if (!found) return null;
+  const repo = found[1]!;
+  let title = found[2]!.trim();
+  let item: number | undefined;
+  const numbered = /^#(\d+)\s+(.+)$/s.exec(title) ?? /^(.+?)\s+#(\d+)$/s.exec(title);
+  if (numbered) {
+    const [, a, b] = numbered;
+    const [number, rest] = /^\d+$/.test(a!) ? [a!, b!] : [b!, a!];
+    item = Number(number);
+    if (item > 0 && rest.trim().length > 0) title = rest.trim();
+    else item = undefined;
+  }
+  return { repo, title, ...(item ? { item } : {}) };
 }
 
 /**
@@ -316,6 +331,8 @@ export interface BeginInput {
   reposDir: string;
   repo: string;
   title: string;
+  /** The board note's number, so the office follows the branch. */
+  item?: number;
   exec?: Git;
   now?: () => number;
 }
@@ -368,6 +385,7 @@ export async function beginTask(input: BeginInput): Promise<Task> {
     base,
     worktree,
     startedAt: now(),
+    ...(input.item && Number.isSafeInteger(input.item) && input.item > 0 ? { item: input.item } : {}),
   };
   writeBook(input.nest, input.agent, {
     active: slug,
@@ -550,6 +568,7 @@ export function taskForOffice(task: Task | null): AgentTaskPayload {
     repo: task.repo,
     branch: task.branch,
     ...(task.pr && state ? { pr: { number: task.pr.number, url: task.pr.url, state } } : {}),
+    ...(task.item ? { item: task.item } : {}),
   };
 }
 
@@ -604,6 +623,7 @@ export function taskReport(
     base: task.base,
     worktree: task.worktree,
     ...(task.pr ? { pull_request: task.pr } : {}),
+    ...(task.item ? { board_item: task.item } : {}),
     note:
       `Work in ${task.worktree} — it is a worktree of REPOS/${task.repo} on ${task.branch}, cut from ${task.base}. ` +
       'Commit there, push with `git push -u origin HEAD`, open the pull request with `gh pr create`, and call task_end when it is merged or abandoned.',

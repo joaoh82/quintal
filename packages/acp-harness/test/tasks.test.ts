@@ -21,6 +21,7 @@ import {
   readBook,
   resolveRepo,
   slugify,
+  taskForOffice,
   taskReport,
   worktreePath,
   worktreeState,
@@ -118,6 +119,21 @@ describe('naming', () => {
     assert.deepEqual(parseTaskCommand('group/api fix it'), { repo: 'group/api', title: 'fix it' });
     assert.equal(parseTaskCommand('api'), null);
     assert.equal(parseTaskCommand(''), null);
+  });
+
+  it('reads a board note\'s number at either end of the title, and leaves it out of the title', () => {
+    assert.deepEqual(parseTaskCommand('api: #12 fix the login redirect'), {
+      repo: 'api',
+      title: 'fix the login redirect',
+      item: 12,
+    });
+    assert.deepEqual(parseTaskCommand('api fix the login redirect #12'), {
+      repo: 'api',
+      title: 'fix the login redirect',
+      item: 12,
+    });
+    assert.deepEqual(parseTaskCommand('api: #12'), { repo: 'api', title: '#12' }, 'a number alone is a title, not a note');
+    assert.deepEqual(parseTaskCommand('api: fix issue #0'), { repo: 'api', title: 'fix issue #0' });
   });
 });
 
@@ -376,5 +392,18 @@ describe('the pull request and the report', () => {
     assert.equal(report.active, true);
     assert.equal(report.worktree, task.worktree);
     assert.equal(report.branch, task.branch);
+    assert.equal('board_item' in report, false);
+  });
+
+  it('keeps the board note a task is for, and says it to the office and the agent', async () => {
+    const { nest, repos } = world();
+    const task = await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'noted', item: 12 });
+    assert.equal(task.item, 12);
+    assert.equal(activeTask(nest, 'Marvin')?.item, 12, 'in the book');
+    assert.equal(taskForOffice(task)?.item, 12);
+    assert.equal(taskReport(task).board_item, 12);
+    assert.equal('item' in taskForOffice({ ...task, item: undefined })!, false, 'none is left off, not sent as 0');
+    const bogus = await beginTask({ nest, agent: 'Arthur', reposDir: repos, repo: 'api', title: 'bogus', item: -3 });
+    assert.equal('item' in bogus, false, 'a number that is no note is dropped');
   });
 });

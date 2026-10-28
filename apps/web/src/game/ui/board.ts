@@ -65,6 +65,21 @@ export const POSTIT_STYLES: Record<BoardColor, { face: string; pin: string; ink:
   purple: { face: '#dccbff', pin: '#7b4fd6', ink: '#2a1750' },
 };
 
+/**
+ * What the note's task says, in a word: in review while its pull request is
+ * open, merged once it is, closed if it was closed without merging, and on a
+ * branch when there is a branch and no pull request yet. Nothing when no
+ * task has taken the note, or the one that did is over without a pull request.
+ */
+export function taskBadgeOf(item: Pick<BoardItemRef, 'task'>): string | null {
+  const task = item.task;
+  if (!task) return null;
+  if (task.pr?.state === 'open') return 'in review';
+  if (task.pr?.state === 'merged') return 'merged';
+  if (task.pr?.state === 'closed') return 'closed';
+  return task.active ? 'on a branch' : null;
+}
+
 /** `2h ago`, for a note's corner. Coarser than a clock: a note is not a timer. */
 export function ageLabel(at: number, now: number = Date.now()): string {
   const seconds = Math.max(0, Math.round((now - at) / 1000));

@@ -36,6 +36,14 @@ describe('the agent:task payload', () => {
     assert.deepEqual(parseAgentTask({ ...bare, pr: null }), bare, 'a null pr is no pr');
   });
 
+  it('takes the board note the task is for, by number, and nothing that is not one', () => {
+    assert.deepEqual(parseAgentTask({ ...TASK, item: 12 }), { ...TASK, item: 12 });
+    assert.deepEqual(parseAgentTask({ ...TASK, item: null }), TASK, 'a null item is no item');
+    for (const item of [0, -1, 1.5, '12', '#12', {}]) {
+      assert.equal(parseAgentTask({ ...TASK, item }), undefined, `item ${JSON.stringify(item)} is refused`);
+    }
+  });
+
   it('reads null as "no task", which is not the same as garbage', () => {
     assert.equal(parseAgentTask(null), null);
     assert.equal(parseAgentTask(undefined), undefined);
@@ -101,6 +109,8 @@ describe('the task in room state', () => {
     assert.equal(agentTaskOf(agentTaskFields(null)), null);
     const { pr: _pr, ...bare } = TASK;
     assert.deepEqual(agentTaskOf(agentTaskFields(bare)), bare);
+    assert.deepEqual(agentTaskOf(agentTaskFields({ ...TASK, item: 12 })), { ...TASK, item: 12 });
+    assert.equal(agentTaskFields(TASK).taskItem, 0, 'no note is 0');
   });
 
   it('reaches a client that decodes the room', () => {
