@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { interactableAt } from '../map.js';
 import { buildWalkableGrid, parseTiledMap, type TiledMap } from './tiled.js';
 
 /**
@@ -120,6 +121,72 @@ describe('parseTiledMap', () => {
   it('rejects non-square tiles', () => {
     const map = { ...base(floorOnly), tileheight: 16 };
     assert.throws(() => parseTiledMap(map), /Non-square/);
+  });
+
+  it('rejects an interactable with an unknown kind', () => {
+    const map = base([
+      ...floorOnly,
+      {
+        type: 'objectgroup',
+        name: 'interactables',
+        objects: [
+          object({
+            name: 'the board',
+            properties: [{ name: 'kind', type: 'string', value: 'borad' }],
+          }),
+        ],
+      },
+    ]);
+    assert.throws(() => parseTiledMap(map), /borad/);
+  });
+
+  it('reads an interactable: where to stand, in tiles, and the prop it belongs to', () => {
+    const map = base([
+      ...floorOnly,
+      {
+        type: 'objectgroup',
+        name: 'interactables',
+        objects: [
+          object({
+            name: 'the board',
+            x: 32,
+            y: 32,
+            width: 32,
+            height: 32,
+            properties: [
+              { name: 'kind', type: 'string', value: 'board' },
+              { name: 'interactableId', type: 'string', value: 'board' },
+              { name: 'label', type: 'string', value: 'the board' },
+              { name: 'prop', type: 'string', value: 'hallway/noticeboard' },
+              { name: 'haloX', type: 'int', value: 27 },
+              { name: 'haloY', type: 'int', value: 10 },
+              { name: 'haloWidth', type: 'int', value: 42 },
+              { name: 'haloHeight', type: 'int', value: 32 },
+            ],
+          }),
+          object({ id: 2, name: 'bare floor', properties: [{ name: 'kind', type: 'string', value: 'board' }] }),
+        ],
+      },
+    ]);
+    const parsed = parseTiledMap(map);
+    assert.deepEqual(parsed.interactables[0], {
+      id: 'board',
+      kind: 'board',
+      label: 'the board',
+      bounds: { x: 1, y: 1, width: 1, height: 1 },
+      prop: 'hallway/noticeboard',
+      halo: { x: 27, y: 10, width: 42, height: 32 },
+    });
+    assert.equal(parsed.interactables[1]?.prop, null, 'a patch of floor belongs to no prop');
+    assert.equal(parsed.interactables[1]?.halo, null, 'and has nothing to light up');
+    assert.equal(parsed.interactables[1]?.id, 'interactable-2');
+    assert.equal(interactableAt(parsed, 1, 1)?.id, 'board');
+    assert.equal(interactableAt(parsed, 0, 0)?.id, 'interactable-2');
+    assert.equal(interactableAt(parsed, 1, 0), null);
+  });
+
+  it('parses a map with no interactables at all', () => {
+    assert.deepEqual(parseTiledMap(base([...floorOnly])).interactables, []);
   });
 
   it('reads zone bounds in tiles, not pixels', () => {

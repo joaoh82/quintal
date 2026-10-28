@@ -41,6 +41,52 @@ export interface TileRect {
   height: number;
 }
 
+/**
+ * What a thing in the office does when you use it. Exactly the values a `kind`
+ * property may take on a rectangle in the map's `interactables` object layer.
+ */
+export type InteractableKind =
+  /** The office board: walk up to the noticeboard and press E, or click it. */
+  'board';
+
+export const INTERACTABLE_KINDS: readonly InteractableKind[] = ['board'];
+
+export function isInteractableKind(value: string): value is InteractableKind {
+  return (INTERACTABLE_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Something on the map you can use by standing by it. The bounds are the
+ * tiles you stand on to use it — the floor in front of a noticeboard, not the
+ * wall it hangs on — and `prop` names the sprite it belongs to, so the
+ * renderer can light it up and take a click on it.
+ */
+export interface MapInteractable {
+  /** Stable id from the map's `interactableId` property. */
+  id: string;
+  kind: InteractableKind;
+  /** What the prompt calls it: "the board". */
+  label: string;
+  /** Where to stand, in tiles. */
+  bounds: TileRect;
+  /** The `sprite` of the prop this belongs to, or null if it is a bare patch of floor. */
+  prop: string | null;
+  /**
+   * Where that prop's visible part is drawn, in pixels, for lighting it up.
+   * The renderer only has the prop's cell; the map builder knows the art.
+   * Null when there is no prop, or nothing recorded about its size.
+   */
+  halo: PixelRect | null;
+}
+
+/** Axis-aligned rectangle in map pixels. */
+export interface PixelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface MapZone {
   /** Stable id from the map's `zoneId` property. Used in messages and state. */
   id: string;
@@ -69,6 +115,7 @@ export interface OfficeMap {
   /** Pixels per tile. */
   tileSize: number;
   zones: MapZone[];
+  interactables: MapInteractable[];
   spawns: SpawnPoint[];
   /**
    * Row-major `width * height` walkability grid derived from the collision
@@ -94,6 +141,45 @@ export function zoneAt(map: OfficeMap, x: number, y: number): MapZone | null {
     if (zone && isInsideZone(zone, x, y)) return zone;
   }
   return null;
+}
+
+/** The interactable you are standing by, if any. Later ones win on overlap, like zones. */
+export function interactableAt(map: OfficeMap, x: number, y: number): MapInteractable | null {
+  for (let i = map.interactables.length - 1; i >= 0; i -= 1) {
+    const interactable = map.interactables[i];
+    if (!interactable) continue;
+    const { bounds } = interactable;
+    if (x >= bounds.x && x < bounds.x + bounds.width && y >= bounds.y && y < bounds.y + bounds.height) {
+      return interactable;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where to stand to use something, walking from `from`: the nearest tile of
+ * its doorstep you can stand on. Null when the whole doorstep is blocked,
+ * which the caller should treat as "cannot be used", not walk to anyway.
+ */
+export function nearestStandingTile(
+  map: OfficeMap,
+  interactable: MapInteractable,
+  from: { x: number; y: number },
+): { x: number; y: number } | null {
+  const { bounds } = interactable;
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let y = bounds.y; y < bounds.y + bounds.height; y += 1) {
+    for (let x = bounds.x; x < bounds.x + bounds.width; x += 1) {
+      if (!isWalkable(map, x, y)) continue;
+      const distance = (x - from.x) ** 2 + (y - from.y) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
 }
 
 export function isWalkable(map: OfficeMap, x: number, y: number): boolean {

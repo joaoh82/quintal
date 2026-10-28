@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { findPath, nearestWalkable } from '../game/pathfinding.js';
-import { isWalkable, spawnFor, type OfficeMap } from '../map.js';
+import { interactableAt, isWalkable, spawnFor, type OfficeMap } from '../map.js';
 import { loadOfficeMap } from './index.js';
 
 /**
@@ -67,6 +67,31 @@ describe('the shipped HQ map', () => {
       bay.bounds.width * bay.bounds.height >= 250,
       `Agent Bay is only ${bay.bounds.width}x${bay.bounds.height} tiles`,
     );
+  });
+
+  it('has the board, on the floor in front of the noticeboard, where you can stand', () => {
+    const board = map.interactables.find((interactable) => interactable.kind === 'board');
+    assert.ok(board, 'no board interactable');
+    assert.equal(board.id, 'board');
+    assert.equal(board.prop, 'hallway/noticeboard');
+
+    // What lights up is the noticeboard itself: on the wall above the
+    // doorstep, no wider than the doorstep, and not the whole 128x96 cell.
+    assert.ok(board.halo, 'nothing to light up');
+    const doorstepTop = board.bounds.y * map.tileSize;
+    assert.ok(board.halo.y + board.halo.height <= doorstepTop + map.tileSize / 2, 'the halo is not above the doorstep');
+    assert.ok(board.halo.y + board.halo.height > doorstepTop - map.tileSize, 'the halo is nowhere near the doorstep');
+    assert.ok(board.halo.width < 64 && board.halo.height < 64, `halo is ${board.halo.width}x${board.halo.height}: a cell, not a board`);
+
+    // The wall it hangs on is the row above; every tile of its doorstep is floor.
+    const { bounds } = board;
+    assert.ok(!isWalkable(map, bounds.x + 1, bounds.y - 1), 'the row above the board is not a wall');
+    const seen = reachableFrom(spawnFor(map, 'human'));
+    for (let x = bounds.x; x < bounds.x + bounds.width; x += 1) {
+      assert.ok(isWalkable(map, x, bounds.y), `cannot stand at ${x},${bounds.y} in front of the board`);
+      assert.ok(seen.has(`${x},${bounds.y}`), `cannot walk to ${x},${bounds.y} from the lobby`);
+      assert.equal(interactableAt(map, x, bounds.y)?.id, 'board');
+    }
   });
 
   it('can walk from the human spawn to every spawn point', () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { tileBeside, type OfficeMap } from './map.js';
+import { nearestStandingTile, tileBeside, type MapInteractable, type OfficeMap } from './map.js';
 
 /**
  * Where an agent stands when it has been asked to come to somebody.
@@ -97,5 +97,37 @@ describe('finding a tile beside somebody', () => {
       null,
       'null is a refusal the caller can report, not a tile in a wall',
     );
+  });
+});
+
+describe('where to stand to use something', () => {
+  // A 5x3 floor; the board's doorstep is the top row's middle three tiles,
+  // with the middle one blocked by a plant.
+  const walkable = [
+    true, true, false, true, true,
+    true, true, true, true, true,
+    true, true, true, true, true,
+  ];
+  const map: OfficeMap = {
+    name: 't', width: 5, height: 3, tileSize: 32, zones: [], spawns: [], walkable,
+    interactables: [],
+  };
+  const board: MapInteractable = {
+    id: 'board', kind: 'board', label: 'the board', prop: null, halo: null,
+    bounds: { x: 1, y: 0, width: 3, height: 1 },
+  };
+
+  it('picks the doorstep tile nearest to where you are', () => {
+    assert.deepEqual(nearestStandingTile(map, board, { x: 4, y: 2 }), { x: 3, y: 0 });
+    assert.deepEqual(nearestStandingTile(map, board, { x: 0, y: 2 }), { x: 1, y: 0 });
+  });
+
+  it('skips a blocked doorstep tile even when it is the closest', () => {
+    assert.deepEqual(nearestStandingTile(map, board, { x: 2, y: 2 }), { x: 1, y: 0 });
+  });
+
+  it('says so when the whole doorstep is blocked', () => {
+    const blocked = { ...map, walkable: walkable.map((open, i) => (i < 5 ? false : open)) };
+    assert.equal(nearestStandingTile(blocked, board, { x: 2, y: 2 }), null);
   });
 });

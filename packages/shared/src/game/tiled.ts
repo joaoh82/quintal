@@ -1,6 +1,9 @@
 import {
+  INTERACTABLE_KINDS,
   ZONE_KINDS,
+  isInteractableKind,
   isZoneKind,
+  type MapInteractable,
   type MapZone,
   type OfficeMap,
   type SpawnPoint,
@@ -68,6 +71,8 @@ export const LAYERS = {
   props: 'props',
   spawns: 'spawns',
   zones: 'zones',
+  /** Rectangles you stand in to use something: the floor in front of the noticeboard. */
+  interactables: 'interactables',
 } as const;
 
 /**
@@ -149,6 +154,52 @@ function parseZones(map: TiledMap): MapZone[] {
   return zones;
 }
 
+function parseInteractables(map: TiledMap): MapInteractable[] {
+  const layer = objectLayer(map, LAYERS.interactables);
+  if (!layer) return [];
+
+  const interactables: MapInteractable[] = [];
+  for (const object of layer.objects) {
+    if (object.point) continue;
+    const properties = propertyMap(object.properties);
+    const kind = properties.kind;
+
+    // Same fail-loud contract as zones: a typo here would leave the board
+    // hanging on the wall with nothing in front of it to stand on.
+    if (kind === undefined || !isInteractableKind(kind)) {
+      throw new Error(
+        `Interactable "${object.name}" (id ${object.id}) has kind "${kind ?? '<missing>'}" — expected ${INTERACTABLE_KINDS.join(' | ')}`,
+      );
+    }
+
+    interactables.push({
+      id: properties.interactableId ?? `interactable-${object.id}`,
+      kind,
+      label: properties.label ?? object.name,
+      bounds: {
+        x: Math.round(object.x / map.tilewidth),
+        y: Math.round(object.y / map.tileheight),
+        width: Math.round(object.width / map.tilewidth),
+        height: Math.round(object.height / map.tileheight),
+      },
+      prop: properties.prop ?? null,
+      halo: haloOf(properties),
+    });
+  }
+  return interactables;
+}
+
+/** The four `halo*` ints, or null if any is missing or not a number. */
+function haloOf(properties: Record<string, string>): MapInteractable['halo'] {
+  const values = ['haloX', 'haloY', 'haloWidth', 'haloHeight'].map((name) => {
+    const raw = properties[name];
+    return raw === undefined ? Number.NaN : Number(raw);
+  });
+  if (values.some((value) => !Number.isFinite(value))) return null;
+  const [x, y, width, height] = values as [number, number, number, number];
+  return { x, y, width, height };
+}
+
 function isPlayerKind(value: string): value is PlayerKind {
   return value === 'human' || value === 'agent';
 }
@@ -191,6 +242,7 @@ export function parseTiledMap(raw: TiledMap): OfficeMap {
     height: raw.height,
     tileSize: raw.tilewidth,
     zones: parseZones(raw),
+    interactables: parseInteractables(raw),
     spawns: parseSpawns(raw),
     walkable: buildWalkableGrid(raw),
   };
