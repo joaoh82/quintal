@@ -3,6 +3,7 @@
 import {
   type ActivityDetailLevel,
   type ConnectionStatus,
+  type MapInteractable,
   type MapZone,
   type RosterEntry,
   type VoiceUiState,
@@ -34,6 +35,8 @@ interface Hud {
   zone: MapZone | null;
   debug: boolean;
   pathLength: number;
+  /** What you stand by, if anything: the noticeboard, for "E · open the board". */
+  near: MapInteractable | null;
 }
 
 const INITIAL_HUD: Hud = {
@@ -42,6 +45,7 @@ const INITIAL_HUD: Hud = {
   zone: null,
   debug: false,
   pathLength: 0,
+  near: null,
 };
 
 /**
@@ -143,11 +147,13 @@ export default function OfficeGame({
   }, []);
 
   // `?` opens help; the overlay key opens the conversations panel; B opens
-  // the board; N goes to whoever is waiting on you. The chat input and the
-  // board stop keydown propagation, so typing any of them in a sentence
-  // never reaches this.
+  // the board, and so does E when you stand by the noticeboard; N goes to
+  // whoever is waiting on you. The chat input and the board stop keydown
+  // propagation, so typing any of them in a sentence never reaches this.
   const waitingRef = useRef(conversations);
   waitingRef.current = conversations;
+  const nearRef = useRef(hud.near);
+  nearRef.current = hud.near;
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === '?') setHelpOpen((open) => !open);
@@ -162,6 +168,15 @@ export default function OfficeGame({
         !typingElsewhere()
       ) {
         setBoardOpen((open) => !open);
+      } else if (
+        (event.key === 'e' || event.key === 'E') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !typingElsewhere() &&
+        nearRef.current?.kind === 'board'
+      ) {
+        setBoardOpen(true);
       } else if (
         (event.key === 'n' || event.key === 'N') &&
         !event.metaKey &&
@@ -243,6 +258,11 @@ export default function OfficeGame({
       gameBridge.on('zone', ({ zone }) => setHud((prev) => ({ ...prev, zone }))),
       gameBridge.on('debug', ({ enabled }) => setHud((prev) => ({ ...prev, debug: enabled }))),
       gameBridge.on('path', ({ length }) => setHud((prev) => ({ ...prev, pathLength: length }))),
+      gameBridge.on('interactable', ({ interactable }) => setHud((prev) => ({ ...prev, near: interactable }))),
+      // Clicked the noticeboard and arrived, or pressed E by it: the board opens.
+      gameBridge.on('interact', ({ interactable }) => {
+        if (interactable.kind === 'board') setBoardOpen(true);
+      }),
       gameBridge.on('roster', ({ players }) => setRoster(players)),
       // A DM you opened from a card is a conversation you meant to type in.
       gameBridge.on('dmOpened', () => setChatFocused(true)),
@@ -368,6 +388,18 @@ export default function OfficeGame({
           className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
         >
           {conversations.notice}
+        </div>
+      ) : null}
+
+      {/* Standing by the noticeboard. The notice and the hint take the same
+          spot and have something to say; this is only an offer. */}
+      {hud.near && !boardOpen && !overlayOpen && !conversations.notice && !hint ? (
+        <div
+          role="status"
+          className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
+        >
+          <kbd className="rounded border border-black/25 bg-white px-1 font-mono text-[11px]">E</kbd>
+          {` · open ${hud.near.label}`}
         </div>
       ) : null}
 

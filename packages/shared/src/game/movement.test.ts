@@ -28,6 +28,7 @@ function gridMap(rows: string[]): OfficeMap {
     height: rows.length,
     tileSize: 32,
     zones: [],
+    interactables: [],
     spawns: [],
     walkable,
   };

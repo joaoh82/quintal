@@ -14121,10 +14121,75 @@
    "visible": true,
    "x": 0,
    "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 7,
+   "name": "interactables",
+   "objects": [
+    {
+     "height": 32,
+     "id": 324,
+     "name": "the board",
+     "properties": [
+      {
+       "name": "kind",
+       "type": "string",
+       "value": "board"
+      },
+      {
+       "name": "interactableId",
+       "type": "string",
+       "value": "board"
+      },
+      {
+       "name": "label",
+       "type": "string",
+       "value": "the board"
+      },
+      {
+       "name": "prop",
+       "type": "string",
+       "value": "hallway/noticeboard"
+      },
+      {
+       "name": "haloX",
+       "type": "int",
+       "value": 731
+      },
+      {
+       "name": "haloY",
+       "type": "int",
+       "value": 352
+      },
+      {
+       "name": "haloWidth",
+       "type": "int",
+       "value": 42
+      },
+      {
+       "name": "haloHeight",
+       "type": "int",
+       "value": 32
+      }
+     ],
+     "rotation": 0,
+     "type": "interactable",
+     "visible": true,
+     "width": 96,
+     "x": 704,
+     "y": 384
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
   }
  ],
- "nextlayerid": 7,
- "nextobjectid": 324,
+ "nextlayerid": 8,
+ "nextobjectid": 325,
  "orientation": "orthogonal",
  "properties": [
   {

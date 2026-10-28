@@ -6,6 +6,8 @@ import {
   directionFromIntent,
   findPath,
   followPath,
+  interactableAt,
+  nearestStandingTile,
   nearestWalkable,
   normalize,
   parseTiledMap,
@@ -18,6 +20,7 @@ import {
   type BoardDeletePayload,
   type BoardMessagePayload,
   type BoardUpdatePayload,
+  type MapInteractable,
   type ChannelChatPayload,
   type ChannelChatSendPayload,
   type ChannelJoinPayload,
@@ -92,6 +95,17 @@ interface OfficeSceneData {
  * that come back. Remote players are interpolated a fraction of a second behind
  * real time so their motion is smooth rather than accurate — see `Avatar`.
  */
+/**
+ * The halo behind a noticeboard: a warm pane that breathes while you stand by
+ * it and holds steady under the pointer. A tint alone cannot do this — it can
+ * only darken a sprite, and a cork board darkened towards yellow reads as the
+ * same cork board.
+ */
+const HALO_COLOUR = 0xffd54a;
+const HALO_PADDING = 6;
+const HALO_NEAR_ALPHA = { from: 0.3, to: 0.6 };
+const HALO_HOVER_ALPHA = 0.7;
+
 export class OfficeScene extends Phaser.Scene {
   static readonly KEY = 'office';
 
@@ -122,6 +136,14 @@ export class OfficeScene extends Phaser.Scene {
 
   #currentZone: MapZone | null = null;
   #currentTile: TilePoint = { x: -1, y: -1 };
+  /** What we stand by, if anything. Published for the HUD's "E · open the board". */
+  #interactable: MapInteractable | null = null;
+  /** The prop of each interactable, by interactable id: what lights up and what you click. */
+  readonly #interactableSprites = new Map<string, Phaser.GameObjects.Image>();
+  /** The halo behind each of those props, and the breathing it does while you stand by. */
+  readonly #halos = new Map<string, { halo: Phaser.GameObjects.Rectangle; breath: Phaser.Tweens.Tween | null }>();
+  /** Something clicked from afar, to be used when the route ends on its doorstep. */
+  #useOnArrival: string | null = null;
   /** Signature of the last roster we published, to avoid pointless re-renders. */
   #rosterSignature = '';
   #nextMinimapAt = 0;
@@ -443,7 +465,10 @@ export class OfficeScene extends Phaser.Scene {
       this.#predicted = position;
       this.#facing = directionFromIntent(intent, this.#facing);
       moving = this.#path.length > 0;
-      if (!moving) this.#bridge.emit('path', { length: 0 });
+      if (!moving) {
+        this.#bridge.emit('path', { length: 0 });
+        this.#arrive();
+      }
     }
 
     self.setPosition(this.#predicted.x, this.#predicted.y);
@@ -480,9 +505,15 @@ export class OfficeScene extends Phaser.Scene {
       if (!this.#inputCaptured) this.#toggleDebug();
     });
 
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.#walkTo(pointer.worldX, pointer.worldY);
-    });
+    // A click on the noticeboard uses it; a click anywhere else walks there.
+    this.input.on(
+      'pointerdown',
+      (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        const clicked = this.#interactableUnder(over);
+        if (clicked) this.#use(clicked);
+        else this.#walkTo(pointer.worldX, pointer.worldY);
+      },
+    );
 
     // A key held when the window loses focus never sends its keyup. Phaser
     // resets the keys on blur, but the stop is only *sent* from `update`, and
@@ -591,6 +622,12 @@ export class OfficeScene extends Phaser.Scene {
     const goal = nearestWalkable(this.#map, target);
     if (!goal) return;
 
+    // A plain click is a change of mind about anything clicked before it.
+    this.#useOnArrival = null;
+    this.#walkToTile(goal);
+  }
+
+  #walkToTile(goal: TilePoint): void {
     // Predict the same route the server is about to plan: same A*, same grid,
     // same start tile. Reconciliation covers the cases where they disagree.
     const path = findPath(this.#map, this.#predictedTile(), goal);
@@ -601,9 +638,132 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   #clearPath(): void {
+    // Walking off by hand is a change of mind too.
+    this.#useOnArrival = null;
     if (this.#path.length === 0) return;
     this.#path = [];
     this.#bridge.emit('path', { length: 0 });
+  }
+
+  // --- using things ----------------------------------------------------------
+
+  /** The interactable whose prop is under the pointer, if any. */
+  #interactableUnder(over: readonly Phaser.GameObjects.GameObject[]): MapInteractable | null {
+    for (const [id, sprite] of this.#interactableSprites) {
+      if (!over.includes(sprite)) continue;
+      return this.#map.interactables.find((interactable) => interactable.id === id) ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Use something: now, if we stand by it; otherwise walk to the nearest tile
+   * of its doorstep and use it on arrival. The route is the same one a click
+   * on that tile would take, so the server plans the same one.
+   */
+  #use(interactable: MapInteractable): void {
+    if (this.#inputCaptured) return;
+    const here = this.#predictedTile();
+    if (interactableAt(this.#map, here.x, here.y)?.id === interactable.id) {
+      this.#bridge.emit('interact', { interactable });
+      return;
+    }
+    const goal = nearestStandingTile(this.#map, interactable, here);
+    if (!goal) return;
+    this.#useOnArrival = interactable.id;
+    this.#walkToTile(goal);
+  }
+
+  /** A route has ended. If it was walked to use something, and we are by it, use it. */
+  #arrive(): void {
+    const id = this.#useOnArrival;
+    if (!id) return;
+    this.#useOnArrival = null;
+    const here = this.#predictedTile();
+    const interactable = interactableAt(this.#map, here.x, here.y);
+    if (interactable?.id === id) this.#bridge.emit('interact', { interactable });
+  }
+
+  /**
+   * The first prop an interactable names is its handle: the pointer becomes a
+   * hand over it, it brightens under the pointer, and it glows while you
+   * stand by it so the prompt and the thing it is about read as one.
+   */
+  #claimInteractable(sprite: string, image: Phaser.GameObjects.Image): void {
+    const owner = this.#map.interactables.find(
+      (interactable) =>
+        interactable.prop === sprite &&
+        !this.#interactableSprites.has(interactable.id) &&
+        // Several props share a sprite; the one this is about is drawn where
+        // its halo is. The anchor is the bottom-centre of the visible part.
+        (!interactable.halo ||
+          (image.x >= interactable.halo.x &&
+            image.x <= interactable.halo.x + interactable.halo.width &&
+            Math.abs(image.y - (interactable.halo.y + interactable.halo.height)) <= 4)),
+    );
+    if (!owner) return;
+    this.#interactableSprites.set(owner.id, image);
+    // The visible part, from the map; the whole cell only if the map is silent.
+    const bounds = owner.halo ?? image.getBounds();
+    const halo = this.add
+      .rectangle(
+        bounds.x + bounds.width / 2,
+        bounds.y + bounds.height / 2,
+        bounds.width + HALO_PADDING * 2,
+        bounds.height + HALO_PADDING * 2,
+        HALO_COLOUR,
+        0,
+      )
+      .setDepth(image.depth - 0.5);
+    this.#halos.set(owner.id, { halo, breath: null });
+    // The hand shows over the board, not over the empty corners of its cell.
+    // The hit area is in the image's own space, whose origin is its top-left.
+    image.setInteractive({
+      hitArea: new Phaser.Geom.Rectangle(
+        bounds.x - (image.x - image.displayOriginX),
+        bounds.y - (image.y - image.displayOriginY),
+        bounds.width,
+        bounds.height,
+      ),
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      useHandCursor: true,
+    });
+    image.on('pointerover', () => this.#light(owner.id));
+    image.on('pointerout', () => this.#light(owner.id));
+  }
+
+  /**
+   * Light an interactable's prop, or put it out: a steady halo under the
+   * pointer, a breathing one while we stand by it, none otherwise.
+   *
+   * "Under the pointer" is asked afresh, not remembered from the last
+   * pointerover: the camera scrolls under a pointer that is not moving, and
+   * Phaser only re-checks hover when it does move.
+   */
+  #light(id: string): void {
+    const entry = this.#halos.get(id);
+    const sprite = this.#interactableSprites.get(id);
+    if (!entry || !sprite) return;
+    entry.breath?.stop();
+    entry.breath = null;
+    const hovered = this.input.hitTestPointer(this.input.activePointer).includes(sprite);
+    if (hovered) {
+      entry.halo.setFillStyle(HALO_COLOUR, HALO_HOVER_ALPHA);
+      return;
+    }
+    if (this.#interactable?.id !== id) {
+      entry.halo.setFillStyle(HALO_COLOUR, 0);
+      return;
+    }
+    entry.halo.setFillStyle(HALO_COLOUR, HALO_NEAR_ALPHA.from);
+    entry.breath = this.tweens.add({
+      targets: entry.halo,
+      fillAlpha: HALO_NEAR_ALPHA.to,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /** Say something. Called by the React chat box, not by the scene. */
@@ -725,10 +885,11 @@ export class OfficeScene extends Phaser.Scene {
       const x = object.x ?? 0;
       const y = object.y ?? 0;
       const z = read('z');
-      this.add
+      const image = this.add
         .image(x, y, `props-${atlas}`, frame)
         .setOrigin(0.5, PROP_ATLASES[atlas].origin)
         .setDepth(typeof z === 'number' ? z : y);
+      this.#claimInteractable(sprite, image);
     }
   }
 
@@ -844,6 +1005,15 @@ export class OfficeScene extends Phaser.Scene {
     if (zone?.id !== this.#currentZone?.id) {
       this.#bridge.emit('zone', { zone, previous: this.#currentZone });
       this.#currentZone = zone;
+    }
+
+    const interactable = interactableAt(this.#map, tile.x, tile.y);
+    if (interactable?.id !== this.#interactable?.id) {
+      const previous = this.#interactable;
+      this.#interactable = interactable;
+      if (previous) this.#light(previous.id);
+      if (interactable) this.#light(interactable.id);
+      this.#bridge.emit('interactable', { interactable });
     }
   }
 

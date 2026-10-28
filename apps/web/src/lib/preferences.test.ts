@@ -29,6 +29,7 @@ describe('the conversations panel key', () => {
     assert.equal(isBindableKey('n'), false);
     assert.equal(isBindableKey('N'), false);
     assert.equal(isBindableKey('b'), false, 'the board');
+    assert.equal(isBindableKey('e'), false, 'using what you stand by');
     assert.equal(isBindableKey('`'), true);
   });
 });

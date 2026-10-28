@@ -38,8 +38,9 @@ const RESERVED = new Set(['Enter', 'Escape', 'Tab', ' ', 'Shift', 'Control', 'Al
 export function isBindableKey(key: string): boolean {
   if (RESERVED.has(key)) return false;
   // WASD and arrows walk; `?` is help; `z` is zones; `n` goes to whoever is
-  // waiting on you; `b` opens the board; `@`, `!`, `/` start things in chat.
-  if (/^[wasdznbWASDZNB?@!/]$/.test(key)) return false;
+  // waiting on you; `b` opens the board and `e` uses what you stand by; `@`,
+  // `!`, `/` start things in chat.
+  if (/^[wasdznbeWASDZNBE?@!/]$/.test(key)) return false;
   if (key.startsWith('Arrow')) return false;
   return key.length === 1 || /^F\d{1,2}$/.test(key);
 }

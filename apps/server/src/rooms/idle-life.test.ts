@@ -45,7 +45,7 @@ function gridMap(rows: string[], zones: MapZone[] = []): OfficeMap {
     assert.equal(row.length, width, 'ragged test grid');
     for (const cell of row) walkable.push(cell !== '#');
   }
-  return { name: 'test', width, height: rows.length, tileSize: 32, zones, spawns: [], walkable };
+  return { name: 'test', width, height: rows.length, tileSize: 32, zones, interactables: [], spawns: [], walkable };
 }
 
 /** A predictable "random": hands out the given fractions in turn, then 0. */

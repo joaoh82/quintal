@@ -540,6 +540,49 @@ const ZONES = [
  * read as rooms without one.
  */
 
+/**
+ * Things you use by standing by them. The rectangle is the floor you stand
+ * on, not the wall the thing hangs on; `prop` names the sprite so the client
+ * can light it up and take a click on it. The noticeboard at (23, 11) is 42px
+ * wide, so the three tiles under it are its doorstep.
+ */
+const INTERACTABLES = [
+  {
+    id: 'board',
+    kind: 'board',
+    label: 'the board',
+    prop: 'hallway/noticeboard',
+    bounds: { x: 22, y: 12, width: 3, height: 1 },
+  },
+];
+
+/**
+ * Where the prop an interactable belongs to is drawn, in pixels: its visible
+ * part, which only this side knows. The client draws the 128x96 cell and has
+ * no idea that a noticeboard is 42x32 of it, so the map tells it. The anchor
+ * is bottom-centre of the visible part, as `blockFor` assumes too.
+ */
+function haloFor(interactable) {
+  if (!interactable.prop) return null;
+  const centreX = (interactable.bounds.x + interactable.bounds.width / 2) * TILE;
+  const centreY = (interactable.bounds.y + interactable.bounds.height / 2) * TILE;
+  let placement = null;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const candidate of props) {
+    if (candidate.sprite !== interactable.prop) continue;
+    const distance = (candidate.x - centreX) ** 2 + (candidate.y - centreY) ** 2;
+    if (distance < nearest) {
+      nearest = distance;
+      placement = candidate;
+    }
+  }
+  if (!placement) throw new Error(`Interactable "${interactable.id}" names a prop that is not placed: ${interactable.prop}`);
+  const size = PROP_SIZES[interactable.prop];
+  if (!size) throw new Error(`No visible size recorded for "${interactable.prop}"`);
+  const [vw, vh] = size;
+  return { x: Math.round(placement.x - vw / 2), y: Math.round(placement.y - vh), width: vw, height: vh };
+}
+
 const SPAWNS = [
   ...[16, 18, 20, 22].map((x, i) => ({ name: `human-${i + 1}`, kind: 'human', x, y: 14 })),
   ...[6, 13, 20, 27, 34, 41, 48].map((x, i) => ({ name: `agent-${i + 1}`, kind: 'agent', x, y: 32 })),
@@ -769,8 +812,46 @@ const map = {
       x: 0,
       y: 0,
     },
+    {
+      draworder: 'topdown',
+      id: 7,
+      name: 'interactables',
+      objects: INTERACTABLES.map((interactable) => {
+        const halo = haloFor(interactable);
+        return {
+        height: interactable.bounds.height * TILE,
+        id: (nextObjectId += 1),
+        name: interactable.label,
+        properties: [
+          stringProperty('kind', interactable.kind),
+          stringProperty('interactableId', interactable.id),
+          stringProperty('label', interactable.label),
+          ...(interactable.prop ? [stringProperty('prop', interactable.prop)] : []),
+          ...(halo
+            ? [
+                { name: 'haloX', type: 'int', value: halo.x },
+                { name: 'haloY', type: 'int', value: halo.y },
+                { name: 'haloWidth', type: 'int', value: halo.width },
+                { name: 'haloHeight', type: 'int', value: halo.height },
+              ]
+            : []),
+        ],
+        rotation: 0,
+        type: 'interactable',
+        visible: true,
+        width: interactable.bounds.width * TILE,
+        x: interactable.bounds.x * TILE,
+        y: interactable.bounds.y * TILE,
+        };
+      }),
+      opacity: 1,
+      type: 'objectgroup',
+      visible: true,
+      x: 0,
+      y: 0,
+    },
   ],
-  nextlayerid: 7,
+  nextlayerid: 8,
   nextobjectid: nextObjectId + 1,
   orientation: 'orthogonal',
   properties: [stringProperty('name', 'Quintal HQ')],
@@ -816,6 +897,6 @@ writeFileSync(OUT, `${JSON.stringify(map, null, 1)}\n`);
 let walkableTiles = 0;
 for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) if (walkable(x, y)) walkableTiles += 1;
 console.log(
-  `[build-hq-map] ${W}x${H} tiles, ${props.length} props, ${ZONES.length} zones, ` +
+  `[build-hq-map] ${W}x${H} tiles, ${props.length} props, ${ZONES.length} zones, ${INTERACTABLES.length} interactables, ` +
     `${walkableTiles} walkable (${Math.round((walkableTiles / (W * H)) * 100)}%) -> packages/shared/maps/hq.json`,
 );
