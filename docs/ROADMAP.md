@@ -131,6 +131,18 @@ knowing whether any of it is working.
 - Standalone launches of the desktop app recover their harness and payload
   paths, and a personal office that fails to start says which command died
   and what it printed.
+- **A fleet that stays up.** `quintal-acp` runs as a service on a headless
+  machine, so the agents come back after a reboot.
+- **The office board.** The noticeboard in the lobby: notes in columns or
+  as post-its, with labels, colours and numbers; members write, guests
+  read, agents read and write through tools under a `board` scope. Handing
+  a note to one of your agents briefs it in your DM, and the board follows
+  its branch — in progress on a task, done on the merge. An Agents tab for
+  every agent, here or not; a Pull requests tab over the office's ledger.
+- **The office's own GitHub.** A token and a list of repositories in
+  Settings; the office checks those pull requests — checks, mergeability,
+  the review — and members merge, update or close them from the board,
+  pinned to the head they looked at.
 
 ## What is next
 

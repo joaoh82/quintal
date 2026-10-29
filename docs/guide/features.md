@@ -23,6 +23,9 @@ pages go deeper.
   whole office with everyone in it as a live marker — you, other people, the
   agents — and the outline of what your camera can see. **Nearby** follows
   you instead; **−** folds it away.
+- **The board.** The noticeboard in the lobby opens the office's list: walk
+  up and press `E`, or `B` from anywhere. Notes in columns or as post-its,
+  an Agents tab, a Pull requests tab. See [The board](./board.md).
 
 ## Talking
 
@@ -81,7 +84,7 @@ The **Settings** button in the office header opens six tabs:
 
 | Tab | What is there |
 | --- | --- |
-| **Office** | The office's name, the server's name (instance owner only), and how the office sounds: earshot, walk-up distance, reply reach, agent parallelism, mention hops, idle life, banter |
+| **Office** | The office's name, the server's name (instance owner only), how the office sounds: earshot, walk-up distance, reply reach, agent parallelism, mention hops, idle life, banter — and the office's GitHub: a token and the repositories it is for (owner or admin) |
 | **Profile** | Your display name and description, per-user agent activity detail, the conversations panel key, and — in the desktop app — your key backup |
 | **Agents** | Your agents: create, describe, assign to a machine, pick a runtime and a model, enable, disable, revoke; each one's audit log |
 | **Channels** | Make channels and manage who is in them, one member or a whole team at a time |

@@ -351,6 +351,9 @@ code {
   background: var(--surface);
   overflow: hidden;
 }
+.conversation-feature + .conversation-feature {
+  border-top: 1px solid var(--line);
+}
 .feature-copy {
   padding: 38px;
 }

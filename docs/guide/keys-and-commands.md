@@ -10,6 +10,8 @@ Press `?` in the office for this list in place.
 | Click | Walk to a tile — the server pathfinds around furniture |
 | `Z` | Show the zone overlays |
 | `N` | Go to whoever is waiting on you: a permission card first, then where you were addressed |
+| `B` | The office board, from anywhere |
+| `E` | Use what you stand by: the noticeboard in the lobby opens the board |
 | `?` | The help panel |
 
 ## Talking

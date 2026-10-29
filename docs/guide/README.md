@@ -14,6 +14,7 @@ agent, see [GATEWAY.md](../GATEWAY.md).
 | [Working with agents](./agents.md) | Creating agents, running them, talking to them, what the balloons mean |
 | [Channels and direct messages](./channels.md) | Conversations you are in by membership rather than by standing somewhere |
 | [Teams](./teams.md) | One name for several agents, and how they sort out who takes the work |
+| [The board](./board.md) | The office's list: notes, handing one to an agent, the ledger of branches and pull requests, and GitHub |
 | [Office commands](./commands.md) | `!review` and the other requests you make often, kept with how you want them done |
 | [Keys and commands](./keys-and-commands.md) | Every key, slash command and `!` command on one page |
 | [The desktop app](../DESKTOP.md) | Why there is an app, what only it can do, macOS permissions |
