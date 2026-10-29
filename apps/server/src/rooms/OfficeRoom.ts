@@ -264,7 +264,7 @@ import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
 import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
-import { PULL_POLL_MS, PullActionError, PullRequestWatch } from '../github/pulls.js';
+import { PULL_POLL_MS, PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -1833,7 +1833,7 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       if (this.#boardLoaded) await this.#boardLoaded;
       if (this.#pulls.listDue()) await this.#listRepoPulls();
-      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses);
+      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, { listed: this.#repoPulls.pulls });
       if (!outcome.configured) return;
       await this.#followPulls(outcome.changes);
       if (outcome.looked > 0) await this.#refreshBoard();
@@ -1895,13 +1895,15 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     try {
       if (this.#boardLoaded) await this.#boardLoaded;
-      // Asked about everything, the repositories are listed again too.
-      const listed = taskId ? { tokenRefused: null } : await this.#listRepoPulls();
+      // Asked about everything, the repositories are listed again too — but not
+      // more often than the token can bear, whoever keeps clicking.
+      const relist = !taskId && this.#pulls.listDue(REPO_PULLS_REFRESH_MIN_MS);
+      const listed = relist ? await this.#listRepoPulls() : { tokenRefused: null };
       if (listed.tokenRefused) {
         this.#sendError(client, 'github', listed.tokenRefused);
         return;
       }
-      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, taskId ? { taskId } : {});
+      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, taskId ? { taskId } : { listed: this.#repoPulls.pulls });
       if (!outcome.configured) {
         this.#sendError(client, 'not_configured', 'This office has no GitHub token any more.');
         return;
@@ -1919,8 +1921,13 @@ export class OfficeRoom extends Room<OfficeState> {
           ? outcome.looked === 0
             ? 'Nothing on the ledger to ask GitHub about.'
             : 'Checked the pull request with GitHub.'
-          : `Listed ${this.#repoPulls.pulls.length} pull request${this.#repoPulls.pulls.length === 1 ? '' : 's'} of the office’s repositories` +
-            (outcome.looked > 0 ? `, and checked ${outcome.looked} on the ledger.` : '.'),
+          : [
+              relist ? `Listed ${this.#repoPulls.pulls.length} pull request${this.#repoPulls.pulls.length === 1 ? '' : 's'} of the office’s repositories.` : null,
+              outcome.looked > 0 ? `Checked ${outcome.looked === 1 ? 'the pull request' : `${outcome.looked} pull requests`} on the ledger.` : null,
+              relist ? null : 'The repositories were listed a moment ago; they are listed again in a few minutes.',
+            ]
+              .filter((part): part is string => part !== null)
+              .join(' '),
       );
     } catch (error: unknown) {
       logger.error('[office] could not check GitHub', error);
@@ -2003,12 +2010,11 @@ export class OfficeRoom extends Room<OfficeState> {
         return;
       }
       this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), undefined, reviewBrief(target));
-      const line = this.#boardTasks.find((task) => task.pr?.url === target.url) ?? null;
       this.#boardEvent({
         kind: 'pr.review_requested',
         actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
-        taskId: line?.id ?? null,
-        itemId: line?.item?.id ?? null,
+        taskId: target.taskId,
+        itemId: target.itemId,
         payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
       });
       this.#sendNotice(client.sessionId, 'pull_request', `Asked ${agent.name} to review ${target.repo}#${target.number}. It answers in your DM.`);
@@ -2030,6 +2036,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const role = await this.#roleFor(sessionId, player);
     client.send(ServerMessage.Board, {
       ...boardForRole(this.#boardView(), role),
+      githubHost: config.githubWebHost,
       you: { userId: player.userId, role },
     } satisfies BoardMessagePayload);
   }

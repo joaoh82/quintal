@@ -38,7 +38,7 @@ import {
   nextStatus,
   pullActionConfirm,
   pullActionLabel,
-  pullActionsOf,
+  pullRowActionsOf,
   DEFAULT_PULL_FILTERS,
   PULL_STATUS_FILTERS,
   pullAuthorsOf,
@@ -112,7 +112,10 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
     [board.agents, board.items, board.tasks, roster, zones, channels, now, query],
   );
   const [pullFilters, setPullFilters] = useState<PullFilters>(DEFAULT_PULL_FILTERS);
-  const allPulls = useMemo(() => pullListOf(board.pulls.pulls, board.tasks), [board.pulls.pulls, board.tasks]);
+  const allPulls = useMemo(
+    () => pullListOf(board.pulls.pulls, board.tasks, board.githubHost),
+    [board.pulls.pulls, board.tasks, board.githubHost],
+  );
   const pulls = useMemo(
     () => allPulls.filter((row) => pullListMatches(row, pullFilters, query)),
     [allPulls, pullFilters, query],
@@ -264,6 +267,7 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
                 now={now}
                 guest={board.you.role === null}
                 github={board.github}
+                host={board.githubHost}
                 listing={board.pulls}
                 reviewers={reviewers}
                 onOpenNote={(id) => setDrawer({ kind: 'item', id })}
@@ -556,6 +560,7 @@ function PullsTab({
   now,
   guest,
   github,
+  host,
   listing,
   reviewers,
   onOpenNote,
@@ -574,6 +579,8 @@ function PullsTab({
   /** A guest is not sent the ledger: say so rather than that nothing was heard. */
   guest: boolean;
   github: BoardGithubRef;
+  /** The office's GitHub host, for reading pull request URLs. */
+  host: string;
   /** When the repositories were last listed, and which would not be. */
   listing: RepoPullsRef;
   /** The viewer's own agents: the ones they may ask for a review. */
@@ -658,7 +665,7 @@ function PullsTab({
             const task = row.task;
             // `row.repo` is lower-case `owner/name`, as the office's list is.
             const onList = github.connected && github.repos.includes(row.repo);
-            const actions = task && onList ? pullActionsOf(task, github) : [];
+            const actions = onList ? pullRowActionsOf(row, github, host) : [];
             const live = task?.github?.known ? task.github : null;
             const checks = live ? checksLabel(live.checks) : null;
             const review = live ? reviewLabel(live.reviewDecision) : null;
@@ -669,7 +676,7 @@ function PullsTab({
               <li key={row.key} className={`px-4 py-2 text-xs ${task && busy === task.id ? 'opacity-60' : ''}`}>
                 <div className="grid grid-cols-[3.5rem_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
                   {task ? (
-                    <PrNumber task={task} now={now} />
+                    <PrNumber task={task} state={row.state} now={now} />
                   ) : (
                     <a
                       href={row.url}
@@ -886,7 +893,7 @@ function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; chil
  * it from here — or, before it has, what the harness last reported, said
  * plainly so a state read here is never mistaken for GitHub's.
  */
-function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
+function PrNumber({ task, state, now }: { task: BoardTaskRef; state: PullListRow['state']; now: number }) {
   const pr = task.pr!;
   const live = task.github?.known ? task.github : null;
   return (
@@ -907,7 +914,7 @@ function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
       >
         <p className="flex items-center gap-2">
           <span className="font-mono text-sky-200">#{pr.number}</span>
-          <PrState state={pullStateOf(task)} />
+          <PrState state={state} />
           {live?.draft ? <Chip tone="none">draft</Chip> : null}
           <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
         </p>

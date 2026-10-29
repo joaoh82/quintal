@@ -21,6 +21,7 @@ import {
   pullAuthorsOf,
   pullListMatches,
   pullListOf,
+  pullRowActionsOf,
   pullProjectsOf,
   DEFAULT_PULL_FILTERS,
   pullStateOf,
@@ -387,6 +388,61 @@ describe('what GitHub said, as the tab shows it', () => {
     assert.equal(pullStateOf(line), 'open');
     assert.equal(pullStateOf({ ...line, github: { ...facts, state: 'merged' } }), 'merged');
     assert.equal(pullStateOf({ ...line, github: { ...facts, known: false, state: 'merged' } }), 'open', 'a failed first look is not an answer');
+  });
+
+  it('lets the newer of the listing and the check say what state a pull request is in', () => {
+    const office = { connected: true, login: 'josh', repos: ['acme/office'] };
+    const listedAs = (state: 'open' | 'merged' | 'closed', updatedAt: number): RepoPullRequestRef => ({
+      repo: 'acme/office',
+      number: 12,
+      url: 'https://github.com/acme/office/pull/12',
+      title: 'fix the chair',
+      author: 'josh',
+      state,
+      draft: false,
+      headRef: 'b',
+      baseRef: 'main',
+      headSha: 'abc',
+      createdAt: 0,
+      updatedAt,
+    });
+    const closedLine = { ...line, status: 'ended' as const, github: { ...facts, state: 'closed' as const, fetchedAt: 1000 } };
+    const [reopened] = pullListOf([listedAs('open', 3000)], [closedLine]);
+    assert.equal(reopened!.state, 'open', 'reopened on GitHub after the last check: the listing is newer');
+    assert.deepEqual(pullRowActionsOf(reopened!, office), [], 'but the actions wait for a check that says open');
+
+    const openLine = { ...line, github: { ...facts, fetchedAt: 1000 } };
+    const [merged] = pullListOf([listedAs('merged', 3000)], [openLine]);
+    assert.equal(merged!.state, 'merged', 'merged since the last check');
+    assert.deepEqual(pullRowActionsOf(merged!, office), [], 'so nothing is offered to merge or close it again');
+
+    const [fresh] = pullListOf([listedAs('open', 500)], [{ ...line, github: { ...facts, state: 'merged', fetchedAt: 1000 } }]);
+    assert.equal(fresh!.state, 'merged', 'a check after the listing is the newer word');
+  });
+
+  it("reads the ledger's URLs on the office's own GitHub host, so an enterprise pull request is one row", () => {
+    const host = 'git.acme.test';
+    const enterprise = { ...line, pr: { ...line.pr!, url: 'https://git.acme.test/acme/office/pull/12' } };
+    const listedThere: RepoPullRequestRef = {
+      repo: 'acme/office',
+      number: 12,
+      url: 'https://git.acme.test/acme/office/pull/12',
+      title: 'fix the chair',
+      author: 'josh',
+      state: 'open',
+      draft: false,
+      headRef: 'b',
+      baseRef: 'main',
+      headSha: 'abc',
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const rows = pullListOf([listedThere], [enterprise], host);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.task?.id, 't');
+    const office = { connected: true, login: 'josh', repos: ['acme/office'] };
+    assert.equal(pullOnOfficeList(enterprise, office, host), true);
+    assert.equal(pullOnOfficeList(enterprise, office), false, 'not on github.com');
   });
 
   it('offers nothing until GitHub has answered, and nothing on a closed one', () => {

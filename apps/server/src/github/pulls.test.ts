@@ -13,7 +13,7 @@ import {
 } from '@quintal/shared/db';
 import { createTestDb, createTestUser } from '@quintal/shared/db/testing';
 
-import { PullActionError, PullRequestWatch, tasksToWatch } from './pulls.js';
+import { PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS, tasksToWatch } from './pulls.js';
 
 const API = 'https://api.github.test';
 
@@ -122,6 +122,21 @@ describe('which pull requests the office asks about', () => {
     const tasks = [line('other-host', { pr: { number: 1, url: 'https://git.acme.example/acme/office/pull/1', state: 'open' } })];
     assert.equal(tasksToWatch(tasks, new Map(), LISTED).length, 0);
     assert.equal(tasksToWatch(tasks, new Map(), LISTED, 12, 'git.acme.example').length, 1, 'unless that is the office’s host');
+  });
+
+  it('watches a pull request reopened since its last check, by the newer listing', () => {
+    const ended = line('a', { status: 'ended', pr: { number: 1, url: 'https://github.com/acme/office/pull/1', state: 'closed' } });
+    const closedAt1000 = { known: true, state: 'closed', fetchedAt: 1000 } as PullRequestStatusRef;
+    const listedOpen = (updatedAt: number) => [
+      {
+        repo: 'acme/office', number: 1, url: 'https://github.com/acme/office/pull/1', title: '', author: '', state: 'open' as const,
+        draft: false, headRef: '', baseRef: '', headSha: '', createdAt: 0, updatedAt,
+      },
+    ];
+    const statuses = new Map([['a', closedAt1000]]);
+    assert.equal(tasksToWatch([ended], statuses, LISTED).length, 0, 'closed, as last checked');
+    assert.equal(tasksToWatch([ended], statuses, LISTED, 12, undefined, listedOpen(3000)).length, 1, 'reopened since');
+    assert.equal(tasksToWatch([ended], statuses, LISTED, 12, undefined, listedOpen(500)).length, 0, 'a listing older than the check');
   });
 
   it('trusts GitHub over the harness about whether one is still open', () => {
@@ -350,6 +365,31 @@ describe("listing every pull request of the office's repositories", () => {
     );
     assert.deepEqual(outcome.pulls.errors.map((error) => error.repo), ['acme/api'], 'acme/api would not list, and kept what it had');
     assert.equal(outcome.pulls.fetchedAt, now);
+  });
+
+  it('keeps a refused token written down when the ledger then has nothing to look at', async () => {
+    const { db, owner } = await office();
+    const github = fakeGithub({
+      'GET /repos/acme/office/pulls?state=open&sort=updated&direction=desc&per_page=100': { status: 401, body: { message: 'Bad credentials' } },
+    });
+    const watch = new PullRequestWatch({ db, workspaceId: owner.workspaceId, apiBase: API, fetch: github.fetch, now: () => 7000 });
+    const listedOutcome = await watch.listRepos({ pulls: [], fetchedAt: null, errors: [] });
+    assert.match(listedOutcome.tokenRefused ?? '', /token/);
+    const looked = await watch.refresh([], new Map());
+    assert.equal(looked.looked, 0);
+    assert.match((await describeOfficeGithub(db, owner.workspaceId)).lastError ?? '', /token/, 'the empty look did not clear it');
+  });
+
+  it('lists again for a person sooner than the poll, but not on every click', async () => {
+    const { db, owner } = await office();
+    let now = 1000;
+    const watch = new PullRequestWatch({ db, workspaceId: owner.workspaceId, apiBase: API, fetch: fakeGithub({}).fetch, now: () => now });
+    await watch.listRepos({ pulls: [], fetchedAt: null, errors: [] });
+    now += 60_000;
+    assert.equal(watch.listDue(REPO_PULLS_REFRESH_MIN_MS), false, 'a minute later, a click checks the ledger only');
+    now += REPO_PULLS_REFRESH_MIN_MS;
+    assert.equal(watch.listDue(REPO_PULLS_REFRESH_MIN_MS), true);
+    assert.equal(watch.listDue(), false, 'the poll waits its five minutes');
   });
 
   it('lists nothing without a token', async () => {

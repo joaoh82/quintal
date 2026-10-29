@@ -50,20 +50,33 @@ export function boardAgentsOf(agents: readonly BoardAgentRef[], grainMs = BOARD_
   );
 }
 
+/**
+ * The repositories' listing, as the signature reads it. It can run to
+ * thousands of rows and changes only when the office lists again, while the
+ * board is compared every ten seconds; so it is stringified once per listing.
+ */
+const pullsSignatures = new WeakMap<RepoPullsRef, { grainMs: number; signature: string }>();
+function pullsSignatureOf(pulls: RepoPullsRef, grainMs: number): string {
+  const known = pullsSignatures.get(pulls);
+  if (known?.grainMs === grainMs) return known.signature;
+  const signature = JSON.stringify({
+    ...pulls,
+    fetchedAt: pulls.fetchedAt === null ? null : Math.floor(pulls.fetchedAt / grainMs) * grainMs,
+  });
+  pullsSignatures.set(pulls, { grainMs, signature });
+  return signature;
+}
+
 /** What the room compares one read with the next by. Equal means nobody is sent anything. */
 export function boardSignatureOf(view: BoardView, grainMs = BOARD_CHECKED_GRAIN_MS): string {
   const tasks = view.tasks.map((task) =>
     task.github ? { ...task, github: { ...task.github, fetchedAt: Math.floor(task.github.fetchedAt / grainMs) * grainMs } } : task,
   );
-  const pulls = {
-    ...view.pulls,
-    fetchedAt: view.pulls.fetchedAt === null ? null : Math.floor(view.pulls.fetchedAt / grainMs) * grainMs,
-  };
-  return JSON.stringify([view.items, view.agents, tasks, view.github, pulls]);
+  return `${JSON.stringify([view.items, view.agents, tasks, view.github])}\n${pullsSignatureOf(view.pulls, grainMs)}`;
 }
 
 /** The board as a person of this role is sent it. */
-export function boardForRole(view: BoardView, role: MembershipRole | null): Omit<BoardPayload, 'you'> {
+export function boardForRole(view: BoardView, role: MembershipRole | null): Omit<BoardPayload, 'you' | 'githubHost'> {
   if (role !== null) {
     return {
       items: [...view.items],

@@ -35,8 +35,10 @@ import {
  * while a person is in the room, which spends under half of that with
  * nothing to spare for anybody else, so a busy office still has headroom.
  * Listing every pull request of the office's repositories is two calls a
- * repository every `REPO_PULLS_POLL_MS`: under 1300 an hour at the most
- * repositories a list may name.
+ * repository every `REPO_PULLS_POLL_MS`, 1200 an hour at the most
+ * repositories a list may name. A person asking again lists at most every
+ * `REPO_PULLS_REFRESH_MIN_MS`, so however often anybody clicks, listing
+ * spends at most 2000 an hour and the ledger's checks keep theirs.
  */
 
 /** How often the office asks, while somebody is here to see the answer. */
@@ -47,6 +49,8 @@ export const PULL_WATCH_MAX = 12;
 export const PULL_REFRESH_MIN_MS = 10_000;
 /** How often the office lists its repositories' pull requests, while somebody is here. */
 export const REPO_PULLS_POLL_MS = 5 * 60_000;
+/** How soon after one listing a person's Check GitHub lists again. Sooner, it checks only the ledger. */
+export const REPO_PULLS_REFRESH_MIN_MS = 3 * 60_000;
 /** How many looks at once. */
 const CONCURRENCY = 3;
 
@@ -69,6 +73,8 @@ export function tasksToWatch(
   repos: readonly string[],
   max = PULL_WATCH_MAX,
   host = GITHUB_WEB_HOST_DEFAULT,
+  /** The repositories' listing: newer than a line's last check, its word on open wins — a reopened one is watched again. */
+  listed: readonly RepoPullRequestRef[] = [],
 ): BoardTaskRef[] {
   return tasks
     .filter((task) => {
@@ -76,7 +82,14 @@ export function tasksToWatch(
       const ref = pr ? parsePullRequestUrl(pr.url, host) : null;
       if (!pr || !ref || !repoOnList(repos, ref)) return false;
       const known = statuses.get(task.id);
-      const open = known?.known ? known.state === 'open' : pr.state === 'open';
+      const repo = `${ref.owner}/${ref.repo}`.toLowerCase();
+      const seen = listed.find((pull) => pull.repo === repo && pull.number === ref.number);
+      const open =
+        seen && (!known?.known || seen.updatedAt > known.fetchedAt)
+          ? seen.state === 'open'
+          : known?.known
+            ? known.state === 'open'
+            : pr.state === 'open';
       return open || task.status === 'active';
     })
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
@@ -178,7 +191,7 @@ export class PullRequestWatch {
   refresh(
     tasks: readonly BoardTaskRef[],
     statuses: ReadonlyMap<string, PullRequestStatusRef>,
-    options: { taskId?: string } = {},
+    options: { taskId?: string; listed?: readonly RepoPullRequestRef[] } = {},
   ): Promise<PullRefreshOutcome> {
     if (this.#looking) return this.#looking;
     this.#looking = this.#look(tasks, statuses, options).finally(() => {
@@ -190,7 +203,7 @@ export class PullRequestWatch {
   async #look(
     tasks: readonly BoardTaskRef[],
     statuses: ReadonlyMap<string, PullRequestStatusRef>,
-    options: { taskId?: string },
+    options: { taskId?: string; listed?: readonly RepoPullRequestRef[] },
   ): Promise<PullRefreshOutcome> {
     const office = await this.#office();
     if (!office) return { configured: false, looked: 0, changes: [], tokenRefused: null };
@@ -203,7 +216,7 @@ export class PullRequestWatch {
           const ref = this.#refOf(task);
           return ref !== null && repoOnList(repos, ref);
         })
-      : tasksToWatch(tasks, statuses, repos, PULL_WATCH_MAX, this.#webHost);
+      : tasksToWatch(tasks, statuses, repos, PULL_WATCH_MAX, this.#webHost, options.listed);
     const changes: PullStateChange[] = [];
     let tokenRefused: string | null = null;
     let looked = 0;
@@ -237,13 +250,15 @@ export class PullRequestWatch {
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-    await noteOfficeGithubCheck(this.#db, this.#workspaceId, tokenRefused, this.#now());
+    // Nothing looked at is nothing learnt about the token: a refusal the listing
+    // just wrote down stays written down.
+    if (looked > 0) await noteOfficeGithubCheck(this.#db, this.#workspaceId, tokenRefused, this.#now());
     return { configured: true, looked, changes, tokenRefused };
   }
 
-  /** Whether the repositories are due to be listed again. */
-  listDue(): boolean {
-    return this.#now() - this.#lastListAt >= REPO_PULLS_POLL_MS;
+  /** Whether the repositories are due to be listed again: by the poll, or sooner for a person who asked. */
+  listDue(minMs = REPO_PULLS_POLL_MS): boolean {
+    return this.#now() - this.#lastListAt >= minMs;
   }
 
   /**

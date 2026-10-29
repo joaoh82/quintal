@@ -1,4 +1,5 @@
 import {
+  GITHUB_WEB_HOST_DEFAULT,
   WORKING_IN_ZONE,
   workingInTokens,
   type AgentTask,
@@ -242,13 +243,23 @@ function pullKey(repo: string, number: number): string {
 /**
  * Every pull request the office knows: what GitHub listed for its
  * repositories, joined with the ledger's lines, most recently moved first.
- * The ledger's newest line wins when two name the same pull request.
+ * The ledger's newest line wins when two name the same pull request. URLs
+ * are read on the office's GitHub host, so an enterprise server's pull
+ * request is one row too.
+ *
+ * Where both have a word on its state, the newer wins: a ledger line's
+ * check from before the pull request last changed on GitHub — merged,
+ * closed, reopened, out of draft — gives way to the listing.
  */
-export function pullListOf(listed: readonly RepoPullRequestRef[], tasks: readonly BoardTaskRef[]): PullListRow[] {
+export function pullListOf(
+  listed: readonly RepoPullRequestRef[],
+  tasks: readonly BoardTaskRef[],
+  host: string = GITHUB_WEB_HOST_DEFAULT,
+): PullListRow[] {
   const lines = new Map<string, BoardTaskRef>();
   for (const task of [...tasks].sort((a, b) => b.lastSeenAt - a.lastSeenAt)) {
     if (!task.pr) continue;
-    const ref = parsePullRequestUrl(task.pr.url);
+    const ref = parsePullRequestUrl(task.pr.url, host);
     const key = ref ? pullKey(`${ref.owner}/${ref.repo}`, ref.number) : task.pr.url;
     if (!lines.has(key)) lines.set(key, task);
   }
@@ -257,7 +268,8 @@ export function pullListOf(listed: readonly RepoPullRequestRef[], tasks: readonl
     const key = pullKey(pull.repo, pull.number);
     const task = lines.get(key) ?? null;
     lines.delete(key);
-    const facts = task?.github?.known ? task.github : null;
+    const checked = task?.github?.known ? task.github : null;
+    const facts = checked && checked.fetchedAt >= pull.updatedAt ? checked : null;
     rows.push({
       key,
       repo: pull.repo,
@@ -275,7 +287,7 @@ export function pullListOf(listed: readonly RepoPullRequestRef[], tasks: readonl
     });
   }
   for (const [key, task] of lines) {
-    const ref = parsePullRequestUrl(task.pr!.url);
+    const ref = parsePullRequestUrl(task.pr!.url, host);
     const facts = task.github?.known ? task.github : null;
     rows.push({
       key,
@@ -294,6 +306,15 @@ export function pullListOf(listed: readonly RepoPullRequestRef[], tasks: readonl
     });
   }
   return rows.sort((a, b) => b.updatedAt - a.updatedAt || a.key.localeCompare(b.key));
+}
+
+/**
+ * What a member may do to a row's pull request: its ledger line's actions,
+ * and only while the row itself — the newer word on it — says it is open.
+ */
+export function pullRowActionsOf(row: PullListRow, office: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): PullRequestAction[] {
+  if (!row.task || row.state !== 'open') return [];
+  return pullActionsOf(row.task, office, host);
 }
 
 export const PULL_STATUS_FILTERS = ['open', 'draft', 'merged', 'closed', 'all'] as const;
@@ -379,8 +400,8 @@ export function pullStateOf(task: BoardTaskRef): 'open' | 'merged' | 'closed' {
  * anything else before GitHub is called; the panel says so instead of
  * offering it.
  */
-export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef): boolean {
-  const ref = task.pr ? parsePullRequestUrl(task.pr.url) : null;
+export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): boolean {
+  const ref = task.pr ? parsePullRequestUrl(task.pr.url, host) : null;
   return ref !== null && repoOnList(github.repos, ref);
 }
 
@@ -391,8 +412,8 @@ export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef): bo
  * marked ready first; "update branch" only when GitHub says the branch is
  * behind, because that is the one thing it fixes.
  */
-export function pullActionsOf(task: BoardTaskRef, office?: BoardGithubRef): PullRequestAction[] {
-  if (office && !pullOnOfficeList(task, office)) return [];
+export function pullActionsOf(task: BoardTaskRef, office?: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): PullRequestAction[] {
+  if (office && !pullOnOfficeList(task, office, host)) return [];
   const github = task.github;
   if (!github?.known || github.state !== 'open') return [];
   const actions: PullRequestAction[] = [];

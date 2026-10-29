@@ -217,6 +217,8 @@ export interface BoardPayload {
   github: BoardGithubRef;
   /** Every pull request of the repositories on the office's GitHub list, agents' or not. Empty for a guest. */
   pulls: RepoPullsRef;
+  /** The host pull requests live on — github.com, or the enterprise server's — so the panel reads their URLs as the office does. */
+  githubHost: string;
   you: { userId: string; role: MembershipRole | null };
 }
 

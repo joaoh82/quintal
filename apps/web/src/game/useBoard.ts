@@ -1,6 +1,6 @@
 'use client';
 
-import { NO_REPO_PULLS } from '@quintal/shared';
+import { GITHUB_WEB_HOST_DEFAULT, NO_REPO_PULLS } from '@quintal/shared';
 import type {
   BoardCreatePayload,
   BoardPayload,
@@ -41,6 +41,7 @@ const EMPTY: BoardPayload = {
   tasks: [],
   github: { connected: false, login: null, repos: [] },
   pulls: NO_REPO_PULLS,
+  githubHost: GITHUB_WEB_HOST_DEFAULT,
   you: { userId: '', role: null },
 };
 
