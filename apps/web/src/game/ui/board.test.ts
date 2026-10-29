@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, PullRequestStatusRef, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, PullRequestStatusRef, RepoPullRequestRef, RosterEntry } from '@quintal/shared';
 
 import {
   ageLabel,
@@ -18,8 +18,11 @@ import {
   pullActionConfirm,
   pullActionsOf,
   pullOnOfficeList,
-  pullRequestMatches,
-  pullRequestRowsOf,
+  pullAuthorsOf,
+  pullListMatches,
+  pullListOf,
+  pullProjectsOf,
+  DEFAULT_PULL_FILTERS,
   pullStateOf,
   repoOfPrUrl,
   taskBadgeOf,
@@ -276,23 +279,67 @@ describe('the Pull requests tab', () => {
     ledger('done-branch', { status: 'ended' }),
   ];
 
-  it('lists the lines with a pull request, newest heard first', () => {
-    assert.deepEqual(pullRequestRowsOf(tasks).map((t) => t.id), ['new', 'old']);
+  const listed = (number: number, extra: Partial<RepoPullRequestRef> = {}): RepoPullRequestRef => ({
+    repo: 'acme/api',
+    number,
+    url: `https://github.com/acme/api/pull/${number}`,
+    title: `Listed ${number}`,
+    author: 'trillian',
+    state: 'open',
+    draft: false,
+    headRef: `head-${number}`,
+    baseRef: 'main',
+    headSha: 'abc',
+    createdAt: 0,
+    updatedAt: 15,
+    ...extra,
+  });
+
+  it("joins GitHub's list with the ledger, and keeps the ledger's pull requests GitHub did not list", () => {
+    const rows = pullListOf([listed(2, { updatedAt: 5 }), listed(3, { repo: 'acme/web', url: 'https://github.com/acme/web/pull/3' })], tasks);
+    assert.deepEqual(
+      rows.map((row) => [row.key, row.task?.id ?? null, row.author, row.agentName]),
+      [
+        ['acme/api#2', 'new', 'trillian', 'marvin'],
+        ['acme/web#3', null, 'trillian', null],
+        ['acme/api#1', 'old', '', 'marvin'],
+      ],
+      'most recently moved first: #2 heard at 20, #3 listed at 15, #1 heard at 10',
+    );
+    assert.equal(rows[0]!.title, 'Listed 2', "GitHub's title over the task's");
   });
 
   it('counts the branches still active with no pull request yet', () => {
     assert.deepEqual(branchesWithoutPr(tasks).map((t) => t.id), ['branch-only']);
   });
 
-  it('answers the filter by PR number, note number, title, repo, branch, agent or state', () => {
-    const row = pullRequestRowsOf(tasks)[0]!;
-    assert.equal(pullRequestMatches(row, '#2'), true);
-    assert.equal(pullRequestMatches(row, '7'), true, 'the note it is for');
-    assert.equal(pullRequestMatches(row, 'chair'), true);
-    assert.equal(pullRequestMatches(row, 'api'), true);
-    assert.equal(pullRequestMatches(row, 'marvin'), true);
-    assert.equal(pullRequestMatches(row, 'open'), true);
-    assert.equal(pullRequestMatches(row, '#1'), false);
+  it('filters by status, author and project', () => {
+    const rows = pullListOf([listed(4, { draft: true }), listed(5, { state: 'closed', author: 'ford', repo: 'acme/web' })], tasks);
+    const keys = (filters: Partial<typeof DEFAULT_PULL_FILTERS>) =>
+      rows.filter((row) => pullListMatches(row, { ...DEFAULT_PULL_FILTERS, ...filters }, '')).map((row) => row.number);
+    assert.deepEqual(keys({}), [2, 4], 'open, drafts included, by default');
+    assert.deepEqual(keys({ status: 'draft' }), [4]);
+    assert.deepEqual(keys({ status: 'merged' }), [1]);
+    assert.deepEqual(keys({ status: 'closed' }), [5]);
+    assert.deepEqual(keys({ status: 'all', author: 'ford' }), [5]);
+    assert.deepEqual(keys({ status: 'all', author: 'marvin' }), [2, 1], "an agent's, by its name");
+    assert.deepEqual(keys({ status: 'all', project: 'acme/web' }), [5]);
+    assert.deepEqual(
+      pullAuthorsOf(rows).map((author) => author.label),
+      ['@ford', '@trillian', '◆ marvin'],
+    );
+    assert.deepEqual(pullProjectsOf(rows, { connected: true, login: null, repos: ['acme/zz'] }), ['acme/api', 'acme/web', 'acme/zz']);
+  });
+
+  it('answers the filter box by PR number, note number, title, repo, branch, author or agent', () => {
+    const row = pullListOf([], tasks)[0]!;
+    const all = { ...DEFAULT_PULL_FILTERS, status: 'all' as const };
+    assert.equal(pullListMatches(row, all, '#2'), true);
+    assert.equal(pullListMatches(row, all, '7'), true, 'the note it is for');
+    assert.equal(pullListMatches(row, all, 'chair'), true);
+    assert.equal(pullListMatches(row, all, 'api'), true);
+    assert.equal(pullListMatches(row, all, 'marvin'), true);
+    assert.equal(pullListMatches(row, all, '#1'), false);
   });
 
   it('names the repository from the pull request URL', () => {

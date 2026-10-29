@@ -301,3 +301,62 @@ describe('acting on a pull request from the board', () => {
     assert.equal((await listBoardEvents(db, owner.workspaceId, { taskId: task.id })).length, 0, 'a refused action is not written down as done');
   });
 });
+
+describe("listing every pull request of the office's repositories", () => {
+  const listed = (number: number, extra: Record<string, unknown> = {}) => ({
+    number,
+    state: 'open',
+    draft: false,
+    title: `PR ${number}`,
+    html_url: `https://github.com/acme/office/pull/${number}`,
+    user: { login: 'trillian' },
+    merged_at: null,
+    head: { sha: `sha${number}`, ref: `branch-${number}` },
+    base: { ref: 'main' },
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: `2026-10-0${number}T00:00:00Z`,
+    ...extra,
+  });
+
+  it('lists open and recently closed ones of each listed repository, newest first, and keeps the last good list of one that fails', async () => {
+    const { db, owner } = await office(true, ['acme/office', 'acme/api']);
+    const github = fakeGithub({
+      'GET /repos/acme/office/pulls?state=open&sort=updated&direction=desc&per_page=100': { body: [listed(3), listed(1, { draft: true })] },
+      'GET /repos/acme/office/pulls?state=closed&sort=updated&direction=desc&per_page=20': {
+        body: [listed(2, { state: 'closed', merged_at: '2026-10-02T00:00:00Z' })],
+      },
+    });
+    let now = 1000;
+    const watch = new PullRequestWatch({ db, workspaceId: owner.workspaceId, apiBase: API, fetch: github.fetch, now: () => now });
+    const previous = {
+      pulls: [{ ...(await watch.listRepos({ pulls: [], fetchedAt: null, errors: [] })).pulls.pulls[0]!, repo: 'acme/api', number: 9, updatedAt: Date.parse('2026-10-02T12:00:00Z') }],
+      fetchedAt: 1,
+      errors: [],
+    };
+    assert.equal(watch.listDue(), false, 'just listed');
+    now += 5 * 60_000;
+    assert.equal(watch.listDue(), true);
+
+    const outcome = await watch.listRepos(previous);
+    assert.equal(outcome.configured, true);
+    assert.deepEqual(
+      outcome.pulls.pulls.map((pull) => [pull.repo, pull.number, pull.state, pull.draft, pull.author]),
+      [
+        ['acme/office', 3, 'open', false, 'trillian'],
+        ['acme/api', 9, 'open', false, 'trillian'],
+        ['acme/office', 2, 'merged', false, 'trillian'],
+        ['acme/office', 1, 'open', true, 'trillian'],
+      ],
+    );
+    assert.deepEqual(outcome.pulls.errors.map((error) => error.repo), ['acme/api'], 'acme/api would not list, and kept what it had');
+    assert.equal(outcome.pulls.fetchedAt, now);
+  });
+
+  it('lists nothing without a token', async () => {
+    const { db, owner } = await office(false);
+    const watch = new PullRequestWatch({ db, workspaceId: owner.workspaceId, apiBase: API, fetch: fakeGithub({}).fetch });
+    const outcome = await watch.listRepos({ pulls: [], fetchedAt: null, errors: [] });
+    assert.equal(outcome.configured, false);
+    assert.deepEqual(outcome.pulls.pulls, []);
+  });
+});

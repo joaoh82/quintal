@@ -1,5 +1,5 @@
 import type { AgentTaskPullRequest, AgentTaskStatus } from './agent-task.js';
-import type { PullRequestStatusRef } from './github.js';
+import type { PullRequestStatusRef, RepoPullsRef } from './github.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -215,6 +215,8 @@ export interface BoardPayload {
   tasks: BoardTaskRef[];
   /** Whether the office can check with GitHub and act there. */
   github: BoardGithubRef;
+  /** Every pull request of the repositories on the office's GitHub list, agents' or not. Empty for a guest. */
+  pulls: RepoPullsRef;
   you: { userId: string; role: MembershipRole | null };
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { NO_REPO_PULLS } from '@quintal/shared';
 import type {
   BoardCreatePayload,
   BoardPayload,
@@ -30,6 +31,8 @@ export interface Board extends BoardPayload {
   refreshPulls: (taskId?: string) => void;
   /** Merge, update or close a pull request with the office's token. */
   actOnPull: (payload: BoardPullActionPayload) => void;
+  /** Ask one of your agents to review a pull request, by its URL. */
+  requestReview: (agentId: string, url: string) => void;
 }
 
 const EMPTY: BoardPayload = {
@@ -37,6 +40,7 @@ const EMPTY: BoardPayload = {
   agents: [],
   tasks: [],
   github: { connected: false, login: null, repos: [] },
+  pulls: NO_REPO_PULLS,
   you: { userId: '', role: null },
 };
 
@@ -74,5 +78,10 @@ export function useBoard(sessionRef: RefObject<OfficeSession | null>): Board {
     [sessionRef],
   );
 
-  return { ...board, loaded, create, update, remove, refreshPulls, actOnPull };
+  const requestReview = useCallback(
+    (agentId: string, url: string) => sessionRef.current?.requestPullReview({ agentId, url }),
+    [sessionRef],
+  );
+
+  return { ...board, loaded, create, update, remove, refreshPulls, actOnPull, requestReview };
 }

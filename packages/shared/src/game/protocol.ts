@@ -72,6 +72,13 @@ export const ClientMessage = {
    * `notice` saying what GitHub did, or an `error` saying what it refused.
    */
   BoardPullAction: 'board_pull_action',
+  /**
+   * Ask one of your agents to review a pull request: a line from you in your
+   * DM with it, with a review brief attached. The agent's owner only, and
+   * only a pull request on the ledger or in a repository on the office's
+   * GitHub list. Answered with a `notice`, or an `error` saying why not.
+   */
+  BoardPullReview: 'board_pull_review',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -318,6 +325,12 @@ export interface BoardPullActionPayload {
    * the update if the branch moved since; nobody merges what they have not seen.
    */
   expectedHeadSha?: string;
+}
+
+/** `board_pull_review`: which of your agents is to review which pull request, by its URL. */
+export interface BoardPullReviewPayload {
+  agentId: string;
+  url: string;
 }
 
 /** `board`: the whole board. See `BoardPayload`. */

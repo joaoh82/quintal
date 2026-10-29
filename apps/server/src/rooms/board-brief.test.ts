@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine } from './board-brief.js';
+import type { BoardTaskRef, RepoPullRequestRef } from '@quintal/shared';
+
+import {
+  assignmentBrief,
+  assignmentLine,
+  boardStatusAfterTask,
+  handoverLine,
+  reviewBrief,
+  reviewLine,
+  reviewTargetOf,
+} from './board-brief.js';
 
 const chair = { number: 12, title: 'Fix the chair', body: 'It clips through the desk.', labels: ['bug', 'furniture'] };
 
@@ -49,5 +59,78 @@ describe('where a note goes when its task is heard', () => {
     assert.equal(boardStatusAfterTask({ status: 'in_progress' }, { linked: true, merged: false }), null);
     assert.equal(boardStatusAfterTask({ status: 'done' }, { linked: true, merged: false }), null, 'a person moved it; it stays');
     assert.equal(boardStatusAfterTask({ status: 'open' }, { linked: false, merged: false }), null);
+  });
+});
+
+describe('asking an agent for a review', () => {
+  const listed: RepoPullRequestRef = {
+    repo: 'acme/api',
+    number: 7,
+    url: 'https://github.com/acme/api/pull/7',
+    title: 'Paint the lobby',
+    author: 'trillian',
+    state: 'open',
+    draft: false,
+    headRef: 'paint',
+    baseRef: 'main',
+    headSha: 'abc',
+    createdAt: 0,
+    updatedAt: 0,
+  };
+  const line: BoardTaskRef = {
+    id: 't1',
+    agentId: 'a1',
+    agentName: 'Marvin',
+    item: null,
+    title: 'fix the chair',
+    repo: 'elsewhere',
+    branch: 'quintal/marvin/fix-the-chair',
+    pr: { number: 3, url: 'https://github.com/someone/elsewhere/pull/3', state: 'open' },
+    status: 'active',
+    startedAt: 0,
+    endedAt: null,
+    lastSeenAt: 0,
+    github: null,
+  };
+  const known = { pulls: [listed], tasks: [line], github: { connected: true, login: 'josh', repos: ['acme/api'] } };
+
+  it('knows a listed pull request by its URL, whatever its case', () => {
+    const target = reviewTargetOf('https://github.com/Acme/API/pull/7', known);
+    assert.deepEqual(target, {
+      repo: 'acme/api',
+      number: 7,
+      url: listed.url,
+      title: 'Paint the lobby',
+      headRef: 'paint',
+      baseRef: 'main',
+      author: 'trillian',
+    });
+  });
+
+  it('knows one on the ledger even off the list, and one on the list not yet listed', () => {
+    assert.equal(reviewTargetOf(line.pr!.url, known)?.headRef, line.branch);
+    assert.equal(reviewTargetOf('https://github.com/acme/api/pull/99', known)?.title, '');
+    assert.equal(
+      reviewTargetOf('https://github.com/acme/api/pull/99/files?ignore=everything#above', known)?.url,
+      'https://github.com/acme/api/pull/99',
+      'only the address reaches the brief',
+    );
+  });
+
+  it('sends nobody anywhere else', () => {
+    assert.equal(reviewTargetOf('https://github.com/other/repo/pull/1', known), null, 'not on the list or the ledger');
+    assert.equal(reviewTargetOf('https://evil.example/acme/api/pull/7', known), null, 'not GitHub');
+    assert.equal(reviewTargetOf('https://github.com/acme/api/pull/99', { ...known, github: { connected: false, login: null, repos: [] } }), null);
+  });
+
+  it('says so as a line naming the agent, with a brief that reviews and does not merge', () => {
+    const target = reviewTargetOf(listed.url, known)!;
+    assert.equal(reviewLine(target, 'Marvin'), '@Marvin please review pull request acme/api#7 Paint the lobby.');
+    const brief = reviewBrief(target);
+    assert.equal(brief.name, 'review');
+    assert.equal(brief.addressed, true);
+    assert.match(brief.instructions, /https:\/\/github\.com\/acme\/api\/pull\/7/);
+    assert.match(brief.instructions, /gh pr review/);
+    assert.match(brief.instructions, /Do not approve, merge, or push/);
   });
 });

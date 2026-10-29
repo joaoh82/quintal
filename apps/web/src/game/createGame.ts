@@ -3,6 +3,7 @@ import {
   type ApprovalOptionId,
   type BoardCreatePayload,
   type BoardPullActionPayload,
+  type BoardPullReviewPayload,
   type BoardUpdatePayload,
   type OfficeState,
 } from '@quintal/shared';
@@ -67,6 +68,8 @@ export interface OfficeSession {
   refreshPullRequests(taskId?: string): void;
   /** Merge, update or close a pull request on the ledger, with the office's token. */
   actOnPullRequest(payload: BoardPullActionPayload): void;
+  /** Ask one of your agents to review a pull request, in your DM with it. */
+  requestPullReview(payload: BoardPullReviewPayload): void;
   /** The microphone switch. Off by default; M in the office. */
   toggleMute(): void;
   /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
@@ -356,6 +359,9 @@ export async function createGame(
     },
     actOnPullRequest(payload) {
       scene()?.actOnPullRequest(payload);
+    },
+    requestPullReview(payload) {
+      scene()?.requestPullReview(payload);
     },
     toggleMute() {
       voice?.toggleMute();

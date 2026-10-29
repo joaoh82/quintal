@@ -153,7 +153,10 @@ import {
   type BoardGithubRef,
   type BoardPullActionPayload,
   type BoardPullRefreshPayload,
+  type BoardPullReviewPayload,
   type PullRequestStatusRef,
+  type RepoPullsRef,
+  NO_REPO_PULLS,
   type BoardItemRef,
   type BoardMessagePayload,
   type BoardTaskRef,
@@ -259,7 +262,7 @@ import {
 } from './commands.js';
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
-import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine } from './board-brief.js';
+import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
 import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
 import { PULL_POLL_MS, PullActionError, PullRequestWatch } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
@@ -435,6 +438,8 @@ export class OfficeRoom extends Room<OfficeState> {
   #boardGithub: BoardGithubRef = { connected: false, login: null, repos: [] };
   /** What GitHub last said about each ledger line's pull request, by task id. */
   #pullStatuses: ReadonlyMap<string, PullRequestStatusRef> = new Map();
+  /** Every pull request of the repositories on the office's list, as last listed. */
+  #repoPulls: RepoPullsRef = NO_REPO_PULLS;
   /** The office's eye on GitHub. Made with the room; the token is read as needed. */
   #pulls!: PullRequestWatch;
   #pullTimer: NodeJS.Timeout | null = null;
@@ -616,6 +621,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.BoardPullAction, (client, payload: unknown) =>
       void this.#onBoardPullAction(client, payload),
+    );
+    this.onMessage(ClientMessage.BoardPullReview, (client, payload: unknown) =>
+      void this.#onBoardPullReview(client, payload),
     );
 
     // --- agent protocol (docs/GATEWAY.md) ---
@@ -1780,6 +1788,11 @@ export class OfficeRoom extends Room<OfficeState> {
       logger.error('[office] could not read the board', error);
       return;
     }
+    this.#sendBoardIfChanged();
+  }
+
+  /** Everybody here is sent the board, if it is not the board they were last sent. */
+  #sendBoardIfChanged(): void {
     const signature = boardSignatureOf(this.#boardView());
     if (signature === this.#boardSignature) return;
     this.#boardSignature = signature;
@@ -1796,7 +1809,13 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   #boardView(): BoardView {
-    return { items: this.#boardItems, agents: this.#boardAgents, tasks: this.#boardTasks, github: this.#boardGithub };
+    return {
+      items: this.#boardItems,
+      agents: this.#boardAgents,
+      tasks: this.#boardTasks,
+      github: this.#boardGithub,
+      pulls: this.#repoPulls,
+    };
   }
 
   /** Who did what on the board, written down. Fire-and-forget, like the agents' audit: a write must not wait on it. */
@@ -1813,6 +1832,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!this.#humansPresent()) return;
     try {
       if (this.#boardLoaded) await this.#boardLoaded;
+      if (this.#pulls.listDue()) await this.#listRepoPulls();
       const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses);
       if (!outcome.configured) return;
       await this.#followPulls(outcome.changes);
@@ -1820,6 +1840,18 @@ export class OfficeRoom extends Room<OfficeState> {
     } catch (error: unknown) {
       logger.error('[office] could not check GitHub', error);
     }
+  }
+
+  /**
+   * List every pull request of the office's repositories, and send the board
+   * if the list changed. No token is no list: one taken out in Settings
+   * empties the tab on the next listing.
+   */
+  async #listRepoPulls(): Promise<{ tokenRefused: string | null }> {
+    const outcome = await this.#pulls.listRepos(this.#repoPulls);
+    this.#repoPulls = outcome.pulls;
+    this.#sendBoardIfChanged();
+    return { tokenRefused: outcome.tokenRefused };
   }
 
   /**
@@ -1863,6 +1895,12 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     try {
       if (this.#boardLoaded) await this.#boardLoaded;
+      // Asked about everything, the repositories are listed again too.
+      const listed = taskId ? { tokenRefused: null } : await this.#listRepoPulls();
+      if (listed.tokenRefused) {
+        this.#sendError(client, 'github', listed.tokenRefused);
+        return;
+      }
       const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, taskId ? { taskId } : {});
       if (!outcome.configured) {
         this.#sendError(client, 'not_configured', 'This office has no GitHub token any more.');
@@ -1877,9 +1915,12 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendNotice(
         client.sessionId,
         'pull_request',
-        outcome.looked === 0
-          ? 'Nothing on the ledger to ask GitHub about.'
-          : `Checked ${outcome.looked === 1 ? 'the pull request' : `${outcome.looked} pull requests`} with GitHub.`,
+        taskId
+          ? outcome.looked === 0
+            ? 'Nothing on the ledger to ask GitHub about.'
+            : 'Checked the pull request with GitHub.'
+          : `Listed ${this.#repoPulls.pulls.length} pull request${this.#repoPulls.pulls.length === 1 ? '' : 's'} of the office’s repositories` +
+            (outcome.looked > 0 ? `, and checked ${outcome.looked} on the ledger.` : '.'),
       );
     } catch (error: unknown) {
       logger.error('[office] could not check GitHub', error);
@@ -1927,6 +1968,57 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
+   * One of your agents asked to review a pull request. It goes the way a
+   * note is handed over: a line from you in your DM with the agent, the
+   * review brief attached, so the agent reads it as you asking and answers
+   * where you will see it. Its owner only, and only a pull request the
+   * office knows — on the ledger, or in a repository on its GitHub list.
+   */
+  async #onBoardPullReview(client: Client, payload: unknown): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const asked = (payload ?? {}) as Partial<BoardPullReviewPayload>;
+    if (typeof asked.agentId !== 'string' || typeof asked.url !== 'string') {
+      this.#sendError(client, 'invalid_payload', 'Name the agent and the pull request it is to review.');
+      return;
+    }
+    if (!(await this.#mayHandTo(client, writer, asked.agentId, 'asks them for a review'))) return;
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const target = reviewTargetOf(asked.url, {
+      pulls: this.#repoPulls.pulls,
+      tasks: this.#boardTasks,
+      github: this.#boardGithub,
+      host: config.githubWebHost,
+    });
+    if (!target) {
+      this.#sendError(client, 'not_found', 'That pull request is neither on the ledger nor in a repository on the office’s GitHub list.');
+      return;
+    }
+    try {
+      const actor = await this.#actorFor(writer.player);
+      const channel = await this.#dmWith(actor, asked.agentId);
+      const agent = await findAgentById(getDb(), asked.agentId);
+      if (!channel || !agent) {
+        this.#sendError(client, 'unauthorised', `${agent?.name ?? 'That agent'} takes no direct messages, so it cannot be asked from here.`);
+        return;
+      }
+      this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), undefined, reviewBrief(target));
+      const line = this.#boardTasks.find((task) => task.pr?.url === target.url) ?? null;
+      this.#boardEvent({
+        kind: 'pr.review_requested',
+        actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+        taskId: line?.id ?? null,
+        itemId: line?.item?.id ?? null,
+        payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
+      });
+      this.#sendNotice(client.sessionId, 'pull_request', `Asked ${agent.name} to review ${target.repo}#${target.number}. It answers in your DM.`);
+    } catch (error: unknown) {
+      logger.error('[office] could not ask for a review', error);
+      this.#sendError(client, 'invalid_payload', 'The review could not be asked for just now.');
+    }
+  }
+
+  /**
    * The board as this person sees it. A guest gets the notes and the agents'
    * names, not the ledger or the office's machines. Agents are not sent it:
    * theirs is the gateway's business.
@@ -1945,6 +2037,10 @@ export class OfficeRoom extends Room<OfficeState> {
   async #onBoardGet(client: Client): Promise<void> {
     if (this.#boardLoaded) await this.#boardLoaded;
     await this.#sendBoard(client.sessionId);
+    // The first person in need not wait for the minute's poll to see the repositories' pull requests.
+    if (this.#boardGithub.connected && this.#repoPulls.fetchedAt === null && this.#pulls.listDue()) {
+      void this.#listRepoPulls().catch((error: unknown) => logger.error('[office] could not list pull requests', error));
+    }
   }
 
   /**
@@ -2025,6 +2121,7 @@ export class OfficeRoom extends Room<OfficeState> {
     client: Client,
     writer: { player: OfficePlayer; role: MembershipRole },
     agentId: string,
+    what = 'hands them a note',
   ): Promise<boolean> {
     const agent = await findAgentById(getDb(), agentId);
     if (!agent || agent.workspaceId !== this.#workspaceId || agent.revokedAt !== null) {
@@ -2036,7 +2133,7 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendError(
         client,
         'unauthorised',
-        `Only ${agent.name}'s owner${owner ? `, ${owner},` : ''} hands them a note. Ask them to.`,
+        `Only ${agent.name}'s owner${owner ? `, ${owner},` : ''} ${what}. Ask them to.`,
       );
       return false;
     }

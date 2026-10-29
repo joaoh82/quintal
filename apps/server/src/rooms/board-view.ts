@@ -1,11 +1,13 @@
 import {
   BOARD_LAST_SEEN_GRAIN_MS,
+  NO_REPO_PULLS,
   type BoardAgentRef,
   type BoardGithubRef,
   type BoardItemRef,
   type BoardPayload,
   type BoardTaskRef,
   type MembershipRole,
+  type RepoPullsRef,
 } from '@quintal/shared';
 
 /**
@@ -24,7 +26,8 @@ import {
  *    pull request stamps `fetchedAt`; in the signature that stamp is kept
  *    to `BOARD_CHECKED_GRAIN_MS`, so a minute's poll that found the same
  *    facts sends nobody anything, and "checked 7m ago" catches up at most
- *    that much late.
+ *    that much late. The same holds for the listing of the office's
+ *    repositories' pull requests and its `fetchedAt`.
  */
 
 /** The grain of a pull request's `fetchedAt` in the board's signature. */
@@ -35,6 +38,7 @@ export interface BoardView {
   agents: readonly BoardAgentRef[];
   tasks: readonly BoardTaskRef[];
   github: BoardGithubRef;
+  pulls: RepoPullsRef;
 }
 
 const NO_GITHUB: BoardGithubRef = { connected: false, login: null, repos: [] };
@@ -51,18 +55,29 @@ export function boardSignatureOf(view: BoardView, grainMs = BOARD_CHECKED_GRAIN_
   const tasks = view.tasks.map((task) =>
     task.github ? { ...task, github: { ...task.github, fetchedAt: Math.floor(task.github.fetchedAt / grainMs) * grainMs } } : task,
   );
-  return JSON.stringify([view.items, view.agents, tasks, view.github]);
+  const pulls = {
+    ...view.pulls,
+    fetchedAt: view.pulls.fetchedAt === null ? null : Math.floor(view.pulls.fetchedAt / grainMs) * grainMs,
+  };
+  return JSON.stringify([view.items, view.agents, tasks, view.github, pulls]);
 }
 
 /** The board as a person of this role is sent it. */
 export function boardForRole(view: BoardView, role: MembershipRole | null): Omit<BoardPayload, 'you'> {
   if (role !== null) {
-    return { items: [...view.items], agents: [...view.agents], tasks: [...view.tasks], github: { ...view.github } };
+    return {
+      items: [...view.items],
+      agents: [...view.agents],
+      tasks: [...view.tasks],
+      github: { ...view.github },
+      pulls: { ...view.pulls, pulls: [...view.pulls.pulls] },
+    };
   }
   return {
     items: [...view.items],
     agents: view.agents.map((agent) => ({ ...agent, hostLabel: null, runtimeId: null, modelId: null })),
     tasks: [],
     github: { ...NO_GITHUB },
+    pulls: { ...NO_REPO_PULLS },
   };
 }

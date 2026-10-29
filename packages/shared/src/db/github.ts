@@ -272,6 +272,8 @@ export const BOARD_EVENT_KINDS = [
   'pr.close',
   /** The office's own poll found the pull request's state changed on GitHub. */
   'pr.state',
+  /** A member asked one of their agents to review a pull request from the board. */
+  'pr.review_requested',
 ] as const;
 export type BoardEventKind = (typeof BOARD_EVENT_KINDS)[number];
 
