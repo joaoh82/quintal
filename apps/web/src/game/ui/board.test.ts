@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import { ageLabel, columnsOf, matchesFilter, nextStatus, wallOf } from './board.js';
+import { ageLabel, columnsOf, matchesFilter, nextStatus, taskBadgeOf, wallOf } from './board.js';
 
 function note(number: number, extra: Partial<BoardItemRef> = {}): BoardItemRef {
   return {
@@ -18,6 +18,7 @@ function note(number: number, extra: Partial<BoardItemRef> = {}): BoardItemRef {
     createdBy: null,
     createdAt: 0,
     updatedAt: 0,
+    task: null,
     ...extra,
   };
 }
@@ -69,6 +70,26 @@ describe('filtering notes', () => {
     assert.equal(matchesFilter(chair, 'furn'), true);
     assert.equal(matchesFilter(chair, 'marv'), true);
     assert.equal(matchesFilter(chair, 'tunnel'), false);
+  });
+});
+
+describe('what a note\'s task says', () => {
+  const task = { agent: { id: 'a1', name: 'Marvin' }, repo: 'office', branch: 'quintal/marvin/chair', pr: null, active: true };
+  const pr = (state: 'open' | 'merged' | 'closed') => ({ number: 12, url: 'https://x/pull/12', state });
+
+  it('is nothing until a task takes the note', () => {
+    assert.equal(taskBadgeOf({ task: null }), null);
+  });
+
+  it('follows the pull request, and before one the branch', () => {
+    assert.equal(taskBadgeOf({ task }), 'on a branch');
+    assert.equal(taskBadgeOf({ task: { ...task, pr: pr('open') } }), 'in review');
+    assert.equal(taskBadgeOf({ task: { ...task, pr: pr('merged'), active: false } }), 'merged');
+    assert.equal(taskBadgeOf({ task: { ...task, pr: pr('closed'), active: false } }), 'closed');
+  });
+
+  it('says nothing of a task that ended without a pull request', () => {
+    assert.equal(taskBadgeOf({ task: { ...task, active: false } }), null);
   });
 });
 

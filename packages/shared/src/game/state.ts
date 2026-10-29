@@ -150,6 +150,7 @@ export class OfficePlayer extends Schema {
   taskPrNumber = 0;
   taskPrUrl = '';
   taskPrState = '';
+  taskItem = 0;
 }
 
 defineTypes(OfficePlayer, {
@@ -191,6 +192,7 @@ defineTypes(OfficePlayer, {
   taskPrNumber: 'number',
   taskPrUrl: 'string',
   taskPrState: 'string',
+  taskItem: 'number',
 });
 
 /** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */

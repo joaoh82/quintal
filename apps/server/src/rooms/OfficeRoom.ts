@@ -69,6 +69,7 @@ import {
   zoneAt,
   type AgentBanterEvent,
   type AgentChannelChatEvent,
+  type AgentCommandCall,
   type AgentTeam,
   type AgentChannelsEvent,
   type AgentChatEvent,
@@ -126,10 +127,13 @@ import {
   WORKING_IN_ZONE,
   agentTaskOf,
   parseAgentTask,
+  mayAssignBoardItem,
   mayDeleteBoardItem,
   mayWriteBoard,
+  noteForTask,
   parseBoardCreate,
   parseBoardUpdate,
+  type AgentTask,
   type BoardAgentRef,
   type BoardDeletePayload,
   type BoardItemRef,
@@ -139,7 +143,11 @@ import {
   BoardItemError,
   createBoardItem,
   deleteBoardItem,
+  endAgentTasks,
+  findBoardItemByNumber,
+  findUnlinkedItemForAgent,
   getBoardItem,
+  noteAgentTask,
   listBoardAgentsForWorkspace,
   listBoardItemsForWorkspace,
   updateBoardItem,
@@ -226,6 +234,7 @@ import {
 } from './commands.js';
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
+import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine } from './board-brief.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -1767,8 +1776,10 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendError(client, 'invalid_payload', 'A note needs a title, a known column and a known colour.');
       return;
     }
+    if (note.assigneeAgentId && !(await this.#mayHandTo(client, writer, note.assigneeAgentId))) return;
+    let created: BoardItemRef;
     try {
-      await createBoardItem(getDb(), {
+      created = await createBoardItem(getDb(), {
         workspaceId: this.#workspaceId,
         ...note,
         createdBy: { userId: writer.player.userId },
@@ -1778,6 +1789,38 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
     await this.#refreshBoard();
+    // A note written straight into an agent's hands is handed over like any other.
+    if (created.assignee) {
+      void this.#announceAssignment(client.sessionId, writer.player, { ...created, assignee: null }, created);
+    }
+  }
+
+  /**
+   * May this writer hand a note to this agent? Handing a note over is the
+   * owner's to do: the agent reads the note as a request and acts as its
+   * owner. The row, not the cache, says whose it is and whether it is still
+   * here at all. Says why not to the client, so the caller only returns.
+   */
+  async #mayHandTo(
+    client: Client,
+    writer: { player: OfficePlayer; role: MembershipRole },
+    agentId: string,
+  ): Promise<boolean> {
+    const agent = await findAgentById(getDb(), agentId);
+    if (!agent || agent.workspaceId !== this.#workspaceId || agent.revokedAt !== null) {
+      this.#sendError(client, 'not_found', 'No such agent in this office.');
+      return false;
+    }
+    if (!mayAssignBoardItem({ userId: writer.player.userId, role: writer.role }, agent)) {
+      const owner = agent.ownerName.trim();
+      this.#sendError(
+        client,
+        'unauthorised',
+        `Only ${agent.name}'s owner${owner ? `, ${owner},` : ''} hands them a note. Ask them to.`,
+      );
+      return false;
+    }
+    return true;
   }
 
   async #onBoardUpdate(client: Client, payload: unknown): Promise<void> {
@@ -1788,13 +1831,149 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendError(client, 'invalid_payload', 'Name the note and what changes about it.');
       return;
     }
+    if (typeof patch.assigneeAgentId === 'string' && !(await this.#mayHandTo(client, writer, patch.assigneeAgentId))) {
+      return;
+    }
+    let before: BoardItemRef | null = null;
+    let after: BoardItemRef;
     try {
-      await updateBoardItem(getDb(), { workspaceId: this.#workspaceId, ...patch });
+      const db = getDb();
+      if (patch.assigneeAgentId !== undefined) before = await getBoardItem(db, this.#workspaceId, patch.itemId);
+      after = await updateBoardItem(db, { workspaceId: this.#workspaceId, ...patch });
     } catch (error: unknown) {
       this.#boardRefused(client, error);
       return;
     }
     await this.#refreshBoard();
+    if (before && before.assignee?.id !== after.assignee?.id) {
+      void this.#announceAssignment(client.sessionId, writer.player, before, after);
+    }
+  }
+
+  /**
+   * A note changed hands: the person who handed it over is seen to say so,
+   * in their DM with the agent, with the brief attached. Whoever had it
+   * before is told where it went, in the same way, without the brief. An
+   * agent that is not here reads it when it next is, as any mention.
+   *
+   * Each line goes only where the person could have said it themselves:
+   * `#dmWith` answers to `mayOpenDm`, so a note taken off a colleague's
+   * agent, or handed to one that lives only in public, is on the board and
+   * nowhere else.
+   */
+  async #announceAssignment(
+    sessionId: string,
+    assigner: OfficePlayer,
+    before: BoardItemRef,
+    after: BoardItemRef,
+  ): Promise<void> {
+    try {
+      const actor = await this.#actorFor(assigner);
+      if (after.assignee) {
+        const channel = await this.#dmWith(actor, after.assignee.id);
+        if (channel) {
+          this.#deliverChannelChat(
+            sessionId,
+            assigner,
+            channel,
+            assignmentLine(after, after.assignee.name),
+            undefined,
+            assignmentBrief(after),
+          );
+        }
+      }
+      if (before.assignee) {
+        const channel = await this.#dmWith(actor, before.assignee.id);
+        if (channel) {
+          this.#deliverChannelChat(
+            sessionId,
+            assigner,
+            channel,
+            handoverLine(after, before.assignee.name, after.assignee?.name ?? null),
+          );
+        }
+      }
+    } catch (error: unknown) {
+      logger.error('[office] could not say who a board note went to', error);
+    }
+  }
+
+  /**
+   * The DM between a person and an agent of this office, opened if need be,
+   * with its members — or null when `mayOpenDm` would refuse them the same
+   * from the roster: not the agent's owner, or an agent without the `dm`
+   * scope. The office never opens a door for somebody that it would not let
+   * them open themselves.
+   */
+  async #dmWith(actor: ChannelActor, agentId: string) {
+    const db = getDb();
+    const agent = await findAgentById(db, agentId);
+    if (!agent || agent.workspaceId !== this.#workspaceId || agent.revokedAt !== null) return null;
+    const subject: ChannelSubject = {
+      id: agent.id,
+      kind: 'agent',
+      ownerUserId: agent.ownerUserId,
+      scopes: agent.scopes,
+    };
+    if (!mayOpenDm(actor, subject)) return null;
+    const { id } = await openDm(db, {
+      workspaceId: this.#workspaceId,
+      openerId: actor.userId,
+      other: { id: agent.id, kind: 'agent' },
+    });
+    if (!this.#channels.has(id)) await this.#refreshChannels();
+    return this.#channels.get(id) ?? null;
+  }
+
+  /**
+   * Keep what an agent says it is on, and move its note along.
+   *
+   * The note is the one the harness named, else the newest handed to this
+   * agent that no task has taken yet — an owner's `!task` names none. A
+   * note newly taken to a branch goes to "in progress"; one whose pull
+   * request merged goes to "done". A note nobody handed over is left as it
+   * is, except that a task naming it takes it. A note handed to *another*
+   * agent is never this task's, whatever the harness says: the task is kept
+   * in the ledger with no note, and that agent's card is left alone. The
+   * board is sent again when anything of this shows on it.
+   */
+  async #ledgerTask(agent: AgentIdentity, task: AgentTask | null): Promise<void> {
+    try {
+      const db = getDb();
+      if (task === null) {
+        const ended = await endAgentTasks(db, this.#workspaceId, agent.id);
+        if (ended.length > 0) await this.#refreshBoard();
+        return;
+      }
+      const item = noteForTask(
+        task.item
+          ? await findBoardItemByNumber(db, this.#workspaceId, task.item)
+          : await findUnlinkedItemForAgent(db, this.#workspaceId, agent.id),
+        agent.id,
+      );
+      const heard = await noteAgentTask(db, {
+        workspaceId: this.#workspaceId,
+        agentId: agent.id,
+        task,
+        boardItemId: item?.id ?? null,
+      });
+      const linked = item ? heard.record.item?.id === item.id : false;
+      if (item) {
+        const status = boardStatusAfterTask(item, { linked: heard.linked, merged: heard.merged });
+        const claim = heard.linked && item.assignee === null ? { assigneeAgentId: agent.id } : {};
+        if (status || claim.assigneeAgentId) {
+          await updateBoardItem(db, {
+            workspaceId: this.#workspaceId,
+            itemId: item.id,
+            ...(status ? { status } : {}),
+            ...claim,
+          });
+        }
+      }
+      if (heard.created || heard.linked || heard.merged || linked) await this.#refreshBoard();
+    } catch (error: unknown) {
+      logger.error('[office] could not keep the agent task', error);
+    }
   }
 
   async #onBoardDelete(client: Client, payload: BoardDeletePayload): Promise<void> {
@@ -2007,6 +2186,8 @@ export class OfficeRoom extends Room<OfficeState> {
     channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
     text: string,
     requestId?: string,
+    /** Attached to the line for every agent it wakes, in place of any `!command` in the text. */
+    brief?: AgentCommandCall,
   ): void {
     const sentAt = Date.now();
     this.#lastMessageAt.set(channel.id, sentAt);
@@ -2072,13 +2253,16 @@ export class OfficeRoom extends Room<OfficeState> {
         const reach = resolved.reached.get(listener.userId);
         const via = reach?.viaTeam;
         // Only to a member it woke: in a channel nothing else starts a turn.
-        const call =
-          woken && commandLine
-            ? commandCallFor(
-                commandLine,
-                commandReach(commandLine, namedReach, resolved.reached).get(listener.userId),
-              )
-            : undefined;
+        const call = !woken
+          ? undefined
+          : brief
+            ? brief
+            : commandLine
+              ? commandCallFor(
+                  commandLine,
+                  commandReach(commandLine, namedReach, resolved.reached).get(listener.userId),
+                )
+              : undefined;
         if (call) commandHeard = true;
         target.send(AgentServerMessage.ChannelChat, {
           channel: ref,
@@ -3001,10 +3185,14 @@ export class OfficeRoom extends Room<OfficeState> {
               repo: task.repo,
               branch: task.branch,
               ...(task.pr ? { pr: task.pr.number, prState: task.pr.state } : {}),
+              ...(task.item ? { item: task.item } : {}),
             }
           : { task: null },
       );
     }
+    // Every time, not only on a change: the ledger's "last seen" and a
+    // harness reconnecting with the same task both need to be heard.
+    void this.#ledgerTask(session.identity, task);
   }
 
   #onAgentLookAround(client: Client, payload: AgentLookAroundPayload): void {

@@ -52,6 +52,11 @@ channel while another answers a question by direct message.
   with `gh pr create`, and call `task_end` when it has merged or the work is
   abandoned — it removes the worktree only when nothing on it would be lost.
   Questions, reading code and conversation need no task.
+- **A note from the board names its number.** When a line hands you a note
+  from the office board (`board note #12 …`), pass `item: 12` to `task_begin`
+  and the board follows your branch: the note moves to *in progress* as you
+  begin and to *done* when the pull request merges. Report in the
+  conversation you were handed it in.
 
 ## When a team is addressed
 

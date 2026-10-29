@@ -109,6 +109,12 @@ const TOOLS = [
       properties: {
         repo: { type: 'string', description: 'A checkout under REPOS/, by name.' },
         title: { type: 'string', description: 'What the task is, in a few words. Becomes the branch name.' },
+        item: {
+          type: 'integer',
+          description:
+            'The office board note this task is for, by its number, when you were handed one ("board note #12"). ' +
+            'The board then follows your branch: the note moves to in progress now and to done when the pull request merges.',
+        },
       },
       required: ['repo', 'title'],
       additionalProperties: false,

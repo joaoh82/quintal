@@ -6,6 +6,7 @@ import {
   BOARD_TITLE_MAX_LENGTH,
   boardStatusLabel,
   mayDeleteBoardItem,
+  mayAssignBoardItem,
   mayWriteBoard,
   type BoardAgentRef,
   type BoardColor,
@@ -23,6 +24,7 @@ import {
   columnsOf,
   matchesFilter,
   nextStatus,
+  taskBadgeOf,
   wallOf,
   type BoardView,
 } from './board';
@@ -317,7 +319,10 @@ function NoteCard({ item, now, selected, online, onOpen }: NoteProps) {
       </span>
       <span className="mt-0.5 block text-xs leading-snug font-medium">{item.title}</span>
       <Labels labels={item.labels} />
-      <Assignee item={item} online={online} />
+      <span className="flex items-end gap-2">
+        <Assignee item={item} online={online} />
+        <TaskBadge item={item} />
+      </span>
     </button>
   );
 }
@@ -342,7 +347,9 @@ function PostIt({ item, now, selected, online, onOpen }: NoteProps) {
       />
       <span className="flex items-baseline font-mono text-lg font-semibold">
         #{item.number}
-        {item.status === 'in_progress' ? (
+        {taskBadgeOf(item) ? (
+          <TaskBadge item={item} />
+        ) : item.status === 'in_progress' ? (
           <span className="ml-auto rounded bg-black/15 px-1 text-[9px] font-normal tracking-wide uppercase">
             in progress
           </span>
@@ -366,6 +373,25 @@ function Labels({ labels }: { labels: string[] }) {
           {label}
         </span>
       ))}
+    </span>
+  );
+}
+
+function TaskBadge({ item }: { item: BoardItemRef }) {
+  const badge = taskBadgeOf(item);
+  if (!badge || !item.task) return null;
+  const tone =
+    badge === 'in review'
+      ? 'bg-sky-700 text-white'
+      : badge === 'merged'
+        ? 'bg-emerald-700 text-white'
+        : badge === 'closed'
+          ? 'bg-black/30 text-white'
+          : 'bg-black/15';
+  const title = item.task.pr ? `${item.task.branch} · PR #${item.task.pr.number}` : item.task.branch;
+  return (
+    <span className={`ml-auto rounded px-1 text-[9px] font-normal tracking-wide uppercase ${tone}`} title={title}>
+      {badge}
     </span>
   );
 }
@@ -429,6 +455,12 @@ function NoteDrawer({ item, board, canWrite, online, onClose, onMessageAgent }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, itemVersion]);
   const editing = canWrite;
+  // Only your own agents are on offer: handing a note to somebody else's is
+  // theirs to do. Whoever has it now stays listed, greyed, so the select can
+  // show it and you can still take the note off them.
+  const assignable = board.agents.filter(
+    (agent: BoardAgentRef) => mayAssignBoardItem(board.you, agent) || agent.id === item?.assignee?.id,
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(item));
   const canDelete = item !== null && mayDeleteBoardItem(board.you, item);
   const moveTo = item ? nextStatus(item.status) : null;
@@ -540,8 +572,13 @@ function NoteDrawer({ item, board, canWrite, online, onClose, onMessageAgent }: 
               <option value="" className="bg-[#10131a]">
                 nobody yet
               </option>
-              {board.agents.map((agent: BoardAgentRef) => (
-                <option key={agent.id} value={agent.id} className="bg-[#10131a]">
+              {assignable.map((agent: BoardAgentRef) => (
+                <option
+                  key={agent.id}
+                  value={agent.id}
+                  disabled={!mayAssignBoardItem(board.you, agent)}
+                  className="bg-[#10131a]"
+                >
                   {AGENT_GLYPH} {agent.name}
                   {online.has(agent.id) ? '' : ' (away)'}
                   {agent.ownerName ? ` · ${agent.ownerName}'s` : ''}
@@ -581,6 +618,27 @@ function NoteDrawer({ item, board, canWrite, online, onClose, onMessageAgent }: 
             ))}
           </div>
         </fieldset>
+
+        {item?.task ? (
+          <div className="flex flex-col gap-0.5 text-[11px] text-white/70">
+            <span className="text-[10px] text-white/50">
+              {item.task.active ? 'Being worked on' : 'Was worked on'} by {item.task.agent.name}
+            </span>
+            <span className="font-mono text-white/80">
+              {item.task.repo} · {item.task.branch}
+            </span>
+            {item.task.pr ? (
+              <a
+                href={item.task.pr.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-300 underline-offset-2 hover:underline"
+              >
+                PR #{item.task.pr.number} · {item.task.pr.state}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
 
         {item?.assignee ? (
           <button

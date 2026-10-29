@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, notExists, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import {
@@ -8,13 +8,15 @@ import {
   type BoardColor,
   type BoardCreateInput,
   type BoardItemRef,
+  type BoardItemTask,
   type BoardStatus,
   type BoardUpdateInput,
   normaliseBoardLabels,
 } from '../board.js';
 import { displayName } from '../identity.js';
+import { taskLinksForBoard } from './agent-tasks.js';
 import type { Database } from './client.js';
-import { agents, boardItems, users, workspaces } from './schema.js';
+import { agentTasks, agents, boardItems, users, workspaces } from './schema.js';
 
 /**
  * The office board's rows.
@@ -172,13 +174,10 @@ function labelsOf(stored: string): string[] {
   }
 }
 
-function toRef({
-  row,
-  assigneeName,
-  creatorUserName,
-  creatorUserPubkey,
-  creatorAgentName,
-}: ItemRow): BoardItemRef {
+function toRef(
+  { row, assigneeName, creatorUserName, creatorUserPubkey, creatorAgentName }: ItemRow,
+  task: BoardItemTask | null,
+): BoardItemRef {
   return {
     id: row.id,
     number: row.number,
@@ -202,18 +201,27 @@ function toRef({
           : null,
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
+    task,
   };
 }
 
-/** Every note on an office's board, newest first. */
+/** Every note on an office's board, newest first, each with the task it went to. */
 export async function listBoardItemsForWorkspace(
   db: Database,
   workspaceId: string,
 ): Promise<BoardItemRef[]> {
-  const rows = await selectItems(db)
-    .where(eq(boardItems.workspaceId, workspaceId))
-    .orderBy(desc(boardItems.number));
-  return rows.map(toRef);
+  const [rows, links] = await Promise.all([
+    selectItems(db).where(eq(boardItems.workspaceId, workspaceId)).orderBy(desc(boardItems.number)),
+    taskLinksForBoard(db, workspaceId),
+  ]);
+  return rows.map((row) => toRef(row, links.get(row.row.id) ?? null));
+}
+
+async function oneItem(db: Database, workspaceId: string, rows: ItemRow[]): Promise<BoardItemRef | null> {
+  const row = rows[0];
+  if (!row) return null;
+  const links = await taskLinksForBoard(db, workspaceId);
+  return toRef(row, links.get(row.row.id) ?? null);
 }
 
 export async function getBoardItem(
@@ -224,7 +232,7 @@ export async function getBoardItem(
   const rows = await selectItems(db)
     .where(and(eq(boardItems.id, itemId), eq(boardItems.workspaceId, workspaceId)))
     .limit(1);
-  return rows[0] ? toRef(rows[0]) : null;
+  return oneItem(db, workspaceId, rows);
 }
 
 /** A note by its number, as people say it. */
@@ -236,7 +244,32 @@ export async function findBoardItemByNumber(
   const rows = await selectItems(db)
     .where(and(eq(boardItems.workspaceId, workspaceId), eq(boardItems.number, number)))
     .limit(1);
-  return rows[0] ? toRef(rows[0]) : null;
+  return oneItem(db, workspaceId, rows);
+}
+
+/**
+ * The note a task is most likely for when the harness named none: the
+ * newest note handed to this agent that is not done and that no task has
+ * been linked to yet. An owner's `!task` says no number, and this is how the
+ * board still follows it.
+ */
+export async function findUnlinkedItemForAgent(
+  db: Database,
+  workspaceId: string,
+  agentId: string,
+): Promise<BoardItemRef | null> {
+  const rows = await selectItems(db)
+    .where(
+      and(
+        eq(boardItems.workspaceId, workspaceId),
+        eq(boardItems.assigneeAgentId, agentId),
+        ne(boardItems.status, 'done'),
+        notExists(db.select({ id: agentTasks.id }).from(agentTasks).where(eq(agentTasks.boardItemId, boardItems.id))),
+      ),
+    )
+    .orderBy(desc(boardItems.number))
+    .limit(1);
+  return oneItem(db, workspaceId, rows);
 }
 
 /** The agents a note could be for: every live one in the office, by name. */

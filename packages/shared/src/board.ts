@@ -1,3 +1,4 @@
+import type { AgentTaskPullRequest } from './agent-task.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -58,6 +59,20 @@ export interface BoardAuthorRef {
 }
 
 /** An item as a client sees it. */
+/**
+ * The task an agent is on, or was on, for a note: the ledger's latest row
+ * that names it. What the card's "in review" badge and the drawer's branch
+ * line are drawn from.
+ */
+export interface BoardItemTask {
+  agent: { id: string; name: string };
+  repo: string;
+  branch: string;
+  pr: AgentTaskPullRequest | null;
+  /** True while the harness still says it is on it. */
+  active: boolean;
+}
+
 export interface BoardItemRef {
   id: string;
   /** `#12`: the office's own count, never reused. */
@@ -72,6 +87,8 @@ export interface BoardItemRef {
   createdBy: BoardAuthorRef | null;
   createdAt: number;
   updatedAt: number;
+  /** The branch and pull request an agent took it to, if any. */
+  task: BoardItemTask | null;
 }
 
 /** An agent an item could be for, online or not. */
@@ -231,6 +248,37 @@ export function parseBoardUpdate(value: unknown): BoardUpdateInput | null {
 /** Any member may write on the board. A guest reads it on the way through. */
 export function mayWriteBoard(actor: Pick<ChannelActor, 'role'>): boolean {
   return actor.role !== null;
+}
+
+/**
+ * May this person hand a note to this agent?
+ *
+ * **Its owner, and nobody else** — the rule for messaging it (`mayOpenDm`)
+ * and for pulling it into a channel, for the same reason: a note handed over
+ * is a request the agent reads as being asked, and it acts as its owner, on
+ * its owner's machine. A colleague who could hand my agent work could put
+ * instructions in front of it that I never see. Taking a note off an agent,
+ * or moving it between columns, is a board edit any member may make; only
+ * putting one in an agent's hands is the owner's.
+ *
+ * Admins are not excepted: the office's rule for agents is accountability,
+ * not rank. Anybody else asks the owner.
+ */
+export function mayAssignBoardItem(actor: ChannelActor, agent: Pick<BoardAgentRef, 'ownerUserId'>): boolean {
+  return actor.role !== null && agent.ownerUserId === actor.userId;
+}
+
+/**
+ * The note a task is for, if the task may have it. A task naming a note
+ * takes it when nobody has it, and keeps it when it is this agent's. A note
+ * handed to another agent is left alone — its card, its column and its
+ * branch stay that agent's, whatever a stale task book or a typo in another
+ * agent's `task_begin` says. Null when the task gets no note.
+ */
+export function noteForTask<T extends { assignee: { id: string } | null }>(item: T | null, agentId: string): T | null {
+  if (!item) return null;
+  if (item.assignee && item.assignee.id !== agentId) return null;
+  return item;
 }
 
 /**

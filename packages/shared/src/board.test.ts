@@ -4,9 +4,11 @@ import { describe, it } from 'node:test';
 import {
   BOARD_LABELS_MAX,
   BOARD_TITLE_MAX_LENGTH,
+  mayAssignBoardItem,
   mayDeleteBoardItem,
   mayWriteBoard,
   normaliseBoardLabels,
+  noteForTask,
   normaliseBoardTitle,
   parseBoardCreate,
   parseBoardUpdate,
@@ -131,5 +133,28 @@ describe('who may touch the board', () => {
     assert.equal(mayDeleteBoardItem(admin, byAgent), true);
     assert.equal(mayDeleteBoardItem(admin, orphan), true);
     assert.equal(mayDeleteBoardItem(guest, mine), false);
+  });
+
+  it("lets only an agent's owner hand it a note, admins included", () => {
+    const marvin = { ownerUserId: 'u1' };
+    assert.equal(mayAssignBoardItem(me, marvin), true);
+    assert.equal(mayAssignBoardItem(admin, marvin), false, 'an admin is not its owner');
+    assert.equal(mayAssignBoardItem({ userId: 'u1', role: null }, marvin), false, 'a guest, even as owner');
+  });
+});
+
+describe('which note a task is for', () => {
+  const free = { number: 1, assignee: null };
+  const mine = { number: 2, assignee: { id: 'a1' } };
+  const theirs = { number: 3, assignee: { id: 'a2' } };
+
+  it('takes a note nobody has, and keeps its own', () => {
+    assert.equal(noteForTask(free, 'a1'), free);
+    assert.equal(noteForTask(mine, 'a1'), mine);
+  });
+
+  it("leaves another agent's note alone", () => {
+    assert.equal(noteForTask(theirs, 'a1'), null);
+    assert.equal(noteForTask(null, 'a1'), null);
   });
 });

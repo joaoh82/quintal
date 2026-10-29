@@ -65,7 +65,7 @@ export interface BridgeHooks {
    * runner owns the book and the agent's working directory, so these go
    * through it — see `runner/tasks.ts`.
    */
-  taskBegin?: (repo: string, title: string) => Promise<unknown>;
+  taskBegin?: (repo: string, title: string, item?: number) => Promise<unknown>;
   taskEnd?: () => Promise<unknown>;
   taskStatus?: () => unknown;
   /**
@@ -279,7 +279,12 @@ async function dispatch(
 
     case 'task_begin': {
       if (!hooks.taskBegin) throw new Error('task_begin is answered by the harness running this agent, and this tool server was started without one');
-      return hooks.taskBegin(String(call.args.repo ?? ''), String(call.args.title ?? ''));
+      const item = call.args.item;
+      return hooks.taskBegin(
+        String(call.args.repo ?? ''),
+        String(call.args.title ?? ''),
+        typeof item === 'number' && Number.isSafeInteger(item) && item > 0 ? item : undefined,
+      );
     }
 
     case 'task_end': {

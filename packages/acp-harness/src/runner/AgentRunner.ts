@@ -490,7 +490,7 @@ export class AgentRunner {
         memorySet: (slug, content, expectedHash) =>
           this.#memorySetFromTool(worker, slug, content, expectedHash),
         workspaceInfo: () => this.workspaceInfo(),
-        taskBegin: (repo, title) => this.#taskBeginFromTool(repo, title),
+        taskBegin: (repo, title, item) => this.#taskBeginFromTool(repo, title, item),
         taskEnd: () => this.#taskEndFromTool(),
         taskStatus: () => this.#taskReport(),
         reloadTools: () => this.#reloadFromTool(worker),
@@ -1104,9 +1104,16 @@ export class AgentRunner {
   }
 
   /** Begin a task: the owner's `!task`, the model's `task_begin`, and anything else that may. */
-  beginTask(repo: string, title: string): Promise<Task> {
+  beginTask(repo: string, title: string, item?: number): Promise<Task> {
     return this.#serialised(async () => {
-      const task = await beginTask({ nest: nestRoot(), agent: this.name, reposDir: this.#reposDir(), repo, title });
+      const task = await beginTask({
+        nest: nestRoot(),
+        agent: this.name,
+        reposDir: this.#reposDir(),
+        repo,
+        title,
+        ...(item ? { item } : {}),
+      });
       this.#log('info', `task "${task.title}": ${task.branch} in ${task.worktree}`);
       this.#publishTask(task);
       this.#watchPullRequest();
@@ -1139,8 +1146,8 @@ export class AgentRunner {
   }
 
   /** `task_begin` from the model: the result tells it where to work from now on. */
-  async #taskBeginFromTool(repo: string, title: string): Promise<unknown> {
-    const task = await this.beginTask(repo, title);
+  async #taskBeginFromTool(repo: string, title: string, item?: number): Promise<unknown> {
+    const task = await this.beginTask(repo, title, item);
     return {
       ...taskReport(task),
       note:
@@ -1246,8 +1253,9 @@ export class AgentRunner {
       return;
     }
     try {
-      const task = await this.beginTask(parsed.repo, parsed.title);
-      this.#speak(`On it: ${task.branch}, cut from ${task.base}, in a worktree of REPOS/${task.repo}.`, scope);
+      const task = await this.beginTask(parsed.repo, parsed.title, parsed.item);
+      const forNote = task.item ? ` For board note #${task.item}.` : '';
+      this.#speak(`On it: ${task.branch}, cut from ${task.base}, in a worktree of REPOS/${task.repo}.${forNote}`, scope);
     } catch (error: unknown) {
       this.#speak(`I could not begin that task: ${describe(error)}`, scope);
     }

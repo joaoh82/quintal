@@ -9,6 +9,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 import { AGENT_SCOPES } from '../agent.js';
+import { AGENT_TASK_PR_STATES, AGENT_TASK_STATUSES } from '../agent-task.js';
 import { ACTIVITY_DETAIL_LEVELS } from '../activity.js';
 import { BOARD_COLORS, BOARD_STATUSES } from '../board.js';
 import { CONVERSATION_KINDS } from '../conversation.js';
@@ -931,3 +932,40 @@ export const agentActivity = sqliteTable('agent_activity', {
   y: integer('y'),
   snapshot: text('snapshot').notNull(),
 }, (table) => [index('agent_activity_conversation_idx').on(table.workspaceId, table.conversationId, table.startedAt)]);
+
+/**
+ * The office's own ledger of what its agents have worked on: one row per
+ * branch an agent cut, kept after the harness has moved on. `agent:task` is
+ * room state and goes with the socket; this is what the board's "in review"
+ * badge, the Pull requests tab and "what was Marvin on last week" are read
+ * from. A row names the board note it was for when the agent was handed one.
+ */
+export const agentTasks = sqliteTable(
+  'agent_tasks',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    boardItemId: text('board_item_id').references(() => boardItems.id, { onDelete: 'set null' }),
+    title: text('title').notNull(),
+    repo: text('repo').notNull(),
+    branch: text('branch').notNull(),
+    prNumber: integer('pr_number'),
+    prUrl: text('pr_url'),
+    prState: text('pr_state', { enum: AGENT_TASK_PR_STATES }),
+    status: text('status', { enum: AGENT_TASK_STATUSES }).notNull().default('active'),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
+    /** When the harness last said this task. */
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    uniqueIndex('agent_tasks_branch_idx').on(table.workspaceId, table.agentId, table.branch),
+    index('agent_tasks_workspace_idx').on(table.workspaceId),
+    index('agent_tasks_item_idx').on(table.boardItemId),
+  ],
+);
