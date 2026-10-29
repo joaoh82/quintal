@@ -91,6 +91,46 @@ describe('the ledger of agent tasks', () => {
     assert.equal(back.record.endedAt, null);
   });
 
+  it('reads the board its share of the ledger: every active line and the newest ended ones', async () => {
+    const { db, owner, marvin } = await office();
+    const on = (branch: string, now: number) =>
+      noteAgentTask(db, { workspaceId: owner.workspaceId, agentId: marvin.id, task: { ...TASK, branch }, now });
+    await on('first', 1000);
+    await endAgentTasks(db, owner.workspaceId, marvin.id, 2000);
+    await on('second', 3000);
+    await endAgentTasks(db, owner.workspaceId, marvin.id, 4000);
+    await on('third', 5000);
+    await endAgentTasks(db, owner.workspaceId, marvin.id, 6000);
+    await on('current', 7000);
+    await on('first', 8000); // said again: active once more, the most recently seen
+
+    const all = await listAgentTasksForWorkspace(db, owner.workspaceId);
+    assert.deepEqual(
+      all.map((row) => [row.branch, row.status]),
+      [
+        ['first', 'active'],
+        ['current', 'active'],
+        ['third', 'ended'],
+        ['second', 'ended'],
+      ],
+    );
+
+    const sent = await listAgentTasksForWorkspace(db, owner.workspaceId, { endedMax: 1 });
+    assert.deepEqual(
+      sent.map((row) => [row.branch, row.status]),
+      [
+        ['first', 'active'],
+        ['current', 'active'],
+        ['third', 'ended'],
+      ],
+      'both active lines, and only the newest ended one',
+    );
+    assert.deepEqual(
+      (await listAgentTasksForWorkspace(db, owner.workspaceId, { endedMax: 0 })).map((row) => row.branch),
+      ['first', 'current'],
+    );
+  });
+
   it('links a task to the note it began for, and keeps that note afterwards', async () => {
     const { db, owner, marvin, note } = await office();
     const chair = await note('Fix the chair', marvin.id);

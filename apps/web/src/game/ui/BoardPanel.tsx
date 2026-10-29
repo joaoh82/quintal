@@ -206,7 +206,13 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
             ) : tab === 'agents' ? (
               <AgentsTab rows={agentRows} now={now} onOpenNote={open} onMessage={onMessageAgent} you={board.you.userId} />
             ) : tab === 'pulls' ? (
-              <PullsTab rows={pulls} onBranch={onBranch} now={now} onOpenNote={(id) => setDrawer({ kind: 'item', id })} />
+              <PullsTab
+                rows={pulls}
+                onBranch={onBranch}
+                now={now}
+                guest={board.you.role === null}
+                onOpenNote={(id) => setDrawer({ kind: 'item', id })}
+              />
             ) : board.items.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
                 <p className="text-sm text-white/70">Nothing on the board yet.</p>
@@ -395,16 +401,21 @@ function PullsTab({
   rows,
   onBranch,
   now,
+  guest,
   onOpenNote,
 }: {
   rows: BoardTaskRef[];
   onBranch: BoardTaskRef[];
   now: number;
+  /** A guest is not sent the ledger: say so rather than that nothing was heard. */
+  guest: boolean;
   onOpenNote: (itemId: string) => void;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {rows.length === 0 ? (
+      {guest ? (
+        <p className="p-6 text-xs text-white/40">The office's pull requests are for its members. Ask to be let in.</p>
+      ) : rows.length === 0 ? (
         <p className="p-6 text-xs text-white/40">
           No pull requests heard of yet. One appears here when an agent on a task opens one.
         </p>

@@ -34,6 +34,7 @@ import {
   AGENT_PARALLELISM_MAX,
   AGENT_REVOCATION_POLL_MS,
   AGENT_STATUS_MAX_LENGTH,
+  BOARD_LEDGER_ENDED_MAX,
   AgentMessage,
   AgentServerMessage,
   CHAT_LOG_LIMIT,
@@ -248,6 +249,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine } from './board-brief.js';
+import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -1728,17 +1730,18 @@ export class OfficeRoom extends Room<OfficeState> {
       const [items, agents, tasks] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
-        listAgentTasksForWorkspace(db, this.#workspaceId),
+        listAgentTasksForWorkspace(db, this.#workspaceId, { endedMax: BOARD_LEDGER_ENDED_MAX }),
       ]);
       if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
-      this.#boardAgents = agents;
+      // To the minute: an agent being heard from is not the board changing.
+      this.#boardAgents = boardAgentsOf(agents);
       this.#boardTasks = tasks;
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);
       return;
     }
-    const signature = JSON.stringify([this.#boardItems, this.#boardAgents, this.#boardTasks]);
+    const signature = boardSignatureOf(this.#boardView());
     if (signature === this.#boardSignature) return;
     this.#boardSignature = signature;
     for (const sessionId of this.state.players.keys()) void this.#sendBoard(sessionId);
@@ -1753,16 +1756,22 @@ export class OfficeRoom extends Room<OfficeState> {
     return actor.role;
   }
 
-  /** The board as this person sees it. Agents are not sent it: theirs is the gateway's business. */
+  #boardView(): BoardView {
+    return { items: this.#boardItems, agents: this.#boardAgents, tasks: this.#boardTasks };
+  }
+
+  /**
+   * The board as this person sees it. A guest gets the notes and the agents'
+   * names, not the ledger or the office's machines. Agents are not sent it:
+   * theirs is the gateway's business.
+   */
   async #sendBoard(sessionId: string): Promise<void> {
     const client = this.clients.getById(sessionId);
     const player = this.state.players.get(sessionId);
     if (!client || !player || this.#agents.has(sessionId)) return;
     const role = await this.#roleFor(sessionId, player);
     client.send(ServerMessage.Board, {
-      items: this.#boardItems as BoardItemRef[],
-      agents: this.#boardAgents as BoardAgentRef[],
-      tasks: this.#boardTasks as BoardTaskRef[],
+      ...boardForRole(this.#boardView(), role),
       you: { userId: player.userId, role },
     } satisfies BoardMessagePayload);
   }

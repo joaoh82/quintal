@@ -193,12 +193,37 @@ export async function endAgentTasks(
   return active.map((row) => toRecord({ ...row, row: { ...row.row, status: 'ended', endedAt: at, lastSeenAt: at } }));
 }
 
-/** Every task in an office's ledger, most recently seen first. */
-export async function listAgentTasksForWorkspace(db: Database, workspaceId: string): Promise<AgentTaskRecord[]> {
-  const rows = await selectRecords(db)
-    .where(eq(agentTasks.workspaceId, workspaceId))
-    .orderBy(desc(agentTasks.lastSeenAt));
-  return rows.map(toRecord);
+export interface ListAgentTasksOptions {
+  /**
+   * Send every active line, and at most this many ended ones, the most
+   * recently seen. Unset reads the whole ledger.
+   */
+  endedMax?: number;
+}
+
+/** An office's ledger, most recently seen first: all of it, or every active line and the newest ended ones. */
+export async function listAgentTasksForWorkspace(
+  db: Database,
+  workspaceId: string,
+  options: ListAgentTasksOptions = {},
+): Promise<AgentTaskRecord[]> {
+  const { endedMax } = options;
+  if (endedMax === undefined) {
+    const rows = await selectRecords(db)
+      .where(eq(agentTasks.workspaceId, workspaceId))
+      .orderBy(desc(agentTasks.lastSeenAt));
+    return rows.map(toRecord);
+  }
+  const [active, ended] = await Promise.all([
+    selectRecords(db)
+      .where(and(eq(agentTasks.workspaceId, workspaceId), eq(agentTasks.status, 'active')))
+      .orderBy(desc(agentTasks.lastSeenAt)),
+    selectRecords(db)
+      .where(and(eq(agentTasks.workspaceId, workspaceId), eq(agentTasks.status, 'ended')))
+      .orderBy(desc(agentTasks.lastSeenAt))
+      .limit(Math.max(0, endedMax)),
+  ]);
+  return [...active, ...ended].map(toRecord).sort((a, b) => b.lastSeenAt - a.lastSeenAt);
 }
 
 /**
