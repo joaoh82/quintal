@@ -391,6 +391,9 @@ export interface AgentReadyPayload {
      */
     chatRadiusTiles: number;
     walkUpRadiusTiles: number;
+    /** Board writes allowed per window, and the window. Past it: `rate_limited` with `retryAfterMs`. */
+    boardWritesPerWindow: number;
+    boardWriteWindowMs: number;
     /**
      * How many conversations this agent may answer at once: its own setting,
      * or the office's default. A harness sizes its pool of runtime processes
@@ -664,6 +667,15 @@ export interface MemorySetResult {
 
 /** Most messages `messages_get` will return, however many are asked for. */
 export const MESSAGES_GET_MAX = 50;
+
+/**
+ * How many notes an agent may write or change on the board in one window.
+ * Enough for a person asking for a handful of tickets at once; not enough
+ * for a runtime in a loop to paper the office before anybody can stop it.
+ * Every write re-reads the board and sends it to everybody in the room.
+ */
+export const AGENT_BOARD_WRITES_PER_WINDOW = 6;
+export const AGENT_BOARD_WRITE_WINDOW_MS = 10_000;
 
 /** How often the server sends a heartbeat to a connected agent. */
 export const AGENT_HEARTBEAT_MS = 15_000;

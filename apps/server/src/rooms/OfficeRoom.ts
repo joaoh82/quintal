@@ -24,6 +24,8 @@ import {
 import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
 import { ErrorCode, Room, ServerError, type Client, logger } from '@colyseus/core';
 import {
+  AGENT_BOARD_WRITE_WINDOW_MS,
+  AGENT_BOARD_WRITES_PER_WINDOW,
   AGENT_CHAT_INTERVAL_MS,
   AGENT_CORE_MEMORY_MAX_BYTES,
   AGENT_HEARTBEAT_MS,
@@ -356,6 +358,13 @@ export class OfficeRoom extends Room<OfficeState> {
    * must not find their next sentence refused for it.
    */
   readonly #readLimiter = new ChatRateLimiter(READ_RATE_LIMIT, READ_RATE_WINDOW_MS);
+  /**
+   * Board writes by agents, per agent, over a sliding window. Speech and
+   * movement are paced per verb; the board is paced as a whole, because a
+   * note written and a note changed cost the room the same: a re-read of
+   * the board and a copy to everybody in it.
+   */
+  readonly #boardPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -948,6 +957,8 @@ export class OfficeRoom extends Room<OfficeState> {
         coreMemoryMaxBytes: AGENT_CORE_MEMORY_MAX_BYTES,
         chatRadiusTiles: this.#settings.chatRadiusTiles,
         walkUpRadiusTiles: this.#settings.walkUpRadiusTiles,
+        boardWritesPerWindow: AGENT_BOARD_WRITES_PER_WINDOW,
+        boardWriteWindowMs: AGENT_BOARD_WRITE_WINDOW_MS,
         // Its own number, or the office's. Resolved here so a harness holding
         // only its key learns it the same way a fleet-launched one does.
         parallelism: identity.maxSessions ?? this.#settings.agentParallelism,
@@ -3423,6 +3434,22 @@ export class OfficeRoom extends Room<OfficeState> {
     return { id: agent.id };
   }
 
+  /**
+   * One write's worth of the agent's board pace, or a refusal with how long
+   * to wait. Taken before the write, not after: a refused write costs the
+   * room nothing, and a harness that backs off on `retryAfterMs` writes the
+   * same notes a little later.
+   */
+  #agentBoardPaced(client: Client, session: AgentSession, requestId: unknown): boolean {
+    const now = Date.now();
+    if (this.#boardPace.tryConsume(session.identity.id, now)) return true;
+    const retryAfterMs = this.#boardPace.retryAfterSeconds(session.identity.id, now) * 1000;
+    const message = `Agents may write on the board ${AGENT_BOARD_WRITES_PER_WINDOW} times every ${AGENT_BOARD_WRITE_WINDOW_MS / 1000}s.`;
+    audit(session.identity.id, 'command.rejected', { code: 'rate_limited', message });
+    this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs });
+    return false;
+  }
+
   /** The line to say when a write put a note in another agent's hands; null otherwise. */
   #handoverFor(session: AgentSession, before: BoardItemRef | null, after: BoardItemRef): string | null {
     if (!after.assignee || after.assignee.id === session.identity.id) return null;
@@ -3481,6 +3508,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const session = this.#agentBoardSession(client, payload);
     if (!session) return;
     markSeen(session.identity.id);
+    if (!this.#agentBoardPaced(client, session, payload?.requestId)) return;
     const actor = await this.#agentBoardActor(client, session, payload?.requestId);
     if (!actor) return;
     const assignee = await this.#agentNamedOnBoard(client, session, actor, payload?.assignee, payload?.requestId);
@@ -3525,6 +3553,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const session = this.#agentBoardSession(client, payload);
     if (!session) return;
     markSeen(session.identity.id);
+    if (!this.#agentBoardPaced(client, session, payload?.requestId)) return;
     const actor = await this.#agentBoardActor(client, session, payload?.requestId);
     if (!actor) return;
     const number = Number(payload?.number);
@@ -3579,7 +3608,7 @@ export class OfficeRoom extends Room<OfficeState> {
   #agentBoardRefused(client: Client, requestId: unknown, error: unknown): void {
     if (error instanceof BoardItemError) {
       this.#replyError(client, requestId, {
-        code: error.reason === 'not_found' ? 'not_found' : 'invalid_payload',
+        code: error.reason === 'not_found' ? 'not_found' : error.reason === 'full' ? 'too_large' : 'invalid_payload',
         message: error.message,
       });
       return;

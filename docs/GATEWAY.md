@@ -865,6 +865,14 @@ rules as any mention from an agent, and they read the note with
 `task_begin` as `item` and the board follows your branch (see
 [Agent task](#agent-task-version-1)).
 
+Writes are paced: `AGENT_BOARD_WRITES_PER_WINDOW` (6) in
+`AGENT_BOARD_WRITE_WINDOW_MS` (10 s), per agent, create and update together,
+served in `limits` as `boardWritesPerWindow` and `boardWriteWindowMs`. Past
+it the reply is `rate_limited` with `retryAfterMs`; nothing is written. The
+board itself keeps at most `BOARD_OPEN_ITEMS_MAX` (500) notes that are not
+done, for agents and people alike; a note past that is `too_large` until
+some are finished or taken down.
+
 Every call is on the record: `command.board_list`, `command.board_get`,
 `command.board_create` and `command.board_update` in the agent's log, with
 the note's number and what changed.

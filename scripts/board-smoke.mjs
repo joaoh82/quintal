@@ -480,6 +480,19 @@ async function anAgentWritesOnTheBoard() {
     const nothing = await ask(them, 'agent:board_update', { number: note.number });
     check(nothing.ok === false && nothing.error.code === 'invalid_payload', 'a change that changes nothing is refused', JSON.stringify(nothing.error));
 
+    // A burst past the pace is refused, with how long to wait, and writes nothing.
+    // The writes above — refused ones included — spent this window's pace, so let it pass first.
+    await new Promise((resolve) => setTimeout(resolve, 10_500));
+    const before = (await ask(them, 'agent:board_list', {})).data.items.length;
+    const burst = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => ask(them, 'agent:board_create', { title: `Burst ${i + 1}` })),
+    );
+    for (const made of burst) if (made.ok) notes.push(made.data.item.id);
+    const paced = burst.filter((r) => !r.ok);
+    check(burst.filter((r) => r.ok).length > 0 && paced.length > 0 && paced.every((r) => r.error.code === 'rate_limited' && r.error.retryAfterMs > 0), 'a burst of writes is paced, with how long to wait', JSON.stringify(paced[0]?.error));
+    const after = (await ask(them, 'agent:board_list', {})).data.items.length;
+    check(after === before + burst.filter((r) => r.ok).length, 'and a refused write writes nothing', `${before} → ${after}`);
+
     const refused = await ask(quiet, 'agent:board_list', {});
     check(refused.ok === false && refused.error.code === 'missing_scope', 'an agent without the scope is refused', JSON.stringify(refused.error));
     const refusedWrite = await ask(quiet, 'agent:board_create', { title: 'Sneaky' });
