@@ -231,6 +231,17 @@ async function standingChangesMidSession() {
     const [refusedCreate, removed] = await Promise.all([them.next('error'), them.next('board')]);
     check(refusedCreate.code === 'unauthorised', 'removed mid-session, they are refused a pen', refusedCreate.message);
     check(removed.you?.role === null, 'and the board they are sent says guest', JSON.stringify(removed.you));
+    check(Array.isArray(removed.tasks) && removed.tasks.length === 0, 'a guest is not sent the ledger', JSON.stringify(removed.tasks));
+    check(
+      removed.agents.every((agent) => agent.hostLabel === null && agent.runtimeId === null && agent.modelId === null),
+      "nor the office's machines, runtimes or models",
+      JSON.stringify(removed.agents),
+    );
+    check(
+      removed.agents.every((agent) => agent.lastSeenAt === null || agent.lastSeenAt % 60_000 === 0),
+      'and last seen is to the minute',
+      JSON.stringify(removed.agents.map((agent) => agent.lastSeenAt)),
+    );
 
     me.room.send('board_delete', { itemId: plants.id });
     await me.next('board');
@@ -285,8 +296,11 @@ async function anAgentTakesANote() {
     const task = { title: 'fix the stapler', repo: 'office', branch, item: stapler.number };
     const moved = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.status === 'in_progress');
     them.room.send('agent:task', task);
-    const onBranch = noteOf(await moved, stapler.id);
+    const movedBoard = await moved;
+    const onBranch = noteOf(movedBoard, stapler.id);
     check(onBranch.task?.branch === branch && onBranch.task?.active === true, 'a task for the note moves it to in progress, on its branch', JSON.stringify(onBranch.task));
+    const ledgerLine = movedBoard.tasks?.find((t) => t.branch === branch);
+    check(ledgerLine?.agentId === agent.id && ledgerLine?.item?.number === stapler.number && ledgerLine?.status === 'active', 'and the board carries the ledger line', JSON.stringify(ledgerLine));
 
     const pr = { number: 7, url: 'https://github.com/acme/office/pull/7', state: 'open' };
     const reviewed = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.task?.pr?.state === 'open');
@@ -295,7 +309,9 @@ async function anAgentTakesANote() {
 
     const done = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.status === 'done');
     them.room.send('agent:task', { ...task, pr: { ...pr, state: 'merged' } });
-    check((noteOf(await done, stapler.id)).task?.pr?.state === 'merged', 'the merge moves it to done');
+    const doneBoard = await done;
+    check((noteOf(doneBoard, stapler.id)).task?.pr?.state === 'merged', 'the merge moves it to done');
+    check(doneBoard.tasks?.find((t) => t.branch === branch)?.pr?.state === 'merged', 'and the ledger line says merged');
 
     const over = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.task?.active === false);
     them.room.send('agent:task', null);
@@ -480,9 +496,20 @@ async function anAgentWritesOnTheBoard() {
     const nothing = await ask(them, 'agent:board_update', { number: note.number });
     check(nothing.ok === false && nothing.error.code === 'invalid_payload', 'a change that changes nothing is refused', JSON.stringify(nothing.error));
 
+    // An agent being heard from is not the board changing. The writes above
+    // were each followed by a board; from here nothing on it changes, while
+    // the office keeps hearing from this agent, and two refresh ticks pass.
+    // At most one board may arrive: the minute `lastSeenAt` is kept to may turn.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const boardsSeen = me.inbox.board.length;
+    for (let i = 0; i < 4; i += 1) {
+      await ask(them, 'agent:look_around', {});
+      await new Promise((resolve) => setTimeout(resolve, 5_250));
+    }
+    check(me.inbox.board.length - boardsSeen <= 1, 'an agent being heard from does not re-send everybody the board', `${me.inbox.board.length - boardsSeen} boards in 21s`);
+
     // A burst past the pace is refused, with how long to wait, and writes nothing.
-    // The writes above — refused ones included — spent this window's pace, so let it pass first.
-    await new Promise((resolve) => setTimeout(resolve, 10_500));
+    // The writes above — refused ones included — spent this window's pace, which has passed by now.
     const before = (await ask(them, 'agent:board_list', {})).data.items.length;
     const burst = await Promise.all(
       Array.from({ length: 8 }, (_, i) => ask(them, 'agent:board_create', { title: `Burst ${i + 1}` })),

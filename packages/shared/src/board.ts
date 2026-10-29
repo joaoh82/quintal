@@ -1,4 +1,4 @@
-import type { AgentTaskPullRequest } from './agent-task.js';
+import type { AgentTaskPullRequest, AgentTaskStatus } from './agent-task.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -42,6 +42,19 @@ export const BOARD_LABELS_MAX = 10;
  * down.
  */
 export const BOARD_OPEN_ITEMS_MAX = 500;
+
+/**
+ * How many ended ledger lines the board is sent, besides every active one.
+ * The office keeps the ledger forever; the board carries what fits a tab.
+ */
+export const BOARD_LEDGER_ENDED_MAX = 50;
+
+/**
+ * The grain of an agent's `lastSeenAt` on the board, in ms. The office hears
+ * from an agent on nearly every command it sends; the panel says "last seen
+ * 2h ago". Rounded, a busy agent does not make the board a changed board.
+ */
+export const BOARD_LAST_SEEN_GRAIN_MS = 60_000;
 
 export function isBoardStatus(value: unknown): value is BoardStatus {
   return typeof value === 'string' && (BOARD_STATUSES as readonly string[]).includes(value);
@@ -99,13 +112,53 @@ export interface BoardItemRef {
   task: BoardItemTask | null;
 }
 
-/** An agent an item could be for, online or not. */
+/**
+ * An agent of the office as the board knows it, online or not: whose it is,
+ * what its owner says it is, the status line it last left, when it was last
+ * heard from, and what it runs on. What it is doing *now* — where it stands,
+ * what it is on — is the roster's, live; the panel joins the two by id.
+ */
 export interface BoardAgentRef {
   /** `agents.id`. */
   id: string;
   name: string;
   ownerUserId: string;
   ownerName: string;
+  /** One line its owner wrote about what it does. */
+  description: string;
+  /** The status line it last left, kept across sessions. Empty for none. */
+  status: string;
+  /** When the office last heard from it, ms since epoch, to the minute; null for never. */
+  lastSeenAt: number | null;
+  /** The runtime the office told a host to launch it on, or null when the office does not define it. */
+  runtimeId: string | null;
+  /** The model it was told to use, by the runtime's own id; null for the runtime's default. */
+  modelId: string | null;
+  /** The machine it is assigned to, as its owner named it. Null to a guest, like `runtimeId` and `modelId`. */
+  hostLabel: string | null;
+}
+
+/**
+ * A line of the office's ledger: a task an agent was heard to be on, kept
+ * after it ends. The branch, its pull request as last heard, the note it was
+ * for, and when. The office keeps these forever; a ticketing integration
+ * syncs into them, never replaces them. The board is sent every active line
+ * and the last `BOARD_LEDGER_ENDED_MAX` ended ones, and a guest none.
+ */
+export interface BoardTaskRef {
+  id: string;
+  agentId: string;
+  agentName: string;
+  /** The board note it is for, if it was handed one: its id, number and title. */
+  item: { id: string; number: number; title: string } | null;
+  title: string;
+  repo: string;
+  branch: string;
+  pr: AgentTaskPullRequest | null;
+  status: AgentTaskStatus;
+  startedAt: number;
+  endedAt: number | null;
+  lastSeenAt: number;
 }
 
 /**
@@ -116,6 +169,8 @@ export interface BoardAgentRef {
 export interface BoardPayload {
   items: BoardItemRef[];
   agents: BoardAgentRef[];
+  /** The ledger, most recently heard first: every active line and the newest ended ones. Empty for a guest. */
+  tasks: BoardTaskRef[];
   you: { userId: string; role: MembershipRole | null };
 }
 

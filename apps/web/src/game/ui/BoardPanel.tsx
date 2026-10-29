@@ -12,22 +12,35 @@ import {
   type BoardColor,
   type BoardItemRef,
   type BoardStatus,
+  type BoardTaskRef,
+  type ChannelRef,
+  type MapZone,
   type RosterEntry,
 } from '@quintal/shared';
-import { Pin, Plus } from 'lucide-react';
+import { ExternalLink, GitPullRequest, Pin, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { Board } from '../useBoard';
+import { runtimeLines } from './agentRuntime';
 import {
   POSTIT_STYLES,
   ageLabel,
+  agentMatches,
+  agentRowsOf,
+  branchesWithoutPr,
   columnsOf,
   matchesFilter,
   nextStatus,
+  pullRequestMatches,
+  pullRequestRowsOf,
+  repoOfPrUrl,
   taskBadgeOf,
   wallOf,
+  type AgentRow,
+  type BoardTab,
   type BoardView,
 } from './board';
+import { formatElapsed } from './elapsed';
 import { useNow } from './useNow';
 
 interface BoardPanelProps {
@@ -38,6 +51,10 @@ interface BoardPanelProps {
   onClose: () => void;
   /** Open a DM with an agent, from a note it is for. */
   onMessageAgent: (agentId: string) => void;
+  /** Every zone on the map, to say where an agent is in words. */
+  zones: MapZone[];
+  /** The channels and DMs the viewer is in, to name where an agent is working. */
+  channels: ChannelRef[];
 }
 
 /** Glyph on every agent, everywhere. Matches the roster. */
@@ -55,7 +72,8 @@ type Drawer = { kind: 'new' } | { kind: 'item'; id: string } | null;
  * closes it. Everything it shows is the office's: a note is on the board
  * when the office says so, never a moment before.
  */
-export function BoardPanel({ board, roster, notice, onClose, onMessageAgent }: BoardPanelProps) {
+export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zones, channels }: BoardPanelProps) {
+  const [tab, setTab] = useState<BoardTab>('issues');
   const [view, setView] = useState<BoardView>('kanban');
   const [query, setQuery] = useState('');
   const [drawer, setDrawer] = useState<Drawer>(null);
@@ -72,6 +90,12 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent }: B
     [board.items, query],
   );
   const selected = drawer?.kind === 'item' ? (board.items.find((item) => item.id === drawer.id) ?? null) : null;
+  const agentRows = useMemo(
+    () => agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now).filter((row) => agentMatches(row, query)),
+    [board.agents, board.items, board.tasks, roster, zones, channels, now, query],
+  );
+  const pulls = useMemo(() => pullRequestRowsOf(board.tasks).filter((task) => pullRequestMatches(task, query)), [board.tasks, query]);
+  const onBranch = useMemo(() => branchesWithoutPr(board.tasks), [board.tasks]);
 
   // A note taken down while its drawer was open is a drawer with nothing in it.
   useEffect(() => {
@@ -119,27 +143,43 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent }: B
             <Pin size={13} className="text-amber-300" aria-hidden />
             Office board
           </h2>
-          <nav className="flex items-center gap-1 text-xs" aria-label="Board tabs">
-            <Tab selected>Issues</Tab>
+          <nav className="flex items-center gap-1 text-xs" role="tablist" aria-label="Board tabs">
+            <Tab selected={tab === 'issues'} onClick={() => setTab('issues')}>
+              Issues
+            </Tab>
+            <Tab selected={tab === 'agents'} onClick={() => setTab('agents')}>
+              Agents
+            </Tab>
+            <Tab selected={tab === 'pulls'} onClick={() => setTab('pulls')}>
+              Pull requests
+            </Tab>
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <div className="flex rounded border border-white/15 text-[11px]">
-              <ViewButton selected={view === 'kanban'} onClick={() => setView('kanban')}>
-                Columns
-              </ViewButton>
-              <ViewButton selected={view === 'postits'} onClick={() => setView('postits')}>
-                Post-its
-              </ViewButton>
-            </div>
+            {tab === 'issues' ? (
+              <div className="flex rounded border border-white/15 text-[11px]">
+                <ViewButton selected={view === 'kanban'} onClick={() => setView('kanban')}>
+                  Columns
+                </ViewButton>
+                <ViewButton selected={view === 'postits'} onClick={() => setView('postits')}>
+                  Post-its
+                </ViewButton>
+              </div>
+            ) : null}
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter: #12, a word, a label, an agent"
-              aria-label="Filter notes"
+              placeholder={
+                tab === 'issues'
+                  ? 'Filter: #12, a word, a label, an agent'
+                  : tab === 'agents'
+                    ? 'Filter: a name, a status, a branch'
+                    : 'Filter: #12, a branch, an agent, a state'
+              }
+              aria-label="Filter"
               className="w-60 rounded border border-white/15 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/30 focus:border-white/40 focus:outline-none"
             />
-            {canWrite ? (
+            {canWrite && tab === 'issues' ? (
               <button
                 type="button"
                 onClick={() => setDrawer({ kind: 'new' })}
@@ -163,6 +203,16 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent }: B
           <section className="flex min-w-0 flex-1 flex-col">
             {!board.loaded ? (
               <p className="p-6 text-xs text-white/40">Reading the board…</p>
+            ) : tab === 'agents' ? (
+              <AgentsTab rows={agentRows} now={now} onOpenNote={open} onMessage={onMessageAgent} you={board.you.userId} />
+            ) : tab === 'pulls' ? (
+              <PullsTab
+                rows={pulls}
+                onBranch={onBranch}
+                now={now}
+                guest={board.you.role === null}
+                onOpenNote={(id) => setDrawer({ kind: 'item', id })}
+              />
             ) : board.items.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
                 <p className="text-sm text-white/70">Nothing on the board yet.</p>
@@ -201,15 +251,283 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent }: B
   );
 }
 
-function Tab({ selected, children }: { selected: boolean; children: React.ReactNode }) {
+function Tab({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <span
+    <button
+      type="button"
       role="tab"
       aria-selected={selected}
-      className={`rounded px-2 py-0.5 ${selected ? 'bg-white/12 text-white' : 'text-white/55'}`}
+      onClick={onClick}
+      className={`rounded px-2 py-0.5 ${selected ? 'bg-white/12 text-white' : 'text-white/55 hover:bg-white/8 hover:text-white'}`}
     >
       {children}
-    </span>
+    </button>
+  );
+}
+
+/** The state of a pull request as a chip, in the colour the board uses for the same word on a note. */
+function PrState({ state }: { state: 'open' | 'merged' | 'closed' }) {
+  const tone =
+    state === 'merged'
+      ? 'border-purple-300/40 text-purple-200'
+      : state === 'open'
+        ? 'border-emerald-300/40 text-emerald-200'
+        : 'border-white/25 text-white/55';
+  return <span className={`rounded border px-1 font-mono text-[9px] tracking-wide uppercase ${tone}`}>{state}</span>;
+}
+
+/**
+ * Every agent of the office, here or not. The office's rows say whose each
+ * is and what it last left; the roster says what the ones here are doing
+ * now. An agent that is away is still a row — its notes are still its
+ * notes — so nobody wonders where the work went when it disconnected.
+ */
+function AgentsTab({
+  rows,
+  now,
+  onOpenNote,
+  onMessage,
+  you,
+}: {
+  rows: AgentRow[];
+  now: number;
+  onOpenNote: (item: BoardItemRef) => void;
+  onMessage: (agentId: string) => void;
+  you: string;
+}) {
+  if (rows.length === 0) {
+    return <p className="p-6 text-xs text-white/40">No agents in this office yet, or none match the filter. Agents are made in Settings.</p>;
+  }
+  return (
+    <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
+      {rows.map((row) => {
+        const running = row.here ? runtimeLines(row.here) : null;
+        const away = row.here === null;
+        return (
+          <li key={row.agent.id} className={`grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4 px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5">
+                <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${away ? 'bg-white/25' : 'bg-emerald-400'}`} aria-hidden />
+                <span className={away ? 'text-sky-200/70' : 'text-sky-300'}>
+                  {AGENT_GLYPH} {row.agent.name}
+                </span>
+                <span className="truncate text-[10px] text-white/40">{row.agent.ownerName ? `${row.agent.ownerName}'s` : ''}</span>
+              </p>
+              {row.agent.description ? <p className="mt-0.5 truncate text-[11px] text-white/45">{row.agent.description}</p> : null}
+              <p className="mt-0.5 font-mono text-[10px] text-white/35">
+                {away
+                  ? row.lastSeenAt === null
+                    ? 'never connected'
+                    : `away · last seen ${ageLabel(row.lastSeenAt, now)}`
+                  : row.workingSince > 0
+                    ? `working for ${formatElapsed(now - row.workingSince)}`
+                    : 'here, idle'}
+              </p>
+              {running ? (
+                <p className="font-mono text-[10px] text-white/35">
+                  {running.runtime} · {running.model}
+                </p>
+              ) : row.agent.runtimeId ? (
+                <p className="font-mono text-[10px] text-white/35">
+                  {row.agent.runtimeId} · {row.agent.modelId ?? 'default'}
+                  {row.agent.hostLabel ? ` · ${row.agent.hostLabel}` : ''}
+                </p>
+              ) : null}
+            </div>
+            <div className="min-w-0">
+              {row.status ? <p className="truncate font-mono text-[11px] text-white/70">{row.status}</p> : <p className="text-white/30">—</p>}
+              {row.where ? <p className="mt-0.5 truncate text-[10px] text-white/40">in {row.where}</p> : null}
+            </div>
+            <div className="min-w-0">
+              {row.task ? (
+                <p className="truncate">
+                  {row.task.title}
+                  {' · '}
+                  <span className="font-mono text-white/60">{row.task.branch}</span>
+                  {row.task.pr ? (
+                    <>
+                      {' '}
+                      <a href={row.task.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+                        PR #{row.task.pr.number}
+                      </a>{' '}
+                      <PrState state={row.task.pr.state} />
+                    </>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="text-white/30">on no task</p>
+              )}
+              {row.notes.length > 0 ? (
+                <p className="mt-0.5 flex flex-wrap gap-1">
+                  {row.notes.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => onOpenNote(note)}
+                      title={note.title}
+                      className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+                    >
+                      #{note.number}
+                    </button>
+                  ))}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex items-start justify-end">
+              {row.agent.ownerUserId === you ? (
+                <button
+                  type="button"
+                  onClick={() => onMessage(row.agent.id)}
+                  className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
+                >
+                  Message
+                </button>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * The ledger's lines with a pull request: what the office last heard about
+ * each, from the harness that opened it. Nothing here is fetched from
+ * GitHub yet — the state and the time are the ledger's, and the card on the
+ * number says so. "Open" goes to the pull request itself.
+ */
+function PullsTab({
+  rows,
+  onBranch,
+  now,
+  guest,
+  onOpenNote,
+}: {
+  rows: BoardTaskRef[];
+  onBranch: BoardTaskRef[];
+  now: number;
+  /** A guest is not sent the ledger: say so rather than that nothing was heard. */
+  guest: boolean;
+  onOpenNote: (itemId: string) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {guest ? (
+        <p className="p-6 text-xs text-white/40">The office's pull requests are for its members. Ask to be let in.</p>
+      ) : rows.length === 0 ? (
+        <p className="p-6 text-xs text-white/40">
+          No pull requests heard of yet. One appears here when an agent on a task opens one.
+        </p>
+      ) : (
+        <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
+          {rows.map((task) => (
+            <li key={task.id} className="grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4 px-4 py-2 text-xs">
+              <PrNumber task={task} now={now} />
+              <div className="min-w-0">
+                <p className="truncate text-white/85">{task.title}</p>
+                <p className="truncate font-mono text-[10px] text-white/45">
+                  {task.repo} · {task.branch}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sky-300/90">
+                  {AGENT_GLYPH} {task.agentName}
+                </p>
+                {task.item ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenNote(task.item!.id)}
+                    className="truncate text-[10px] text-amber-200/90 underline-offset-2 hover:underline"
+                    title={task.item.title}
+                  >
+                    note #{task.item.number} {task.item.title}
+                  </button>
+                ) : (
+                  <p className="text-[10px] text-white/30">no note</p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                <PrState state={task.pr!.state} />
+                <span className="font-mono text-[10px] text-white/35">heard {ageLabel(task.lastSeenAt, now)}</span>
+              </div>
+              <a
+                href={task.pr!.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+              >
+                Open <ExternalLink size={11} aria-hidden />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {onBranch.length > 0 ? (
+        <p className="border-t border-white/10 px-4 py-1.5 text-[11px] text-white/40">
+          {onBranch.length === 1
+            ? `1 task on a branch with no pull request yet: ${onBranch[0]!.agentName} on ${onBranch[0]!.branch}.`
+            : `${onBranch.length} tasks on a branch with no pull request yet.`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The number, with a card on hover: what the ledger knows. A later change
+ * puts GitHub's own facts here — checks, mergeability, the review — and
+ * actions beside them. Until then the card says plainly where its facts are
+ * from, so a state read here is never mistaken for GitHub's.
+ */
+function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
+  const pr = task.pr!;
+  return (
+    <div className="group relative">
+      <a
+        href={pr.url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
+        aria-describedby={`pr-card-${task.id}`}
+      >
+        <GitPullRequest size={12} aria-hidden />#{pr.number}
+      </a>
+      <div
+        id={`pr-card-${task.id}`}
+        role="tooltip"
+        className="pointer-events-none absolute top-full left-0 z-10 mt-1 hidden w-72 rounded-md border border-white/15 bg-[#161a24] p-3 text-[11px] text-white/80 shadow-xl group-hover:block group-focus-within:block"
+      >
+        <p className="flex items-center gap-2">
+          <span className="font-mono text-sky-200">#{pr.number}</span>
+          <PrState state={pr.state} />
+          <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
+        </p>
+        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+          <dt className="text-white/40">task</dt>
+          <dd className="truncate">{task.title}</dd>
+          <dt className="text-white/40">branch</dt>
+          <dd className="truncate font-mono text-white/70">{task.branch}</dd>
+          <dt className="text-white/40">by</dt>
+          <dd>
+            {AGENT_GLYPH} {task.agentName}
+          </dd>
+          <dt className="text-white/40">note</dt>
+          <dd className="truncate">{task.item ? `#${task.item.number} ${task.item.title}` : 'none'}</dd>
+          <dt className="text-white/40">started</dt>
+          <dd>{ageLabel(task.startedAt, now)}</dd>
+          <dt className="text-white/40">last heard</dt>
+          <dd>{ageLabel(task.lastSeenAt, now)}</dd>
+          {task.endedAt !== null ? (
+            <>
+              <dt className="text-white/40">ended</dt>
+              <dd>{ageLabel(task.endedAt, now)}</dd>
+            </>
+          ) : null}
+        </dl>
+        <p className="mt-2 text-[10px] text-white/40">As the agent's harness last reported it. Not checked with GitHub.</p>
+      </div>
+    </div>
   );
 }
 

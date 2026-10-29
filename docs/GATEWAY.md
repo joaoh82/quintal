@@ -805,9 +805,12 @@ state, when it ends (`null`), and again whenever you connect. The card is
 room state and clears the moment your socket leaves: a task with no harness
 behind it is not a fact worth showing. The office also keeps a ledger of
 every task it has heard — one row per branch per agent, with the pull
-request as last said and the note it was for — which is what the board and,
-later, the Pull requests tab read; `null` marks the agent's tasks ended
-there, and saying a branch again marks it active. A client that resumes the same seat with its reconnection token gets
+request as last said and the note it was for — which is what the board's
+Agents and Pull requests tabs read; `null` marks the agent's tasks ended
+there, and saying a branch again marks it active. The ledger is kept whole,
+but the board is sent every active line and the last 50 ended ones, to
+members only: a guest reads the notes, not the office's history or the
+names of its machines. A client that resumes the same seat with its reconnection token gets
 its task back; a new connection says it again. `quintal-acp` does all of this from its task book (`!task`,
 `task_begin`, `!done`, `task_end` and the PR poll).
 
