@@ -3,7 +3,23 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import { ageLabel, columnsOf, matchesFilter, nextStatus, taskBadgeOf, wallOf } from './board.js';
+import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, RosterEntry } from '@quintal/shared';
+
+import {
+  ageLabel,
+  agentMatches,
+  agentRowsOf,
+  branchesWithoutPr,
+  columnsOf,
+  matchesFilter,
+  nextStatus,
+  pullRequestMatches,
+  pullRequestRowsOf,
+  repoOfPrUrl,
+  taskBadgeOf,
+  wallOf,
+  whereLabel,
+} from './board.js';
 
 function note(number: number, extra: Partial<BoardItemRef> = {}): BoardItemRef {
   return {
@@ -101,5 +117,167 @@ describe('how old a note is', () => {
     assert.equal(ageLabel(now - 3 * 3_600_000, now), '3h ago');
     assert.equal(ageLabel(now - 2 * 86_400_000, now), '2d ago');
     assert.equal(ageLabel(now + 60_000, now), 'just now', 'never in the future');
+  });
+});
+
+function agent(id: string, extra: Partial<BoardAgentRef> = {}): BoardAgentRef {
+  return {
+    id,
+    name: id,
+    ownerUserId: 'u1',
+    ownerName: 'Josh',
+    description: '',
+    status: '',
+    lastSeenAt: null,
+    runtimeId: null,
+    modelId: null,
+    hostLabel: null,
+    ...extra,
+  };
+}
+
+function here(identityId: string, extra: Partial<RosterEntry> = {}): RosterEntry {
+  return {
+    sessionId: `s-${identityId}`,
+    name: identityId,
+    kind: 'agent',
+    status: '',
+    isSelf: false,
+    ownerName: 'Josh',
+    ownerUserId: 'u1',
+    scopes: [],
+    runtimeId: '',
+    modelId: '',
+    identityId,
+    lastActionAt: 0,
+    zoneId: 'lobby',
+    emote: '',
+    workingIn: '',
+    workingSince: 0,
+    isGuest: false,
+    description: '',
+    pubkey: '',
+    avatar: '',
+    task: null,
+    ...extra,
+  };
+}
+
+function ledger(id: string, extra: Partial<BoardTaskRef> = {}): BoardTaskRef {
+  return {
+    id,
+    agentId: 'marvin',
+    agentName: 'marvin',
+    item: null,
+    title: `task ${id}`,
+    repo: 'api',
+    branch: `quintal/marvin/${id}`,
+    pr: null,
+    status: 'active',
+    startedAt: 0,
+    endedAt: null,
+    lastSeenAt: 0,
+    ...extra,
+  };
+}
+
+const zones: MapZone[] = [{ id: 'focus', kind: 'common', label: 'Focus room', bounds: { x: 0, y: 0, width: 1, height: 1 } }];
+const channels: ChannelRef[] = [
+  { id: 'ch-1', kind: 'channel', name: 'Engineering', slug: 'engineering' },
+  { id: 'dm-1', kind: 'dm', name: 'Josh', slug: '' },
+];
+
+describe('where an agent is', () => {
+  it('names the zone it stands in when idle, and the floor outside every zone', () => {
+    assert.equal(whereLabel(here('a', { zoneId: 'focus' }), zones, channels), 'Focus room');
+    assert.equal(whereLabel(here('a', { zoneId: 'nowhere' }), zones, channels), 'the floor');
+  });
+
+  it('names the channels and DMs it is answering, and the zone for spatial work', () => {
+    const busy = here('a', { zoneId: 'focus', workingSince: 5, workingIn: 'ch-1,dm-1,zone' });
+    assert.equal(whereLabel(busy, zones, channels), '#engineering, DM with Josh, Focus room');
+  });
+
+  it('falls back to the zone when the work is somewhere it cannot name', () => {
+    assert.equal(whereLabel(here('a', { zoneId: 'focus', workingSince: 5, workingIn: 'gone' }), zones, channels), 'Focus room');
+  });
+});
+
+describe('the Agents tab', () => {
+  const task = { title: 'fix the chair', repo: 'api', branch: 'quintal/marvin/chair' };
+  const agents = [agent('zaphod', { status: 'last seen fixing', lastSeenAt: 100 }), agent('marvin')];
+  const roster = [here('marvin', { status: 'reading', zoneId: 'focus', workingSince: 7, task })];
+  const items = [
+    note(1, { assignee: { id: 'marvin', name: 'marvin' } }),
+    note(2, { assignee: { id: 'marvin', name: 'marvin' }, status: 'done' }),
+    note(3, { assignee: { id: 'zaphod', name: 'zaphod' } }),
+  ];
+
+  it('puts who is here first, live, and the rest by what the office last knew', () => {
+    const rows = agentRowsOf(agents, roster, items, [ledger('t1', { agentId: 'zaphod', pr: null })], zones, channels, 1000);
+    assert.deepEqual(rows.map((row) => row.agent.id), ['marvin', 'zaphod']);
+    const [marvin, zaphod] = rows;
+    assert.equal(marvin!.here?.identityId, 'marvin');
+    assert.equal(marvin!.status, 'reading', 'the live status line');
+    assert.equal(marvin!.where, 'Focus room');
+    assert.deepEqual(marvin!.task, task, 'the roster says what it is on');
+    assert.equal(marvin!.workingSince, 7);
+    assert.equal(marvin!.lastSeenAt, 1000, 'here means heard from now');
+    assert.deepEqual(marvin!.notes.map((n) => n.number), [1], 'done notes are not open work');
+    assert.equal(zaphod!.here, null);
+    assert.equal(zaphod!.status, 'last seen fixing', 'the line it left');
+    assert.equal(zaphod!.where, '');
+    assert.equal(zaphod!.task?.branch, 'quintal/marvin/t1', "the ledger's active task");
+    assert.equal(zaphod!.lastSeenAt, 100);
+  });
+
+  it('shows an away agent no task once the ledger says it ended', () => {
+    const [row] = agentRowsOf([agent('zaphod')], [], [], [ledger('t1', { agentId: 'zaphod', status: 'ended' })], zones, channels, 0);
+    assert.equal(row!.task, null);
+  });
+
+  it('answers the filter by name, owner, status, branch or note', () => {
+    const [marvin] = agentRowsOf([agent('marvin')], roster, items, [], zones, channels, 0);
+    assert.equal(agentMatches(marvin!, 'marv'), true);
+    assert.equal(agentMatches(marvin!, 'josh'), true);
+    assert.equal(agentMatches(marvin!, 'reading'), true);
+    assert.equal(agentMatches(marvin!, 'chair'), true);
+    assert.equal(agentMatches(marvin!, '#1'), true);
+    assert.equal(agentMatches(marvin!, 'zaphod'), false);
+  });
+});
+
+describe('the Pull requests tab', () => {
+  const pr = (number: number, state: 'open' | 'merged' | 'closed') => ({ number, url: `https://github.com/acme/api/pull/${number}`, state });
+  const tasks = [
+    ledger('old', { pr: pr(1, 'merged'), lastSeenAt: 10, status: 'ended' }),
+    ledger('branch-only'),
+    ledger('new', { pr: pr(2, 'open'), lastSeenAt: 20, item: { id: 'i7', number: 7, title: 'Fix the chair' } }),
+    ledger('done-branch', { status: 'ended' }),
+  ];
+
+  it('lists the lines with a pull request, newest heard first', () => {
+    assert.deepEqual(pullRequestRowsOf(tasks).map((t) => t.id), ['new', 'old']);
+  });
+
+  it('counts the branches still active with no pull request yet', () => {
+    assert.deepEqual(branchesWithoutPr(tasks).map((t) => t.id), ['branch-only']);
+  });
+
+  it('answers the filter by PR number, note number, title, repo, branch, agent or state', () => {
+    const row = pullRequestRowsOf(tasks)[0]!;
+    assert.equal(pullRequestMatches(row, '#2'), true);
+    assert.equal(pullRequestMatches(row, '7'), true, 'the note it is for');
+    assert.equal(pullRequestMatches(row, 'chair'), true);
+    assert.equal(pullRequestMatches(row, 'api'), true);
+    assert.equal(pullRequestMatches(row, 'marvin'), true);
+    assert.equal(pullRequestMatches(row, 'open'), true);
+    assert.equal(pullRequestMatches(row, '#1'), false);
+  });
+
+  it('names the repository from the pull request URL', () => {
+    assert.equal(repoOfPrUrl('https://github.com/acme/api/pull/12'), 'github.com/acme/api');
+    assert.equal(repoOfPrUrl('https://example.com/'), 'example.com');
+    assert.equal(repoOfPrUrl('not a url'), 'not a url');
   });
 });

@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
 import type { AgentTask, AgentTaskPrState, AgentTaskPullRequest, AgentTaskStatus } from '../agent-task.js';
-import type { BoardItemTask } from '../board.js';
+import type { BoardItemTask, BoardTaskRef } from '../board.js';
 import type { Database } from './client.js';
 import { agentTasks, agents, boardItems } from './schema.js';
 
@@ -21,21 +21,9 @@ function newId(): string {
   return randomBytes(16).toString('hex');
 }
 
-export interface AgentTaskRecord {
-  id: string;
+/** A ledger line as the board sends it, with the office it belongs to. */
+export interface AgentTaskRecord extends BoardTaskRef {
   workspaceId: string;
-  agentId: string;
-  agentName: string;
-  /** The board note it is for, if it was handed one: its id, number and title. */
-  item: { id: string; number: number; title: string } | null;
-  title: string;
-  repo: string;
-  branch: string;
-  pr: AgentTaskPullRequest | null;
-  status: AgentTaskStatus;
-  startedAt: number;
-  endedAt: number | null;
-  lastSeenAt: number;
 }
 
 export interface NoteAgentTaskInput {

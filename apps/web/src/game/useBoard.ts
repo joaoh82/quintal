@@ -27,7 +27,7 @@ export interface Board extends BoardPayload {
   remove: (itemId: string) => void;
 }
 
-const EMPTY: BoardPayload = { items: [], agents: [], you: { userId: '', role: null } };
+const EMPTY: BoardPayload = { items: [], agents: [], tasks: [], you: { userId: '', role: null } };
 
 export function useBoard(sessionRef: RefObject<OfficeSession | null>): Board {
   const [board, setBoard] = useState<BoardPayload>(EMPTY);

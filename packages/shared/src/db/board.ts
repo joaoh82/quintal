@@ -302,6 +302,12 @@ export async function listBoardAgentsForWorkspace(
       name: agents.name,
       ownerUserId: agents.ownerUserId,
       ownerName: users.name,
+      description: agents.description,
+      status: agents.status,
+      lastSeenAt: agents.lastSeenAt,
+      runtimeId: agents.runtimeId,
+      modelId: agents.modelId,
+      hostLabel: agents.hostLabel,
     })
     .from(agents)
     .leftJoin(users, eq(users.id, agents.ownerUserId))
@@ -312,5 +318,11 @@ export async function listBoardAgentsForWorkspace(
     name: row.name,
     ownerUserId: row.ownerUserId,
     ownerName: row.ownerName ?? '',
+    description: row.description,
+    status: row.status,
+    lastSeenAt: row.lastSeenAt?.getTime() ?? null,
+    runtimeId: row.runtimeId,
+    modelId: row.modelId,
+    hostLabel: row.hostLabel,
   }));
 }

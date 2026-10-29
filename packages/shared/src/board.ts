@@ -1,4 +1,4 @@
-import type { AgentTaskPullRequest } from './agent-task.js';
+import type { AgentTaskPullRequest, AgentTaskStatus } from './agent-task.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -99,13 +99,52 @@ export interface BoardItemRef {
   task: BoardItemTask | null;
 }
 
-/** An agent an item could be for, online or not. */
+/**
+ * An agent of the office as the board knows it, online or not: whose it is,
+ * what its owner says it is, the status line it last left, when it was last
+ * heard from, and what it runs on. What it is doing *now* — where it stands,
+ * what it is on — is the roster's, live; the panel joins the two by id.
+ */
 export interface BoardAgentRef {
   /** `agents.id`. */
   id: string;
   name: string;
   ownerUserId: string;
   ownerName: string;
+  /** One line its owner wrote about what it does. */
+  description: string;
+  /** The status line it last left, kept across sessions. Empty for none. */
+  status: string;
+  /** When the office last heard from it, ms since epoch; null for never. */
+  lastSeenAt: number | null;
+  /** The runtime the office told a host to launch it on, or null when the office does not define it. */
+  runtimeId: string | null;
+  /** The model it was told to use, by the runtime's own id; null for the runtime's default. */
+  modelId: string | null;
+  /** The machine it is assigned to, as its owner named it. */
+  hostLabel: string | null;
+}
+
+/**
+ * A line of the office's ledger: a task an agent was heard to be on, kept
+ * after it ends. The branch, its pull request as last heard, the note it was
+ * for, and when. The office keeps these forever; a ticketing integration
+ * syncs into them, never replaces them.
+ */
+export interface BoardTaskRef {
+  id: string;
+  agentId: string;
+  agentName: string;
+  /** The board note it is for, if it was handed one: its id, number and title. */
+  item: { id: string; number: number; title: string } | null;
+  title: string;
+  repo: string;
+  branch: string;
+  pr: AgentTaskPullRequest | null;
+  status: AgentTaskStatus;
+  startedAt: number;
+  endedAt: number | null;
+  lastSeenAt: number;
 }
 
 /**
@@ -116,6 +155,8 @@ export interface BoardAgentRef {
 export interface BoardPayload {
   items: BoardItemRef[];
   agents: BoardAgentRef[];
+  /** The ledger, most recently heard first. */
+  tasks: BoardTaskRef[];
   you: { userId: string; role: MembershipRole | null };
 }
 

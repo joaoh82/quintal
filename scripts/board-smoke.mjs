@@ -285,8 +285,11 @@ async function anAgentTakesANote() {
     const task = { title: 'fix the stapler', repo: 'office', branch, item: stapler.number };
     const moved = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.status === 'in_progress');
     them.room.send('agent:task', task);
-    const onBranch = noteOf(await moved, stapler.id);
+    const movedBoard = await moved;
+    const onBranch = noteOf(movedBoard, stapler.id);
     check(onBranch.task?.branch === branch && onBranch.task?.active === true, 'a task for the note moves it to in progress, on its branch', JSON.stringify(onBranch.task));
+    const ledgerLine = movedBoard.tasks?.find((t) => t.branch === branch);
+    check(ledgerLine?.agentId === agent.id && ledgerLine?.item?.number === stapler.number && ledgerLine?.status === 'active', 'and the board carries the ledger line', JSON.stringify(ledgerLine));
 
     const pr = { number: 7, url: 'https://github.com/acme/office/pull/7', state: 'open' };
     const reviewed = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.task?.pr?.state === 'open');
@@ -295,7 +298,9 @@ async function anAgentTakesANote() {
 
     const done = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.status === 'done');
     them.room.send('agent:task', { ...task, pr: { ...pr, state: 'merged' } });
-    check((noteOf(await done, stapler.id)).task?.pr?.state === 'merged', 'the merge moves it to done');
+    const doneBoard = await done;
+    check((noteOf(doneBoard, stapler.id)).task?.pr?.state === 'merged', 'the merge moves it to done');
+    check(doneBoard.tasks?.find((t) => t.branch === branch)?.pr?.state === 'merged', 'and the ledger line says merged');
 
     const over = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.task?.active === false);
     them.room.send('agent:task', null);

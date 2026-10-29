@@ -149,6 +149,7 @@ import {
   type BoardDeletePayload,
   type BoardItemRef,
   type BoardMessagePayload,
+  type BoardTaskRef,
 } from '@quintal/shared';
 import {
   BoardItemError,
@@ -157,6 +158,7 @@ import {
   endAgentTasks,
   findBoardItemByNumber,
   findUnlinkedItemForAgent,
+  listAgentTasksForWorkspace,
   getBoardItem,
   noteAgentTask,
   listBoardAgentsForWorkspace,
@@ -414,6 +416,7 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   #boardItems: readonly BoardItemRef[] = [];
   #boardAgents: readonly BoardAgentRef[] = [];
+  #boardTasks: readonly BoardTaskRef[] = [];
   /** What the board looked like when it was last sent, so an unchanged one is not sent again. */
   #boardSignature = '';
   /** The first read of the board, so a `board_get` that beats it still gets an answer. */
@@ -1722,18 +1725,20 @@ export class OfficeRoom extends Room<OfficeState> {
     const ticket = this.#boardReads.start();
     try {
       const db = getDb();
-      const [items, agents] = await Promise.all([
+      const [items, agents, tasks] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
+        listAgentTasksForWorkspace(db, this.#workspaceId),
       ]);
       if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
       this.#boardAgents = agents;
+      this.#boardTasks = tasks;
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);
       return;
     }
-    const signature = JSON.stringify([this.#boardItems, this.#boardAgents]);
+    const signature = JSON.stringify([this.#boardItems, this.#boardAgents, this.#boardTasks]);
     if (signature === this.#boardSignature) return;
     this.#boardSignature = signature;
     for (const sessionId of this.state.players.keys()) void this.#sendBoard(sessionId);
@@ -1757,6 +1762,7 @@ export class OfficeRoom extends Room<OfficeState> {
     client.send(ServerMessage.Board, {
       items: this.#boardItems as BoardItemRef[],
       agents: this.#boardAgents as BoardAgentRef[],
+      tasks: this.#boardTasks as BoardTaskRef[],
       you: { userId: player.userId, role },
     } satisfies BoardMessagePayload);
   }

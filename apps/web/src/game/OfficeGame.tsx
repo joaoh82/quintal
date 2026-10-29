@@ -473,6 +473,8 @@ export default function OfficeGame({
           notice={conversations.notice ?? ''}
           onClose={closeBoard}
           onMessageAgent={messageAgentFromBoard}
+          zones={conversations.zones}
+          channels={conversations.channels}
         />
       ) : null}
 
