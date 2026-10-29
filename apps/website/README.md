@@ -17,6 +17,10 @@ The production build exports static files to `apps/website/out/`. Deploy that di
 
 The `/docs/` index links to the current technical documentation in the public repository. The local quickstart is a real MDX route at `src/app/docs/getting-started/page.mdx`. Add future guides as `src/app/docs/<slug>/page.mdx`, export `metadata`, and add navigation in `src/app/docs/layout.tsx` and entries to `src/app/sitemap.ts`. MDX can import components; compile only trusted, repository-owned content.
 
+## Version and changelog
+
+The header badge, the download page and the changelog read the current version from this app's `package.json`, which `just release` bumps with every other package. The changelog's entries live in `src/app/changelog/releases.ts`, newest first; add one for each release.
+
 ## Design and assets
 
 DM Sans is self-hosted through Fontsource. Theme colors follow the system preference, and interactions respect reduced motion. Screenshots are optimized WebP derivatives of the repository's `screenshots/` assets; the originals are unchanged. Only screenshots not flagged for stale warnings in the brief are used. Pixel art in the product is the Shared World CC0 pack, with emote balloons from Kenney; see `apps/web/public/assets/CREDITS.md`.

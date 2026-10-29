@@ -19,6 +19,12 @@ The same `v*` tag publishes the office image via `.github/workflows/docker.yml`
 (`:{version}`, `:{major}.{minor}`, `:latest` for stable tags), so the image
 and the app agree.
 
+The website shows the version from `apps/website/package.json`, so its header
+badge and download page follow the release commit on their own. Its changelog
+(`apps/website/src/app/changelog/releases.ts`) is written by hand: add the new
+version's entry at the top in a pull request. Until it is there, the changelog
+page shows the current version with a link to its GitHub release notes.
+
 `node scripts/set-version.mjs 0.1.0` performs only the manifest update, useful on
 a feature branch for a prerelease rehearsal. All packages share one version,
 including the server version reported by `/health`. The `v` prefix belongs to

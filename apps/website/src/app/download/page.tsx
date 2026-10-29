@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDownToLine } from "lucide-react";
 import { CopyCommand } from "@/components/copy-command";
 import { REPO } from "@/components/site-chrome";
+import { VERSION } from "@/lib/version";
 import releaseAssets from "../../../../../scripts/release-assets.json";
 
 export const metadata: Metadata = {
@@ -59,7 +60,11 @@ export default function Download() {
             </div>
           </article>
         </div>
-        <p className="download-version">What version? <a href={`${REPO}/releases/latest`}>See the latest release and checksums.</a></p>
+        <p className="download-version">
+          The current version is <strong>v{VERSION}</strong>.{" "}
+          <Link href="/changelog/">What's new</Link> ·{" "}
+          <a href={`${REPO}/releases/latest`}>Release and checksums</a>
+        </p>
         <div className="download-notes">
           <h3>First launch</h3>
           <p>On macOS, open the DMG and drag Quintal into Applications. Releases from

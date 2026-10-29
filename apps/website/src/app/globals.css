@@ -1262,3 +1262,133 @@ code {
     grid-template-columns: 1fr;
   }
 }
+/* The current version, beside the wordmark. Pulled in against the header's gap so it reads as part of the mark. */
+.version-badge {
+  margin-left: -28px;
+  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.version-badge:hover {
+  color: var(--green);
+  border-color: var(--green);
+}
+@media (max-width: 1024px) {
+  .version-badge {
+    margin-left: -10px;
+  }
+}
+@media (max-width: 767px) {
+  .version-badge {
+    margin-left: -10px;
+    padding: 2px 7px;
+    font-size: 10px;
+  }
+}
+.changelog-page {
+  padding-block: 64px 90px;
+}
+.changelog-intro h1 {
+  font-size: clamp(44px, 6vw, 76px);
+  margin-bottom: 24px;
+}
+.changelog-intro p {
+  max-width: 640px;
+  font-size: 18px;
+}
+.changelog-intro a,
+.changelog-entry p a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.changelog-intro strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.changelog-list {
+  list-style: none;
+  margin: 48px 0 0;
+  padding: 0;
+}
+.changelog-entry {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 40px;
+  padding-block: 32px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 24px;
+}
+.changelog-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.changelog-meta h2 {
+  font-family: ui-monospace, monospace;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.changelog-meta h2 a:hover {
+  color: var(--green);
+}
+.changelog-meta time {
+  font-size: 13px;
+  color: var(--muted);
+}
+.changelog-current {
+  border-radius: 999px;
+  background: var(--green);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+}
+.changelog-body h3 {
+  font-size: 24px;
+  margin-bottom: 14px;
+}
+.changelog-body ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.changelog-body li + li {
+  margin-top: 6px;
+}
+.changelog-notes {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--green);
+}
+.changelog-notes:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+@media (max-width: 767px) {
+  .changelog-page {
+    padding-block: 40px 64px;
+  }
+  .changelog-entry {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .changelog-meta {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .changelog-body h3 {
+    font-size: 20px;
+  }
+}

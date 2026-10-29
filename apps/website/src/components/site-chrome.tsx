@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, GitFork } from "lucide-react";
+import { VERSION } from "@/lib/version";
 
 export const REPO = "https://github.com/joaoh82/quintal";
 export function Header() {
@@ -8,6 +9,9 @@ export function Header() {
       <Link className="wordmark" href="/" aria-label="Quintal home">
         <span className="brand-mark" aria-hidden="true" />
         quintal<span className="wordmark-period">.</span>
+      </Link>
+      <Link className="version-badge" href="/changelog/" title={`What's new in v${VERSION}`}>
+        v{VERSION}
       </Link>
       <nav className="desktop-nav" aria-label="Main navigation">
         <Link href="/#office">The office</Link>
@@ -30,6 +34,7 @@ export function Header() {
           <Link href="/#desktop">Desktop app</Link>
           <Link href="/download/">Download</Link>
           <Link href="/docs/">Docs</Link>
+          <Link href="/changelog/">Changelog</Link>
           <Link href="/#roadmap">Roadmap</Link>
         </nav>
       </details>
@@ -52,6 +57,7 @@ export function Footer() {
       <nav aria-label="Footer navigation">
         <Link href="/download/">Download</Link>
         <Link href="/docs/">Documentation</Link>
+        <Link href="/changelog/">Changelog · v{VERSION}</Link>
         <Link href="/#desktop">Desktop app</Link>
         <a href={`${REPO}/blob/main/SELF_HOSTING.md`}>Self-hosting</a>
         <a href={`${REPO}/blob/main/CONTRIBUTING.md`}>Contribute</a>
