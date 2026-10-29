@@ -160,6 +160,7 @@ import {
   type BoardItemRef,
   type BoardMessagePayload,
   type BoardTaskRef,
+  type BoardPullReviewRef,
 } from '@quintal/shared';
 import {
   BoardItemError,
@@ -173,6 +174,8 @@ import {
   boardGithubOf,
   describeOfficeGithub,
   pullRequestStatusesForWorkspace,
+  listPullReviewRequests,
+  BOARD_PULL_REVIEWS_MAX,
   recordBoardEvent,
   type RecordBoardEventInput,
   noteAgentTask,
@@ -440,6 +443,8 @@ export class OfficeRoom extends Room<OfficeState> {
   #pullStatuses: ReadonlyMap<string, PullRequestStatusRef> = new Map();
   /** Every pull request of the repositories on the office's list, as last listed. */
   #repoPulls: RepoPullsRef = NO_REPO_PULLS;
+  /** Who was asked from the board to review which pull request, newest first. */
+  #boardReviews: readonly BoardPullReviewRef[] = [];
   /** The office's eye on GitHub. Made with the room; the token is read as needed. */
   #pulls!: PullRequestWatch;
   #pullTimer: NodeJS.Timeout | null = null;
@@ -1766,7 +1771,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const ticket = this.#boardReads.start();
     try {
       const db = getDb();
-      const [items, agents, tasks, statuses, github] = await Promise.all([
+      const [items, agents, tasks, statuses, github, reviews] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
         listAgentTasksForWorkspace(db, this.#workspaceId, {
@@ -1775,6 +1780,7 @@ export class OfficeRoom extends Room<OfficeState> {
         }),
         pullRequestStatusesForWorkspace(db, this.#workspaceId),
         describeOfficeGithub(db, this.#workspaceId),
+        listPullReviewRequests(db, this.#workspaceId),
       ]);
       if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
@@ -1784,6 +1790,7 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#boardTasks = tasks.map((task) => ({ ...task, github: statuses.get(task.id) ?? null }));
       this.#pullStatuses = statuses;
       this.#boardGithub = boardGithubOf(github);
+      this.#boardReviews = reviews;
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);
       return;
@@ -1815,6 +1822,7 @@ export class OfficeRoom extends Room<OfficeState> {
       tasks: this.#boardTasks,
       github: this.#boardGithub,
       pulls: this.#repoPulls,
+      reviews: this.#boardReviews,
     };
   }
 
@@ -2010,13 +2018,28 @@ export class OfficeRoom extends Room<OfficeState> {
         return;
       }
       this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), undefined, reviewBrief(target));
+      // Stamped once, so the row shown now is the row the next read finds.
+      const now = Date.now();
       this.#boardEvent({
         kind: 'pr.review_requested',
         actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
         taskId: target.taskId,
         itemId: target.itemId,
         payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
+        now,
       });
+      // The tab says who was asked at once, rather than on the next read.
+      const review: BoardPullReviewRef = {
+        url: target.url,
+        repo: target.repo.toLowerCase(),
+        number: target.number,
+        agentId: agent.id,
+        agentName: agent.name,
+        byName: writer.player.name,
+        at: now,
+      };
+      this.#boardReviews = [review, ...this.#boardReviews].slice(0, BOARD_PULL_REVIEWS_MAX);
+      this.#sendBoardIfChanged();
       this.#sendNotice(client.sessionId, 'pull_request', `Asked ${agent.name} to review ${target.repo}#${target.number}. It answers in your DM.`);
     } catch (error: unknown) {
       logger.error('[office] could not ask for a review', error);

@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import type { AgentTaskPrState } from '../agent-task.js';
-import type { BoardEventRef, BoardGithubRef, OfficeGithubRef } from '../board.js';
+import type { BoardEventRef, BoardGithubRef, BoardPullReviewRef, OfficeGithubRef } from '../board.js';
 import type { PullRequestAction, PullRequestFacts, PullRequestStatusRef } from '../github.js';
 import type { Database } from './client.js';
 import { agentTasks, boardEvents, officeGithub, pullRequestStatus, users } from './schema.js';
@@ -313,6 +313,32 @@ export async function recordBoardEvent(db: Database, input: RecordBoardEventInpu
     payload: input.payload ?? null,
     createdAt: createdAt.getTime(),
   };
+}
+
+/** How many of an office's review requests the board carries: the newest. */
+export const BOARD_PULL_REVIEWS_MAX = 200;
+
+/**
+ * Who was asked from the board to review which pull request, newest first,
+ * read back from the board's events. An event whose payload does not say
+ * which pull request and which agent is left out.
+ */
+export async function listPullReviewRequests(db: Database, workspaceId: string, limit = BOARD_PULL_REVIEWS_MAX): Promise<BoardPullReviewRef[]> {
+  const rows = await db
+    .select({ actorName: boardEvents.actorName, payload: boardEvents.payload, createdAt: boardEvents.createdAt })
+    .from(boardEvents)
+    .where(and(eq(boardEvents.workspaceId, workspaceId), eq(boardEvents.kind, 'pr.review_requested')))
+    .orderBy(desc(boardEvents.createdAt))
+    .limit(Math.max(1, limit));
+  const reviews: BoardPullReviewRef[] = [];
+  for (const row of rows) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    const { url, repo, number, agentId, agentName } = payload;
+    if (typeof url !== 'string' || typeof repo !== 'string' || typeof number !== 'number') continue;
+    if (typeof agentId !== 'string' || typeof agentName !== 'string') continue;
+    reviews.push({ url, repo: repo.toLowerCase(), number, agentId, agentName, byName: row.actorName, at: row.createdAt.getTime() });
+  }
+  return reviews;
 }
 
 export interface ListBoardEventsOptions {

@@ -78,11 +78,21 @@ const checked: PullRequestStatusRef = {
   known: true,
 };
 
+const REVIEW = {
+  url: 'https://github.com/acme/api/pull/7',
+  repo: 'acme/api',
+  number: 7,
+  agentId: 'a1',
+  agentName: 'Marvin',
+  byName: 'Arthur',
+  at: MINUTE,
+};
+
 describe('what the board is sent, and when', () => {
   it('does not count an agent being heard from as the board changing', () => {
-    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS };
+    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] };
     const heard = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 40_000 };
-    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS };
+    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] };
     assert.equal(boardSignatureOf(after), boardSignatureOf(before), 'the same minute is the same board');
 
     const later = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 60_000 };
@@ -96,7 +106,7 @@ describe('what the board is sent, and when', () => {
   });
 
   it('does not count GitHub being asked again as the board changing, unless the answer differs', () => {
-    const view = (github: PullRequestStatusRef) => ({ items: [], agents: [], tasks: [{ ...task, github }], github: GITHUB, pulls: NO_REPO_PULLS });
+    const view = (github: PullRequestStatusRef) => ({ items: [], agents: [], tasks: [{ ...task, github }], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] });
     const first = boardSignatureOf(view(checked));
     assert.equal(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 60_000 })), first, 'a minute later, the same facts');
     assert.notEqual(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 5 * 60_000 })), first, 'five minutes later it is sent once, so "checked … ago" catches up');
@@ -105,14 +115,20 @@ describe('what the board is sent, and when', () => {
   });
 
   it("does not count listing the repositories again as the board changing, unless the list differs", () => {
-    const view = (pulls: RepoPullsRef) => ({ items: [], agents: [], tasks: [], github: GITHUB, pulls });
+    const view = (pulls: RepoPullsRef) => ({ items: [], agents: [], tasks: [], github: GITHUB, pulls, reviews: [] });
     const first = boardSignatureOf(view(PULLS));
     assert.equal(boardSignatureOf(view({ ...PULLS, fetchedAt: PULLS.fetchedAt! + 60_000 })), first);
     assert.notEqual(boardSignatureOf(view({ ...PULLS, pulls: [{ ...PULLS.pulls[0]!, state: 'merged' }] })), first);
   });
 
+  it('counts somebody being asked to review as the board changing', () => {
+    const view = { items: [], agents: [], tasks: [], github: GITHUB, pulls: PULLS, reviews: [] };
+    assert.notEqual(boardSignatureOf({ ...view, reviews: [REVIEW] }), boardSignatureOf(view));
+  });
+
   it('sends a member everything the board has', () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS }, 'member');
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW] }, 'member');
+    assert.deepEqual(sent.reviews, [REVIEW]);
     assert.deepEqual(sent.agents, [marvin]);
     assert.deepEqual(sent.tasks, [task]);
     assert.deepEqual(sent.github, GITHUB);
@@ -120,8 +136,9 @@ describe('what the board is sent, and when', () => {
   });
 
   it("sends a guest the notes and who the agents are, not the ledger or the office's machines", () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS }, null);
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW] }, null);
     assert.deepEqual(sent.tasks, []);
+    assert.deepEqual(sent.reviews, [], 'nor who was asked to review what');
     assert.deepEqual(sent.pulls.pulls, [], "nor the office's repositories' pull requests");
     assert.deepEqual(sent.github, { connected: false, login: null, repos: [] }, 'nor whether the office has a token');
     assert.equal(sent.agents.length, 1);

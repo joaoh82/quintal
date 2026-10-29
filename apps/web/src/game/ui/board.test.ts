@@ -310,6 +310,33 @@ describe('the Pull requests tab', () => {
     assert.equal(rows[0]!.title, 'Listed 2', "GitHub's title over the task's");
   });
 
+  it('says which agents were asked to review each pull request, each once, newest first', () => {
+    const ask = (agentId: string, at: number, number = 3) => ({
+      url: `https://github.com/acme/web/pull/${number}`,
+      repo: 'acme/web',
+      number,
+      agentId,
+      agentName: agentId === 'a1' ? 'Marvin' : 'Eddie',
+      byName: 'Arthur',
+      at,
+    });
+    const rows = pullListOf(
+      [listed(2), listed(3, { repo: 'acme/web', url: 'https://github.com/acme/web/pull/3' })],
+      tasks,
+      undefined,
+      [ask('a1', 10), ask('a2', 30), ask('a1', 20), ask('a1', 5, 9)],
+    );
+    const web = rows.find((row) => row.key === 'acme/web#3')!;
+    assert.deepEqual(
+      web.reviews.map((review) => [review.agentName, review.at]),
+      [
+        ['Eddie', 30],
+        ['Marvin', 20],
+      ],
+    );
+    assert.deepEqual(rows.find((row) => row.key === 'acme/api#2')!.reviews, [], 'another pull request was asked of nobody');
+  });
+
   it('counts the branches still active with no pull request yet', () => {
     assert.deepEqual(branchesWithoutPr(tasks).map((t) => t.id), ['branch-only']);
   });
