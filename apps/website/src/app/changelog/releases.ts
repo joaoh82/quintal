@@ -15,6 +15,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.16.0",
+    date: "2026-10-29",
+    summary: "Who's reviewing what, and every pull request at a glance.",
+    changes: [
+      "A pull request handed to one of your agents for review says which agent on the Pull requests tab, with who asked and when.",
+      "Hover a pull request's number or title for its full title, branches, author, reviewers, merge and review state and every check by name, with a link to GitHub. Click the title to keep it open.",
+      "The website has a changelog, and shows the current version at the top of every page.",
+    ],
+  },
+  {
     version: "0.15.0",
     date: "2026-10-29",
     summary: "Every pull request in one place, and agents that review them.",
