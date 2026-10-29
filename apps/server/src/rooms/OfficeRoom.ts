@@ -35,6 +35,7 @@ import {
   AGENT_REVOCATION_POLL_MS,
   AGENT_STATUS_MAX_LENGTH,
   BOARD_LEDGER_ENDED_MAX,
+  BOARD_LEDGER_ENDED_PER_AGENT_MAX,
   AgentMessage,
   AgentServerMessage,
   CHAT_LOG_LIMIT,
@@ -1760,7 +1761,10 @@ export class OfficeRoom extends Room<OfficeState> {
       const [items, agents, tasks, statuses, github] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
-        listAgentTasksForWorkspace(db, this.#workspaceId, { endedMax: BOARD_LEDGER_ENDED_MAX }),
+        listAgentTasksForWorkspace(db, this.#workspaceId, {
+          endedMax: BOARD_LEDGER_ENDED_MAX,
+          endedPerAgentMax: BOARD_LEDGER_ENDED_PER_AGENT_MAX,
+        }),
         pullRequestStatusesForWorkspace(db, this.#workspaceId),
         describeOfficeGithub(db, this.#workspaceId),
       ]);

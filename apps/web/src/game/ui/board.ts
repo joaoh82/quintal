@@ -126,6 +126,8 @@ export interface AgentRow {
   workingSince: number;
   /** The notes handed to it that are not done, newest first. */
   notes: BoardItemRef[];
+  /** Its other ledger lines — what it was on before, and any still open beside `task` — most recently heard first. */
+  history: BoardTaskRef[];
   /** When the office last heard from it: now while it is here. Null for never. */
   lastSeenAt: number | null;
 }
@@ -173,14 +175,17 @@ export function agentRowsOf(
 ): AgentRow[] {
   const rows = agents.map((agent): AgentRow => {
     const here = roster.find((entry) => entry.kind === 'agent' && entry.identityId === agent.id) ?? null;
+    const task = here ? here.task : ledgerTaskOf(agent.id, tasks);
     return {
       agent,
       here,
       status: here ? here.status : agent.status,
       where: here ? whereLabel(here, zones, channels) : '',
-      task: here ? here.task : ledgerTaskOf(agent.id, tasks),
+      task,
       workingSince: here?.workingSince ?? 0,
       notes: items.filter((item) => item.assignee?.id === agent.id && item.status !== 'done'),
+      // The ledger is upserted by (agent, branch), so the branch is what makes a line the current task.
+      history: tasks.filter((line) => line.agentId === agent.id && line.branch !== task?.branch),
       lastSeenAt: here ? now : agent.lastSeenAt,
     };
   });
@@ -196,6 +201,7 @@ export function agentMatches(row: AgentRow, query: string): boolean {
   if (row.agent.ownerName.toLowerCase().includes(q)) return true;
   if (row.status.toLowerCase().includes(q)) return true;
   if (row.task && (row.task.branch.toLowerCase().includes(q) || row.task.title.toLowerCase().includes(q))) return true;
+  if (row.history.some((line) => line.branch.toLowerCase().includes(q) || line.title.toLowerCase().includes(q))) return true;
   return row.notes.some((note) => matchesFilter(note, q));
 }
 

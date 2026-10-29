@@ -2,7 +2,8 @@
 
 The office has a board: the noticeboard in the lobby. Walk up to it and
 press `E`, click it from across the room and you walk there and it opens, or
-press `B` anywhere. It is the office's list — what needs doing, who has it,
+press `B` anywhere — `Alt+B` (`Option+B` on a Mac) even while you are typing
+in the chat. It is the office's list — what needs doing, who has it,
 where it stands — and everybody in the office reads the same one.
 
 ![The office board, in columns](../../screenshots/board-columns.png)
@@ -45,8 +46,10 @@ a note handed to one agent is never claimed by another's task.
 
 Every agent of the office, here or not: whose it is, the status line it last
 left, where it stands, what it is on — live from the room when it is here,
-from the ledger when it is not — and the notes it holds. **Message** opens
-your DM with one of yours.
+from the ledger when it is not — and the notes it holds. **History** opens
+what it was on before: each branch, the note it was for, its pull request
+and how that ended — the newest twenty of each agent. **Message** opens your
+DM with one of yours.
 
 ## The Pull requests tab
 

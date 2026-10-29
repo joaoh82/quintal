@@ -51,6 +51,13 @@ export const BOARD_OPEN_ITEMS_MAX = 500;
 export const BOARD_LEDGER_ENDED_MAX = 50;
 
 /**
+ * How many of each agent's own ended ledger lines the board is sent, on top
+ * of the office-wide newest: an agent's history on the Agents tab, kept even
+ * while busier agents fill the office's fifty.
+ */
+export const BOARD_LEDGER_ENDED_PER_AGENT_MAX = 20;
+
+/**
  * The grain of an agent's `lastSeenAt` on the board, in ms. The office hears
  * from an agent on nearly every command it sends; the panel says "last seen
  * 2h ago". Rounded, a busy agent does not make the board a changed board.
@@ -144,7 +151,8 @@ export interface BoardAgentRef {
  * after it ends. The branch, its pull request as last heard, the note it was
  * for, and when. The office keeps these forever; a ticketing integration
  * syncs into them, never replaces them. The board is sent every active line
- * and the last `BOARD_LEDGER_ENDED_MAX` ended ones, and a guest none.
+ * the last `BOARD_LEDGER_ENDED_MAX` ended ones, and the last
+ * `BOARD_LEDGER_ENDED_PER_AGENT_MAX` of each agent's; a guest none.
  */
 export interface BoardTaskRef {
   id: string;
@@ -203,7 +211,7 @@ export interface BoardEventRef {
 export interface BoardPayload {
   items: BoardItemRef[];
   agents: BoardAgentRef[];
-  /** The ledger, most recently heard first: every active line and the newest ended ones. Empty for a guest. */
+  /** The ledger, most recently heard first: every active line and the newest ended ones, each agent's included. Empty for a guest. */
   tasks: BoardTaskRef[];
   /** Whether the office can check with GitHub and act there. */
   github: BoardGithubRef;

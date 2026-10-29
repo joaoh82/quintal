@@ -230,7 +230,14 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
             {!board.loaded ? (
               <p className="p-6 text-xs text-white/40">Reading the board…</p>
             ) : tab === 'agents' ? (
-              <AgentsTab rows={agentRows} now={now} onOpenNote={open} onMessage={onMessageAgent} you={board.you.userId} />
+              <AgentsTab
+                rows={agentRows}
+                now={now}
+                guest={board.you.role === null}
+                onOpenNote={(id) => setDrawer({ kind: 'item', id })}
+                onMessage={onMessageAgent}
+                you={board.you.userId}
+              />
             ) : tab === 'pulls' ? (
               <PullsTab
                 rows={pulls}
@@ -310,20 +317,34 @@ function PrState({ state }: { state: 'open' | 'merged' | 'closed' }) {
  * is and what it last left; the roster says what the ones here are doing
  * now. An agent that is away is still a row — its notes are still its
  * notes — so nobody wonders where the work went when it disconnected.
+ * Each row opens onto what the agent was on before, from the ledger.
  */
 function AgentsTab({
   rows,
   now,
+  guest,
   onOpenNote,
   onMessage,
   you,
 }: {
   rows: AgentRow[];
   now: number;
-  onOpenNote: (item: BoardItemRef) => void;
+  /** A guest is not sent the ledger, so it has no history to show. */
+  guest: boolean;
+  onOpenNote: (itemId: string) => void;
   onMessage: (agentId: string) => void;
   you: string;
 }) {
+  /** Which agents have their history open. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (agentId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+
   if (rows.length === 0) {
     return <p className="p-6 text-xs text-white/40">No agents in this office yet, or none match the filter. Agents are made in Settings.</p>;
   }
@@ -332,91 +353,167 @@ function AgentsTab({
       {rows.map((row) => {
         const running = row.here ? runtimeLines(row.here) : null;
         const away = row.here === null;
+        const open = expanded.has(row.agent.id);
         return (
-          <li key={row.agent.id} className={`grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4 px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5">
-                <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${away ? 'bg-white/25' : 'bg-emerald-400'}`} aria-hidden />
-                <span className={away ? 'text-sky-200/70' : 'text-sky-300'}>
-                  {AGENT_GLYPH} {row.agent.name}
-                </span>
-                <span className="truncate text-[10px] text-white/40">{row.agent.ownerName ? `${row.agent.ownerName}'s` : ''}</span>
-              </p>
-              {row.agent.description ? <p className="mt-0.5 truncate text-[11px] text-white/45">{row.agent.description}</p> : null}
-              <p className="mt-0.5 font-mono text-[10px] text-white/35">
-                {away
-                  ? row.lastSeenAt === null
-                    ? 'never connected'
-                    : `away · last seen ${ageLabel(row.lastSeenAt, now)}`
-                  : row.workingSince > 0
-                    ? `working for ${formatElapsed(now - row.workingSince)}`
-                    : 'here, idle'}
-              </p>
-              {running ? (
-                <p className="font-mono text-[10px] text-white/35">
-                  {running.runtime} · {running.model}
+          <li key={row.agent.id} className={`px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
+            <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5">
+                  <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${away ? 'bg-white/25' : 'bg-emerald-400'}`} aria-hidden />
+                  <span className={away ? 'text-sky-200/70' : 'text-sky-300'}>
+                    {AGENT_GLYPH} {row.agent.name}
+                  </span>
+                  <span className="truncate text-[10px] text-white/40">{row.agent.ownerName ? `${row.agent.ownerName}'s` : ''}</span>
                 </p>
-              ) : row.agent.runtimeId ? (
-                <p className="font-mono text-[10px] text-white/35">
-                  {row.agent.runtimeId} · {row.agent.modelId ?? 'default'}
-                  {row.agent.hostLabel ? ` · ${row.agent.hostLabel}` : ''}
+                {row.agent.description ? <p className="mt-0.5 truncate text-[11px] text-white/45">{row.agent.description}</p> : null}
+                <p className="mt-0.5 font-mono text-[10px] text-white/35">
+                  {away
+                    ? row.lastSeenAt === null
+                      ? 'never connected'
+                      : `away · last seen ${ageLabel(row.lastSeenAt, now)}`
+                    : row.workingSince > 0
+                      ? `working for ${formatElapsed(now - row.workingSince)}`
+                      : 'here, idle'}
                 </p>
-              ) : null}
+                {running ? (
+                  <p className="font-mono text-[10px] text-white/35">
+                    {running.runtime} · {running.model}
+                  </p>
+                ) : row.agent.runtimeId ? (
+                  <p className="font-mono text-[10px] text-white/35">
+                    {row.agent.runtimeId} · {row.agent.modelId ?? 'default'}
+                    {row.agent.hostLabel ? ` · ${row.agent.hostLabel}` : ''}
+                  </p>
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                {row.status ? <p className="truncate font-mono text-[11px] text-white/70">{row.status}</p> : <p className="text-white/30">—</p>}
+                {row.where ? <p className="mt-0.5 truncate text-[10px] text-white/40">in {row.where}</p> : null}
+              </div>
+              <div className="min-w-0">
+                {row.task ? (
+                  <p className="truncate">
+                    {row.task.title}
+                    {' · '}
+                    <span className="font-mono text-white/60">{row.task.branch}</span>
+                    {row.task.pr ? (
+                      <>
+                        {' '}
+                        <a href={row.task.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+                          PR #{row.task.pr.number}
+                        </a>{' '}
+                        <PrState state={row.task.pr.state} />
+                      </>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-white/30">on no task</p>
+                )}
+                {row.notes.length > 0 ? (
+                  <p className="mt-0.5 flex flex-wrap gap-1">
+                    {row.notes.map((note) => (
+                      <button
+                        key={note.id}
+                        type="button"
+                        onClick={() => onOpenNote(note.id)}
+                        title={note.title}
+                        className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+                      >
+                        #{note.number}
+                      </button>
+                    ))}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex items-start justify-end gap-3">
+                {guest ? null : (
+                  <button
+                    type="button"
+                    onClick={() => toggle(row.agent.id)}
+                    aria-expanded={open}
+                    aria-controls={`agent-history-${row.agent.id}`}
+                    disabled={row.history.length === 0}
+                    title={row.history.length === 0 ? 'Nothing earlier in the ledger' : undefined}
+                    className="text-[11px] text-white/60 underline-offset-2 enabled:hover:underline disabled:text-white/25"
+                  >
+                    {open ? 'Hide history' : `History · ${row.history.length}`}
+                  </button>
+                )}
+                {row.agent.ownerUserId === you ? (
+                  <button
+                    type="button"
+                    onClick={() => onMessage(row.agent.id)}
+                    className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
+                  >
+                    Message
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <div className="min-w-0">
-              {row.status ? <p className="truncate font-mono text-[11px] text-white/70">{row.status}</p> : <p className="text-white/30">—</p>}
-              {row.where ? <p className="mt-0.5 truncate text-[10px] text-white/40">in {row.where}</p> : null}
-            </div>
-            <div className="min-w-0">
-              {row.task ? (
-                <p className="truncate">
-                  {row.task.title}
-                  {' · '}
-                  <span className="font-mono text-white/60">{row.task.branch}</span>
-                  {row.task.pr ? (
-                    <>
-                      {' '}
-                      <a href={row.task.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
-                        PR #{row.task.pr.number}
-                      </a>{' '}
-                      <PrState state={row.task.pr.state} />
-                    </>
-                  ) : null}
-                </p>
-              ) : (
-                <p className="text-white/30">on no task</p>
-              )}
-              {row.notes.length > 0 ? (
-                <p className="mt-0.5 flex flex-wrap gap-1">
-                  {row.notes.map((note) => (
-                    <button
-                      key={note.id}
-                      type="button"
-                      onClick={() => onOpenNote(note)}
-                      title={note.title}
-                      className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
-                    >
-                      #{note.number}
-                    </button>
-                  ))}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex items-start justify-end">
-              {row.agent.ownerUserId === you ? (
-                <button
-                  type="button"
-                  onClick={() => onMessage(row.agent.id)}
-                  className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
-                >
-                  Message
-                </button>
-              ) : null}
-            </div>
+            {open && row.history.length > 0 ? (
+              <AgentHistory id={`agent-history-${row.agent.id}`} lines={row.history} now={now} onOpenNote={onOpenNote} />
+            ) : null}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * What an agent was on before, from the office's ledger: each branch it
+ * said it was on, what it was for, and how its pull request ended. The
+ * board carries each agent's newest ended lines, not the whole ledger.
+ */
+function AgentHistory({
+  id,
+  lines,
+  now,
+  onOpenNote,
+}: {
+  id: string;
+  lines: BoardTaskRef[];
+  now: number;
+  onOpenNote: (itemId: string) => void;
+}) {
+  return (
+    <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+      {lines.map((line) => (
+        <li key={line.id} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_auto] items-baseline gap-x-4">
+          <p className="min-w-0 truncate">
+            <span className="text-white/80">{line.title}</span>
+            {' · '}
+            <span className="font-mono text-[11px] text-white/50">
+              {line.repo} · {line.branch}
+            </span>
+          </p>
+          <p className="min-w-0 truncate">
+            {line.pr ? (
+              <>
+                <a href={line.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+                  PR #{line.pr.number}
+                </a>{' '}
+                <PrState state={pullStateOf(line)} />{' '}
+              </>
+            ) : null}
+            {line.item ? (
+              <button
+                type="button"
+                onClick={() => onOpenNote(line.item!.id)}
+                title={line.item.title}
+                className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+              >
+                #{line.item.number}
+              </button>
+            ) : null}
+            {!line.pr && !line.item ? <span className="text-white/30">no pull request</span> : null}
+          </p>
+          <p className="text-right font-mono text-[10px] text-white/40" title={new Date(line.startedAt).toLocaleString()}>
+            {line.status === 'active' ? `still open · heard ${ageLabel(line.lastSeenAt, now)}` : `ended ${ageLabel(line.endedAt ?? line.lastSeenAt, now)}`}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 

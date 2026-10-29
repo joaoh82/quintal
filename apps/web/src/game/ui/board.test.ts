@@ -243,6 +243,19 @@ describe('the Agents tab', () => {
     assert.equal(row!.task, null);
   });
 
+  it("gives each agent its other ledger lines as history, not the task it is on", () => {
+    const tasks = [
+      ledger('now', { agentId: 'zaphod', lastSeenAt: 30 }),
+      ledger('before', { agentId: 'zaphod', status: 'ended', lastSeenAt: 20 }),
+      ledger('someone-else', { agentId: 'marvin', status: 'ended', lastSeenAt: 15 }),
+      ledger('long-ago', { agentId: 'zaphod', status: 'ended', lastSeenAt: 10 }),
+    ];
+    const [row] = agentRowsOf([agent('zaphod')], [], [], tasks, zones, channels, 0);
+    assert.equal(row!.task?.branch, 'quintal/marvin/now');
+    assert.deepEqual(row!.history.map((line) => line.id), ['before', 'long-ago']);
+    assert.equal(agentMatches(row!, 'long-ago'), true, 'the filter finds an agent by what it was on');
+  });
+
   it('answers the filter by name, owner, status, branch or note', () => {
     const [marvin] = agentRowsOf([agent('marvin')], roster, items, [], zones, channels, 0);
     assert.equal(agentMatches(marvin!, 'marv'), true);
