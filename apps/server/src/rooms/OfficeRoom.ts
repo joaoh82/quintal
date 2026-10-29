@@ -2020,15 +2020,10 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), undefined, reviewBrief(target));
       // Stamped once, so the row shown now is the row the next read finds.
       const now = Date.now();
-      this.#boardEvent({
-        kind: 'pr.review_requested',
-        actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
-        taskId: target.taskId,
-        itemId: target.itemId,
-        payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
-        now,
-      });
-      // The tab says who was asked at once, rather than on the next read.
+      // The tab says who was asked at once. A read already in flight may have
+      // started before the event below is written: taking a ticket keeps it
+      // from landing, and the read after the write carries the row for good.
+      this.#boardReads.start();
       const review: BoardPullReviewRef = {
         url: target.url,
         repo: target.repo.toLowerCase(),
@@ -2040,6 +2035,23 @@ export class OfficeRoom extends Room<OfficeState> {
       };
       this.#boardReviews = [review, ...this.#boardReviews].slice(0, BOARD_PULL_REVIEWS_MAX);
       this.#sendBoardIfChanged();
+      // The DM has gone either way: a failed write is logged, not refused.
+      const recorded = await recordBoardEvent(getDb(), {
+        workspaceId: this.#workspaceId,
+        kind: 'pr.review_requested',
+        actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+        taskId: target.taskId,
+        itemId: target.itemId,
+        payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
+        now,
+      }).then(
+        () => true,
+        (error: unknown) => {
+          logger.error('[office] board event write failed (pr.review_requested)', error);
+          return false;
+        },
+      );
+      if (recorded) void this.#refreshBoard();
       this.#sendNotice(client.sessionId, 'pull_request', `Asked ${agent.name} to review ${target.repo}#${target.number}. It answers in your DM.`);
     } catch (error: unknown) {
       logger.error('[office] could not ask for a review', error);

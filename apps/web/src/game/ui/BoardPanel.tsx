@@ -22,6 +22,7 @@ import {
 } from '@quintal/shared';
 import { ExternalLink, GitPullRequest, Pin, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { Board } from '../useBoard';
 import { runtimeLines } from './agentRuntime';
@@ -700,8 +701,6 @@ function PullsTab({
                     rel="noreferrer"
                     onMouseEnter={(event) => showHover(row.key, event.currentTarget)}
                     onMouseLeave={leaveHover}
-                    onFocus={(event) => showHover(row.key, event.currentTarget)}
-                    onBlur={leaveHover}
                     className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
                   >
                     <GitPullRequest size={12} aria-hidden />#{row.number}
@@ -1087,10 +1086,15 @@ const PULL_CARD_LINGER_MS = 150;
 const PULL_CARD_WIDTH = 352;
 
 /**
- * The hover card. It is placed on the page, not in the list, so the list's
- * scrolling does not clip it: under the row's number or title, or above
- * when there is no room below. It stays while the pointer is on it, so its
- * link can be followed.
+ * The hover card. It is portalled to the document's body, not drawn in the
+ * list: the board's overlay has a backdrop filter, which would make it the
+ * box a fixed card is placed in, and the panel under it clips. On the body,
+ * the anchor's viewport coordinates are the card's. It hangs under the
+ * row's number or title, or above when there is no room below, and stays
+ * while the pointer is on it, so its link can be followed.
+ *
+ * It is the pointer's shortcut. From the keyboard, the title is a button
+ * that pins the same details under the row, link and all, in tab order.
  */
 function PullHoverCard({
   row,
@@ -1107,9 +1111,8 @@ function PullHoverCard({
 }) {
   const below = window.innerHeight - anchor.bottom > 320 || anchor.top < window.innerHeight / 2;
   const left = Math.max(8, Math.min(anchor.left, window.innerWidth - PULL_CARD_WIDTH - 8));
-  return (
+  return createPortal(
     <div
-      role="tooltip"
       onMouseEnter={onKeep}
       onMouseLeave={onLeave}
       style={{
@@ -1122,7 +1125,8 @@ function PullHoverCard({
       className="z-50 overflow-y-auto rounded-md border border-white/15 bg-[#161a24] p-3 shadow-xl"
     >
       <PullDetails row={row} now={now} />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
