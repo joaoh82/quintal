@@ -41,6 +41,7 @@ const EMPTY: BoardPayload = {
   tasks: [],
   github: { connected: false, login: null, repos: [] },
   pulls: NO_REPO_PULLS,
+  reviews: [],
   githubHost: GITHUB_WEB_HOST_DEFAULT,
   you: { userId: '', role: null },
 };

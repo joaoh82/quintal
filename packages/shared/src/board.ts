@@ -203,6 +203,19 @@ export interface BoardEventRef {
   createdAt: number;
 }
 
+/** One of a member's agents asked from the board to review a pull request: which, for whom, by whom, when. */
+export interface BoardPullReviewRef {
+  url: string;
+  /** `owner/name`, lower-case. */
+  repo: string;
+  number: number;
+  agentId: string;
+  agentName: string;
+  /** The member who asked. */
+  byName: string;
+  at: number;
+}
+
 /**
  * The board, as the office sends it: every item, every agent it could be for,
  * and where the viewer stands — so the panel can hide what the office would
@@ -217,6 +230,8 @@ export interface BoardPayload {
   github: BoardGithubRef;
   /** Every pull request of the repositories on the office's GitHub list, agents' or not. Empty for a guest. */
   pulls: RepoPullsRef;
+  /** Who was asked from the board to review which pull request, newest first. Empty for a guest. */
+  reviews: BoardPullReviewRef[];
   /** The host pull requests live on — github.com, or the enterprise server's — so the panel reads their URLs as the office does. */
   githubHost: string;
   you: { userId: string; role: MembershipRole | null };

@@ -5,6 +5,7 @@ import {
   type AgentTask,
   type BoardAgentRef,
   type BoardItemRef,
+  type BoardPullReviewRef,
   type BoardColor,
   type BoardStatus,
   type BoardTaskRef,
@@ -234,6 +235,8 @@ export interface PullListRow {
   task: BoardTaskRef | null;
   /** GitHub's list entry, when its repository is on the office's list. */
   listed: RepoPullRequestRef | null;
+  /** The agents asked from the board to review it: the newest ask of each, newest first. */
+  reviews: BoardPullReviewRef[];
 }
 
 function pullKey(repo: string, number: number): string {
@@ -250,12 +253,24 @@ function pullKey(repo: string, number: number): string {
  * Where both have a word on its state, the newer wins: a ledger line's
  * check from before the pull request last changed on GitHub — merged,
  * closed, reopened, out of draft — gives way to the listing.
+ *
+ * Each row carries who was asked to review it from the board, an agent once
+ * however often it was asked.
  */
 export function pullListOf(
   listed: readonly RepoPullRequestRef[],
   tasks: readonly BoardTaskRef[],
   host: string = GITHUB_WEB_HOST_DEFAULT,
+  reviews: readonly BoardPullReviewRef[] = [],
 ): PullListRow[] {
+  const asked = new Map<string, BoardPullReviewRef[]>();
+  for (const review of [...reviews].sort((a, b) => b.at - a.at)) {
+    const key = pullKey(review.repo, review.number);
+    const those = asked.get(key) ?? [];
+    if (!those.some((other) => other.agentId === review.agentId)) those.push(review);
+    asked.set(key, those);
+  }
+  const reviewsOf = (key: string): BoardPullReviewRef[] => asked.get(key) ?? [];
   const lines = new Map<string, BoardTaskRef>();
   for (const task of [...tasks].sort((a, b) => b.lastSeenAt - a.lastSeenAt)) {
     if (!task.pr) continue;
@@ -284,6 +299,7 @@ export function pullListOf(
       updatedAt: Math.max(pull.updatedAt, task?.lastSeenAt ?? 0),
       task,
       listed: pull,
+      reviews: reviewsOf(key),
     });
   }
   for (const [key, task] of lines) {
@@ -303,6 +319,7 @@ export function pullListOf(
       updatedAt: task.lastSeenAt,
       task,
       listed: null,
+      reviews: ref ? reviewsOf(key) : [],
     });
   }
   return rows.sort((a, b) => b.updatedAt - a.updatedAt || a.key.localeCompare(b.key));

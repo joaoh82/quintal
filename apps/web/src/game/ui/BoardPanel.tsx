@@ -21,7 +21,8 @@ import {
   type RosterEntry,
 } from '@quintal/shared';
 import { ExternalLink, GitPullRequest, Pin, Plus, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { Board } from '../useBoard';
 import { runtimeLines } from './agentRuntime';
@@ -46,7 +47,6 @@ import {
   pullListOf,
   pullProjectsOf,
   pullStateOf,
-  repoOfPrUrl,
   reviewLabel,
   taskBadgeOf,
   wallOf,
@@ -113,8 +113,8 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
   );
   const [pullFilters, setPullFilters] = useState<PullFilters>(DEFAULT_PULL_FILTERS);
   const allPulls = useMemo(
-    () => pullListOf(board.pulls.pulls, board.tasks, board.githubHost),
-    [board.pulls.pulls, board.tasks, board.githubHost],
+    () => pullListOf(board.pulls.pulls, board.tasks, board.githubHost, board.reviews),
+    [board.pulls.pulls, board.tasks, board.githubHost, board.reviews],
   );
   const pulls = useMemo(
     () => allPulls.filter((row) => pullListMatches(row, pullFilters, query)),
@@ -549,7 +549,9 @@ function AgentHistory({
  * agent's task shows what the office checked — the harness's word until
  * GitHub has been asked, GitHub's after — and, for a member of an office
  * with a token, the few things to do about it, each in two clicks. Any open
- * one can be handed to one of your agents to review.
+ * one can be handed to one of your agents to review, and the row says who
+ * was. Its number or title shows the whole of it on hover; a click on the
+ * title keeps that open under the row.
  */
 function PullsTab({
   rows,
@@ -590,8 +592,25 @@ function PullsTab({
   onRefresh: (taskId: string) => void;
   onRequestReview: (agentId: string, url: string) => void;
 }) {
-  /** Which row has something open under it: its actions, or the review picker. */
-  const [open, setOpen] = useState<{ key: string; what: 'actions' | 'review' } | null>(null);
+  /** Which row has something open under it: its details, its actions, or the review picker. */
+  const [open, setOpen] = useState<{ key: string; what: 'details' | 'actions' | 'review' } | null>(null);
+  /** The row whose card is up on hover, and what it hangs from. */
+  const [hover, setHover] = useState<{ key: string; anchor: DOMRect } | null>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepHover = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  };
+  const showHover = (key: string, target: HTMLElement) => {
+    keepHover();
+    setHover({ key, anchor: target.getBoundingClientRect() });
+  };
+  const leaveHover = () => {
+    keepHover();
+    hoverTimer.current = setTimeout(() => setHover(null), PULL_CARD_LINGER_MS);
+  };
+  useEffect(() => keepHover, []);
+  const hovered = hover && open?.key !== hover.key ? rows.find((row) => row.key === hover.key) : undefined;
   const [confirm, setConfirm] = useState<{ taskId: string; action: PullRequestAction } | null>(null);
   /** A row acted on, until the office sends the board again. */
   const [busy, setBusy] = useState<string | null>(null);
@@ -609,9 +628,10 @@ function PullsTab({
     setOpen(null);
     onAct(task.id, action, task.github?.headSha || undefined);
   };
-  const toggle = (key: string, what: 'actions' | 'review') => {
+  const toggle = (key: string, what: 'details' | 'actions' | 'review') => {
     setOpen(open?.key === key && open.what === what ? null : { key, what });
     setConfirm(null);
+    setHover(null);
   };
 
   if (guest) {
@@ -660,7 +680,7 @@ function PullsTab({
             : 'No pull requests match. Try another status, author or project.'}
         </p>
       ) : (
-        <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
+        <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto" onScroll={() => setHover(null)}>
           {rows.map((row) => {
             const task = row.task;
             // `row.repo` is lower-case `owner/name`, as the office's list is.
@@ -675,20 +695,27 @@ function PullsTab({
             return (
               <li key={row.key} className={`px-4 py-2 text-xs ${task && busy === task.id ? 'opacity-60' : ''}`}>
                 <div className="grid grid-cols-[3.5rem_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
-                  {task ? (
-                    <PrNumber task={task} state={row.state} draft={row.draft} now={now} />
-                  ) : (
-                    <a
-                      href={row.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
-                    >
-                      <GitPullRequest size={12} aria-hidden />#{row.number}
-                    </a>
-                  )}
+                  <a
+                    href={row.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onMouseEnter={(event) => showHover(row.key, event.currentTarget)}
+                    onMouseLeave={leaveHover}
+                    className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
+                  >
+                    <GitPullRequest size={12} aria-hidden />#{row.number}
+                  </a>
                   <div className="min-w-0">
-                    <p className="truncate text-white/85">{row.title}</p>
+                    <button
+                      type="button"
+                      onClick={() => toggle(row.key, 'details')}
+                      onMouseEnter={(event) => showHover(row.key, event.currentTarget)}
+                      onMouseLeave={leaveHover}
+                      aria-expanded={showing === 'details'}
+                      className="block w-full truncate text-left text-white/85 hover:text-white"
+                    >
+                      {row.title}
+                    </button>
                     <p className="truncate font-mono text-[10px] text-white/45">
                       {row.repo} · {row.headRef}
                       {row.listed?.baseRef || live?.baseRef ? ` → ${row.listed?.baseRef || live?.baseRef}` : ''}
@@ -716,6 +743,15 @@ function PullsTab({
                     ) : (
                       <p className="text-[10px] text-white/30">{task ? 'no note' : 'no agent task'}</p>
                     )}
+                    {row.reviews.length > 0 ? (
+                      <p
+                        className="truncate text-[10px] text-violet-200/90"
+                        title={row.reviews.map((review) => `${review.agentName}, asked by ${review.byName} ${ageLabel(review.at, now)}`).join('\n')}
+                      >
+                        <span className="text-white/40">reviewer </span>
+                        {row.reviews.map((review) => `${AGENT_GLYPH} ${review.agentName}`).join(', ')}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-0.5">
                     <span className="flex items-center gap-1.5">
@@ -767,6 +803,11 @@ function PullsTab({
                     </a>
                   </div>
                 </div>
+                {showing === 'details' ? (
+                  <div className="mt-2 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+                    <PullDetails row={row} now={now} />
+                  </div>
+                ) : null}
                 {showing === 'review' ? (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
                     <span className="text-white/60">Ask for a review of #{row.number}:</span>
@@ -833,6 +874,7 @@ function PullsTab({
           })}
         </ul>
       )}
+      {hover && hovered ? <PullHoverCard row={hovered} anchor={hover.anchor} now={now} onKeep={keepHover} onLeave={leaveHover} /> : null}
       {onBranch.length > 0 ? (
         <p className="border-t border-white/10 px-4 py-1.5 text-[11px] text-white/40">
           {onBranch.length === 1
@@ -888,118 +930,203 @@ function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; chil
 }
 
 /**
- * The number, with a card on hover: what GitHub said when the office last
- * asked — the checks by name, mergeability, the review, who last acted on
- * it from here — or, before it has, what the harness last reported, said
+ * Everything the office knows about one pull request, for the card a row
+ * shows on hover and under itself when its title is clicked: its title in
+ * full, where it goes, who opened it and who was asked to review it, and —
+ * for one an agent's task opened — what GitHub said when the office last
+ * asked (the checks by name, mergeability, the review, who last acted on it
+ * from here) or, before it has, what the harness last reported, said
  * plainly so a state read here is never mistaken for GitHub's.
  */
-/** `state` and `draft` are the row's: the newer of the listing and the ledger's check. */
-function PrNumber({ task, state, draft, now }: { task: BoardTaskRef; state: PullListRow['state']; draft: boolean; now: number }) {
-  const pr = task.pr!;
-  const live = task.github?.known ? task.github : null;
+function PullDetails({ row, now }: { row: PullListRow; now: number }) {
+  const task = row.task;
+  const live = task?.github?.known ? task.github : null;
+  const base = row.listed?.baseRef || live?.baseRef || '';
+  const checks = live?.checks ?? null;
   return (
-    <div className="group relative">
-      <a
-        href={pr.url}
-        target="_blank"
-        rel="noreferrer"
-        className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
-        aria-describedby={`pr-card-${task.id}`}
-      >
-        <GitPullRequest size={12} aria-hidden />#{pr.number}
-      </a>
-      <div
-        id={`pr-card-${task.id}`}
-        role="tooltip"
-        className="pointer-events-none absolute top-full left-0 z-10 mt-1 hidden w-80 rounded-md border border-white/15 bg-[#161a24] p-3 text-[11px] text-white/80 shadow-xl group-hover:block group-focus-within:block"
-      >
-        <p className="flex items-center gap-2">
-          <span className="font-mono text-sky-200">#{pr.number}</span>
-          <PrState state={state} />
-          {draft ? <Chip tone="none">draft</Chip> : null}
-          <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
-        </p>
-        <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-          <dt className="text-white/40">task</dt>
-          <dd className="truncate">{live?.title || task.title}</dd>
-          <dt className="text-white/40">branch</dt>
-          <dd className="truncate font-mono text-white/70">
-            {task.branch}
-            {live?.baseRef ? ` → ${live.baseRef}` : ''}
-          </dd>
-          <dt className="text-white/40">by</dt>
-          <dd>
-            {AGENT_GLYPH} {task.agentName}
-          </dd>
-          <dt className="text-white/40">note</dt>
-          <dd className="truncate">{task.item ? `#${task.item.number} ${task.item.title}` : 'none'}</dd>
+    <div className="text-[11px] text-white/80">
+      <p className="flex items-center gap-2">
+        <span className="font-mono text-sky-200">#{row.number}</span>
+        <PrState state={row.state} />
+        {row.draft ? <Chip tone="none">draft</Chip> : null}
+        <span className="ml-auto truncate font-mono text-[10px] text-white/45">{row.repo}</span>
+      </p>
+      <p className="mt-1.5 text-[13px] leading-snug break-words text-white/90">{row.title}</p>
+      <p className="mt-1 truncate font-mono text-[10px] text-white/50">
+        {row.headRef}
+        {base ? ` → ${base}` : ''}
+      </p>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+        <dt className="text-white/40">opened by</dt>
+        <dd className="truncate">
+          {row.author ? <span>@{row.author}</span> : null}
+          {row.author && row.agentName ? <span className="text-white/30"> · </span> : null}
+          {row.agentName ? (
+            <span className="text-sky-300/90">
+              {AGENT_GLYPH} {row.agentName}
+            </span>
+          ) : null}
+          {!row.author && !row.agentName ? <span className="text-white/40">unknown</span> : null}
+        </dd>
+        <dt className="text-white/40">reviewer</dt>
+        <dd>
+          {row.reviews.length === 0 ? (
+            <span className="text-white/40">no agent asked</span>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {row.reviews.map((review) => (
+                <li key={review.agentId} className="truncate">
+                  <span className="text-violet-200">
+                    {AGENT_GLYPH} {review.agentName}
+                  </span>
+                  <span className="text-white/40">
+                    {' '}
+                    asked by {review.byName}, {ageLabel(review.at, now)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </dd>
+        {task ? (
+          <>
+            <dt className="text-white/40">task</dt>
+            <dd className="truncate">{task.title}</dd>
+            <dt className="text-white/40">note</dt>
+            <dd className="truncate">{task.item ? `#${task.item.number} ${task.item.title}` : 'none'}</dd>
+          </>
+        ) : null}
+        {live ? (
+          <>
+            <dt className="text-white/40">merge</dt>
+            <dd>{mergeableLabel(live)}</dd>
+            <dt className="text-white/40">review</dt>
+            <dd>{reviewLabel(live.reviewDecision) ?? 'none yet'}</dd>
+            {live.lastAction ? (
+              <>
+                <dt className="text-white/40">from here</dt>
+                <dd>
+                  {pullActionLabel(live.lastAction.action).toLowerCase()} by {live.lastAction.byName}, {ageLabel(live.lastAction.at, now)}
+                </dd>
+              </>
+            ) : null}
+            <dt className="text-white/40">head</dt>
+            <dd className="truncate font-mono text-white/60">{live.headSha.slice(0, 10)}</dd>
+          </>
+        ) : null}
+        {row.listed ? (
+          <>
+            <dt className="text-white/40">opened</dt>
+            <dd>{ageLabel(row.listed.createdAt, now)}</dd>
+          </>
+        ) : task ? (
+          <>
+            <dt className="text-white/40">started</dt>
+            <dd>{ageLabel(task.startedAt, now)}</dd>
+          </>
+        ) : null}
+        <dt className="text-white/40">updated</dt>
+        <dd>{ageLabel(row.updatedAt, now)}</dd>
+      </dl>
+      {checks && checks.total > 0 ? (
+        <div className="mt-2 border-t border-white/10 pt-2">
+          <p className={checks.summary === 'passing' ? 'text-emerald-300' : checks.summary === 'failing' ? 'text-rose-300' : 'text-amber-200'}>
+            {checks.summary === 'passing'
+              ? `All checks passed · ${checks.passed}/${checks.total}`
+              : checks.summary === 'failing'
+                ? `${checks.failed} of ${checks.total} checks failing`
+                : `${checks.pending} of ${checks.total} checks running`}
+          </p>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {checks.runs.slice(0, 10).map((run) => (
+              <li key={run.name} className="flex items-center gap-1.5">
+                <span
+                  className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                    run.status !== 'completed'
+                      ? 'bg-amber-300'
+                      : run.conclusion === 'success' || run.conclusion === 'neutral' || run.conclusion === 'skipped'
+                        ? 'bg-emerald-400'
+                        : 'bg-rose-400'
+                  }`}
+                  aria-hidden
+                />
+                <span className="truncate">{run.name}</span>
+                <span className="ml-auto font-mono text-[10px] text-white/40">{run.status !== 'completed' ? run.status.replace('_', ' ') : run.conclusion}</span>
+              </li>
+            ))}
+            {checks.total > 10 ? <li className="text-white/40">and {checks.total - 10} more</li> : null}
+          </ul>
+        </div>
+      ) : null}
+      <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[10px] text-white/40">
+        <span className="min-w-0 flex-1">
           {live ? (
             <>
-              <dt className="text-white/40">merge</dt>
-              <dd>{mergeableLabel(live)}</dd>
-              <dt className="text-white/40">review</dt>
-              <dd>{reviewLabel(live.reviewDecision) ?? 'none yet'}</dd>
-              <dt className="text-white/40">checks</dt>
-              <dd>
-                {live.checks.total === 0 ? (
-                  'none'
-                ) : (
-                  <ul className="flex flex-col gap-0.5">
-                    {live.checks.runs.slice(0, 8).map((run) => (
-                      <li key={run.name} className="flex items-center gap-1.5">
-                        <span
-                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
-                            run.status !== 'completed'
-                              ? 'bg-amber-300'
-                              : run.conclusion === 'success' || run.conclusion === 'neutral' || run.conclusion === 'skipped'
-                                ? 'bg-emerald-400'
-                                : 'bg-rose-400'
-                          }`}
-                          aria-hidden
-                        />
-                        <span className="truncate">{run.name}</span>
-                        <span className="ml-auto font-mono text-[10px] text-white/40">{run.status !== 'completed' ? run.status.replace('_', ' ') : run.conclusion}</span>
-                      </li>
-                    ))}
-                    {live.checks.total > 8 ? <li className="text-white/40">and {live.checks.total - 8} more</li> : null}
-                  </ul>
-                )}
-              </dd>
-              <dt className="text-white/40">head</dt>
-              <dd className="truncate font-mono text-white/60">{live.headSha.slice(0, 10)}</dd>
-              {live.lastAction ? (
-                <>
-                  <dt className="text-white/40">from here</dt>
-                  <dd>
-                    {pullActionLabel(live.lastAction.action).toLowerCase()} by {live.lastAction.byName}, {ageLabel(live.lastAction.at, now)}
-                  </dd>
-                </>
-              ) : null}
+              From GitHub, checked {ageLabel(live.fetchedAt, now)}.
+              {task?.github?.error ? <span className="text-rose-300/80"> The last check failed: {task.github.error}</span> : null}
             </>
-          ) : null}
-          <dt className="text-white/40">started</dt>
-          <dd>{ageLabel(task.startedAt, now)}</dd>
-          <dt className="text-white/40">last heard</dt>
-          <dd>{ageLabel(task.lastSeenAt, now)}</dd>
-          {task.endedAt !== null ? (
-            <>
-              <dt className="text-white/40">ended</dt>
-              <dd>{ageLabel(task.endedAt, now)}</dd>
-            </>
-          ) : null}
-        </dl>
-        {live ? (
-          <p className="mt-2 text-[10px] text-white/40">
-            From GitHub, checked {ageLabel(live.fetchedAt, now)}.
-            {task.github?.error ? <span className="text-rose-300/80"> The last check failed: {task.github.error}</span> : null}
-          </p>
-        ) : task.github?.error ? (
-          <p className="mt-2 text-[10px] text-rose-300/80">GitHub could not be asked: {task.github.error}</p>
-        ) : (
-          <p className="mt-2 text-[10px] text-white/40">As the agent's harness last reported it. Not checked with GitHub.</p>
-        )}
+          ) : task?.github?.error ? (
+            <span className="text-rose-300/80">GitHub could not be asked: {task.github.error}</span>
+          ) : task ? (
+            "As the agent's harness last reported it. Not checked with GitHub."
+          ) : (
+            'As GitHub listed it.'
+          )}
+        </span>
+        <a href={row.url} target="_blank" rel="noreferrer" className="flex shrink-0 items-center gap-1 text-sky-200 hover:underline">
+          View on GitHub <ExternalLink size={10} aria-hidden />
+        </a>
       </div>
     </div>
+  );
+}
+
+/** How long the pointer may be away from a row and its card before the card goes. */
+const PULL_CARD_LINGER_MS = 150;
+const PULL_CARD_WIDTH = 352;
+
+/**
+ * The hover card. It is portalled to the document's body, not drawn in the
+ * list: the board's overlay has a backdrop filter, which would make it the
+ * box a fixed card is placed in, and the panel under it clips. On the body,
+ * the anchor's viewport coordinates are the card's. It hangs under the
+ * row's number or title, or above when there is no room below, and stays
+ * while the pointer is on it, so its link can be followed.
+ *
+ * It is the pointer's shortcut. From the keyboard, the title is a button
+ * that pins the same details under the row, link and all, in tab order.
+ */
+function PullHoverCard({
+  row,
+  anchor,
+  now,
+  onKeep,
+  onLeave,
+}: {
+  row: PullListRow;
+  anchor: DOMRect;
+  now: number;
+  onKeep: () => void;
+  onLeave: () => void;
+}) {
+  const below = window.innerHeight - anchor.bottom > 320 || anchor.top < window.innerHeight / 2;
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - PULL_CARD_WIDTH - 8));
+  return createPortal(
+    <div
+      onMouseEnter={onKeep}
+      onMouseLeave={onLeave}
+      style={{
+        position: 'fixed',
+        left,
+        width: PULL_CARD_WIDTH,
+        ...(below ? { top: anchor.bottom + 4 } : { bottom: window.innerHeight - anchor.top + 4 }),
+        maxHeight: below ? window.innerHeight - anchor.bottom - 12 : anchor.top - 12,
+      }}
+      className="z-50 overflow-y-auto rounded-md border border-white/15 bg-[#161a24] p-3 shadow-xl"
+    >
+      <PullDetails row={row} now={now} />
+    </div>,
+    document.body,
   );
 }
 

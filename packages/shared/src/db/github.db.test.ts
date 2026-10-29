@@ -9,6 +9,7 @@ import {
   describeOfficeGithub,
   getOfficeGithub,
   listBoardEvents,
+  listPullReviewRequests,
   noteOfficeGithubCheck,
   pullRequestStatusesForWorkspace,
   recordBoardEvent,
@@ -154,5 +155,23 @@ describe('who did what on the board', () => {
     assert.equal(forTask.length, 1);
     assert.equal(forTask[0]?.actor.name, 'Josh');
     assert.equal(forTask[0]?.createdAt, 1000);
+  });
+
+  it('reads back who was asked to review which pull request, newest first, skipping what does not say', async () => {
+    const { db, owner, marvin } = await office();
+    const actor = { kind: 'user' as const, id: owner.id, name: 'Josh' };
+    const payload = { repo: 'Acme/Office', number: 12, url: 'https://github.com/acme/office/pull/12', agentId: marvin.id, agentName: 'Marvin' };
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload, now: 1000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload: { url: 'x' }, now: 2000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.close', actor, now: 3000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload: { ...payload, number: 13 }, now: 4000 });
+    const reviews = await listPullReviewRequests(db, owner.workspaceId);
+    assert.deepEqual(
+      reviews.map((review) => [review.repo, review.number, review.agentName, review.byName, review.at]),
+      [
+        ['acme/office', 13, 'Marvin', 'Josh', 4000],
+        ['acme/office', 12, 'Marvin', 'Josh', 1000],
+      ],
+    );
   });
 });

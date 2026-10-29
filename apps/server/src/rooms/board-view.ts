@@ -5,6 +5,7 @@ import {
   type BoardGithubRef,
   type BoardItemRef,
   type BoardPayload,
+  type BoardPullReviewRef,
   type BoardTaskRef,
   type MembershipRole,
   type RepoPullsRef,
@@ -21,7 +22,8 @@ import {
  * 2. A guest reads the notes, which is the board's policy from the start.
  *    They do not get the office's history of work, nor the names of its
  *    machines: the ledger and `hostLabel`, `runtimeId`, `modelId` are a
- *    member's. Nor whether the office has a GitHub token.
+ *    member's. Nor whether the office has a GitHub token, nor who was asked
+ *    to review what.
  * 3. GitHub being asked again is not the board changing either. A look at a
  *    pull request stamps `fetchedAt`; in the signature that stamp is kept
  *    to `BOARD_CHECKED_GRAIN_MS`, so a minute's poll that found the same
@@ -39,6 +41,7 @@ export interface BoardView {
   tasks: readonly BoardTaskRef[];
   github: BoardGithubRef;
   pulls: RepoPullsRef;
+  reviews: readonly BoardPullReviewRef[];
 }
 
 const NO_GITHUB: BoardGithubRef = { connected: false, login: null, repos: [] };
@@ -72,7 +75,7 @@ export function boardSignatureOf(view: BoardView, grainMs = BOARD_CHECKED_GRAIN_
   const tasks = view.tasks.map((task) =>
     task.github ? { ...task, github: { ...task.github, fetchedAt: Math.floor(task.github.fetchedAt / grainMs) * grainMs } } : task,
   );
-  return `${JSON.stringify([view.items, view.agents, tasks, view.github])}\n${pullsSignatureOf(view.pulls, grainMs)}`;
+  return `${JSON.stringify([view.items, view.agents, tasks, view.github, view.reviews])}\n${pullsSignatureOf(view.pulls, grainMs)}`;
 }
 
 /** The board as a person of this role is sent it. */
@@ -84,6 +87,7 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
       tasks: [...view.tasks],
       github: { ...view.github },
       pulls: { ...view.pulls, pulls: [...view.pulls.pulls] },
+      reviews: [...view.reviews],
     };
   }
   return {
@@ -92,5 +96,6 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
     tasks: [],
     github: { ...NO_GITHUB },
     pulls: { ...NO_REPO_PULLS },
+    reviews: [],
   };
 }
