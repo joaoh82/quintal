@@ -676,7 +676,7 @@ function PullsTab({
               <li key={row.key} className={`px-4 py-2 text-xs ${task && busy === task.id ? 'opacity-60' : ''}`}>
                 <div className="grid grid-cols-[3.5rem_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
                   {task ? (
-                    <PrNumber task={task} state={row.state} now={now} />
+                    <PrNumber task={task} state={row.state} draft={row.draft} now={now} />
                   ) : (
                     <a
                       href={row.url}
@@ -893,7 +893,8 @@ function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; chil
  * it from here — or, before it has, what the harness last reported, said
  * plainly so a state read here is never mistaken for GitHub's.
  */
-function PrNumber({ task, state, now }: { task: BoardTaskRef; state: PullListRow['state']; now: number }) {
+/** `state` and `draft` are the row's: the newer of the listing and the ledger's check. */
+function PrNumber({ task, state, draft, now }: { task: BoardTaskRef; state: PullListRow['state']; draft: boolean; now: number }) {
   const pr = task.pr!;
   const live = task.github?.known ? task.github : null;
   return (
@@ -915,7 +916,7 @@ function PrNumber({ task, state, now }: { task: BoardTaskRef; state: PullListRow
         <p className="flex items-center gap-2">
           <span className="font-mono text-sky-200">#{pr.number}</span>
           <PrState state={state} />
-          {live?.draft ? <Chip tone="none">draft</Chip> : null}
+          {draft ? <Chip tone="none">draft</Chip> : null}
           <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
         </p>
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
