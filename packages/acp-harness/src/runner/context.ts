@@ -303,7 +303,7 @@ export function commandSection(command: AgentCommandCall, fromName: string): str
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote.',
+  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update.',
   'say posts a line now, into the conversation this turn is in — use it to say',
   'you have picked something up and to report when it lands or blocks, rather',
   'than holding everything for your final answer. Your final answer is posted',

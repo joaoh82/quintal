@@ -79,6 +79,10 @@ function fixture() {
     messagesGet: async () => ({ scope: 'nearby', zoneId: null, channelId: null, messages: [], hasMore: false }),
     memoryGet: async () => ({ slug: 'core', content: '', hash: 'fixture' }) as Awaited<ReturnType<Gateway['memoryGet']>>,
     memorySet: async () => { throw new Error('Read-only latency fixture'); },
+    boardList: async () => ({ items: [], agents: [], you: { agentId: 'latency-agent', name: 'LatencyAgent' } }),
+    boardGet: async () => { throw new Error('Read-only latency fixture'); },
+    boardCreate: async () => { throw new Error('Read-only latency fixture'); },
+    boardUpdate: async () => { throw new Error('Read-only latency fixture'); },
     occupants: () => [], channels: () => [lobby, ...dms],
   };
   const runner = new AgentRunner({ ...config, name: 'LatencyAgent' }, undefined, gateway);

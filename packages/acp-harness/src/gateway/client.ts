@@ -11,6 +11,13 @@ import {
   type AgentOccupant,
   type AgentHostReportPayload,
   type AgentMessagesGetPayload,
+  type AgentBoardCreatePayload,
+  type AgentBoardGetPayload,
+  type AgentBoardListPayload,
+  type AgentBoardUpdatePayload,
+  type BoardGetResult,
+  type BoardListResult,
+  type BoardWriteResult,
   type AgentReadyPayload,
   type AgentResultPayload,
   type AgentRosterEvent,
@@ -432,6 +439,35 @@ export class GatewayClient {
     return this.#request<MessagesGetResult>(AgentMessage.MessagesGet, query);
   }
 
+  // --- the board -----------------------------------------------------------
+
+  /**
+   * The office board. An office that predates it says no `boardVersion`,
+   * and the question is refused here rather than sent to time out there.
+   */
+  boardList(query: Omit<AgentBoardListPayload, 'requestId'>): Promise<BoardListResult> {
+    return this.#boardRequest<BoardListResult>(AgentMessage.BoardList, query);
+  }
+
+  boardGet(number: number): Promise<BoardGetResult> {
+    return this.#boardRequest<BoardGetResult>(AgentMessage.BoardGet, { number });
+  }
+
+  boardCreate(input: Omit<AgentBoardCreatePayload, 'requestId'>): Promise<BoardWriteResult> {
+    return this.#boardRequest<BoardWriteResult>(AgentMessage.BoardCreate, input);
+  }
+
+  boardUpdate(input: Omit<AgentBoardUpdatePayload, 'requestId'>): Promise<BoardWriteResult> {
+    return this.#boardRequest<BoardWriteResult>(AgentMessage.BoardUpdate, input);
+  }
+
+  #boardRequest<T>(type: string, payload: Record<string, unknown>): Promise<T> {
+    if (this.#ready && this.#ready.boardVersion !== 1) {
+      return Promise.reject(new Error('this office has no board: it predates the board tools'));
+    }
+    return this.#request<T>(type, payload);
+  }
+
   memoryGet(slug: string): Promise<MemoryGetResult> {
     return this.#request<MemoryGetResult>(AgentMessage.MemoryGet, { slug });
   }
@@ -514,6 +550,10 @@ export type Gateway = Pick<
   | 'moveToPerson'
   | 'lookAround'
   | 'messagesGet'
+  | 'boardList'
+  | 'boardGet'
+  | 'boardCreate'
+  | 'boardUpdate'
   | 'memoryGet'
   | 'memorySet'
   | 'occupants'

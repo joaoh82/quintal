@@ -179,6 +179,7 @@ try {
   await standingChangesMidSession();
   await anAgentTakesANote();
   await aColleagueKeepsTheirHandsOffMyAgent();
+  await anAgentWritesOnTheBoard();
 } finally {
   await me.room.leave();
 }
@@ -397,6 +398,99 @@ async function aColleagueKeepsTheirHandsOffMyAgent() {
     }
     await Promise.all([them.room.leave(), mine.room.leave(), other.room.leave()]);
     await db.execute({ sql: 'DELETE FROM agents WHERE id IN (?, ?)', args: [myAgent.id, theirAgent.id] });
+    await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
+  }
+}
+
+
+/**
+ * An agent with the `board` scope reads the board, pins a note as itself,
+ * changes it, and hands it only where its owner could; one without the scope
+ * is refused at the door.
+ */
+async function anAgentWritesOnTheBoard() {
+  const db = getClient();
+  const { getDb } = await import('@quintal/shared/db');
+  const stamp = Date.now().toString(36);
+  const colleague = await signIn();
+  const theirs = await ticket(colleague.cookie);
+  const membershipId = randomUUID();
+  await db.execute({
+    sql: 'INSERT INTO memberships (id, workspace_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)',
+    args: [membershipId, workspaceId, theirs.user.id, 'member', Date.now()],
+  });
+  const scribe = await createAgent(getDb(), { workspaceId, ownerUserId: user.id, name: `Scribe${stamp}`, spriteKey: 'slate' });
+  const sibling = await createAgent(getDb(), { workspaceId, ownerUserId: user.id, name: `Sibling${stamp}`, spriteKey: 'slate' });
+  const theirAgent = await createAgent(getDb(), { workspaceId, ownerUserId: theirs.user.id, name: `Other${stamp}`, spriteKey: 'slate' });
+  const mute = await createAgent(getDb(), { workspaceId, ownerUserId: user.id, name: `Mute${stamp}`, spriteKey: 'slate', scopes: ['chat'] });
+  const kinds = ['agent:result', 'agent:ready', 'agent:error', 'agent:channel_chat'];
+  const them = await enter({ agentKey: scribe.key, workspaceId }, kinds);
+  const quiet = await enter({ agentKey: mute.key, workspaceId }, kinds);
+  let seq = 0;
+  const ask = async (who, type, payload) => {
+    const requestId = `s${(seq += 1)}`;
+    const reply = who.next('agent:result', 6000, (result) => result.requestId === requestId);
+    who.room.send(type, { ...payload, requestId });
+    return reply;
+  };
+  const notes = [];
+  try {
+    const ready = await them.next('agent:ready', 6000).catch(() => them.inbox['agent:ready'][0]);
+    check(ready?.boardVersion === 1, 'the office says it has a board', JSON.stringify(ready?.boardVersion));
+
+    const shown = me.next('board', 6000, (b) => b.items.some((i) => i.title === 'Login redirect drops the return URL'));
+    const created = await ask(them, 'agent:board_create', {
+      title: 'Login redirect drops the return URL',
+      body: 'Seen on staging. After sign-in the user lands on / instead of where they were.',
+      labels: ['bug', 'auth'],
+    });
+    check(created.ok === true && created.data.item.number > 0, 'an agent pins a note', JSON.stringify(created.error));
+    const note = created.data.item;
+    notes.push(note.id);
+    check(note.createdBy?.kind === 'agent' && note.createdBy?.name === scribe.name, 'written as itself', JSON.stringify(note.createdBy));
+    check(created.data.handover === null, 'a note handed to nobody has no hand-over line');
+    check((await shown.catch(() => null)) !== null, 'and everybody is told');
+
+    const listed = await ask(them, 'agent:board_list', { status: 'open' });
+    check(listed.ok === true && listed.data.items.some((i) => i.id === note.id), 'it reads the board back');
+    check(listed.data.agents.some((a) => a.name === sibling.name && a.yours === true) && listed.data.agents.some((a) => a.name === theirAgent.name && a.yours === false), 'and is told which agents are its owner\'s', JSON.stringify(listed.data.agents.map((a) => [a.name, a.yours])));
+    const mineBefore = await ask(them, 'agent:board_list', { mine: true });
+    check(mineBefore.ok === true && !mineBefore.data.items.some((i) => i.id === note.id), 'mine is only what it was handed');
+
+    const got = await ask(them, 'agent:board_get', { number: note.number });
+    check(got.ok === true && got.data.item.id === note.id, 'board_get by number');
+    const missing = await ask(them, 'agent:board_get', { number: 999999 });
+    check(missing.ok === false && missing.error.code === 'not_found', 'an unknown number is not found', JSON.stringify(missing.error));
+
+    const toMe = await ask(them, 'agent:board_update', { number: note.number, assignee: 'me', status: 'in_progress' });
+    check(toMe.ok === true && toMe.data.item.assignee?.id === scribe.id && toMe.data.item.status === 'in_progress', 'it takes a note itself and moves it', JSON.stringify(toMe.error));
+    check(toMe.data.handover === null, 'taking a note yourself has no hand-over line');
+    const mineAfter = await ask(them, 'agent:board_list', { mine: true });
+    check(mineAfter.data.items.some((i) => i.id === note.id), 'and mine now has it');
+
+    const toSibling = await ask(them, 'agent:board_update', { number: note.number, assignee: `@${sibling.name}` });
+    check(toSibling.ok === true && toSibling.data.item.assignee?.id === sibling.id, "it hands a note to its owner's other agent by name", JSON.stringify(toSibling.error));
+    check(toSibling.data.handover === `@${sibling.name} board note #${note.number} ${note.title} is yours.`, 'and gets the line to say', toSibling.data.handover);
+
+    const toTheirs = await ask(them, 'agent:board_update', { number: note.number, assignee: theirAgent.name });
+    check(toTheirs.ok === false && toTheirs.error.code === 'unauthorised' && /owner/.test(toTheirs.error.message), "but not to a colleague's agent", JSON.stringify(toTheirs.error));
+    const toNobodyKnown = await ask(them, 'agent:board_update', { number: note.number, assignee: 'Zaphod' });
+    check(toNobodyKnown.ok === false && toNobodyKnown.error.code === 'not_found', 'nor to a name nobody here has', JSON.stringify(toNobodyKnown.error));
+
+    const nothing = await ask(them, 'agent:board_update', { number: note.number });
+    check(nothing.ok === false && nothing.error.code === 'invalid_payload', 'a change that changes nothing is refused', JSON.stringify(nothing.error));
+
+    const refused = await ask(quiet, 'agent:board_list', {});
+    check(refused.ok === false && refused.error.code === 'missing_scope', 'an agent without the scope is refused', JSON.stringify(refused.error));
+    const refusedWrite = await ask(quiet, 'agent:board_create', { title: 'Sneaky' });
+    check(refusedWrite.ok === false && refusedWrite.error.code === 'missing_scope', 'reads and writes alike');
+  } finally {
+    for (const id of notes) {
+      me.room.send('board_delete', { itemId: id });
+      await me.next('board').catch(() => {});
+    }
+    await Promise.all([them.room.leave(), quiet.room.leave()]);
+    await db.execute({ sql: 'DELETE FROM agents WHERE id IN (?, ?, ?, ?)', args: [scribe.id, sibling.id, theirAgent.id, mute.id] });
     await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
   }
 }

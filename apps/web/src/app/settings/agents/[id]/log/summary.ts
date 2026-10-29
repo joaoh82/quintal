@@ -32,6 +32,18 @@ export function describe(kind: string, payload: unknown): string {
       return String(data.slug ?? '');
     case 'command.messages_get':
       return `${String(data.scope ?? '')} · n=${String(data.n ?? '')}`;
+    case 'command.board_list':
+      return `${typeof data.status === 'string' ? data.status : 'every column'}${data.mine === true ? ' · mine' : ''}`;
+    case 'command.board_get':
+      return `#${String(data.number ?? '?')}`;
+    case 'command.board_create':
+      return `#${String(data.number ?? '?')} “${String(data.title ?? '')}”${
+        typeof data.assignee === 'string' ? ` · for ${data.assignee}` : ''
+      }`;
+    case 'command.board_update':
+      return `#${String(data.number ?? '?')} · ${asList(data.changed).join(', ') || 'no change'}${
+        'assignee' in data ? ` · for ${typeof data.assignee === 'string' ? data.assignee : 'nobody'}` : ''
+      }`;
     case 'effect.task_changed':
       if (typeof data.branch !== 'string') return 'no task';
       return `“${String(data.title ?? '')}” · ${data.branch}${

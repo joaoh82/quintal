@@ -224,6 +224,88 @@ const TOOLS = [
     },
   },
   {
+    name: 'board_list',
+    description:
+      'Read the office board: every note (number, title, body, column, labels, who it is for, ' +
+      'and the branch or pull request it is on), plus the agents a note could be handed to. ' +
+      'Columns are "open", "in_progress" and "done". Pass status to read one column, or mine: true ' +
+      'for the notes handed to you. Read it when you are asked what is on the board, what you are ' +
+      'on, or before you write a note that might already be there.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['open', 'in_progress', 'done'] },
+        mine: { type: 'boolean', description: 'Only the notes handed to you.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'board_get',
+    description:
+      'Read one note on the office board by its number ("#12" is 12): the whole body, its ' +
+      'labels, who it is for, and the branch and pull request it is on. Read a note you were ' +
+      'handed before you start on it, and pass its number to task_begin as item.',
+    inputSchema: {
+      type: 'object',
+      properties: { number: { type: 'integer', minimum: 1 } },
+      required: ['number'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'board_create',
+    description:
+      'Pin a note on the office board, written as you, for everybody to read. When someone asks ' +
+      'you to put something on the board, write a ticket worth reading from what they said: a ' +
+      'one-line title that says what, not "fix bug", and a body with the why, what you know, and ' +
+      'what done looks like. Say the number back ("That is #14"). Do not hand it to anybody unless ' +
+      'you were told to: leave it on the board and ask whether to assign it. You may hand a note ' +
+      'only to an agent your owner owns, yourself included. When you do hand one over, the result ' +
+      'carries a line to say where you were asked, naming them, so they are woken by it; the ' +
+      'office posts nothing for you.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'One line, up to 200 characters. What the note is.' },
+        body: { type: 'string', description: 'The ticket: why, what is known, what done looks like. Up to 8000 characters.' },
+        status: { type: 'string', enum: ['open', 'in_progress', 'done'], description: 'The column. Default open.' },
+        color: { type: 'string', enum: ['yellow', 'blue', 'green', 'pink', 'orange', 'purple'] },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Up to ten short labels: "bug", "ui".' },
+        assignee: {
+          type: ['string', 'null'],
+          description: 'An agent, by name, or "me". Only when told to hand it over. Omit to leave it on the board.',
+        },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'board_update',
+    description:
+      'Change a note on the office board by its number: title, body, column, colour, labels, or ' +
+      'who it is for. Only what you pass changes. Move a note you are on to "in_progress" or ' +
+      '"done" when you were not handed it with a task (task_begin with item moves it for you); ' +
+      'never move a note that is not yours unless asked. assignee: an agent by name, "me", or null ' +
+      'to take it off whoever has it. You may hand a note only to an agent your owner owns. When ' +
+      'you do, say the returned handover line where you were asked, so they are woken by it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        number: { type: 'integer', minimum: 1 },
+        title: { type: 'string' },
+        body: { type: 'string' },
+        status: { type: 'string', enum: ['open', 'in_progress', 'done'] },
+        color: { type: 'string', enum: ['yellow', 'blue', 'green', 'pink', 'orange', 'purple'] },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Replaces the labels whole.' },
+        assignee: { type: ['string', 'null'], description: 'An agent by name, "me", or null for nobody.' },
+      },
+      required: ['number'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'memory_get',
     description:
       'Read one of your memory slugs. "core" holds your identity, standing ' +
