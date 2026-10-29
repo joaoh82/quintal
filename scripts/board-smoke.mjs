@@ -138,7 +138,7 @@ try {
 
   me.room.send('board_update', { itemId: chair.id, assigneeAgentId: 'nobody-here' });
   const refusedAssignee = await me.next('error');
-  check(refusedAssignee.code === 'invalid_payload', 'a note cannot be for an agent that is not here', refusedAssignee.message);
+  check(refusedAssignee.code === 'not_found', 'a note cannot be for an agent that is not here', refusedAssignee.message);
 
   me.room.send('board_update', { itemId: chair.id, title: '   ' });
   const refusedTitle = await me.next('error');
@@ -178,6 +178,7 @@ try {
 
   await standingChangesMidSession();
   await anAgentTakesANote();
+  await aColleagueKeepsTheirHandsOffMyAgent();
 } finally {
   await me.room.leave();
 }
@@ -320,5 +321,82 @@ async function anAgentTakesANote() {
   } finally {
     await them.room.leave();
     await db.execute({ sql: 'DELETE FROM agents WHERE id = ?', args: [agent.id] });
+  }
+}
+
+/**
+ * Handing a note to an agent is its owner's to do, and a task names only its
+ * own notes: a colleague is refused my agent, my agent hears nothing from
+ * them, and their agent's task leaves my agent's note alone.
+ */
+async function aColleagueKeepsTheirHandsOffMyAgent() {
+  const db = getClient();
+  const { getDb } = await import('@quintal/shared/db');
+  const stamp = Date.now().toString(36);
+  const colleague = await signIn();
+  const theirs = await ticket(colleague.cookie);
+  const membershipId = randomUUID();
+  await db.execute({
+    sql: 'INSERT INTO memberships (id, workspace_id, user_id, role, created_at) VALUES (?, ?, ?, ?, ?)',
+    args: [membershipId, workspaceId, theirs.user.id, 'member', Date.now()],
+  });
+  const myAgent = await createAgent(getDb(), { workspaceId, ownerUserId: user.id, name: `Mine${stamp}`, spriteKey: 'slate' });
+  const theirAgent = await createAgent(getDb(), { workspaceId, ownerUserId: theirs.user.id, name: `Theirs${stamp}`, spriteKey: 'slate' });
+  const agentKinds = ['agent:channel_chat', 'agent:ready', 'agent:error'];
+  const them = await enter({ token: theirs.token, workspaceId });
+  const mine = await enter({ agentKey: myAgent.key, workspaceId }, agentKinds);
+  const other = await enter({ agentKey: theirAgent.key, workspaceId }, agentKinds);
+  const silence = (who, ms = 1500) => who.next('agent:channel_chat', ms).then(() => false, () => true);
+  const noteOf = (board, id) => board.items.find((item) => item.id === id);
+  const fresh = async (who) => {
+    who.room.send('board_get', {});
+    return who.next('board');
+  };
+  const notes = [];
+  try {
+    // A note of mine, in my agent's hands.
+    me.room.send('board_create', { title: 'Fix the stapler lid', assigneeAgentId: myAgent.id });
+    const lid = (await me.next('board', 4000, (b) => b.items.some((i) => i.title === 'Fix the stapler lid'))).items.find((i) => i.title === 'Fix the stapler lid');
+    notes.push(lid.id);
+    await mine.next('agent:channel_chat', 6000, (line) => /is yours/.test(line.text));
+    await them.next('board', 4000, (b) => noteOf(b, lid.id)?.assignee?.id === myAgent.id).catch(() => {});
+
+    // A colleague may not hand my agent a note: refused, and my agent hears nothing.
+    me.room.send('board_create', { title: 'Sort the post' });
+    const post = (await me.next('board', 4000, (b) => b.items.some((i) => i.title === 'Sort the post'))).items.find((i) => i.title === 'Sort the post');
+    notes.push(post.id);
+    const quiet = silence(mine);
+    them.room.send('board_update', { itemId: post.id, assigneeAgentId: myAgent.id });
+    const refused = await them.next('error');
+    check(refused.code === 'unauthorised' && /owner/.test(refused.message), "a colleague is refused my agent, and told whose it is", refused.message);
+    check(await quiet, 'and my agent hears nothing from them');
+    check((noteOf(await fresh(me), post.id)).assignee === null, 'the note stays unassigned');
+
+    // Their agent's task naming my agent's note leaves it alone.
+    other.room.send('agent:task', { title: 'fix the lid', repo: 'office', branch: `quintal/theirs/${stamp}`, item: lid.number });
+    await new Promise((r) => setTimeout(r, 1500));
+    const lidNow = noteOf(await fresh(me), lid.id);
+    check(lidNow.task === null && lidNow.status === 'open', "another agent's task naming my agent's note neither links nor moves it", JSON.stringify(lidNow.task));
+    other.room.send('agent:task', null);
+
+    // They hand a note to their own agent, as they may; I may take it off, and their agent is not told by me.
+    const handed = them.next('board', 6000, (b) => noteOf(b, post.id)?.assignee?.id === theirAgent.id);
+    const told = other.next('agent:channel_chat', 6000, (line) => /is yours/.test(line.text));
+    them.room.send('board_update', { itemId: post.id, assigneeAgentId: theirAgent.id });
+    await handed;
+    check((await told).command?.name === 'board', 'a colleague hands a note to their own agent, with the brief');
+    const unsaid = silence(other);
+    const taken = me.next('board', 6000, (b) => noteOf(b, post.id)?.assignee === null);
+    me.room.send('board_update', { itemId: post.id, assigneeAgentId: null });
+    await taken;
+    check(await unsaid, "I may take a note off their agent, but their agent is not told in a DM I may not open");
+  } finally {
+    for (const id of notes) {
+      me.room.send('board_delete', { itemId: id });
+      await me.next('board').catch(() => {});
+    }
+    await Promise.all([them.room.leave(), mine.room.leave(), other.room.leave()]);
+    await db.execute({ sql: 'DELETE FROM agents WHERE id IN (?, ?)', args: [myAgent.id, theirAgent.id] });
+    await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
   }
 }

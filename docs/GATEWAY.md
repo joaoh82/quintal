@@ -780,7 +780,14 @@ when `pr.state` is `merged`, and shows the branch and pull request on the
 note. A task that names no note is matched to the newest note handed to the
 agent that is not done and that no task has taken yet, so an owner's `!task`
 still moves the board. A note a person has already moved is never moved
-back.
+back, and a note handed to *another* agent is never yours: a task naming it
+is kept with no note, and that agent's card is left alone.
+
+A person hands a note to an agent only if they own it — the rule for
+messaging it, and for the same reason: the agent reads the note as a request
+and acts as its owner. The hand-over is a line in the owner's DM with the
+agent, so it also needs the `dm` scope; without it the note is on the board
+and nowhere else.
 
 It is not the status line, on purpose. The status line is the activity
 signal: a non-empty one keeps a balloon up and keeps the office's idle life

@@ -6,6 +6,7 @@ import {
   BOARD_TITLE_MAX_LENGTH,
   boardStatusLabel,
   mayDeleteBoardItem,
+  mayAssignBoardItem,
   mayWriteBoard,
   type BoardAgentRef,
   type BoardColor,
@@ -454,6 +455,12 @@ function NoteDrawer({ item, board, canWrite, online, onClose, onMessageAgent }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, itemVersion]);
   const editing = canWrite;
+  // Only your own agents are on offer: handing a note to somebody else's is
+  // theirs to do. Whoever has it now stays listed, greyed, so the select can
+  // show it and you can still take the note off them.
+  const assignable = board.agents.filter(
+    (agent: BoardAgentRef) => mayAssignBoardItem(board.you, agent) || agent.id === item?.assignee?.id,
+  );
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(item));
   const canDelete = item !== null && mayDeleteBoardItem(board.you, item);
   const moveTo = item ? nextStatus(item.status) : null;
@@ -565,8 +572,13 @@ function NoteDrawer({ item, board, canWrite, online, onClose, onMessageAgent }: 
               <option value="" className="bg-[#10131a]">
                 nobody yet
               </option>
-              {board.agents.map((agent: BoardAgentRef) => (
-                <option key={agent.id} value={agent.id} className="bg-[#10131a]">
+              {assignable.map((agent: BoardAgentRef) => (
+                <option
+                  key={agent.id}
+                  value={agent.id}
+                  disabled={!mayAssignBoardItem(board.you, agent)}
+                  className="bg-[#10131a]"
+                >
                   {AGENT_GLYPH} {agent.name}
                   {online.has(agent.id) ? '' : ' (away)'}
                   {agent.ownerName ? ` · ${agent.ownerName}'s` : ''}

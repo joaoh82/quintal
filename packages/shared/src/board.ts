@@ -251,6 +251,37 @@ export function mayWriteBoard(actor: Pick<ChannelActor, 'role'>): boolean {
 }
 
 /**
+ * May this person hand a note to this agent?
+ *
+ * **Its owner, and nobody else** — the rule for messaging it (`mayOpenDm`)
+ * and for pulling it into a channel, for the same reason: a note handed over
+ * is a request the agent reads as being asked, and it acts as its owner, on
+ * its owner's machine. A colleague who could hand my agent work could put
+ * instructions in front of it that I never see. Taking a note off an agent,
+ * or moving it between columns, is a board edit any member may make; only
+ * putting one in an agent's hands is the owner's.
+ *
+ * Admins are not excepted: the office's rule for agents is accountability,
+ * not rank. Anybody else asks the owner.
+ */
+export function mayAssignBoardItem(actor: ChannelActor, agent: Pick<BoardAgentRef, 'ownerUserId'>): boolean {
+  return actor.role !== null && agent.ownerUserId === actor.userId;
+}
+
+/**
+ * The note a task is for, if the task may have it. A task naming a note
+ * takes it when nobody has it, and keeps it when it is this agent's. A note
+ * handed to another agent is left alone — its card, its column and its
+ * branch stay that agent's, whatever a stale task book or a typo in another
+ * agent's `task_begin` says. Null when the task gets no note.
+ */
+export function noteForTask<T extends { assignee: { id: string } | null }>(item: T | null, agentId: string): T | null {
+  if (!item) return null;
+  if (item.assignee && item.assignee.id !== agentId) return null;
+  return item;
+}
+
+/**
  * Whoever wrote a note may take it down, and office admins may take down
  * any — a board fills with notes whose authors have moved on, and somebody
  * has to be able to clear it.
