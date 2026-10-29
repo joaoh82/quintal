@@ -25,6 +25,7 @@ export interface OfficeGithubRow {
   workspaceId: string;
   token: string;
   login: string;
+  repos: string[];
   setByUserId: string | null;
   lastCheckedAt: number | null;
   lastError: string | null;
@@ -40,6 +41,7 @@ export async function getOfficeGithub(db: Database, workspaceId: string): Promis
     workspaceId: row.workspaceId,
     token: row.token,
     login: row.login,
+    repos: row.repos ?? [],
     setByUserId: row.setByUserId,
     lastCheckedAt: row.lastCheckedAt?.getTime() ?? null,
     lastError: row.lastError,
@@ -56,10 +58,11 @@ export async function describeOfficeGithub(db: Database, workspaceId: string): P
     .where(eq(officeGithub.workspaceId, workspaceId))
     .limit(1);
   const found = rows[0];
-  if (!found) return { connected: false, login: null, setByName: null, updatedAt: null, lastCheckedAt: null, lastError: null };
+  if (!found) return { connected: false, login: null, repos: [], setByName: null, updatedAt: null, lastCheckedAt: null, lastError: null };
   return {
     connected: true,
     login: found.row.login,
+    repos: found.row.repos ?? [],
     setByName: found.setByName ?? null,
     updatedAt: found.row.updatedAt.getTime(),
     lastCheckedAt: found.row.lastCheckedAt?.getTime() ?? null,
@@ -67,9 +70,9 @@ export async function describeOfficeGithub(db: Database, workspaceId: string): P
   };
 }
 
-/** For the board payload: the two facts the panel acts on. */
+/** For the board payload: what the panel acts on. */
 export function boardGithubOf(office: OfficeGithubRef): BoardGithubRef {
-  return { connected: office.connected, login: office.login };
+  return { connected: office.connected, login: office.login, repos: [...office.repos] };
 }
 
 export interface SetOfficeGithubInput {
@@ -78,17 +81,21 @@ export interface SetOfficeGithubInput {
   /** Whose token GitHub said it is, checked by the caller before saving. */
   login: string;
   setByUserId: string;
+  /** The repositories it is for. Omitted, a replaced token keeps the list it had. */
+  repos?: string[];
 }
 
-/** Put the token in, or replace it. A new token starts with a clean record. */
+/** Put the token in, or replace it. A new token starts with a clean record; the list stays unless given. */
 export async function setOfficeGithub(db: Database, input: SetOfficeGithubInput): Promise<void> {
   const at = new Date();
+  const repos = input.repos ? { repos: [...input.repos] } : {};
   await db
     .insert(officeGithub)
     .values({
       workspaceId: input.workspaceId,
       token: input.token,
       login: input.login,
+      repos: input.repos ?? [],
       setByUserId: input.setByUserId,
       lastCheckedAt: at,
       lastError: null,
@@ -97,8 +104,18 @@ export async function setOfficeGithub(db: Database, input: SetOfficeGithubInput)
     })
     .onConflictDoUpdate({
       target: officeGithub.workspaceId,
-      set: { token: input.token, login: input.login, setByUserId: input.setByUserId, lastCheckedAt: at, lastError: null, updatedAt: at },
+      set: { token: input.token, login: input.login, ...repos, setByUserId: input.setByUserId, lastCheckedAt: at, lastError: null, updatedAt: at },
     });
+}
+
+/** The repositories the office is for. False when there is no token to be for them. */
+export async function setOfficeGithubRepos(db: Database, workspaceId: string, repos: readonly string[]): Promise<boolean> {
+  const changed = await db
+    .update(officeGithub)
+    .set({ repos: [...repos], updatedAt: new Date() })
+    .where(eq(officeGithub.workspaceId, workspaceId))
+    .returning({ id: officeGithub.workspaceId });
+  return changed.length > 0;
 }
 
 /** Take the token out. The status cache stays: it is what was last known, and says when. */

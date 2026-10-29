@@ -37,7 +37,7 @@ const task: BoardTaskRef = {
   github: null,
 };
 
-const GITHUB = { connected: true, login: 'josh' };
+const GITHUB = { connected: true, login: 'josh', repos: ['acme/office'] };
 
 const checked: PullRequestStatusRef = {
   state: 'open',
@@ -92,7 +92,7 @@ describe('what the board is sent, and when', () => {
   it("sends a guest the notes and who the agents are, not the ledger or the office's machines", () => {
     const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB }, null);
     assert.deepEqual(sent.tasks, []);
-    assert.deepEqual(sent.github, { connected: false, login: null }, 'nor whether the office has a token');
+    assert.deepEqual(sent.github, { connected: false, login: null, repos: [] }, 'nor whether the office has a token');
     assert.equal(sent.agents.length, 1);
     const [agent] = sent.agents;
     assert.equal(agent?.name, 'Marvin');

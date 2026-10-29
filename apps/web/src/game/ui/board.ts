@@ -11,6 +11,9 @@ import {
   type MapZone,
   type RosterEntry,
   mayMergeFromFacts,
+  parsePullRequestUrl,
+  repoOnList,
+  type BoardGithubRef,
   type PullRequestAction,
   type PullRequestStatusRef,
 } from '@quintal/shared';
@@ -238,12 +241,25 @@ export function pullStateOf(task: BoardTaskRef): 'open' | 'merged' | 'closed' {
 }
 
 /**
- * What a member may do to this line's pull request from the board. Nothing
- * until GitHub has been asked and says it is open; a draft is merged from
- * GitHub, where it is marked ready first; "update branch" only when GitHub
- * says the branch is behind, because that is the one thing it fixes.
+ * Is this line's pull request one the office may look at and act in: on
+ * the office's GitHub, in a repository on its list? The office refuses
+ * anything else before GitHub is called; the panel says so instead of
+ * offering it.
  */
-export function pullActionsOf(task: BoardTaskRef): PullRequestAction[] {
+export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef): boolean {
+  const ref = task.pr ? parsePullRequestUrl(task.pr.url) : null;
+  return ref !== null && repoOnList(github.repos, ref);
+}
+
+/**
+ * What a member may do to this line's pull request from the board. Nothing
+ * for a repository off the office's list; nothing until GitHub has been
+ * asked and says it is open; a draft is merged from GitHub, where it is
+ * marked ready first; "update branch" only when GitHub says the branch is
+ * behind, because that is the one thing it fixes.
+ */
+export function pullActionsOf(task: BoardTaskRef, office?: BoardGithubRef): PullRequestAction[] {
+  if (office && !pullOnOfficeList(task, office)) return [];
   const github = task.github;
   if (!github?.known || github.state !== 'open') return [];
   const actions: PullRequestAction[] = [];

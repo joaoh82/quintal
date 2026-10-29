@@ -15,6 +15,7 @@ import {
   savePullRequestStatus,
   setAgentTaskPullRequestState,
   setOfficeGithub,
+  setOfficeGithubRepos,
 } from './github.js';
 import { createTestDb, createTestUser } from './testing.js';
 
@@ -74,6 +75,19 @@ describe('the office’s GitHub token', () => {
     assert.equal(await clearOfficeGithub(db, owner.workspaceId), true);
     assert.equal(await clearOfficeGithub(db, owner.workspaceId), false);
     assert.equal(await getOfficeGithub(db, owner.workspaceId), null);
+  });
+
+  it('is for a list of repositories, kept across a replaced token and empty to begin with', async () => {
+    const { db, owner } = await office();
+    assert.equal(await setOfficeGithubRepos(db, owner.workspaceId, ['acme/office']), false, 'no token, nothing to be for');
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_one', login: 'josh', setByUserId: owner.id });
+    assert.deepEqual((await describeOfficeGithub(db, owner.workspaceId)).repos, []);
+    assert.equal(await setOfficeGithubRepos(db, owner.workspaceId, ['acme/office', 'acme/web']), true);
+    assert.deepEqual((await getOfficeGithub(db, owner.workspaceId))?.repos, ['acme/office', 'acme/web']);
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_two', login: 'ana', setByUserId: owner.id });
+    assert.deepEqual((await describeOfficeGithub(db, owner.workspaceId)).repos, ['acme/office', 'acme/web'], 'a new token keeps the list');
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_three', login: 'ana', setByUserId: owner.id, repos: ['acme/api'] });
+    assert.deepEqual((await describeOfficeGithub(db, owner.workspaceId)).repos, ['acme/api'], 'unless one is given');
   });
 });
 

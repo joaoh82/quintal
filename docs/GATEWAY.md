@@ -813,11 +813,14 @@ members only: a guest reads the notes, not the office's history or the
 names of its machines.
 
 The office may also have its own eye on GitHub: a token an owner or admin
-puts in Settings → Office → GitHub. With one, the game server asks GitHub
-about the ledger's open pull requests once a minute while a person is in
-the room — checks, mergeability, the review — and shows the answer on the
-board's Pull requests tab, where a member may merge, squash, rebase, update
-the branch of, or close one. A state the office finds there moves the
+puts in Settings → Office → GitHub, with a list of the repositories it is
+for. With one, the game server asks GitHub about the ledger's open pull
+requests in those repositories once a minute while a person is in the room
+— checks, mergeability, the review — and shows the answer on the board's
+Pull requests tab, where a member may merge, squash, rebase, update the
+branch of, or close one. A pull request anywhere else — another
+repository, another host — is shown as you reported it and nothing more:
+the office neither asks about it nor touches it, whatever its URL says. A state the office finds there moves the
 ledger and the note the same way your `agent:task` would, so a pull request
 left open after `!done` still goes to *done* when it merges. Expect it:
 your `agent:task` saying `open` for a pull request the office already knows

@@ -431,7 +431,7 @@ export class OfficeRoom extends Room<OfficeState> {
   #boardAgents: readonly BoardAgentRef[] = [];
   #boardTasks: readonly BoardTaskRef[] = [];
   /** Whether the office has a GitHub token, and whose. The token itself never comes up here. */
-  #boardGithub: BoardGithubRef = { connected: false, login: null };
+  #boardGithub: BoardGithubRef = { connected: false, login: null, repos: [] };
   /** What GitHub last said about each ledger line's pull request, by task id. */
   #pullStatuses: ReadonlyMap<string, PullRequestStatusRef> = new Map();
   /** The office's eye on GitHub. Made with the room; the token is read as needed. */
@@ -683,7 +683,7 @@ export class OfficeRoom extends Room<OfficeState> {
 
     void this.#refreshSettings();
     void this.#refreshChannels();
-    this.#pulls = new PullRequestWatch({ db: getDb(), workspaceId: this.#workspaceId, apiBase: config.githubApi });
+    this.#pulls = new PullRequestWatch({ db: getDb(), workspaceId: this.#workspaceId, apiBase: config.githubApi, webHost: config.githubWebHost });
     this.#boardLoaded = this.#refreshBoard();
     // GitHub is asked about the ledger's pull requests while somebody is here
     // to see the answer. The first look is a minute in: the board is read

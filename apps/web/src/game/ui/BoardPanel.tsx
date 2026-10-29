@@ -38,6 +38,7 @@ import {
   pullActionConfirm,
   pullActionLabel,
   pullActionsOf,
+  pullOnOfficeList,
   pullRequestMatches,
   pullRequestRowsOf,
   pullStateOf,
@@ -474,7 +475,8 @@ function PullsTab({
       ) : (
         <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
           {rows.map((task) => {
-            const actions = github.connected ? pullActionsOf(task) : [];
+            const onList = github.connected && pullOnOfficeList(task, github);
+            const actions = onList ? pullActionsOf(task, github) : [];
             const live = task.github?.known ? task.github : null;
             const checks = live ? checksLabel(live.checks) : null;
             const review = live ? reviewLabel(live.reviewDecision) : null;
@@ -517,6 +519,7 @@ function PullsTab({
                     <span className="font-mono text-[10px] text-white/35">
                       {live ? `GitHub · ${mergeableLabel(live)} · checked ${ageLabel(live.fetchedAt, now)}` : `heard ${ageLabel(task.lastSeenAt, now)}`}
                       {task.github?.error ? <span className="text-rose-300/80"> · {task.github.known ? 'last check failed' : task.github.error}</span> : null}
+                      {github.connected && !onList ? <span title="Not on the office’s GitHub list. An owner or admin adds repositories in Settings → Office → GitHub."> · not on the office’s list</span> : null}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">

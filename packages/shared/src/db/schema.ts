@@ -988,6 +988,14 @@ export const officeGithub = sqliteTable('office_github', {
   token: text('token').notNull(),
   /** The GitHub account the token is for, as GitHub said when it was saved. */
   login: text('login').notNull().default(''),
+  /**
+   * The repositories the office may look at and act in with the token,
+   * `owner/name` each, lower-case. A pull request anywhere else is shown as
+   * the harness reported it and nothing more: no facts fetched, no actions
+   * offered. The token may reach more than this; the list is what the
+   * office lets its members do with it.
+   */
+  repos: text('repos', { mode: 'json' }).$type<string[]>().notNull().default([]),
   setByUserId: text('set_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   /** When the server last tried the token, and what GitHub said if it was no. */
   lastCheckedAt: integer('last_checked_at', { mode: 'timestamp_ms' }),

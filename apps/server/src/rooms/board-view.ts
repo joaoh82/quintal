@@ -37,7 +37,7 @@ export interface BoardView {
   github: BoardGithubRef;
 }
 
-const NO_GITHUB: BoardGithubRef = { connected: false, login: null };
+const NO_GITHUB: BoardGithubRef = { connected: false, login: null, repos: [] };
 
 /** Agents as the board carries them: `lastSeenAt` rounded down to the grain. */
 export function boardAgentsOf(agents: readonly BoardAgentRef[], grainMs = BOARD_LAST_SEEN_GRAIN_MS): BoardAgentRef[] {

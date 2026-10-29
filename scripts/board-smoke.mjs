@@ -606,7 +606,7 @@ async function theOfficeChecksGithub() {
     const notConfigured = await me.next('error');
     check(notConfigured.code === 'not_configured', 'without a token, asking GitHub is refused and says where the token goes', notConfigured.message);
 
-    await setOfficeGithub(db, { workspaceId, token: 'ghp_smoke_token_0123456789abcdef', login: 'smokebot', setByUserId: user.id });
+    await setOfficeGithub(db, { workspaceId, token: 'ghp_smoke_token_0123456789abcdef', login: 'smokebot', setByUserId: user.id, repos: ['acme/office'] });
 
     me.room.send('board_create', { title: 'Replace the kettle', assigneeAgentId: agent.id });
     const kettle = (await me.next('board', 6000, (board) => board.items.some((item) => item.title === 'Replace the kettle'))).items.find((item) => item.title === 'Replace the kettle');
@@ -625,6 +625,21 @@ async function theOfficeChecksGithub() {
     check(checkedBoard.github?.connected === true && checkedBoard.github?.login === 'smokebot', 'and the board says whose token the office has', JSON.stringify(checkedBoard.github));
     check(/Checked the pull request/.test((await told).message), 'and I am told it was checked', (await told).message);
     check(github.seen.filter((call) => call.method === 'GET').length === 3, 'three calls to GitHub for one pull request', JSON.stringify(github.seen.map((c) => c.path)));
+    check(checkedBoard.github?.repos?.includes('acme/office'), 'and which repositories the office is for', JSON.stringify(checkedBoard.github?.repos));
+
+    // A pull request the agent names in a repository off the office's list:
+    // shown as reported, never asked about, and no member may act on it.
+    const elsewhereBranch = 'quintal/smoke/elsewhere';
+    const elsewhereShown = me.next('board', 6000, (board) => board.tasks.some((t) => t.branch === elsewhereBranch));
+    them.room.send('agent:task', { title: 'something in payments', repo: 'payments', branch: elsewhereBranch, pr: { number: 88, url: 'https://github.com/acme/payments/pull/88', state: 'open' } });
+    const elsewhere = (await elsewhereShown).tasks.find((t) => t.branch === elsewhereBranch);
+    me.room.send('board_pull_action', { taskId: elsewhere.id, action: 'squash', expectedHeadSha: 'whatever' });
+    const offList = await me.next('error');
+    check(offList.code === 'unauthorised' && /acme\/payments is not on this office/.test(offList.message), 'acting on a pull request off the office’s list is refused', offList.message);
+    check(!github.seen.some((call) => call.path.includes('/acme/payments/')), 'and GitHub was never asked about it', JSON.stringify(github.seen.map((c) => c.path)));
+    // Back on the listed line, with the agent's book as it was.
+    them.room.send('agent:task', { title: 'replace the kettle', repo: 'office', branch, item: kettle.number, pr: { number: 21, url: 'https://github.com/acme/office/pull/21', state: 'open' } });
+    await me.next('board', 6000, (board) => board.tasks.find((t) => t.id === line.id)?.status === 'active');
 
     me.room.send('board_pull_refresh', {});
     const paced = await me.next('error');

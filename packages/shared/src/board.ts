@@ -167,10 +167,12 @@ export interface BoardTaskRef {
   github: PullRequestStatusRef | null;
 }
 
-/** The office's GitHub, as the board tells it: whether there is a token, and whose. */
+/** The office's GitHub, as the board tells it: whether there is a token, whose, and which repositories it is for. */
 export interface BoardGithubRef {
   connected: boolean;
   login: string | null;
+  /** `owner/name`, lower-case. Facts and actions are offered only for pull requests in these. */
+  repos: string[];
 }
 
 /** The office's GitHub, as the settings page tells it. Never the token. */

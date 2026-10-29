@@ -36,7 +36,7 @@ const EMPTY: BoardPayload = {
   items: [],
   agents: [],
   tasks: [],
-  github: { connected: false, login: null },
+  github: { connected: false, login: null, repos: [] },
   you: { userId: '', role: null },
 };
 

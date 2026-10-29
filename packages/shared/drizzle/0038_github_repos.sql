@@ -1,0 +1,1 @@
+ALTER TABLE `office_github` ADD `repos` text DEFAULT '[]' NOT NULL;

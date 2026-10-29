@@ -13,8 +13,12 @@ import type { MembershipRole } from './workspace.js';
  */
 
 export const GITHUB_API_DEFAULT = 'https://api.github.com';
+/** Where pull requests live, for the URLs a harness reports. An enterprise server says otherwise. */
+export const GITHUB_WEB_HOST_DEFAULT = 'github.com';
 export const GITHUB_API_VERSION = '2022-11-28';
 export const GITHUB_TOKEN_MAX_LENGTH = 255;
+/** How many repositories an office's list may name. */
+export const GITHUB_REPOS_MAX = 50;
 
 /**
  * A token as GitHub mints them: letters, digits and underscores, at least
@@ -34,19 +38,55 @@ export interface PullRequestRef {
   number: number;
 }
 
-/** `https://github.com/acme/office/pull/12` → acme, office, 12. Null for anything that is not one. */
-export function parsePullRequestUrl(url: string): PullRequestRef | null {
+/**
+ * `https://github.com/acme/office/pull/12` → acme, office, 12. Null for
+ * anything that is not one: a malformed path, or any other host. A line
+ * that points somewhere else is not a pull request on the office's GitHub,
+ * whatever its path looks like.
+ */
+export function parsePullRequestUrl(url: string, host = GITHUB_WEB_HOST_DEFAULT): PullRequestRef | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return null;
   }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  const hostname = parsed.hostname.toLowerCase();
+  const wanted = host.toLowerCase();
+  if (hostname !== wanted && hostname !== `www.${wanted}`) return null;
   const match = /^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/.exec(parsed.pathname);
   if (!match) return null;
   const number = Number(match[3]);
   if (!Number.isSafeInteger(number) || number <= 0) return null;
   return { owner: match[1]!, repo: match[2]!, number };
+}
+
+/** `acme/office`, as the office's list names a repository. */
+const REPO_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/**
+ * The office's list of repositories, as typed: one per line, or separated
+ * by spaces or commas, `owner/name` each, or a GitHub URL of the repository.
+ * Lower-cased and deduplicated, because GitHub does not care about case.
+ * Null when anything in it is not a repository name, or there are too many.
+ */
+export function normaliseGithubRepos(input: unknown): string[] | null {
+  if (typeof input !== 'string') return null;
+  const repos: string[] = [];
+  for (const raw of input.split(/[\s,]+/)) {
+    if (raw.length === 0) continue;
+    let name = raw.replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\.git$/, '').replace(/\/+$/, '');
+    name = name.toLowerCase();
+    if (!REPO_NAME.test(name)) return null;
+    if (!repos.includes(name)) repos.push(name);
+  }
+  return repos.length > GITHUB_REPOS_MAX ? null : repos;
+}
+
+/** Is this pull request in a repository the office's list names? The list is lower-case; the ref may not be. */
+export function repoOnList(repos: readonly string[], ref: Pick<PullRequestRef, 'owner' | 'repo'>): boolean {
+  return repos.includes(`${ref.owner}/${ref.repo}`.toLowerCase());
 }
 
 // --- what GitHub says, summarised ------------------------------------------

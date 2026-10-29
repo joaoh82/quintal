@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_PORT, GITHUB_API_DEFAULT, devGamePort } from '@quintal/shared';
+import { DEFAULT_PORT, GITHUB_API_DEFAULT, GITHUB_WEB_HOST_DEFAULT, devGamePort } from '@quintal/shared';
 import { deploymentOrigin } from '@quintal/shared/db';
 
 /** `apps/server` — same depth whether running from `src/` (tsx) or `dist/` (node). */
@@ -47,6 +47,8 @@ export const config = {
    * otherwise: an enterprise server, or a stub the smoke test stands up.
    */
   githubApi: (process.env.QUINTAL_GITHUB_API ?? GITHUB_API_DEFAULT).replace(/\/$/, ''),
+  /** The host pull request URLs are on: github.com, or `QUINTAL_GITHUB_WEB_HOST` for an enterprise server. */
+  githubWebHost: (process.env.QUINTAL_GITHUB_WEB_HOST ?? GITHUB_WEB_HOST_DEFAULT).trim().toLowerCase(),
 } as const;
 
 /** `AGENT_LEGACY_KEYS`: anything but an explicit no means yes. */

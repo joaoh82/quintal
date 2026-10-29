@@ -17,6 +17,7 @@ import {
   nextStatus,
   pullActionConfirm,
   pullActionsOf,
+  pullOnOfficeList,
   pullRequestMatches,
   pullRequestRowsOf,
   pullStateOf,
@@ -331,6 +332,16 @@ describe('what GitHub said, as the tab shows it', () => {
   it('offers nothing until GitHub has answered, and nothing on a closed one', () => {
     assert.deepEqual(pullActionsOf(line), []);
     assert.deepEqual(pullActionsOf({ ...line, github: { ...facts, state: 'merged' } }), []);
+  });
+
+  it('offers nothing in a repository off the office’s list, and says which lines are on it', () => {
+    const office = { connected: true, login: 'josh', repos: ['acme/office'] };
+    assert.equal(pullOnOfficeList(line, office), true);
+    assert.deepEqual(pullActionsOf({ ...line, github: facts }, office), ['squash', 'merge', 'rebase', 'close']);
+    const elsewhere = { ...line, pr: { number: 88, url: 'https://github.com/acme/payments/pull/88', state: 'open' as const } };
+    assert.equal(pullOnOfficeList(elsewhere, office), false);
+    assert.deepEqual(pullActionsOf({ ...elsewhere, github: facts }, office), []);
+    assert.equal(pullOnOfficeList(line, { ...office, repos: [] }), false, 'an empty list is nothing');
   });
 
   it('offers the three merges and close on a clean open one, update branch only when behind, no merge on a draft or conflicts', () => {

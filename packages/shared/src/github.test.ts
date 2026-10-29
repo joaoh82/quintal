@@ -6,8 +6,10 @@ import {
   GithubError,
   mayManageGithubToken,
   mayMergeFromFacts,
+  normaliseGithubRepos,
   normaliseGithubToken,
   parsePullRequestUrl,
+  repoOnList,
   reviewDecisionOf,
   summariseChecks,
 } from './github.js';
@@ -36,6 +38,36 @@ describe('a pull request URL', () => {
     assert.equal(parsePullRequestUrl('https://github.com/acme/office/issues/12'), null);
     assert.equal(parsePullRequestUrl('https://github.com/acme/office/pull/0'), null);
     assert.equal(parsePullRequestUrl('not a url'), null);
+  });
+
+  it('is null on any other host: a path that looks right somewhere else is not a pull request here', () => {
+    assert.equal(parsePullRequestUrl('https://gitlab.example/acme/office/pull/5'), null);
+    assert.equal(parsePullRequestUrl('https://github.com.evil.example/acme/office/pull/5'), null);
+    assert.equal(parsePullRequestUrl('ftp://github.com/acme/office/pull/5'), null);
+    assert.deepEqual(parsePullRequestUrl('https://www.github.com/acme/office/pull/5'), { owner: 'acme', repo: 'office', number: 5 });
+    assert.deepEqual(parsePullRequestUrl('https://git.acme.example/acme/office/pull/5', 'git.acme.example'), { owner: 'acme', repo: 'office', number: 5 }, 'an enterprise host, when configured');
+    assert.equal(parsePullRequestUrl('https://github.com/acme/office/pull/5', 'git.acme.example'), null, 'and then not github.com');
+  });
+});
+
+describe('the office’s list of repositories', () => {
+  it('reads names one per line, or by spaces or commas, or as URLs, lower-cased and once each', () => {
+    assert.deepEqual(normaliseGithubRepos('acme/office\nAcme/Payments, acme/office https://github.com/acme/web.git'), ['acme/office', 'acme/payments', 'acme/web']);
+    assert.deepEqual(normaliseGithubRepos('  '), []);
+  });
+
+  it('refuses anything that is not a repository name, and too many', () => {
+    assert.equal(normaliseGithubRepos('acme'), null);
+    assert.equal(normaliseGithubRepos('acme/office/pull/5'), null);
+    assert.equal(normaliseGithubRepos('acme/of fice'), null);
+    assert.equal(normaliseGithubRepos(Array.from({ length: 51 }, (_, i) => `acme/r${i}`).join(' ')), null);
+    assert.equal(normaliseGithubRepos(42), null);
+  });
+
+  it('says whether a pull request is in a listed repository, whatever the case', () => {
+    assert.equal(repoOnList(['acme/office'], { owner: 'Acme', repo: 'Office' }), true);
+    assert.equal(repoOnList(['acme/office'], { owner: 'acme', repo: 'payments' }), false);
+    assert.equal(repoOnList([], { owner: 'acme', repo: 'office' }), false);
   });
 });
 

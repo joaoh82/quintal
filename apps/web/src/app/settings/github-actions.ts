@@ -1,7 +1,15 @@
 'use server';
 
-import { GITHUB_API_DEFAULT, GithubClient, GithubError, mayManageGithubToken, normaliseGithubToken, type OfficeGithubRef } from '@quintal/shared';
-import { clearOfficeGithub, describeOfficeGithub, getDb, setOfficeGithub } from '@quintal/shared/db';
+import {
+  GITHUB_API_DEFAULT,
+  GithubClient,
+  GithubError,
+  mayManageGithubToken,
+  normaliseGithubRepos,
+  normaliseGithubToken,
+  type OfficeGithubRef,
+} from '@quintal/shared';
+import { clearOfficeGithub, describeOfficeGithub, getDb, setOfficeGithub, setOfficeGithubRepos } from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
@@ -47,11 +55,37 @@ export async function saveGithubTokenAction(_previous: GithubState, formData: Fo
       return { ok: false, error: error instanceof GithubError ? error.message : 'GitHub could not be reached to check the token.' };
     }
     const db = getDb();
-    await setOfficeGithub(db, { workspaceId: who.workspaceId, token, login, setByUserId: who.userId });
+    // The list may come with the token the first time; on its own it is the other action.
+    const repos = formData.get('repos') === null ? undefined : normaliseGithubRepos(formData.get('repos'));
+    if (repos === null) return { ok: false, error: 'Name repositories as owner/name, one per line.' };
+    await setOfficeGithub(db, { workspaceId: who.workspaceId, token, login, setByUserId: who.userId, ...(repos ? { repos } : {}) });
     revalidatePath('/settings');
     return { ok: true, github: await describeOfficeGithub(db, who.workspaceId) };
   } catch (error: unknown) {
     return { ok: false, error: error instanceof Error ? error.message : 'Could not save the token.' };
+  }
+}
+
+/**
+ * The repositories the office may look at and act in with its token. The
+ * rule that keeps the token from being every member's write access to
+ * everything it reaches: only an owner or admin names them, and a pull
+ * request anywhere else is shown as reported and nothing more.
+ */
+export async function saveGithubReposAction(_previous: GithubState, formData: FormData): Promise<GithubState> {
+  try {
+    const who = await officeAdmin();
+    if ('error' in who) return { ok: false, error: who.error };
+    const repos = normaliseGithubRepos(formData.get('repos') ?? '');
+    if (repos === null) return { ok: false, error: 'Name repositories as owner/name, one per line, fifty at most.' };
+    const db = getDb();
+    if (!(await setOfficeGithubRepos(db, who.workspaceId, repos))) {
+      return { ok: false, error: 'Connect a token first; the list is what the office may do with it.' };
+    }
+    revalidatePath('/settings');
+    return { ok: true, github: await describeOfficeGithub(db, who.workspaceId) };
+  } catch (error: unknown) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not save the list.' };
   }
 }
 
