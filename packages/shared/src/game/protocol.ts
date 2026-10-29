@@ -1,4 +1,5 @@
 import type { BoardCreateInput, BoardPayload, BoardUpdateInput } from '../board.js';
+import type { PullRequestAction } from '../github.js';
 import type { ChannelRef } from '../conversation.js';
 import type { TeamRef } from '../team.js';
 import type { OfficeCommandRef } from '../office-command.js';
@@ -60,6 +61,17 @@ export const ClientMessage = {
   BoardUpdate: 'board_update',
   /** Take a note down. Whoever wrote it, or an admin. */
   BoardDelete: 'board_delete',
+  /**
+   * Ask GitHub now about the ledger's pull requests, or one of them. Members
+   * only, paced per office. Answered with `board` when anything changed.
+   */
+  BoardPullRefresh: 'board_pull_refresh',
+  /**
+   * Merge, squash, rebase, update the branch of, or close a pull request on
+   * the ledger, with the office's token. Members only. Answered with a
+   * `notice` saying what GitHub did, or an `error` saying what it refused.
+   */
+  BoardPullAction: 'board_pull_action',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -258,7 +270,11 @@ export interface ErrorPayload {
     | 'missing_scope'
     | 'invalid_payload'
     /** The agent that asked is no longer connected to hear the answer. */
-    | 'unroutable';
+    | 'unroutable'
+    /** The office has no GitHub token to do that with. Settings → Office → GitHub. */
+    | 'not_configured'
+    /** GitHub refused, or could not be reached. The message is GitHub's reason, in words. */
+    | 'github';
   message: string;
   /**
    * What this refusal was about, when it was about one thing — an approval
@@ -272,8 +288,9 @@ export interface NoticePayload {
   /**
    * `team_members_absent`: a team you named has members outside this conversation.
    * `command_unheard`: an office command you sent reached no agent.
+   * `pull_request`: what GitHub did for you — merged, closed, brought up to date — or that nothing changed on a refresh.
    */
-  code: 'team_members_absent' | 'command_unheard';
+  code: 'team_members_absent' | 'command_unheard' | 'pull_request';
   message: string;
 }
 
@@ -285,6 +302,22 @@ export type BoardUpdatePayload = BoardUpdateInput;
 
 export interface BoardDeletePayload {
   itemId: string;
+}
+
+/** `board_pull_refresh`: one ledger line, or every pull request the office watches when omitted. */
+export interface BoardPullRefreshPayload {
+  taskId?: string;
+}
+
+/** `board_pull_action`: what to do to which ledger line's pull request. */
+export interface BoardPullActionPayload {
+  taskId: string;
+  action: PullRequestAction;
+  /**
+   * The head the person was looking at. Given, GitHub refuses the merge or
+   * the update if the branch moved since; nobody merges what they have not seen.
+   */
+  expectedHeadSha?: string;
 }
 
 /** `board`: the whole board. See `BoardPayload`. */

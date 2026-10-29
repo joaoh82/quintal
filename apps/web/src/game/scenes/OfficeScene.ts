@@ -19,6 +19,8 @@ import {
   type BoardCreatePayload,
   type BoardDeletePayload,
   type BoardMessagePayload,
+  type BoardPullActionPayload,
+  type BoardPullRefreshPayload,
   type BoardUpdatePayload,
   type MapInteractable,
   type ChannelChatPayload,
@@ -839,6 +841,16 @@ export class OfficeScene extends Phaser.Scene {
 
   deleteBoardItem(itemId: string): void {
     this.#room.send(ClientMessage.BoardDelete, { itemId } satisfies BoardDeletePayload);
+  }
+
+  /** Ask GitHub about the ledger's pull requests now, or one. Answered with `board`, and a `notice` for us. */
+  refreshPullRequests(taskId?: string): void {
+    this.#room.send(ClientMessage.BoardPullRefresh, (taskId ? { taskId } : {}) satisfies BoardPullRefreshPayload);
+  }
+
+  /** Merge, update or close a pull request with the office's token. A `notice` says what GitHub did. */
+  actOnPullRequest(payload: BoardPullActionPayload): void {
+    this.#room.send(ClientMessage.BoardPullAction, payload);
   }
 
   /**

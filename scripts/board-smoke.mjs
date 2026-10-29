@@ -18,6 +18,13 @@
  * it; a note it was handed is matched to a task that named none; and being
  * taken off a note is said to it too.
  *
+ * Then, with `SMOKE_GITHUB=1`, the office's own GitHub: a stub GitHub is
+ * stood up on :4799 and the server must have been started pointing at it
+ * (`QUINTAL_GITHUB_API=http://127.0.0.1:4799 pnpm dev`). A token goes in,
+ * the office is asked to check, the pull request's checks and mergeability
+ * show on the ledger line, a squash merge from the board reaches the stub
+ * pinned to the head seen, and the note follows to done.
+ *
  *   node scripts/board-smoke.mjs [baseUrl]
  *
  * Needs a server already running (`pnpm dev` or `pnpm start`) on the same
@@ -25,6 +32,7 @@
  * `data/quintal.db` at the repo root.
  */
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 
 import {
   buildAuthPayload,
@@ -32,7 +40,7 @@ import {
   getPublicKeyHex,
   signAuthPayload,
 } from '@quintal/shared';
-import { createAgent, getClient } from '@quintal/shared/db';
+import { clearOfficeGithub, createAgent, getClient, setOfficeGithub } from '@quintal/shared/db';
 
 const base = (process.argv[2] ?? 'http://localhost:3000').replace(/\/$/, '');
 
@@ -180,6 +188,7 @@ try {
   await anAgentTakesANote();
   await aColleagueKeepsTheirHandsOffMyAgent();
   await anAgentWritesOnTheBoard();
+  if (process.env.SMOKE_GITHUB === '1') await theOfficeChecksGithub();
 } finally {
   await me.room.leave();
 }
@@ -532,5 +541,127 @@ async function anAgentWritesOnTheBoard() {
     await Promise.all([them.room.leave(), quiet.room.leave()]);
     await db.execute({ sql: 'DELETE FROM agents WHERE id IN (?, ?, ?, ?)', args: [scribe.id, sibling.id, theirAgent.id, mute.id] });
     await db.execute({ sql: 'DELETE FROM memberships WHERE id = ?', args: [membershipId] });
+  }
+}
+
+/**
+ * A GitHub that answers for one pull request, #21 on acme/office, and keeps
+ * what it was asked. Merged, it says so from then on.
+ */
+function stubGithub(port) {
+  const seen = [];
+  let merged = false;
+  const pull = () => ({
+    number: 21,
+    state: merged ? 'closed' : 'open',
+    merged,
+    draft: false,
+    title: 'Replace the kettle',
+    mergeable: merged ? null : true,
+    mergeable_state: merged ? 'unknown' : 'clean',
+    head: { sha: 'h21', ref: 'quintal/smoke/kettle' },
+    base: { ref: 'main' },
+  });
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      seen.push({ method: req.method, path: req.url, auth: req.headers.authorization, body: body ? JSON.parse(body) : null });
+      const answer = (status, json) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(json === undefined ? '' : JSON.stringify(json));
+      };
+      if (req.headers.authorization !== 'Bearer ghp_smoke_token_0123456789abcdef') return answer(401, { message: 'Bad credentials' });
+      if (req.method === 'GET' && req.url === '/user') return answer(200, { login: 'smokebot' });
+      if (req.method === 'GET' && req.url === '/repos/acme/office/pulls/21') return answer(200, pull());
+      if (req.method === 'GET' && req.url.startsWith('/repos/acme/office/commits/h21/check-runs')) {
+        return answer(200, { check_runs: [{ name: 'build', status: 'completed', conclusion: 'success', html_url: null }] });
+      }
+      if (req.method === 'GET' && req.url.startsWith('/repos/acme/office/pulls/21/reviews')) return answer(200, []);
+      if (req.method === 'PUT' && req.url === '/repos/acme/office/pulls/21/merge') {
+        merged = true;
+        return answer(200, { sha: 'm21', merged: true, message: 'Pull Request successfully merged' });
+      }
+      return answer(404, { message: 'Not Found' });
+    });
+  });
+  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({ seen, close: () => new Promise((done) => server.close(done)) })));
+}
+
+/**
+ * The office's own eye on GitHub: refused without a token, then with one it
+ * checks a pull request on request, paces a second ask, merges from the
+ * board pinned to the head seen, and the ledger and the note follow.
+ */
+async function theOfficeChecksGithub() {
+  const { getDb } = await import('@quintal/shared/db');
+  const db = getDb();
+  const github = await stubGithub(4799);
+  const agent = await createAgent(db, { workspaceId, ownerUserId: user.id, name: `Kettle${Date.now().toString(36)}`, spriteKey: 'slate' });
+  const them = await enter({ agentKey: agent.key, workspaceId }, ['agent:channel_chat', 'agent:ready', 'agent:error']);
+  try {
+    const noteOf = (board, id) => board.items.find((item) => item.id === id);
+
+    me.room.send('board_pull_refresh', {});
+    const notConfigured = await me.next('error');
+    check(notConfigured.code === 'not_configured', 'without a token, asking GitHub is refused and says where the token goes', notConfigured.message);
+
+    await setOfficeGithub(db, { workspaceId, token: 'ghp_smoke_token_0123456789abcdef', login: 'smokebot', setByUserId: user.id, repos: ['acme/office'] });
+
+    me.room.send('board_create', { title: 'Replace the kettle', assigneeAgentId: agent.id });
+    const kettle = (await me.next('board', 6000, (board) => board.items.some((item) => item.title === 'Replace the kettle'))).items.find((item) => item.title === 'Replace the kettle');
+    const branch = 'quintal/smoke/kettle';
+    const withPr = me.next('board', 6000, (board) => board.tasks.some((t) => t.branch === branch && t.pr?.number === 21));
+    them.room.send('agent:task', { title: 'replace the kettle', repo: 'office', branch, item: kettle.number, pr: { number: 21, url: 'https://github.com/acme/office/pull/21', state: 'open' } });
+    const line = (await withPr).tasks.find((t) => t.branch === branch);
+    check(line.github === null, 'before the office has looked, the line carries no word from GitHub');
+
+    const checked = me.next('board', 8000, (board) => board.tasks.find((t) => t.id === line.id)?.github?.known === true);
+    const told = me.next('notice', 8000, (notice) => notice.code === 'pull_request');
+    me.room.send('board_pull_refresh', {});
+    const checkedBoard = await checked;
+    const live = checkedBoard.tasks.find((t) => t.id === line.id).github;
+    check(live.checks.summary === 'passing' && live.mergeable === true && live.mergeableState === 'clean' && live.baseRef === 'main', 'asked, the office shows what GitHub said: checks, mergeability, the base', JSON.stringify(live));
+    check(checkedBoard.github?.connected === true && checkedBoard.github?.login === 'smokebot', 'and the board says whose token the office has', JSON.stringify(checkedBoard.github));
+    check(/Checked the pull request/.test((await told).message), 'and I am told it was checked', (await told).message);
+    check(github.seen.filter((call) => call.method === 'GET').length === 3, 'three calls to GitHub for one pull request', JSON.stringify(github.seen.map((c) => c.path)));
+    check(checkedBoard.github?.repos?.includes('acme/office'), 'and which repositories the office is for', JSON.stringify(checkedBoard.github?.repos));
+
+    // A pull request the agent names in a repository off the office's list:
+    // shown as reported, never asked about, and no member may act on it.
+    const elsewhereBranch = 'quintal/smoke/elsewhere';
+    const elsewhereShown = me.next('board', 6000, (board) => board.tasks.some((t) => t.branch === elsewhereBranch));
+    them.room.send('agent:task', { title: 'something in payments', repo: 'payments', branch: elsewhereBranch, pr: { number: 88, url: 'https://github.com/acme/payments/pull/88', state: 'open' } });
+    const elsewhere = (await elsewhereShown).tasks.find((t) => t.branch === elsewhereBranch);
+    me.room.send('board_pull_action', { taskId: elsewhere.id, action: 'squash', expectedHeadSha: 'whatever' });
+    const offList = await me.next('error');
+    check(offList.code === 'unauthorised' && /acme\/payments is not on this office/.test(offList.message), 'acting on a pull request off the office’s list is refused', offList.message);
+    check(!github.seen.some((call) => call.path.includes('/acme/payments/')), 'and GitHub was never asked about it', JSON.stringify(github.seen.map((c) => c.path)));
+    // Back on the listed line, with the agent's book as it was.
+    them.room.send('agent:task', { title: 'replace the kettle', repo: 'office', branch, item: kettle.number, pr: { number: 21, url: 'https://github.com/acme/office/pull/21', state: 'open' } });
+    await me.next('board', 6000, (board) => board.tasks.find((t) => t.id === line.id)?.status === 'active');
+
+    me.room.send('board_pull_refresh', {});
+    const paced = await me.next('error');
+    check(paced.code === 'rate_limited', 'asking again at once is paced', paced.message);
+
+    const mergedBoard = me.next('board', 8000, (board) => board.tasks.find((t) => t.id === line.id)?.github?.state === 'merged');
+    const said = me.next('notice', 8000, (notice) => notice.code === 'pull_request');
+    me.room.send('board_pull_action', { taskId: line.id, action: 'squash', expectedHeadSha: live.headSha });
+    const after = await mergedBoard;
+    check(/Merged #21 \(squash\)/.test((await said).message), 'a squash from the board is said to have merged', (await said).message);
+    const mergeCall = github.seen.find((call) => call.method === 'PUT');
+    check(mergeCall && mergeCall.body.merge_method === 'squash' && mergeCall.body.sha === 'h21', 'GitHub was asked to squash, pinned to the head I saw', JSON.stringify(mergeCall?.body));
+    const mergedLine = after.tasks.find((t) => t.id === line.id);
+    check(mergedLine.pr.state === 'merged', 'the ledger follows GitHub to merged');
+    check(mergedLine.github.lastAction?.action === 'squash' && typeof mergedLine.github.lastAction?.byName === 'string' && mergedLine.github.lastAction.byName.length > 0, 'and remembers who did it from here', JSON.stringify(mergedLine.github.lastAction));
+    check(noteOf(after, kettle.id)?.status === 'done', 'and the note goes to done', noteOf(after, kettle.id)?.status);
+
+    them.room.send('agent:task', null);
+    await me.next('board', 6000, (board) => board.tasks.find((t) => t.id === line.id)?.status === 'ended');
+  } finally {
+    await them.room.leave();
+    await clearOfficeGithub(db, workspaceId);
+    await github.close();
   }
 }

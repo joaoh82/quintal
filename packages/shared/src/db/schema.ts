@@ -12,6 +12,7 @@ import { AGENT_SCOPES } from '../agent.js';
 import { AGENT_TASK_PR_STATES, AGENT_TASK_STATUSES } from '../agent-task.js';
 import { ACTIVITY_DETAIL_LEVELS } from '../activity.js';
 import { BOARD_COLORS, BOARD_STATUSES } from '../board.js';
+import { PULL_REQUEST_REVIEW_DECISIONS, type PullRequestChecks } from '../github.js';
 import { CONVERSATION_KINDS } from '../conversation.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
@@ -967,5 +968,102 @@ export const agentTasks = sqliteTable(
     uniqueIndex('agent_tasks_branch_idx').on(table.workspaceId, table.agentId, table.branch),
     index('agent_tasks_workspace_idx').on(table.workspaceId),
     index('agent_tasks_item_idx').on(table.boardItemId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// GitHub
+// ---------------------------------------------------------------------------
+
+/**
+ * The office's GitHub token: one per office, put there by an owner or admin
+ * in Settings. Read by the game server to poll the ledger's pull requests
+ * and to act on them; never sent to a client. The login is whose token it
+ * is, so the settings page can say "connected as @josh" without the token.
+ */
+export const officeGithub = sqliteTable('office_github', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  token: text('token').notNull(),
+  /** The GitHub account the token is for, as GitHub said when it was saved. */
+  login: text('login').notNull().default(''),
+  /**
+   * The repositories the office may look at and act in with the token,
+   * `owner/name` each, lower-case. A pull request anywhere else is shown as
+   * the harness reported it and nothing more: no facts fetched, no actions
+   * offered. The token may reach more than this; the list is what the
+   * office lets its members do with it.
+   */
+  repos: text('repos', { mode: 'json' }).$type<string[]>().notNull().default([]),
+  setByUserId: text('set_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  /** When the server last tried the token, and what GitHub said if it was no. */
+  lastCheckedAt: integer('last_checked_at', { mode: 'timestamp_ms' }),
+  lastError: text('last_error'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+    .default(now)
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+/**
+ * What GitHub last said about a ledger line's pull request: the cache behind
+ * the board's hover card. One row per task; the facts are kept from the last
+ * good fetch when a later one fails, with `error` saying so.
+ */
+export const pullRequestStatus = sqliteTable(
+  'pull_request_status',
+  {
+    taskId: text('task_id')
+      .primaryKey()
+      .references(() => agentTasks.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    state: text('state', { enum: AGENT_TASK_PR_STATES }),
+    draft: integer('draft', { mode: 'boolean' }).notNull().default(false),
+    title: text('title').notNull().default(''),
+    headSha: text('head_sha').notNull().default(''),
+    headRef: text('head_ref').notNull().default(''),
+    baseRef: text('base_ref').notNull().default(''),
+    /** Null while GitHub is still working it out, or before the first good fetch. */
+    mergeable: integer('mergeable', { mode: 'boolean' }),
+    mergeableState: text('mergeable_state').notNull().default('unknown'),
+    checks: text('checks', { mode: 'json' }).$type<PullRequestChecks>(),
+    reviewDecision: text('review_decision', { enum: PULL_REQUEST_REVIEW_DECISIONS }).notNull().default('none'),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    error: text('error'),
+  },
+  (table) => [index('pull_request_status_workspace_idx').on(table.workspaceId)],
+);
+
+/**
+ * Who did what on the board: a note made, moved or handed over; a pull
+ * request merged, closed or brought up to date from here; a state the
+ * office's own poll found changed. The note's history, and the audit of
+ * the actions a token lets a member take.
+ */
+export const boardEvents = sqliteTable(
+  'board_events',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    itemId: text('item_id').references(() => boardItems.id, { onDelete: 'set null' }),
+    taskId: text('task_id').references(() => agentTasks.id, { onDelete: 'set null' }),
+    /** `user`, `agent`, or `office` for what the office did on its own. */
+    actorKind: text('actor_kind').notNull(),
+    actorId: text('actor_id'),
+    actorName: text('actor_name').notNull().default(''),
+    kind: text('kind').notNull(),
+    payload: text('payload', { mode: 'json' }).$type<unknown>(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    index('board_events_workspace_idx').on(table.workspaceId, table.createdAt),
+    index('board_events_item_idx').on(table.itemId),
+    index('board_events_task_idx').on(table.taskId),
   ],
 );

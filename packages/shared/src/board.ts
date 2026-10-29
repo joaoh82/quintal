@@ -1,4 +1,5 @@
 import type { AgentTaskPullRequest, AgentTaskStatus } from './agent-task.js';
+import type { PullRequestStatusRef } from './github.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -159,6 +160,39 @@ export interface BoardTaskRef {
   startedAt: number;
   endedAt: number | null;
   lastSeenAt: number;
+  /**
+   * What GitHub last said about the pull request, when the office has a
+   * token and has looked. Null until it has, and for a guest.
+   */
+  github: PullRequestStatusRef | null;
+}
+
+/** The office's GitHub, as the board tells it: whether there is a token, whose, and which repositories it is for. */
+export interface BoardGithubRef {
+  connected: boolean;
+  login: string | null;
+  /** `owner/name`, lower-case. Facts and actions are offered only for pull requests in these. */
+  repos: string[];
+}
+
+/** The office's GitHub, as the settings page tells it. Never the token. */
+export interface OfficeGithubRef extends BoardGithubRef {
+  setByName: string | null;
+  updatedAt: number | null;
+  lastCheckedAt: number | null;
+  /** What GitHub said the last time the token was refused, or null while it works. */
+  lastError: string | null;
+}
+
+/** Who did what on the board. */
+export interface BoardEventRef {
+  id: string;
+  kind: string;
+  actor: { kind: 'user' | 'agent' | 'office'; id: string | null; name: string };
+  itemId: string | null;
+  taskId: string | null;
+  payload: unknown;
+  createdAt: number;
 }
 
 /**
@@ -171,6 +205,8 @@ export interface BoardPayload {
   agents: BoardAgentRef[];
   /** The ledger, most recently heard first: every active line and the newest ended ones. Empty for a guest. */
   tasks: BoardTaskRef[];
+  /** Whether the office can check with GitHub and act there. */
+  github: BoardGithubRef;
   you: { userId: string; role: MembershipRole | null };
 }
 

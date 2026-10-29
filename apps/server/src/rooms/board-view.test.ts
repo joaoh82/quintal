@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardAgentRef, BoardTaskRef } from '@quintal/shared';
+import type { BoardAgentRef, BoardTaskRef, PullRequestStatusRef } from '@quintal/shared';
 
 import { boardAgentsOf, boardForRole, boardSignatureOf } from './board-view.js';
 
@@ -34,13 +34,33 @@ const task: BoardTaskRef = {
   startedAt: 1000,
   endedAt: null,
   lastSeenAt: 2000,
+  github: null,
+};
+
+const GITHUB = { connected: true, login: 'josh', repos: ['acme/office'] };
+
+const checked: PullRequestStatusRef = {
+  state: 'open',
+  draft: false,
+  title: 'fix the chair',
+  headSha: 'abc',
+  headRef: 'quintal/marvin/fix-the-chair',
+  baseRef: 'main',
+  mergeable: true,
+  mergeableState: 'clean',
+  checks: { summary: 'passing', total: 1, passed: 1, failed: 0, pending: 0, runs: [] },
+  reviewDecision: 'none',
+  fetchedAt: 1_700_000_100_000 + 1000, // a thousand past a five-minute mark
+  error: null,
+  lastAction: null,
+  known: true,
 };
 
 describe('what the board is sent, and when', () => {
   it('does not count an agent being heard from as the board changing', () => {
-    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task] };
+    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task], github: GITHUB };
     const heard = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 40_000 };
-    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task] };
+    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task], github: GITHUB };
     assert.equal(boardSignatureOf(after), boardSignatureOf(before), 'the same minute is the same board');
 
     const later = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 60_000 };
@@ -53,15 +73,26 @@ describe('what the board is sent, and when', () => {
     assert.equal(never?.lastSeenAt, null);
   });
 
+  it('does not count GitHub being asked again as the board changing, unless the answer differs', () => {
+    const view = (github: PullRequestStatusRef) => ({ items: [], agents: [], tasks: [{ ...task, github }], github: GITHUB });
+    const first = boardSignatureOf(view(checked));
+    assert.equal(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 60_000 })), first, 'a minute later, the same facts');
+    assert.notEqual(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 5 * 60_000 })), first, 'five minutes later it is sent once, so "checked … ago" catches up');
+    assert.notEqual(boardSignatureOf(view({ ...checked, checks: { ...checked.checks, summary: 'failing' } })), first, 'a check failing is a change');
+    assert.notEqual(boardSignatureOf(view({ ...checked, error: 'rate limit' })), first, 'so is GitHub refusing');
+  });
+
   it('sends a member everything the board has', () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task] }, 'member');
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB }, 'member');
     assert.deepEqual(sent.agents, [marvin]);
     assert.deepEqual(sent.tasks, [task]);
+    assert.deepEqual(sent.github, GITHUB);
   });
 
   it("sends a guest the notes and who the agents are, not the ledger or the office's machines", () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task] }, null);
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB }, null);
     assert.deepEqual(sent.tasks, []);
+    assert.deepEqual(sent.github, { connected: false, login: null, repos: [] }, 'nor whether the office has a token');
     assert.equal(sent.agents.length, 1);
     const [agent] = sent.agents;
     assert.equal(agent?.name, 'Marvin');
