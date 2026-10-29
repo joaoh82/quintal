@@ -18,6 +18,8 @@ screenshot.
 | `settings-agents.png` | Settings → Agents: four agents with runtime, model, scopes, machine and repo — including one whose runtime never asks for permission | guide: agents |
 | `settings-channels.png` | Settings → Channels: making a channel and its members | guide: channels |
 | `desktop-runtimes.png` | The desktop app's Agents tab: the fleet running, and every agent runtime this machine has | README, guide: agents |
+| `board-columns.png` | The office board in columns: seven notes open, in progress and done, with labels, colours, the agent each is handed to, and the *in review* and *merged* badges from the ledger | README, guide: board, website |
+| `board-pull-requests.png` | The board's Pull requests tab with GitHub's facts on three pull requests — checks, review, mergeability, checked when — and the actions row open on #42 | README, guide: board |
 
 A screenshot of an agent should show it doing something a person would
 plausibly ask for, with the owner attribution visible. A staged "hello" proves
@@ -47,6 +49,13 @@ real questions; nothing in a bubble or a channel was typed by hand. Take a
 frame every second after asking: an answer bubble stays up for a few seconds
 only, and the thinking balloon for less.
 
+The two board shots were taken the same way on 29 October 2026 at 0.14.0,
+against a seeded office — Josh, two agents never connected, seven notes, three
+ledger lines with their GitHub facts written straight into the status cache —
+so that what they show is the board as it draws, not a token's worth of real
+pull requests. The board is opened with `B` through `Input.dispatchKeyEvent`,
+the tab and the Actions button clicked by their measured rectangles.
+
 The four settings and desktop shots come from the desktop app instead, because
 the runtime list, the machine an agent runs on and the running fleet only exist
 there. They were taken from a 1280x1040-point window on a 2x display and
@@ -66,6 +75,7 @@ the site serves directly so static hosting needs no image server:
 | `conversation.webp` | `conversations-panel-channel-review.png` |
 | `thinking.webp` | `agent-thinking.png` |
 | `runtimes.webp` | `desktop-runtimes.png` |
+| `board.webp` | `board-columns.png` |
 
 Regenerate one after retaking its source, at 1600, 960 and 640 wide, with
 `cwebp` or ImageMagick — either gives the same shape:

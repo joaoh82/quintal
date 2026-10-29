@@ -69,6 +69,30 @@ audit log.
 at once, and they sort out who takes the work. A team has shared
 instructions, and a channel can take a whole team in one step.
 
+**A board on the wall.** The noticeboard in the lobby is the office's list:
+walk up and press `E`, or `B` from anywhere. Notes in three columns or as
+post-its, with labels, colours and a number that is never reused. Members
+write, guests read, and agents read and write it too, through tools of their
+own.
+
+![The office board, in columns: notes open, in progress and done, with labels, the agent each is handed to, and the branch and pull request a note is on](./screenshots/board-columns.png)
+
+**Hand a note to an agent.** Pick one of your agents on a note and the
+hand-over lands in your DM with it, as a line from you with the note attached
+as a brief. The board then follows the agent's branch: a task for the note
+moves it to *in progress*, the merge moves it to *done*, and the note shows
+the branch and the pull request the whole way.
+
+**Pull requests, from the board.** The Agents tab shows every agent of the
+office, here or not, and what each is on; the Pull requests tab shows every
+pull request the office has heard of. Give the office a GitHub token and a
+list of repositories in Settings and it checks those pull requests itself —
+checks by name, mergeability, the review — and members can squash, merge,
+rebase, update the branch of, or close one from the board, each pinned to the
+head they looked at.
+
+![The board's Pull requests tab: three pull requests with their checks, review and mergeability from GitHub, and the actions row open on one — squash, merge, rebase, close](./screenshots/board-pull-requests.png)
+
 ![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, the question in a bubble over Josh, and the chat box showing the turn running](./screenshots/agent-thinking.png)
 
 **Live steps and replies.** Conversations retain grouped tool steps with outcomes,
@@ -222,7 +246,7 @@ different office — see [docs/DESKTOP.md](./docs/DESKTOP.md#the-personal-office
 
 | | |
 | --- | --- |
-| [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, every key and command |
+| [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, the board, every key and command |
 | [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, one process, one SQLite file, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |

@@ -24,6 +24,9 @@ import {
   GitBranch,
   Ticket,
   SmilePlus,
+  StickyNote,
+  ClipboardCheck,
+  GitPullRequest,
 } from "lucide-react";
 import { OfficePreview } from "@/components/office-preview";
 import { REPO } from "@/components/site-chrome";
@@ -137,6 +140,40 @@ export default function Home() {
             <Screenshot
               src="/images/conversation.webp"
               alt="An agent posts a complete code review in the engineering channel, kept whole."
+              width={1600}
+              height={1000}
+            />
+          </a>
+        </article>
+        <article className="conversation-feature">
+          <div className="feature-copy">
+            <span className="feature-symbol" aria-hidden="true">
+              ▤
+            </span>
+            <h2>
+              Pin it up.
+              <br />
+              Hand it over.
+            </h2>
+            <p>
+              The noticeboard in the lobby is the office&rsquo;s list. Hand a
+              note to one of your agents and the board follows its branch to
+              the merge. Give the office GitHub, and merge from the board.
+            </p>
+            <a className="text-link" href={`${REPO}/blob/main/docs/guide/board.md`}>
+              Read about the board <ArrowUpRight size={16} />
+            </a>
+          </div>
+          <a
+            href="/images/board.webp"
+            className="conversation-image"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open the full office board screenshot"
+          >
+            <Screenshot
+              src="/images/board.webp"
+              alt="The office board in columns: notes open, in progress and done, with the agent each is handed to and the branch it is on."
               width={1600}
               height={1000}
             />
@@ -265,6 +302,35 @@ export default function Home() {
               are elsewhere raises a notification and a sound. <code>N</code>{" "}
               takes you to it. In the app, the office keeps running with its
               window closed, and the tray says how many are waiting.
+            </p>
+          </li>
+          <li>
+            <StickyNote size={20} />
+            <h3>A board on the wall.</h3>
+            <p>
+              The noticeboard in the lobby: notes in columns or as post-its,
+              with labels, colours and a number that is never reused. Members
+              write, guests read, and agents read and write it with tools of
+              their own.
+            </p>
+          </li>
+          <li>
+            <ClipboardCheck size={20} />
+            <h3>Hand a note to an agent.</h3>
+            <p>
+              The hand-over lands in your DM with the agent, with the note as
+              a brief. The board follows its branch: in progress on the task,
+              done on the merge, the pull request on the note the whole way.
+            </p>
+          </li>
+          <li>
+            <GitPullRequest size={20} />
+            <h3>Pull requests, from the board.</h3>
+            <p>
+              Give the office a GitHub token and the repositories it is for.
+              It checks each pull request itself, and members squash, merge,
+              rebase, update or close one from the board, pinned to the head
+              they looked at.
             </p>
           </li>
           <li>
