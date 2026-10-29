@@ -131,6 +131,32 @@ describe('the ledger of agent tasks', () => {
     );
   });
 
+  it("keeps each agent's own newest ended lines, however busy the others are", async () => {
+    const { db, owner, marvin } = await office();
+    const zaphod = await createAgent(db, {
+      workspaceId: owner.workspaceId,
+      ownerUserId: owner.id,
+      name: 'Zaphod',
+      spriteKey: 'slate',
+    });
+    const done = async (agentId: string, branch: string, now: number) => {
+      await noteAgentTask(db, { workspaceId: owner.workspaceId, agentId, task: { ...TASK, branch }, now });
+      await endAgentTasks(db, owner.workspaceId, agentId, now + 1);
+    };
+    await done(zaphod.id, 'z-old', 1000);
+    await done(zaphod.id, 'z-new', 2000);
+    await done(marvin.id, 'm-1', 3000);
+    await done(marvin.id, 'm-2', 4000);
+    await done(marvin.id, 'm-3', 5000);
+
+    const sent = await listAgentTasksForWorkspace(db, owner.workspaceId, { endedMax: 2, endedPerAgentMax: 1 });
+    assert.deepEqual(
+      sent.map((row) => row.branch),
+      ['m-3', 'm-2', 'z-new'],
+      "the office's newest two, and Zaphod's newest though Marvin filled them",
+    );
+  });
+
   it('links a task to the note it began for, and keeps that note afterwards', async () => {
     const { db, owner, marvin, note } = await office();
     const chair = await note('Fix the chair', marvin.id);

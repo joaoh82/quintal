@@ -1,5 +1,7 @@
 import {
   GITHUB_WEB_HOST_DEFAULT,
+  REPO_PULLS_CLOSED_MAX,
+  REPO_PULLS_OPEN_MAX,
   GithubClient,
   GithubError,
   parsePullRequestUrl,
@@ -10,6 +12,8 @@ import {
   type PullRequestFacts,
   type PullRequestRef,
   type PullRequestStatusRef,
+  type RepoPullRequestRef,
+  type RepoPullsRef,
 } from '@quintal/shared';
 import {
   getOfficeGithub,
@@ -30,6 +34,11 @@ import {
  * three. The poll looks at most `PULL_WATCH_MAX` lines every `PULL_POLL_MS`
  * while a person is in the room, which spends under half of that with
  * nothing to spare for anybody else, so a busy office still has headroom.
+ * Listing every pull request of the office's repositories is two calls a
+ * repository every `REPO_PULLS_POLL_MS`, 1200 an hour at the most
+ * repositories a list may name. A person asking again lists at most every
+ * `REPO_PULLS_REFRESH_MIN_MS`, so however often anybody clicks, listing
+ * spends at most 2000 an hour and the ledger's checks keep theirs.
  */
 
 /** How often the office asks, while somebody is here to see the answer. */
@@ -38,6 +47,10 @@ export const PULL_POLL_MS = 60_000;
 export const PULL_WATCH_MAX = 12;
 /** How soon after one look a person may ask for another. */
 export const PULL_REFRESH_MIN_MS = 10_000;
+/** How often the office lists its repositories' pull requests, while somebody is here. */
+export const REPO_PULLS_POLL_MS = 5 * 60_000;
+/** How soon after one listing a person's Check GitHub lists again. Sooner, it checks only the ledger. */
+export const REPO_PULLS_REFRESH_MIN_MS = 3 * 60_000;
 /** How many looks at once. */
 const CONCURRENCY = 3;
 
@@ -60,6 +73,8 @@ export function tasksToWatch(
   repos: readonly string[],
   max = PULL_WATCH_MAX,
   host = GITHUB_WEB_HOST_DEFAULT,
+  /** The repositories' listing: newer than a line's last check, its word on open wins — a reopened one is watched again. */
+  listed: readonly RepoPullRequestRef[] = [],
 ): BoardTaskRef[] {
   return tasks
     .filter((task) => {
@@ -67,7 +82,14 @@ export function tasksToWatch(
       const ref = pr ? parsePullRequestUrl(pr.url, host) : null;
       if (!pr || !ref || !repoOnList(repos, ref)) return false;
       const known = statuses.get(task.id);
-      const open = known?.known ? known.state === 'open' : pr.state === 'open';
+      const repo = `${ref.owner}/${ref.repo}`.toLowerCase();
+      const seen = listed.find((pull) => pull.repo === repo && pull.number === ref.number);
+      const open =
+        seen && (!known?.known || seen.updatedAt > known.fetchedAt)
+          ? seen.state === 'open'
+          : known?.known
+            ? known.state === 'open'
+            : pr.state === 'open';
       return open || task.status === 'active';
     })
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
@@ -89,6 +111,14 @@ export interface PullRefreshOutcome {
   looked: number;
   /** Lines whose pull request state GitHub says differs from the ledger's. */
   changes: PullStateChange[];
+  /** The token was refused: nothing more will work until it is replaced. */
+  tokenRefused: string | null;
+}
+
+export interface RepoListOutcome {
+  /** False when the office has no token: nothing was asked, and there is nothing to list. */
+  configured: boolean;
+  pulls: RepoPullsRef;
   /** The token was refused: nothing more will work until it is replaced. */
   tokenRefused: string | null;
 }
@@ -121,6 +151,8 @@ export class PullRequestWatch {
   readonly #now: () => number;
   #lastLookAt = 0;
   #looking: Promise<PullRefreshOutcome> | null = null;
+  #lastListAt = 0;
+  #listing: Promise<RepoListOutcome> | null = null;
 
   constructor(options: PullRequestWatchOptions) {
     this.#db = options.db;
@@ -159,7 +191,7 @@ export class PullRequestWatch {
   refresh(
     tasks: readonly BoardTaskRef[],
     statuses: ReadonlyMap<string, PullRequestStatusRef>,
-    options: { taskId?: string } = {},
+    options: { taskId?: string; listed?: readonly RepoPullRequestRef[] } = {},
   ): Promise<PullRefreshOutcome> {
     if (this.#looking) return this.#looking;
     this.#looking = this.#look(tasks, statuses, options).finally(() => {
@@ -171,7 +203,7 @@ export class PullRequestWatch {
   async #look(
     tasks: readonly BoardTaskRef[],
     statuses: ReadonlyMap<string, PullRequestStatusRef>,
-    options: { taskId?: string },
+    options: { taskId?: string; listed?: readonly RepoPullRequestRef[] },
   ): Promise<PullRefreshOutcome> {
     const office = await this.#office();
     if (!office) return { configured: false, looked: 0, changes: [], tokenRefused: null };
@@ -184,7 +216,7 @@ export class PullRequestWatch {
           const ref = this.#refOf(task);
           return ref !== null && repoOnList(repos, ref);
         })
-      : tasksToWatch(tasks, statuses, repos, PULL_WATCH_MAX, this.#webHost);
+      : tasksToWatch(tasks, statuses, repos, PULL_WATCH_MAX, this.#webHost, options.listed);
     const changes: PullStateChange[] = [];
     let tokenRefused: string | null = null;
     let looked = 0;
@@ -218,8 +250,66 @@ export class PullRequestWatch {
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-    await noteOfficeGithubCheck(this.#db, this.#workspaceId, tokenRefused, this.#now());
+    // Nothing looked at is nothing learnt about the token: a refusal the listing
+    // just wrote down stays written down.
+    if (looked > 0) await noteOfficeGithubCheck(this.#db, this.#workspaceId, tokenRefused, this.#now());
     return { configured: true, looked, changes, tokenRefused };
+  }
+
+  /** Whether the repositories are due to be listed again: by the poll, or sooner for a person who asked. */
+  listDue(minMs = REPO_PULLS_POLL_MS): boolean {
+    return this.#now() - this.#lastListAt >= minMs;
+  }
+
+  /**
+   * List every pull request of the repositories on the office's list: the
+   * open ones and the most recently closed or merged. Two lists asked for
+   * at once are one. A repository GitHub will not list keeps what it last
+   * listed, with the reason beside it; a refused token stops the listing
+   * and is written on the token's row.
+   */
+  listRepos(previous: RepoPullsRef): Promise<RepoListOutcome> {
+    if (this.#listing) return this.#listing;
+    this.#listing = this.#list(previous).finally(() => {
+      this.#listing = null;
+    });
+    return this.#listing;
+  }
+
+  async #list(previous: RepoPullsRef): Promise<RepoListOutcome> {
+    const office = await this.#office();
+    if (!office) return { configured: false, pulls: { pulls: [], fetchedAt: null, errors: [] }, tokenRefused: null };
+    const { client, repos } = office;
+    this.#lastListAt = this.#now();
+    const byRepo = new Map<string, RepoPullRequestRef[]>();
+    const errors: RepoPullsRef['errors'] = [];
+    let tokenRefused: string | null = null;
+
+    const queue = [...repos];
+    const worker = async (): Promise<void> => {
+      for (let repo = queue.shift(); repo && tokenRefused === null; repo = queue.shift()) {
+        const [owner, name] = repo.split('/') as [string, string];
+        try {
+          const [open, closed] = await Promise.all([
+            client.listPullRequests({ owner, repo: name }, 'open', REPO_PULLS_OPEN_MAX),
+            client.listPullRequests({ owner, repo: name }, 'closed', REPO_PULLS_CLOSED_MAX),
+          ]);
+          byRepo.set(repo, [...open, ...closed]);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          errors.push({ repo, message });
+          byRepo.set(repo, previous.pulls.filter((pull) => pull.repo === repo));
+          if (error instanceof GithubError && error.code === 'unauthorised') tokenRefused = message;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+    // In the list's order, then newest first, so the same answer is the same board.
+    const pulls = repos
+      .flatMap((repo) => byRepo.get(repo) ?? previous.pulls.filter((pull) => pull.repo === repo))
+      .sort((a, b) => b.updatedAt - a.updatedAt || a.repo.localeCompare(b.repo) || b.number - a.number);
+    await noteOfficeGithubCheck(this.#db, this.#workspaceId, tokenRefused, this.#now());
+    return { configured: true, pulls: { pulls, fetchedAt: this.#now(), errors }, tokenRefused };
   }
 
   /**

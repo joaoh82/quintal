@@ -1,5 +1,5 @@
 import type { AgentTaskPullRequest, AgentTaskStatus } from './agent-task.js';
-import type { PullRequestStatusRef } from './github.js';
+import type { PullRequestStatusRef, RepoPullsRef } from './github.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
@@ -49,6 +49,13 @@ export const BOARD_OPEN_ITEMS_MAX = 500;
  * The office keeps the ledger forever; the board carries what fits a tab.
  */
 export const BOARD_LEDGER_ENDED_MAX = 50;
+
+/**
+ * How many of each agent's own ended ledger lines the board is sent, on top
+ * of the office-wide newest: an agent's history on the Agents tab, kept even
+ * while busier agents fill the office's fifty.
+ */
+export const BOARD_LEDGER_ENDED_PER_AGENT_MAX = 20;
 
 /**
  * The grain of an agent's `lastSeenAt` on the board, in ms. The office hears
@@ -144,7 +151,8 @@ export interface BoardAgentRef {
  * after it ends. The branch, its pull request as last heard, the note it was
  * for, and when. The office keeps these forever; a ticketing integration
  * syncs into them, never replaces them. The board is sent every active line
- * and the last `BOARD_LEDGER_ENDED_MAX` ended ones, and a guest none.
+ * the last `BOARD_LEDGER_ENDED_MAX` ended ones, and the last
+ * `BOARD_LEDGER_ENDED_PER_AGENT_MAX` of each agent's; a guest none.
  */
 export interface BoardTaskRef {
   id: string;
@@ -203,10 +211,14 @@ export interface BoardEventRef {
 export interface BoardPayload {
   items: BoardItemRef[];
   agents: BoardAgentRef[];
-  /** The ledger, most recently heard first: every active line and the newest ended ones. Empty for a guest. */
+  /** The ledger, most recently heard first: every active line and the newest ended ones, each agent's included. Empty for a guest. */
   tasks: BoardTaskRef[];
   /** Whether the office can check with GitHub and act there. */
   github: BoardGithubRef;
+  /** Every pull request of the repositories on the office's GitHub list, agents' or not. Empty for a guest. */
+  pulls: RepoPullsRef;
+  /** The host pull requests live on — github.com, or the enterprise server's — so the panel reads their URLs as the office does. */
+  githubHost: string;
   you: { userId: string; role: MembershipRole | null };
 }
 

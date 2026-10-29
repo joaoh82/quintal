@@ -11,6 +11,7 @@ Press `?` in the office for this list in place.
 | `Z` | Show the zone overlays |
 | `N` | Go to whoever is waiting on you: a permission card first, then where you were addressed |
 | `B` | The office board, from anywhere |
+| `Alt+B` | The office board even while typing in the chat (`Option+B` on a Mac) |
 | `E` | Use what you stand by: the noticeboard in the lobby opens the board |
 | `?` | The help panel |
 

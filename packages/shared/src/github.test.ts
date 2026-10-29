@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  repoPullOf,
   GithubClient,
   GithubError,
   mayManageGithubToken,
@@ -246,5 +247,31 @@ describe('the client', () => {
       },
     });
     await assert.rejects(client.viewer(), (error: unknown) => error instanceof GithubError && error.code === 'unavailable' && /ECONNREFUSED/.test(error.message));
+  });
+});
+
+describe('a listed pull request, as the board carries it', () => {
+  const raw = {
+    number: 7,
+    state: 'closed',
+    draft: false,
+    title: 'Paint the lobby',
+    html_url: 'https://github.com/Acme/API/pull/7',
+    user: { login: 'trillian' },
+    merged_at: '2026-10-02T00:00:00Z',
+    head: { sha: 'abc', ref: 'paint' },
+    base: { ref: 'main' },
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-02T00:00:00Z',
+  };
+
+  it('says merged for a closed one with a merge, and keys the repository lower-case', () => {
+    const pull = repoPullOf(raw, 'Acme/API');
+    assert.equal(pull.repo, 'acme/api');
+    assert.equal(pull.state, 'merged');
+    assert.equal(pull.author, 'trillian');
+    assert.equal(pull.updatedAt, Date.parse('2026-10-02T00:00:00Z'));
+    assert.equal(repoPullOf({ ...raw, merged_at: null }, 'acme/api').state, 'closed');
+    assert.equal(repoPullOf({ ...raw, state: 'open', merged_at: null, draft: true, user: null }, 'acme/api').author, '');
   });
 });

@@ -1,4 +1,5 @@
 import {
+  GITHUB_WEB_HOST_DEFAULT,
   WORKING_IN_ZONE,
   workingInTokens,
   type AgentTask,
@@ -16,6 +17,7 @@ import {
   type BoardGithubRef,
   type PullRequestAction,
   type PullRequestStatusRef,
+  type RepoPullRequestRef,
 } from '@quintal/shared';
 
 /**
@@ -126,6 +128,8 @@ export interface AgentRow {
   workingSince: number;
   /** The notes handed to it that are not done, newest first. */
   notes: BoardItemRef[];
+  /** Its other ledger lines — what it was on before, and any still open beside `task` — most recently heard first. */
+  history: BoardTaskRef[];
   /** When the office last heard from it: now while it is here. Null for never. */
   lastSeenAt: number | null;
 }
@@ -173,14 +177,17 @@ export function agentRowsOf(
 ): AgentRow[] {
   const rows = agents.map((agent): AgentRow => {
     const here = roster.find((entry) => entry.kind === 'agent' && entry.identityId === agent.id) ?? null;
+    const task = here ? here.task : ledgerTaskOf(agent.id, tasks);
     return {
       agent,
       here,
       status: here ? here.status : agent.status,
       where: here ? whereLabel(here, zones, channels) : '',
-      task: here ? here.task : ledgerTaskOf(agent.id, tasks),
+      task,
       workingSince: here?.workingSince ?? 0,
       notes: items.filter((item) => item.assignee?.id === agent.id && item.status !== 'done'),
+      // The ledger is upserted by (agent, branch), so the branch is what makes a line the current task.
+      history: tasks.filter((line) => line.agentId === agent.id && line.branch !== task?.branch),
       lastSeenAt: here ? now : agent.lastSeenAt,
     };
   });
@@ -196,30 +203,177 @@ export function agentMatches(row: AgentRow, query: string): boolean {
   if (row.agent.ownerName.toLowerCase().includes(q)) return true;
   if (row.status.toLowerCase().includes(q)) return true;
   if (row.task && (row.task.branch.toLowerCase().includes(q) || row.task.title.toLowerCase().includes(q))) return true;
+  if (row.history.some((line) => line.branch.toLowerCase().includes(q) || line.title.toLowerCase().includes(q))) return true;
   return row.notes.some((note) => matchesFilter(note, q));
 }
 
 // --- the Pull requests tab -----------------------------------------------------
 
-/** Ledger lines with a pull request, as last heard, most recent first. */
-export function pullRequestRowsOf(tasks: readonly BoardTaskRef[]): BoardTaskRef[] {
-  return tasks.filter((task) => task.pr !== null).sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+/**
+ * A pull request as the tab lists it: one of the office's repositories' as
+ * GitHub listed it, an agent's from the ledger, or both joined by
+ * repository and number. A ledger line's pull request off the office's list
+ * is still a row, as the harness reported it.
+ */
+export interface PullListRow {
+  key: string;
+  /** `owner/name`, lower-case; the ledger's repo when the URL is not GitHub's. */
+  repo: string;
+  number: number;
+  url: string;
+  title: string;
+  /** The GitHub login that opened it. Empty when only the ledger knows it. */
+  author: string;
+  /** The agent whose task it came from, if any. */
+  agentName: string | null;
+  state: 'open' | 'merged' | 'closed';
+  draft: boolean;
+  headRef: string;
+  updatedAt: number;
+  /** The ledger line, when an agent's task opened it: the facts, the actions. */
+  task: BoardTaskRef | null;
+  /** GitHub's list entry, when its repository is on the office's list. */
+  listed: RepoPullRequestRef | null;
+}
+
+function pullKey(repo: string, number: number): string {
+  return `${repo.toLowerCase()}#${number}`;
+}
+
+/**
+ * Every pull request the office knows: what GitHub listed for its
+ * repositories, joined with the ledger's lines, most recently moved first.
+ * The ledger's newest line wins when two name the same pull request. URLs
+ * are read on the office's GitHub host, so an enterprise server's pull
+ * request is one row too.
+ *
+ * Where both have a word on its state, the newer wins: a ledger line's
+ * check from before the pull request last changed on GitHub — merged,
+ * closed, reopened, out of draft — gives way to the listing.
+ */
+export function pullListOf(
+  listed: readonly RepoPullRequestRef[],
+  tasks: readonly BoardTaskRef[],
+  host: string = GITHUB_WEB_HOST_DEFAULT,
+): PullListRow[] {
+  const lines = new Map<string, BoardTaskRef>();
+  for (const task of [...tasks].sort((a, b) => b.lastSeenAt - a.lastSeenAt)) {
+    if (!task.pr) continue;
+    const ref = parsePullRequestUrl(task.pr.url, host);
+    const key = ref ? pullKey(`${ref.owner}/${ref.repo}`, ref.number) : task.pr.url;
+    if (!lines.has(key)) lines.set(key, task);
+  }
+  const rows: PullListRow[] = [];
+  for (const pull of listed) {
+    const key = pullKey(pull.repo, pull.number);
+    const task = lines.get(key) ?? null;
+    lines.delete(key);
+    const checked = task?.github?.known ? task.github : null;
+    const facts = checked && checked.fetchedAt >= pull.updatedAt ? checked : null;
+    rows.push({
+      key,
+      repo: pull.repo,
+      number: pull.number,
+      url: pull.url,
+      title: pull.title,
+      author: pull.author,
+      agentName: task?.agentName ?? null,
+      state: facts?.state ?? pull.state,
+      draft: facts?.draft ?? pull.draft,
+      headRef: pull.headRef,
+      updatedAt: Math.max(pull.updatedAt, task?.lastSeenAt ?? 0),
+      task,
+      listed: pull,
+    });
+  }
+  for (const [key, task] of lines) {
+    const ref = parsePullRequestUrl(task.pr!.url, host);
+    const facts = task.github?.known ? task.github : null;
+    rows.push({
+      key,
+      repo: ref ? `${ref.owner}/${ref.repo}`.toLowerCase() : task.repo,
+      number: task.pr!.number,
+      url: task.pr!.url,
+      title: facts?.title || task.title,
+      author: '',
+      agentName: task.agentName,
+      state: pullStateOf(task),
+      draft: facts?.draft ?? false,
+      headRef: task.branch,
+      updatedAt: task.lastSeenAt,
+      task,
+      listed: null,
+    });
+  }
+  return rows.sort((a, b) => b.updatedAt - a.updatedAt || a.key.localeCompare(b.key));
+}
+
+/**
+ * What a member may do to a row's pull request: its ledger line's actions,
+ * and only while the row itself — the newer word on it — says it is open.
+ */
+export function pullRowActionsOf(row: PullListRow, office: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): PullRequestAction[] {
+  if (!row.task || row.state !== 'open') return [];
+  return pullActionsOf(row.task, office, host);
+}
+
+export const PULL_STATUS_FILTERS = ['open', 'draft', 'merged', 'closed', 'all'] as const;
+export type PullStatusFilter = (typeof PULL_STATUS_FILTERS)[number];
+
+/** The tab's three pickers. An empty author or project is anybody's, anywhere. */
+export interface PullFilters {
+  status: PullStatusFilter;
+  /** A GitHub login, or an agent's name. */
+  author: string;
+  project: string;
+}
+
+export const DEFAULT_PULL_FILTERS: PullFilters = { status: 'open', author: '', project: '' };
+
+/** Who opened what is listed, for the author picker: GitHub logins, then agents, each once. */
+export function pullAuthorsOf(rows: readonly PullListRow[]): { value: string; label: string }[] {
+  const logins = [...new Set(rows.map((row) => row.author).filter((author) => author.length > 0))].sort((a, b) => a.localeCompare(b));
+  const agents = [...new Set(rows.map((row) => row.agentName).filter((name): name is string => name !== null))]
+    .filter((name) => !logins.includes(name))
+    .sort((a, b) => a.localeCompare(b));
+  return [...logins.map((login) => ({ value: login, label: `@${login}` })), ...agents.map((name) => ({ value: name, label: `◆ ${name}` }))];
+}
+
+/** Every project there is to pick: the office's list, and wherever the ledger's pull requests are. */
+export function pullProjectsOf(rows: readonly PullListRow[], github: BoardGithubRef): string[] {
+  return [...new Set([...github.repos, ...rows.map((row) => row.repo)])].sort((a, b) => a.localeCompare(b));
+}
+
+/** Does a row answer the pickers and the filter box? The box: number, note, title, repo, branch, author, agent. */
+export function pullListMatches(row: PullListRow, filters: PullFilters, query: string): boolean {
+  switch (filters.status) {
+    case 'open':
+      if (row.state !== 'open') return false;
+      break;
+    case 'draft':
+      if (row.state !== 'open' || !row.draft) return false;
+      break;
+    case 'merged':
+    case 'closed':
+      if (row.state !== filters.status) return false;
+      break;
+    case 'all':
+      break;
+  }
+  if (filters.author && row.author !== filters.author && row.agentName !== filters.author) return false;
+  if (filters.project && row.repo !== filters.project) return false;
+  const q = query.trim().toLowerCase();
+  if (q.length === 0) return true;
+  const number = q.replace(/^#/, '');
+  if (String(row.number) === number) return true;
+  if (row.task?.item && String(row.task.item.number) === number) return true;
+  return [row.title, row.repo, row.headRef, row.author, row.agentName ?? '', row.task?.item?.title ?? '', row.state]
+    .some((text) => text.toLowerCase().includes(q));
 }
 
 /** Ledger lines on a branch with no pull request yet, still active. */
 export function branchesWithoutPr(tasks: readonly BoardTaskRef[]): BoardTaskRef[] {
   return tasks.filter((task) => task.pr === null && task.status === 'active');
-}
-
-/** Does a pull request row answer the filter box? By number, title, repo, branch, agent or note. */
-export function pullRequestMatches(task: BoardTaskRef, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (q.length === 0) return true;
-  const number = q.replace(/^#/, '');
-  if (task.pr && String(task.pr.number) === number) return true;
-  if (task.item && String(task.item.number) === number) return true;
-  return [task.title, task.repo, task.branch, task.agentName, task.item?.title ?? '', task.pr?.state ?? '']
-    .some((text) => text.toLowerCase().includes(q));
 }
 
 /** `github.com/acme/api` from a pull request URL, for the row; the URL itself when it is not one. */
@@ -246,8 +400,8 @@ export function pullStateOf(task: BoardTaskRef): 'open' | 'merged' | 'closed' {
  * anything else before GitHub is called; the panel says so instead of
  * offering it.
  */
-export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef): boolean {
-  const ref = task.pr ? parsePullRequestUrl(task.pr.url) : null;
+export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): boolean {
+  const ref = task.pr ? parsePullRequestUrl(task.pr.url, host) : null;
   return ref !== null && repoOnList(github.repos, ref);
 }
 
@@ -258,8 +412,8 @@ export function pullOnOfficeList(task: BoardTaskRef, github: BoardGithubRef): bo
  * marked ready first; "update branch" only when GitHub says the branch is
  * behind, because that is the one thing it fixes.
  */
-export function pullActionsOf(task: BoardTaskRef, office?: BoardGithubRef): PullRequestAction[] {
-  if (office && !pullOnOfficeList(task, office)) return [];
+export function pullActionsOf(task: BoardTaskRef, office?: BoardGithubRef, host: string = GITHUB_WEB_HOST_DEFAULT): PullRequestAction[] {
+  if (office && !pullOnOfficeList(task, office, host)) return [];
   const github = task.github;
   if (!github?.known || github.state !== 'open') return [];
   const actions: PullRequestAction[] = [];

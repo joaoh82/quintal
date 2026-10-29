@@ -20,6 +20,7 @@ import {
   type BoardDeletePayload,
   type BoardMessagePayload,
   type BoardPullActionPayload,
+  type BoardPullReviewPayload,
   type BoardPullRefreshPayload,
   type BoardUpdatePayload,
   type MapInteractable,
@@ -851,6 +852,11 @@ export class OfficeScene extends Phaser.Scene {
   /** Merge, update or close a pull request with the office's token. A `notice` says what GitHub did. */
   actOnPullRequest(payload: BoardPullActionPayload): void {
     this.#room.send(ClientMessage.BoardPullAction, payload);
+  }
+
+  /** Ask one of your agents to review a pull request. A `notice` says it was asked. */
+  requestPullReview(payload: BoardPullReviewPayload): void {
+    this.#room.send(ClientMessage.BoardPullReview, payload);
   }
 
   /**

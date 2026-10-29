@@ -89,6 +89,81 @@ export function repoOnList(repos: readonly string[], ref: Pick<PullRequestRef, '
   return repos.includes(`${ref.owner}/${ref.repo}`.toLowerCase());
 }
 
+// --- every pull request of the office's repositories ---------------------------
+
+/** How many open pull requests the office lists per repository: one page. */
+export const REPO_PULLS_OPEN_MAX = 100;
+/** How many closed or merged pull requests per repository, the most recently updated. */
+export const REPO_PULLS_CLOSED_MAX = 20;
+
+/**
+ * A pull request of a repository on the office's list, as GitHub lists them:
+ * whoever opened it, wherever it came from, an agent's or not. Lighter than
+ * a ledger line's facts — no checks or reviews, which cost calls per pull
+ * request — and joined to the ledger by repository and number.
+ */
+export interface RepoPullRequestRef {
+  /** `owner/name`, lower-case, as the office's list names it. */
+  repo: string;
+  number: number;
+  url: string;
+  title: string;
+  /** The GitHub login that opened it. */
+  author: string;
+  state: AgentTaskPrState;
+  draft: boolean;
+  headRef: string;
+  baseRef: string;
+  /** The head commit, for acting on what was looked at. */
+  headSha: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Every listed repository's pull requests, as last asked, and what went wrong asking. */
+export interface RepoPullsRef {
+  pulls: RepoPullRequestRef[];
+  /** When the office last listed them; null for never. */
+  fetchedAt: number | null;
+  /** Repositories GitHub would not list, and why, fit to show a person. */
+  errors: { repo: string; message: string }[];
+}
+
+export const NO_REPO_PULLS: RepoPullsRef = { pulls: [], fetchedAt: null, errors: [] };
+
+/** A pull request as GitHub's list gives it. */
+export interface RawListedPullRequest {
+  number: number;
+  state: string;
+  draft?: boolean;
+  title: string;
+  html_url: string;
+  user: { login: string } | null;
+  merged_at: string | null;
+  head: { sha: string; ref: string };
+  base: { ref: string };
+  created_at: string;
+  updated_at: string;
+}
+
+/** One listed pull request, as the board carries it. */
+export function repoPullOf(raw: RawListedPullRequest, repo: string): RepoPullRequestRef {
+  return {
+    repo: repo.toLowerCase(),
+    number: raw.number,
+    url: raw.html_url,
+    title: raw.title,
+    author: raw.user?.login ?? '',
+    state: raw.merged_at ? 'merged' : raw.state === 'closed' ? 'closed' : 'open',
+    draft: raw.draft === true,
+    headRef: raw.head.ref,
+    baseRef: raw.base.ref,
+    headSha: raw.head.sha,
+    createdAt: Date.parse(raw.created_at) || 0,
+    updatedAt: Date.parse(raw.updated_at) || 0,
+  };
+}
+
 // --- what GitHub says, summarised ------------------------------------------
 
 export const PULL_REQUEST_CHECK_SUMMARIES = ['none', 'pending', 'passing', 'failing'] as const;
@@ -403,6 +478,22 @@ export class GithubClient {
       checks: summariseChecks(checks),
       reviewDecision: reviewDecisionOf(reviews),
     };
+  }
+
+  /**
+   * A repository's pull requests, most recently updated first: the open
+   * ones, or the closed and merged. One page, `perPage` long.
+   */
+  async listPullRequests(
+    repo: Pick<PullRequestRef, 'owner' | 'repo'>,
+    state: 'open' | 'closed',
+    perPage: number,
+  ): Promise<RepoPullRequestRef[]> {
+    const rows = await this.#call<RawListedPullRequest[]>(
+      'GET',
+      `/repos/${repo.owner}/${repo.repo}/pulls?state=${state}&sort=updated&direction=desc&per_page=${perPage}`,
+    );
+    return (rows ?? []).map((row) => repoPullOf(row, `${repo.owner}/${repo.repo}`));
   }
 
   /** Merge, by method. `sha` makes GitHub refuse if the head moved since the person looked. */

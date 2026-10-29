@@ -147,7 +147,7 @@ export default function OfficeGame({
   }, []);
 
   // `?` opens help; the overlay key opens the conversations panel; B opens
-  // the board, and so does E when you stand by the noticeboard; N goes to
+  // the board (Alt+B too, below, even mid-sentence), and so does E when you stand by the noticeboard; N goes to
   // whoever is waiting on you. The chat input and the board stop keydown
   // propagation, so typing any of them in a sentence never reaches this.
   const waitingRef = useRef(conversations);
@@ -193,6 +193,30 @@ export default function OfficeGame({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [overlayKey, openConversation]);
+
+  // Alt+B (Option+B) is the board from anywhere: with the chat box or a
+  // panel's field holding the keyboard too, where a bare B is a letter.
+  // Listened for on the way down, before those fields stop the key, and
+  // matched by `code` because Option+B on a Mac types `∫`. It does not
+  // close the board while you type in it: that would throw the note away.
+  const boardOpenRef = useRef(boardOpen);
+  boardOpenRef.current = boardOpen;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'KeyB' || !event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (boardOpenRef.current) {
+        if (!typingElsewhere()) setBoardOpen(false);
+        return;
+      }
+      // The board covers the chat box; a draft there should not keep taking keys.
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      setBoardOpen(true);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -431,13 +455,13 @@ export default function OfficeGame({
         <span className="ml-auto text-white/45">
           {chatFocused
             ? 'Esc returns to walking'
-            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · N next waiting · B board · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
+            : `WASD / arrows · click to walk · Enter to chat · M mic · hold Space to talk · N next waiting · B board (Alt+B while typing) · ${overlayKey} for all conversations · Z ${hud.debug ? 'hides' : 'shows'} zones`}
         </span>
         <button
           type="button"
           onClick={() => setBoardOpen(true)}
-          aria-label="Office board (B)"
-          title="Office board (B)"
+          aria-label="Office board (B, or Alt+B from anywhere)"
+          title="Office board (B, or Alt+B from anywhere)"
           className="pointer-events-auto flex h-[22px] items-center rounded border border-white/20 px-1.5 text-white/70 hover:bg-white/10 hover:text-white"
         >
           <Pin size={12} aria-hidden />

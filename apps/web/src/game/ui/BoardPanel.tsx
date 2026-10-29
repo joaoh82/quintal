@@ -17,6 +17,7 @@ import {
   type ChannelRef,
   type MapZone,
   type PullRequestAction,
+  type RepoPullsRef,
   type RosterEntry,
 } from '@quintal/shared';
 import { ExternalLink, GitPullRequest, Pin, Plus, RefreshCw } from 'lucide-react';
@@ -37,10 +38,13 @@ import {
   nextStatus,
   pullActionConfirm,
   pullActionLabel,
-  pullActionsOf,
-  pullOnOfficeList,
-  pullRequestMatches,
-  pullRequestRowsOf,
+  pullRowActionsOf,
+  DEFAULT_PULL_FILTERS,
+  PULL_STATUS_FILTERS,
+  pullAuthorsOf,
+  pullListMatches,
+  pullListOf,
+  pullProjectsOf,
   pullStateOf,
   repoOfPrUrl,
   reviewLabel,
@@ -48,6 +52,9 @@ import {
   wallOf,
   type AgentRow,
   type BoardTab,
+  type PullFilters,
+  type PullListRow,
+  type PullStatusFilter,
   type BoardView,
 } from './board';
 import { formatElapsed } from './elapsed';
@@ -104,7 +111,19 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
     () => agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now).filter((row) => agentMatches(row, query)),
     [board.agents, board.items, board.tasks, roster, zones, channels, now, query],
   );
-  const pulls = useMemo(() => pullRequestRowsOf(board.tasks).filter((task) => pullRequestMatches(task, query)), [board.tasks, query]);
+  const [pullFilters, setPullFilters] = useState<PullFilters>(DEFAULT_PULL_FILTERS);
+  const allPulls = useMemo(
+    () => pullListOf(board.pulls.pulls, board.tasks, board.githubHost),
+    [board.pulls.pulls, board.tasks, board.githubHost],
+  );
+  const pulls = useMemo(
+    () => allPulls.filter((row) => pullListMatches(row, pullFilters, query)),
+    [allPulls, pullFilters, query],
+  );
+  const reviewers = useMemo(
+    () => board.agents.filter((agent) => agent.ownerUserId === board.you.userId),
+    [board.agents, board.you.userId],
+  );
   const onBranch = useMemo(() => branchesWithoutPr(board.tasks), [board.tasks]);
 
   // A note taken down while its drawer was open is a drawer with nothing in it.
@@ -200,7 +219,7 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
                   ? 'Filter: #12, a word, a label, an agent'
                   : tab === 'agents'
                     ? 'Filter: a name, a status, a branch'
-                    : 'Filter: #12, a branch, an agent, a state'
+                    : 'Filter: #12, a title, a branch, a person'
               }
               aria-label="Filter"
               className="w-60 rounded border border-white/15 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/30 focus:border-white/40 focus:outline-none"
@@ -230,17 +249,31 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
             {!board.loaded ? (
               <p className="p-6 text-xs text-white/40">Reading the board…</p>
             ) : tab === 'agents' ? (
-              <AgentsTab rows={agentRows} now={now} onOpenNote={open} onMessage={onMessageAgent} you={board.you.userId} />
+              <AgentsTab
+                rows={agentRows}
+                now={now}
+                guest={board.you.role === null}
+                onOpenNote={(id) => setDrawer({ kind: 'item', id })}
+                onMessage={onMessageAgent}
+                you={board.you.userId}
+              />
             ) : tab === 'pulls' ? (
               <PullsTab
                 rows={pulls}
+                allRows={allPulls}
+                filters={pullFilters}
+                onFilters={setPullFilters}
                 onBranch={onBranch}
                 now={now}
                 guest={board.you.role === null}
                 github={board.github}
+                host={board.githubHost}
+                listing={board.pulls}
+                reviewers={reviewers}
                 onOpenNote={(id) => setDrawer({ kind: 'item', id })}
                 onAct={(taskId, action, expectedHeadSha) => board.actOnPull({ taskId, action, expectedHeadSha })}
                 onRefresh={(taskId) => board.refreshPulls(taskId)}
+                onRequestReview={(agentId, url) => board.requestReview(agentId, url)}
               />
             ) : board.items.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -310,20 +343,34 @@ function PrState({ state }: { state: 'open' | 'merged' | 'closed' }) {
  * is and what it last left; the roster says what the ones here are doing
  * now. An agent that is away is still a row — its notes are still its
  * notes — so nobody wonders where the work went when it disconnected.
+ * Each row opens onto what the agent was on before, from the ledger.
  */
 function AgentsTab({
   rows,
   now,
+  guest,
   onOpenNote,
   onMessage,
   you,
 }: {
   rows: AgentRow[];
   now: number;
-  onOpenNote: (item: BoardItemRef) => void;
+  /** A guest is not sent the ledger, so it has no history to show. */
+  guest: boolean;
+  onOpenNote: (itemId: string) => void;
   onMessage: (agentId: string) => void;
   you: string;
 }) {
+  /** Which agents have their history open. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (agentId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+
   if (rows.length === 0) {
     return <p className="p-6 text-xs text-white/40">No agents in this office yet, or none match the filter. Agents are made in Settings.</p>;
   }
@@ -332,87 +379,106 @@ function AgentsTab({
       {rows.map((row) => {
         const running = row.here ? runtimeLines(row.here) : null;
         const away = row.here === null;
+        const open = expanded.has(row.agent.id);
         return (
-          <li key={row.agent.id} className={`grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4 px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5">
-                <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${away ? 'bg-white/25' : 'bg-emerald-400'}`} aria-hidden />
-                <span className={away ? 'text-sky-200/70' : 'text-sky-300'}>
-                  {AGENT_GLYPH} {row.agent.name}
-                </span>
-                <span className="truncate text-[10px] text-white/40">{row.agent.ownerName ? `${row.agent.ownerName}'s` : ''}</span>
-              </p>
-              {row.agent.description ? <p className="mt-0.5 truncate text-[11px] text-white/45">{row.agent.description}</p> : null}
-              <p className="mt-0.5 font-mono text-[10px] text-white/35">
-                {away
-                  ? row.lastSeenAt === null
-                    ? 'never connected'
-                    : `away · last seen ${ageLabel(row.lastSeenAt, now)}`
-                  : row.workingSince > 0
-                    ? `working for ${formatElapsed(now - row.workingSince)}`
-                    : 'here, idle'}
-              </p>
-              {running ? (
-                <p className="font-mono text-[10px] text-white/35">
-                  {running.runtime} · {running.model}
+          <li key={row.agent.id} className={`px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
+            <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5">
+                  <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${away ? 'bg-white/25' : 'bg-emerald-400'}`} aria-hidden />
+                  <span className={away ? 'text-sky-200/70' : 'text-sky-300'}>
+                    {AGENT_GLYPH} {row.agent.name}
+                  </span>
+                  <span className="truncate text-[10px] text-white/40">{row.agent.ownerName ? `${row.agent.ownerName}'s` : ''}</span>
                 </p>
-              ) : row.agent.runtimeId ? (
-                <p className="font-mono text-[10px] text-white/35">
-                  {row.agent.runtimeId} · {row.agent.modelId ?? 'default'}
-                  {row.agent.hostLabel ? ` · ${row.agent.hostLabel}` : ''}
+                {row.agent.description ? <p className="mt-0.5 truncate text-[11px] text-white/45">{row.agent.description}</p> : null}
+                <p className="mt-0.5 font-mono text-[10px] text-white/35">
+                  {away
+                    ? row.lastSeenAt === null
+                      ? 'never connected'
+                      : `away · last seen ${ageLabel(row.lastSeenAt, now)}`
+                    : row.workingSince > 0
+                      ? `working for ${formatElapsed(now - row.workingSince)}`
+                      : 'here, idle'}
                 </p>
-              ) : null}
+                {running ? (
+                  <p className="font-mono text-[10px] text-white/35">
+                    {running.runtime} · {running.model}
+                  </p>
+                ) : row.agent.runtimeId ? (
+                  <p className="font-mono text-[10px] text-white/35">
+                    {row.agent.runtimeId} · {row.agent.modelId ?? 'default'}
+                    {row.agent.hostLabel ? ` · ${row.agent.hostLabel}` : ''}
+                  </p>
+                ) : null}
+              </div>
+              <div className="min-w-0">
+                {row.status ? <p className="truncate font-mono text-[11px] text-white/70">{row.status}</p> : <p className="text-white/30">—</p>}
+                {row.where ? <p className="mt-0.5 truncate text-[10px] text-white/40">in {row.where}</p> : null}
+              </div>
+              <div className="min-w-0">
+                {row.task ? (
+                  <p className="truncate">
+                    {row.task.title}
+                    {' · '}
+                    <span className="font-mono text-white/60">{row.task.branch}</span>
+                    {row.task.pr ? (
+                      <>
+                        {' '}
+                        <a href={row.task.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+                          PR #{row.task.pr.number}
+                        </a>{' '}
+                        <PrState state={row.task.pr.state} />
+                      </>
+                    ) : null}
+                  </p>
+                ) : (
+                  <p className="text-white/30">on no task</p>
+                )}
+                {row.notes.length > 0 ? (
+                  <p className="mt-0.5 flex flex-wrap gap-1">
+                    {row.notes.map((note) => (
+                      <button
+                        key={note.id}
+                        type="button"
+                        onClick={() => onOpenNote(note.id)}
+                        title={note.title}
+                        className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+                      >
+                        #{note.number}
+                      </button>
+                    ))}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex items-start justify-end gap-3">
+                {guest ? null : (
+                  <button
+                    type="button"
+                    onClick={() => toggle(row.agent.id)}
+                    aria-expanded={open}
+                    aria-controls={`agent-history-${row.agent.id}`}
+                    disabled={row.history.length === 0}
+                    title={row.history.length === 0 ? 'Nothing earlier in the ledger' : undefined}
+                    className="text-[11px] text-white/60 underline-offset-2 enabled:hover:underline disabled:text-white/25"
+                  >
+                    {open ? 'Hide history' : `History · ${row.history.length}`}
+                  </button>
+                )}
+                {row.agent.ownerUserId === you ? (
+                  <button
+                    type="button"
+                    onClick={() => onMessage(row.agent.id)}
+                    className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
+                  >
+                    Message
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <div className="min-w-0">
-              {row.status ? <p className="truncate font-mono text-[11px] text-white/70">{row.status}</p> : <p className="text-white/30">—</p>}
-              {row.where ? <p className="mt-0.5 truncate text-[10px] text-white/40">in {row.where}</p> : null}
-            </div>
-            <div className="min-w-0">
-              {row.task ? (
-                <p className="truncate">
-                  {row.task.title}
-                  {' · '}
-                  <span className="font-mono text-white/60">{row.task.branch}</span>
-                  {row.task.pr ? (
-                    <>
-                      {' '}
-                      <a href={row.task.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
-                        PR #{row.task.pr.number}
-                      </a>{' '}
-                      <PrState state={row.task.pr.state} />
-                    </>
-                  ) : null}
-                </p>
-              ) : (
-                <p className="text-white/30">on no task</p>
-              )}
-              {row.notes.length > 0 ? (
-                <p className="mt-0.5 flex flex-wrap gap-1">
-                  {row.notes.map((note) => (
-                    <button
-                      key={note.id}
-                      type="button"
-                      onClick={() => onOpenNote(note)}
-                      title={note.title}
-                      className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
-                    >
-                      #{note.number}
-                    </button>
-                  ))}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex items-start justify-end">
-              {row.agent.ownerUserId === you ? (
-                <button
-                  type="button"
-                  onClick={() => onMessage(row.agent.id)}
-                  className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
-                >
-                  Message
-                </button>
-              ) : null}
-            </div>
+            {open && row.history.length > 0 ? (
+              <AgentHistory id={`agent-history-${row.agent.id}`} lines={row.history} now={now} onOpenNote={onOpenNote} />
+            ) : null}
           </li>
         );
       })}
@@ -421,41 +487,121 @@ function AgentsTab({
 }
 
 /**
- * The ledger's lines with a pull request. Each shows what the office knows:
- * the harness's word until GitHub has been asked, GitHub's after — state,
- * checks, mergeability, the review — and, for a member of an office with a
- * token, the few things to do about it. Every action is two clicks: the
- * second is a line saying exactly what is about to happen, to what.
+ * What an agent was on before, from the office's ledger: each branch it
+ * said it was on, what it was for, and how its pull request ended. The
+ * board carries each agent's newest ended lines, not the whole ledger.
+ */
+function AgentHistory({
+  id,
+  lines,
+  now,
+  onOpenNote,
+}: {
+  id: string;
+  lines: BoardTaskRef[];
+  now: number;
+  onOpenNote: (itemId: string) => void;
+}) {
+  return (
+    <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+      {lines.map((line) => (
+        <li key={line.id} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_auto] items-baseline gap-x-4">
+          <p className="min-w-0 truncate">
+            <span className="text-white/80">{line.title}</span>
+            {' · '}
+            <span className="font-mono text-[11px] text-white/50">
+              {line.repo} · {line.branch}
+            </span>
+          </p>
+          <p className="min-w-0 truncate">
+            {line.pr ? (
+              <>
+                <a href={line.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+                  PR #{line.pr.number}
+                </a>{' '}
+                <PrState state={pullStateOf(line)} />{' '}
+              </>
+            ) : null}
+            {line.item ? (
+              <button
+                type="button"
+                onClick={() => onOpenNote(line.item!.id)}
+                title={line.item.title}
+                className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+              >
+                #{line.item.number}
+              </button>
+            ) : null}
+            {!line.pr && !line.item ? <span className="text-white/30">no pull request</span> : null}
+          </p>
+          <p className="text-right font-mono text-[10px] text-white/40" title={new Date(line.startedAt).toLocaleString()}>
+            {line.status === 'active' ? `still open · heard ${ageLabel(line.lastSeenAt, now)}` : `ended ${ageLabel(line.endedAt ?? line.lastSeenAt, now)}`}
+          </p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * Every pull request the office knows: each of its repositories' as GitHub
+ * lists them, whoever opened them, and the ledger's, joined. A row from an
+ * agent's task shows what the office checked — the harness's word until
+ * GitHub has been asked, GitHub's after — and, for a member of an office
+ * with a token, the few things to do about it, each in two clicks. Any open
+ * one can be handed to one of your agents to review.
  */
 function PullsTab({
   rows,
+  allRows,
+  filters,
+  onFilters,
   onBranch,
   now,
   guest,
   github,
+  host,
+  listing,
+  reviewers,
   onOpenNote,
   onAct,
   onRefresh,
+  onRequestReview,
 }: {
-  rows: BoardTaskRef[];
+  /** The rows that answer the pickers and the filter box. */
+  rows: PullListRow[];
+  /** Every row, for what the pickers offer. */
+  allRows: PullListRow[];
+  filters: PullFilters;
+  onFilters: (filters: PullFilters) => void;
   onBranch: BoardTaskRef[];
   now: number;
   /** A guest is not sent the ledger: say so rather than that nothing was heard. */
   guest: boolean;
   github: BoardGithubRef;
+  /** The office's GitHub host, for reading pull request URLs. */
+  host: string;
+  /** When the repositories were last listed, and which would not be. */
+  listing: RepoPullsRef;
+  /** The viewer's own agents: the ones they may ask for a review. */
+  reviewers: BoardAgentRef[];
   onOpenNote: (itemId: string) => void;
   onAct: (taskId: string, action: PullRequestAction, expectedHeadSha: string | undefined) => void;
   onRefresh: (taskId: string) => void;
+  onRequestReview: (agentId: string, url: string) => void;
 }) {
-  /** Which row has its actions open, and which action is waiting on its second click. */
-  const [open, setOpen] = useState<string | null>(null);
+  /** Which row has something open under it: its actions, or the review picker. */
+  const [open, setOpen] = useState<{ key: string; what: 'actions' | 'review' } | null>(null);
   const [confirm, setConfirm] = useState<{ taskId: string; action: PullRequestAction } | null>(null);
   /** A row acted on, until the office sends the board again. */
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => {
     setBusy(null);
     setConfirm(null);
-  }, [rows]);
+  }, [allRows]);
+
+  const authors = useMemo(() => pullAuthorsOf(allRows), [allRows]);
+  const projects = useMemo(() => pullProjectsOf(allRows, github), [allRows, github]);
 
   const act = (task: BoardTaskRef, action: PullRequestAction) => {
     setBusy(task.id);
@@ -463,40 +609,102 @@ function PullsTab({
     setOpen(null);
     onAct(task.id, action, task.github?.headSha || undefined);
   };
+  const toggle = (key: string, what: 'actions' | 'review') => {
+    setOpen(open?.key === key && open.what === what ? null : { key, what });
+    setConfirm(null);
+  };
+
+  if (guest) {
+    return <p className="p-6 text-xs text-white/40">The office's pull requests are for its members. Ask to be let in.</p>;
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {guest ? (
-        <p className="p-6 text-xs text-white/40">The office's pull requests are for its members. Ask to be let in.</p>
-      ) : rows.length === 0 ? (
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-1.5 text-[11px]">
+        <Picker
+          label="Status"
+          value={filters.status}
+          onChange={(status) => onFilters({ ...filters, status: status as PullStatusFilter })}
+          options={PULL_STATUS_FILTERS.map((status) => ({ value: status, label: status === 'all' ? 'any status' : status }))}
+        />
+        <Picker
+          label="Author"
+          value={filters.author}
+          onChange={(author) => onFilters({ ...filters, author })}
+          options={[{ value: '', label: 'anybody' }, ...authors]}
+        />
+        <Picker
+          label="Project"
+          value={filters.project}
+          onChange={(project) => onFilters({ ...filters, project })}
+          options={[{ value: '', label: 'every project' }, ...projects.map((repo) => ({ value: repo, label: repo }))]}
+        />
+        <span className="ml-auto font-mono text-[10px] text-white/35">
+          {!github.connected
+            ? 'Only the ledger’s: give the office a GitHub token in Settings → Office → GitHub to list its repositories.'
+            : listing.fetchedAt === null
+              ? 'Listing the office’s repositories…'
+              : `${github.repos.length} ${github.repos.length === 1 ? 'repository' : 'repositories'} listed ${ageLabel(listing.fetchedAt, now)}`}
+          {listing.errors.length > 0 ? (
+            <span className="text-rose-300/80" title={listing.errors.map((error) => `${error.repo}: ${error.message}`).join('\n')}>
+              {' '}
+              · {listing.errors.length} would not list
+            </span>
+          ) : null}
+        </span>
+      </div>
+      {rows.length === 0 ? (
         <p className="p-6 text-xs text-white/40">
-          No pull requests heard of yet. One appears here when an agent on a task opens one.
+          {allRows.length === 0
+            ? 'No pull requests yet. One appears here when an agent on a task opens one, or when one is opened in a repository on the office’s GitHub list.'
+            : 'No pull requests match. Try another status, author or project.'}
         </p>
       ) : (
         <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
-          {rows.map((task) => {
-            const onList = github.connected && pullOnOfficeList(task, github);
-            const actions = onList ? pullActionsOf(task, github) : [];
-            const live = task.github?.known ? task.github : null;
+          {rows.map((row) => {
+            const task = row.task;
+            // `row.repo` is lower-case `owner/name`, as the office's list is.
+            const onList = github.connected && github.repos.includes(row.repo);
+            const actions = onList ? pullRowActionsOf(row, github, host) : [];
+            const live = task?.github?.known ? task.github : null;
             const checks = live ? checksLabel(live.checks) : null;
             const review = live ? reviewLabel(live.reviewDecision) : null;
-            const pending = confirm?.taskId === task.id ? confirm.action : null;
+            const pending = task && confirm?.taskId === task.id ? confirm.action : null;
+            const mayReview = row.state === 'open' && reviewers.length > 0 && (onList || task !== null);
+            const showing = open?.key === row.key ? open.what : null;
             return (
-              <li key={task.id} className={`px-4 py-2 text-xs ${busy === task.id ? 'opacity-60' : ''}`}>
-                <div className="grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
-                  <PrNumber task={task} now={now} />
+              <li key={row.key} className={`px-4 py-2 text-xs ${task && busy === task.id ? 'opacity-60' : ''}`}>
+                <div className="grid grid-cols-[3.5rem_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
+                  {task ? (
+                    <PrNumber task={task} state={row.state} draft={row.draft} now={now} />
+                  ) : (
+                    <a
+                      href={row.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 font-mono text-sky-200 underline-offset-2 hover:underline"
+                    >
+                      <GitPullRequest size={12} aria-hidden />#{row.number}
+                    </a>
+                  )}
                   <div className="min-w-0">
-                    <p className="truncate text-white/85">{live?.title || task.title}</p>
+                    <p className="truncate text-white/85">{row.title}</p>
                     <p className="truncate font-mono text-[10px] text-white/45">
-                      {task.repo} · {task.branch}
-                      {live?.baseRef ? ` → ${live.baseRef}` : ''}
+                      {row.repo} · {row.headRef}
+                      {row.listed?.baseRef || live?.baseRef ? ` → ${row.listed?.baseRef || live?.baseRef}` : ''}
                     </p>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sky-300/90">
-                      {AGENT_GLYPH} {task.agentName}
+                    <p className="truncate">
+                      {row.author ? <span className="text-white/70">@{row.author}</span> : null}
+                      {row.author && row.agentName ? <span className="text-white/30"> · </span> : null}
+                      {row.agentName ? (
+                        <span className="text-sky-300/90">
+                          {AGENT_GLYPH} {row.agentName}
+                        </span>
+                      ) : null}
                     </p>
-                    {task.item ? (
+                    {task?.item ? (
                       <button
                         type="button"
                         onClick={() => onOpenNote(task.item!.id)}
@@ -506,39 +714,51 @@ function PullsTab({
                         note #{task.item.number} {task.item.title}
                       </button>
                     ) : (
-                      <p className="text-[10px] text-white/30">no note</p>
+                      <p className="text-[10px] text-white/30">{task ? 'no note' : 'no agent task'}</p>
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-0.5">
                     <span className="flex items-center gap-1.5">
                       {checks ? <Chip tone={checks.tone}>{checks.text}</Chip> : null}
                       {review ? <Chip tone={review === 'approved' ? 'good' : 'bad'}>{review}</Chip> : null}
-                      {live?.draft ? <Chip tone="none">draft</Chip> : null}
-                      <PrState state={pullStateOf(task)} />
+                      {row.draft ? <Chip tone="none">draft</Chip> : null}
+                      <PrState state={row.state} />
                     </span>
                     <span className="font-mono text-[10px] text-white/35">
-                      {live ? `GitHub · ${mergeableLabel(live)} · checked ${ageLabel(live.fetchedAt, now)}` : `heard ${ageLabel(task.lastSeenAt, now)}`}
-                      {task.github?.error ? <span className="text-rose-300/80"> · {task.github.known ? 'last check failed' : task.github.error}</span> : null}
+                      {live
+                        ? `GitHub · ${mergeableLabel(live)} · checked ${ageLabel(live.fetchedAt, now)}`
+                        : row.listed
+                          ? `updated ${ageLabel(row.listed.updatedAt, now)}`
+                          : `heard ${ageLabel(row.updatedAt, now)}`}
+                      {task?.github?.error ? <span className="text-rose-300/80"> · {task.github.known ? 'last check failed' : task.github.error}</span> : null}
                       {github.connected && !onList ? <span title="Not on the office’s GitHub list. An owner or admin adds repositories in Settings → Office → GitHub."> · not on the office’s list</span> : null}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    {actions.length > 0 ? (
+                    {mayReview ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setOpen(open === task.id ? null : task.id);
-                          setConfirm(null);
-                        }}
+                        onClick={() => toggle(row.key, 'review')}
+                        aria-expanded={showing === 'review'}
+                        className="rounded border border-sky-300/30 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-300/10"
+                        title="Ask one of your agents to review it"
+                      >
+                        Review
+                      </button>
+                    ) : null}
+                    {task && actions.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => toggle(row.key, 'actions')}
                         disabled={busy === task.id}
-                        aria-expanded={open === task.id}
+                        aria-expanded={showing === 'actions'}
                         className="rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-50"
                       >
                         Actions
                       </button>
                     ) : null}
                     <a
-                      href={task.pr!.url}
+                      href={row.url}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
@@ -547,7 +767,26 @@ function PullsTab({
                     </a>
                   </div>
                 </div>
-                {open === task.id ? (
+                {showing === 'review' ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+                    <span className="text-white/60">Ask for a review of #{row.number}:</span>
+                    {reviewers.map((agent) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => {
+                          setOpen(null);
+                          onRequestReview(agent.id, row.url);
+                        }}
+                        className="rounded border border-sky-300/30 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-300/10"
+                      >
+                        {AGENT_GLYPH} {agent.name}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-[10px] text-white/35">It lands in your DM with the agent, which reviews on GitHub.</span>
+                  </div>
+                ) : null}
+                {task && showing === 'actions' ? (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
                     {pending ? (
                       <>
@@ -605,6 +844,36 @@ function PullsTab({
   );
 }
 
+/** A labelled drop-down for the Pull requests tab's filters. */
+function Picker({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label className="flex items-center gap-1 text-white/45">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="max-w-44 rounded border border-white/15 bg-[#161a24] px-1.5 py-0.5 text-[11px] text-white/85 focus:border-white/40 focus:outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /** A small fact on a row: the checks, the review, a draft. */
 function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; children: ReactNode }) {
   const colour =
@@ -624,7 +893,8 @@ function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; chil
  * it from here — or, before it has, what the harness last reported, said
  * plainly so a state read here is never mistaken for GitHub's.
  */
-function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
+/** `state` and `draft` are the row's: the newer of the listing and the ledger's check. */
+function PrNumber({ task, state, draft, now }: { task: BoardTaskRef; state: PullListRow['state']; draft: boolean; now: number }) {
   const pr = task.pr!;
   const live = task.github?.known ? task.github : null;
   return (
@@ -645,8 +915,8 @@ function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
       >
         <p className="flex items-center gap-2">
           <span className="font-mono text-sky-200">#{pr.number}</span>
-          <PrState state={pullStateOf(task)} />
-          {live?.draft ? <Chip tone="none">draft</Chip> : null}
+          <PrState state={state} />
+          {draft ? <Chip tone="none">draft</Chip> : null}
           <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
         </p>
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">

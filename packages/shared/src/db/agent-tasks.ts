@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, lte, sql } from 'drizzle-orm';
 
 import type { AgentTask, AgentTaskPrState, AgentTaskPullRequest, AgentTaskStatus } from '../agent-task.js';
 import type { BoardItemTask, BoardTaskRef } from '../board.js';
@@ -201,6 +201,11 @@ export interface ListAgentTasksOptions {
    * recently seen. Unset reads the whole ledger.
    */
   endedMax?: number;
+  /**
+   * With `endedMax`: also each agent's own newest this many ended lines,
+   * so one busy agent does not push every other agent's history off.
+   */
+  endedPerAgentMax?: number;
 }
 
 /** An office's ledger, most recently seen first: all of it, or every active line and the newest ended ones. */
@@ -209,23 +214,39 @@ export async function listAgentTasksForWorkspace(
   workspaceId: string,
   options: ListAgentTasksOptions = {},
 ): Promise<AgentTaskRecord[]> {
-  const { endedMax } = options;
+  const { endedMax, endedPerAgentMax = 0 } = options;
   if (endedMax === undefined) {
     const rows = await selectRecords(db)
       .where(eq(agentTasks.workspaceId, workspaceId))
       .orderBy(desc(agentTasks.lastSeenAt));
     return rows.map(toRecord);
   }
-  const [active, ended] = await Promise.all([
+  const ended = and(eq(agentTasks.workspaceId, workspaceId), eq(agentTasks.status, 'ended'));
+  const ranked = db
+    .select({
+      id: agentTasks.id,
+      rank: sql<number>`row_number() over (partition by ${agentTasks.agentId} order by ${agentTasks.lastSeenAt} desc)`.as('rank'),
+    })
+    .from(agentTasks)
+    .where(ended)
+    .as('ranked');
+  const [active, newest, perAgent] = await Promise.all([
     selectRecords(db)
       .where(and(eq(agentTasks.workspaceId, workspaceId), eq(agentTasks.status, 'active')))
       .orderBy(desc(agentTasks.lastSeenAt)),
     selectRecords(db)
-      .where(and(eq(agentTasks.workspaceId, workspaceId), eq(agentTasks.status, 'ended')))
+      .where(ended)
       .orderBy(desc(agentTasks.lastSeenAt))
       .limit(Math.max(0, endedMax)),
+    endedPerAgentMax > 0
+      ? selectRecords(db)
+          .innerJoin(ranked, eq(ranked.id, agentTasks.id))
+          .where(lte(ranked.rank, endedPerAgentMax))
+      : Promise.resolve([]),
   ]);
-  return [...active, ...ended].map(toRecord).sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+  const byId = new Map<string, AgentTaskRecord>();
+  for (const row of [...active, ...newest, ...perAgent]) byId.set(row.row.id, toRecord(row));
+  return [...byId.values()].sort((a, b) => b.lastSeenAt - a.lastSeenAt);
 }
 
 /**

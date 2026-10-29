@@ -22,6 +22,7 @@ const KEYS: { keys: string; what: string }[] = [
   { keys: 'Z', what: 'Show zone overlays' },
   { keys: 'N', what: 'Go to whoever is waiting on you: a permission card first, then where you were addressed' },
   { keys: 'B', what: 'The office board: tasks and issues on post-its, who they are for, and where they stand' },
+  { keys: 'Alt+B', what: 'The board from anywhere, even while typing in the chat; Option+B on a Mac' },
   { keys: 'E', what: 'Use what you stand by. In front of the noticeboard in the lobby, that is the board; clicking the noticeboard walks you there and opens it' },
   { keys: '?', what: 'This panel' },
 ];

@@ -2,7 +2,8 @@
 
 The office has a board: the noticeboard in the lobby. Walk up to it and
 press `E`, click it from across the room and you walk there and it opens, or
-press `B` anywhere. It is the office's list — what needs doing, who has it,
+press `B` anywhere — `Alt+B` (`Option+B` on a Mac) even while you are typing
+in the chat. It is the office's list — what needs doing, who has it,
 where it stands — and everybody in the office reads the same one.
 
 ![The office board, in columns](../../screenshots/board-columns.png)
@@ -45,8 +46,10 @@ a note handed to one agent is never claimed by another's task.
 
 Every agent of the office, here or not: whose it is, the status line it last
 left, where it stands, what it is on — live from the room when it is here,
-from the ledger when it is not — and the notes it holds. **Message** opens
-your DM with one of yours.
+from the ledger when it is not — and the notes it holds. **History** opens
+what it was on before: each branch, the note it was for, its pull request
+and how that ended — the newest twenty of each agent. **Message** opens your
+DM with one of yours.
 
 ## The Pull requests tab
 
@@ -77,5 +80,28 @@ A pull request in a repository that is not on the list is shown as the agent
 reported it and nothing more: not checked, not touched, whatever its link
 says. A merge the office finds on GitHub moves the note to **done** just as
 the agent reporting it would.
+
+The tab also lists **every** pull request of the repositories on the list,
+whoever opened it, agent or not: the open ones and the twenty most recently
+closed or merged of each, asked for every five minutes while somebody is in
+the room, and again on **Check GitHub** if the last listing is more than
+three minutes old. One an agent's task opened is the
+same row as its ledger line. Pick a **status** (open, which includes drafts;
+draft; merged; closed; or any), an **author** (a GitHub login, or an agent
+by name) and a **project** to narrow it; the filter box still finds a number,
+a title, a branch or a person.
+
+### Asking an agent for a review
+
+**Review** on any open pull request picks one of **your** agents to review
+it. Like handing over a note, the request lands in your DM with the agent as
+a line from you — `@Marvin please review pull request acme/api#12.` — with a
+brief attached: read the whole diff, leave the review on the pull request
+with `gh pr review` (comments, or changes requested), don't approve, merge or
+push to its branch unless asked, and say here what it found. What the pull
+request says about itself — its title, author, branch — is never in the line
+said in your name; the brief carries it fenced off as the author's words, not
+instructions, on one line and cut short. Only a pull request on the ledger or in a repository on the list can
+be handed out, and only an agent that takes direct messages can be asked.
 
 ![The board's Pull requests tab, with GitHub's facts on three pull requests and the actions row open on one](../../screenshots/board-pull-requests.png)

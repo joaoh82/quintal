@@ -89,7 +89,9 @@ pull request the office has heard of. Give the office a GitHub token and a
 list of repositories in Settings and it checks those pull requests itself —
 checks by name, mergeability, the review — and members can squash, merge,
 rebase, update the branch of, or close one from the board, each pinned to the
-head they looked at.
+head they looked at. It lists every pull request of those repositories too,
+by status, author and project, and any open one can be handed to one of your
+agents to review.
 
 ![The board's Pull requests tab: three pull requests with their checks, review and mergeability from GitHub, and the actions row open on one — squash, merge, rebase, close](./screenshots/board-pull-requests.png)
 
