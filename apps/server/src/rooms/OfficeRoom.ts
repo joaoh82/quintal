@@ -24,6 +24,8 @@ import {
 import { keepActivity, readActivity, findActivity } from '@quintal/shared/db';
 import { ErrorCode, Room, ServerError, type Client, logger } from '@colyseus/core';
 import {
+  AGENT_BOARD_WRITE_WINDOW_MS,
+  AGENT_BOARD_WRITES_PER_WINDOW,
   AGENT_CHAT_INTERVAL_MS,
   AGENT_CORE_MEMORY_MAX_BYTES,
   AGENT_HEARTBEAT_MS,
@@ -81,6 +83,14 @@ import {
   type AgentHostReportPayload,
   type AgentMemorySetPayload,
   type AgentMessagesGetPayload,
+  type AgentRequest,
+  type AgentBoardCreatePayload,
+  type AgentBoardGetPayload,
+  type AgentBoardListPayload,
+  type AgentBoardUpdatePayload,
+  type BoardGetResult,
+  type BoardListResult,
+  type BoardWriteResult,
   type AgentMoveToPayload,
   type AgentOccupant,
   type AgentReadyPayload,
@@ -127,6 +137,7 @@ import {
   WORKING_IN_ZONE,
   agentTaskOf,
   parseAgentTask,
+  isBoardStatus,
   mayAssignBoardItem,
   mayDeleteBoardItem,
   mayWriteBoard,
@@ -347,6 +358,13 @@ export class OfficeRoom extends Room<OfficeState> {
    * must not find their next sentence refused for it.
    */
   readonly #readLimiter = new ChatRateLimiter(READ_RATE_LIMIT, READ_RATE_WINDOW_MS);
+  /**
+   * Board writes by agents, per agent, over a sliding window. Speech and
+   * movement are paced per verb; the board is paced as a whole, because a
+   * note written and a note changed cost the room the same: a re-read of
+   * the board and a copy to everybody in it.
+   */
+  readonly #boardPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -605,6 +623,18 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(AgentMessage.MessagesGet, (client, payload: AgentMessagesGetPayload) =>
       this.#onAgentMessagesGet(client, payload),
+    );
+    this.onMessage(AgentMessage.BoardList, (client, payload: AgentBoardListPayload) =>
+      void this.#onAgentBoardList(client, payload),
+    );
+    this.onMessage(AgentMessage.BoardGet, (client, payload: AgentBoardGetPayload) =>
+      void this.#onAgentBoardGet(client, payload),
+    );
+    this.onMessage(AgentMessage.BoardCreate, (client, payload: AgentBoardCreatePayload) =>
+      void this.#onAgentBoardCreate(client, payload),
+    );
+    this.onMessage(AgentMessage.BoardUpdate, (client, payload: AgentBoardUpdatePayload) =>
+      void this.#onAgentBoardUpdate(client, payload),
     );
     this.onMessage(AgentMessage.MemoryGet, (client, payload: AgentMemoryGetPayload) =>
       void this.#onAgentMemoryGet(client, payload),
@@ -901,6 +931,7 @@ export class OfficeRoom extends Room<OfficeState> {
       approvalVersion: 1,
       taskVersion: 1,
       mcpVersion: 1,
+      boardVersion: 1,
       mcpServers: mcp?.servers ?? [],
       agentId: identity.id,
       sessionId: client.sessionId,
@@ -926,6 +957,8 @@ export class OfficeRoom extends Room<OfficeState> {
         coreMemoryMaxBytes: AGENT_CORE_MEMORY_MAX_BYTES,
         chatRadiusTiles: this.#settings.chatRadiusTiles,
         walkUpRadiusTiles: this.#settings.walkUpRadiusTiles,
+        boardWritesPerWindow: AGENT_BOARD_WRITES_PER_WINDOW,
+        boardWriteWindowMs: AGENT_BOARD_WRITE_WINDOW_MS,
         // Its own number, or the office's. Resolved here so a harness holding
         // only its key learns it the same way a fleet-launched one does.
         parallelism: identity.maxSessions ?? this.#settings.agentParallelism,
@@ -2046,11 +2079,14 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /** A person's standing in the office, for the channel rules. Null for a guest. */
   async #actorFor(player: OfficePlayer): Promise<ChannelActor> {
-    const membership = player.isGuest
-      ? null
-      : await findMembership(getDb(), { userId: player.userId, workspaceId: this.#workspaceId });
+    return player.isGuest ? { userId: player.userId, role: null } : this.#actorForUser(player.userId);
+  }
+
+  /** A person's standing in this office from their membership row, or a guest's when they have none. */
+  async #actorForUser(userId: string): Promise<ChannelActor> {
+    const membership = await findMembership(getDb(), { userId, workspaceId: this.#workspaceId });
     return {
-      userId: player.userId,
+      userId,
       role: (membership?.role as MembershipRole | undefined) ?? null,
     };
   }
@@ -3312,6 +3348,273 @@ export class OfficeRoom extends Room<OfficeState> {
       messages: page.messages.map((message) => this.#toChatEvent(message, player)),
     };
     this.#reply(client, payload?.requestId, result);
+  }
+
+  // --- the board, for agents -----------------------------------------------
+
+  /**
+   * An agent's session, if the call is in its `board` scope. Everything on
+   * the board is under one scope, reads included: what an agent reads from
+   * the board it acts on, and an owner who does not want it taking work from
+   * there does not want it reading it either.
+   */
+  #agentBoardSession(client: Client, payload: AgentRequest | undefined): AgentSession | null {
+    const session = this.#agentSession(client);
+    if (!session) return null;
+    if (!hasScope(session.identity, 'board')) {
+      const message = 'This agent has no "board" scope.';
+      audit(session.identity.id, 'command.rejected', { code: 'missing_scope', message });
+      this.#replyError(client, payload?.requestId, { code: 'missing_scope', message });
+      return null;
+    }
+    return session;
+  }
+
+  /**
+   * An agent writes on the board as its owner: it holds the pen if its owner
+   * does, and hands a note only where its owner could. Read from the row
+   * each time, like a person's standing, so an owner who has left takes the
+   * agent's pen with them.
+   */
+  async #agentBoardActor(client: Client, session: AgentSession, requestId: unknown): Promise<ChannelActor | null> {
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    if (!mayWriteBoard(actor)) {
+      this.#replyError(client, requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you have no pen for its board.',
+      });
+      return null;
+    }
+    return actor;
+  }
+
+  /**
+   * Who a note is for, as an agent says it: a name, an id, or "me". Null for
+   * nobody. The match is against every agent of the office, present or not,
+   * and refused if a name fits more than one — a display name is not an
+   * identity. Replies with the refusal itself; the caller only returns.
+   */
+  async #agentNamedOnBoard(
+    client: Client,
+    session: AgentSession,
+    actor: ChannelActor,
+    wanted: unknown,
+    requestId: unknown,
+  ): Promise<{ id: string } | null | undefined> {
+    if (wanted === null || wanted === undefined) return null;
+    if (typeof wanted !== 'string' || wanted.trim().length === 0) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: 'assignee is an agent, by name, or null.' });
+      return undefined;
+    }
+    await this.#boardLoaded;
+    const needle = wanted.trim().replace(/^@/, '').toLowerCase();
+    const self = session.identity;
+    const matches =
+      needle === 'me' || needle === self.id || needle === self.name.toLowerCase()
+        ? this.#boardAgents.filter((agent) => agent.id === self.id)
+        : this.#boardAgents.filter((agent) => agent.id === wanted.trim() || agent.name.toLowerCase() === needle);
+    const agent = matches.length === 1 ? matches[0] : undefined;
+    if (!agent) {
+      this.#replyError(client, requestId, {
+        code: 'not_found',
+        message:
+          matches.length === 0
+            ? `No agent here called ${wanted.trim()}. board_list names them.`
+            : `More than one agent here is called ${wanted.trim()}.`,
+      });
+      return undefined;
+    }
+    if (!mayAssignBoardItem(actor, agent)) {
+      this.#replyError(client, requestId, {
+        code: 'unauthorised',
+        message: `Only ${agent.name}'s owner${agent.ownerName ? `, ${agent.ownerName},` : ''} hands them a note. Say so where you were asked instead, and leave the note on the board.`,
+      });
+      return undefined;
+    }
+    return { id: agent.id };
+  }
+
+  /**
+   * One write's worth of the agent's board pace, or a refusal with how long
+   * to wait. Taken before the write, not after: a refused write costs the
+   * room nothing, and a harness that backs off on `retryAfterMs` writes the
+   * same notes a little later.
+   */
+  #agentBoardPaced(client: Client, session: AgentSession, requestId: unknown): boolean {
+    const now = Date.now();
+    if (this.#boardPace.tryConsume(session.identity.id, now)) return true;
+    const retryAfterMs = this.#boardPace.retryAfterSeconds(session.identity.id, now) * 1000;
+    const message = `Agents may write on the board ${AGENT_BOARD_WRITES_PER_WINDOW} times every ${AGENT_BOARD_WRITE_WINDOW_MS / 1000}s.`;
+    audit(session.identity.id, 'command.rejected', { code: 'rate_limited', message });
+    this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs });
+    return false;
+  }
+
+  /** The line to say when a write put a note in another agent's hands; null otherwise. */
+  #handoverFor(session: AgentSession, before: BoardItemRef | null, after: BoardItemRef): string | null {
+    if (!after.assignee || after.assignee.id === session.identity.id) return null;
+    if (before?.assignee?.id === after.assignee.id) return null;
+    return assignmentLine(after, after.assignee.name);
+  }
+
+  async #onAgentBoardList(client: Client, payload: AgentBoardListPayload): Promise<void> {
+    const session = this.#agentBoardSession(client, payload);
+    if (!session) return;
+    const status = isBoardStatus(payload?.status) ? payload.status : null;
+    const mine = payload?.mine === true;
+    audit(session.identity.id, 'command.board_list', { status, mine });
+    markSeen(session.identity.id);
+    await this.#boardLoaded;
+    const me = session.identity.id;
+    const result: BoardListResult = {
+      items: this.#boardItems.filter(
+        (item) => (status === null || item.status === status) && (!mine || item.assignee?.id === me),
+      ) as BoardItemRef[],
+      agents: this.#boardAgents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        ownerName: agent.ownerName,
+        yours: agent.ownerUserId === session.identity.ownerUserId,
+      })),
+      you: { agentId: me, name: session.identity.name },
+    };
+    this.#reply(client, payload?.requestId, result);
+  }
+
+  async #onAgentBoardGet(client: Client, payload: AgentBoardGetPayload): Promise<void> {
+    const session = this.#agentBoardSession(client, payload);
+    if (!session) return;
+    const number = Number(payload?.number);
+    audit(session.identity.id, 'command.board_get', { number });
+    markSeen(session.identity.id);
+    if (!Number.isSafeInteger(number) || number <= 0) {
+      this.#replyError(client, payload?.requestId, { code: 'invalid_payload', message: 'board_get wants a note number.' });
+      return;
+    }
+    try {
+      const item = await findBoardItemByNumber(getDb(), this.#workspaceId, number);
+      if (!item) {
+        this.#replyError(client, payload?.requestId, { code: 'not_found', message: `No note #${number} on this board.` });
+        return;
+      }
+      this.#reply(client, payload?.requestId, { item } satisfies BoardGetResult);
+    } catch (error: unknown) {
+      logger.error('[office] could not read a board note for an agent', error);
+      this.#replyError(client, payload?.requestId, { code: 'unavailable', message: 'Could not read the board.' });
+    }
+  }
+
+  async #onAgentBoardCreate(client: Client, payload: AgentBoardCreatePayload): Promise<void> {
+    const session = this.#agentBoardSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentBoardPaced(client, session, payload?.requestId)) return;
+    const actor = await this.#agentBoardActor(client, session, payload?.requestId);
+    if (!actor) return;
+    const assignee = await this.#agentNamedOnBoard(client, session, actor, payload?.assignee, payload?.requestId);
+    if (assignee === undefined) return;
+    const note = parseBoardCreate({
+      title: payload?.title,
+      body: payload?.body,
+      status: payload?.status,
+      color: payload?.color,
+      labels: payload?.labels,
+      assigneeAgentId: assignee?.id ?? null,
+    });
+    if (!note) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'invalid_payload',
+        message: 'A note needs a title (one line, 200 characters), and a known column and colour if you name them.',
+      });
+      return;
+    }
+    try {
+      const item = await createBoardItem(getDb(), {
+        workspaceId: this.#workspaceId,
+        ...note,
+        createdBy: { agentId: session.identity.id },
+      });
+      audit(session.identity.id, 'command.board_create', {
+        number: item.number,
+        title: item.title,
+        assignee: item.assignee?.name ?? null,
+      });
+      await this.#refreshBoard();
+      this.#reply(client, payload?.requestId, {
+        item,
+        handover: this.#handoverFor(session, null, item),
+      } satisfies BoardWriteResult);
+    } catch (error: unknown) {
+      this.#agentBoardRefused(client, payload?.requestId, error);
+    }
+  }
+
+  async #onAgentBoardUpdate(client: Client, payload: AgentBoardUpdatePayload): Promise<void> {
+    const session = this.#agentBoardSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentBoardPaced(client, session, payload?.requestId)) return;
+    const actor = await this.#agentBoardActor(client, session, payload?.requestId);
+    if (!actor) return;
+    const number = Number(payload?.number);
+    if (!Number.isSafeInteger(number) || number <= 0) {
+      this.#replyError(client, payload?.requestId, { code: 'invalid_payload', message: 'board_update wants a note number.' });
+      return;
+    }
+    try {
+      const db = getDb();
+      const before = await findBoardItemByNumber(db, this.#workspaceId, number);
+      if (!before) {
+        this.#replyError(client, payload?.requestId, { code: 'not_found', message: `No note #${number} on this board.` });
+        return;
+      }
+      const reassign = payload?.assignee !== undefined;
+      const assignee = reassign
+        ? await this.#agentNamedOnBoard(client, session, actor, payload.assignee, payload?.requestId)
+        : null;
+      if (assignee === undefined) return;
+      const patch = parseBoardUpdate({
+        itemId: before.id,
+        ...(payload?.title !== undefined ? { title: payload.title } : {}),
+        ...(payload?.body !== undefined ? { body: payload.body } : {}),
+        ...(payload?.status !== undefined ? { status: payload.status } : {}),
+        ...(payload?.color !== undefined ? { color: payload.color } : {}),
+        ...(payload?.labels !== undefined ? { labels: payload.labels } : {}),
+        ...(reassign ? { assigneeAgentId: assignee?.id ?? null } : {}),
+      });
+      if (!patch) {
+        this.#replyError(client, payload?.requestId, {
+          code: 'invalid_payload',
+          message: 'Name what changes about the note, and make it something the board takes: a one-line title, a known column, a known colour.',
+        });
+        return;
+      }
+      const after = await updateBoardItem(db, { workspaceId: this.#workspaceId, ...patch });
+      audit(session.identity.id, 'command.board_update', {
+        number: after.number,
+        changed: Object.keys(patch).filter((key) => key !== 'itemId'),
+        ...(reassign ? { assignee: after.assignee?.name ?? null } : {}),
+      });
+      await this.#refreshBoard();
+      this.#reply(client, payload?.requestId, {
+        item: after,
+        handover: this.#handoverFor(session, before, after),
+      } satisfies BoardWriteResult);
+    } catch (error: unknown) {
+      this.#agentBoardRefused(client, payload?.requestId, error);
+    }
+  }
+
+  #agentBoardRefused(client: Client, requestId: unknown, error: unknown): void {
+    if (error instanceof BoardItemError) {
+      this.#replyError(client, requestId, {
+        code: error.reason === 'not_found' ? 'not_found' : error.reason === 'full' ? 'too_large' : 'invalid_payload',
+        message: error.message,
+      });
+      return;
+    }
+    logger.error('[office] board write by an agent failed', error);
+    this.#replyError(client, requestId, { code: 'unavailable', message: 'The board could not be written.' });
   }
 
   async #onAgentMemoryGet(client: Client, payload: AgentMemoryGetPayload): Promise<void> {

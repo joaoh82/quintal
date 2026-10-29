@@ -34,6 +34,14 @@ export const BOARD_BODY_MAX_LENGTH = 8_000;
 /** A label is a word on a chip. */
 export const BOARD_LABEL_MAX_LENGTH = 24;
 export const BOARD_LABELS_MAX = 10;
+/**
+ * Most notes an office keeps up at once — open or in progress; done notes
+ * do not count. A board is read whole by everybody in the room, so it has
+ * to stay a board, and a cap is what stops an agent in a loop turning it
+ * into a log. Past it, a new note is refused until some are done or taken
+ * down.
+ */
+export const BOARD_OPEN_ITEMS_MAX = 500;
 
 export function isBoardStatus(value: unknown): value is BoardStatus {
   return typeof value === 'string' && (BOARD_STATUSES as readonly string[]).includes(value);

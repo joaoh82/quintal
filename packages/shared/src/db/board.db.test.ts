@@ -105,6 +105,23 @@ describe('writing a note', () => {
     assert.deepEqual(made.createdBy, { kind: 'agent', id: marvin.id, name: 'Marvin' });
   });
 
+  it('is refused once the board is full of notes that are not done', async () => {
+    const { db, owner, note } = await office('Ana');
+    await note('one', { openLimit: 2 });
+    await note('two', { openLimit: 2 });
+    await assert.rejects(
+      note('three', { openLimit: 2 }),
+      (error: unknown) => error instanceof BoardItemError && error.reason === 'full' && /2 notes up/.test(error.message),
+    );
+    assert.equal((await listBoardItemsForWorkspace(db, owner.workspaceId)).length, 2, 'nothing was written');
+    const [two] = await listBoardItemsForWorkspace(db, owner.workspaceId);
+    await updateBoardItem(db, { workspaceId: owner.workspaceId, itemId: two!.id, status: 'done' });
+    await note('three', { openLimit: 2 });
+    assert.equal((await listBoardItemsForWorkspace(db, owner.workspaceId)).length, 3, 'a done note makes room');
+    await note('a done one', { openLimit: 2, status: 'done' });
+    assert.equal((await listBoardItemsForWorkspace(db, owner.workspaceId)).length, 4, 'a note written as done does not count');
+  });
+
   it('is for a live agent of this office, or for nobody', async () => {
     const { db, owner, agent, note } = await office('Ana');
     const other = await office('Bea');

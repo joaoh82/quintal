@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 
-import { CHOSEN_EMOTES, type AgentZone } from '@quintal/shared';
+import { CHOSEN_EMOTES, isBoardColor, type AgentZone, type BoardColor } from '@quintal/shared';
 
 import type { Gateway } from '../gateway/client.js';
 
@@ -157,6 +157,68 @@ export function resolveZone(zones: readonly AgentZone[], wanted: string): string
   return match.id;
 }
 
+/**
+ * The board is one scope, reads included. The office refuses without it too;
+ * refusing here as well saves a round trip and says where the scope is set.
+ */
+function needBoardScope(gateway: Gateway, tool: string): void {
+  if (gateway.ready?.scopes?.includes('board')) return;
+  throw new Error(
+    `${tool}: this agent has no "board" scope. Its owner grants it under Settings → Agents. ` +
+      'Until then, say what you would have written and leave the board to them.',
+  );
+}
+
+/** `12`, `"12"` or `"#12"`: the note's number as people write it. */
+export function noteNumber(value: unknown): number {
+  const text = String(value ?? '').trim().replace(/^#/, '');
+  const number = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(number) || number <= 0) {
+    throw new Error(`"${String(value ?? '')}" is not a note number; notes are #1, #2 … as board_list shows them`);
+  }
+  return number;
+}
+
+/** `"bug, ui"` or `["bug", "ui"]`: labels as the model is likely to write them. */
+function labelsArg(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) return value.map((label) => String(label));
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((label) => label.trim())
+      .filter((label) => label.length > 0);
+  }
+  return undefined;
+}
+
+/** `"Marvin"`, `"@Marvin"`, `"me"`; `null` or `""` is nobody. */
+function assigneeArg(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const name = String(value).trim().replace(/^@/, '');
+  return name.length === 0 || name.toLowerCase() === 'nobody' ? null : name;
+}
+
+/** The fields a create and an update share, only those given. */
+function noteFields(args: Record<string, unknown>): {
+  body?: string;
+  status?: 'open' | 'in_progress' | 'done';
+  color?: BoardColor;
+  labels?: string[];
+} {
+  const labels = labelsArg(args.labels);
+  const status = args.status;
+  const color = typeof args.color === 'string' ? args.color.trim().toLowerCase() : undefined;
+  if (color !== undefined && !isBoardColor(color)) {
+    throw new Error(`"${String(args.color)}" is not a colour the board has; it has yellow, blue, green, pink, orange and purple`);
+  }
+  return {
+    ...(typeof args.body === 'string' ? { body: args.body } : {}),
+    ...(status === 'open' || status === 'in_progress' || status === 'done' ? { status } : {}),
+    ...(color !== undefined ? { color } : {}),
+    ...(labels !== undefined ? { labels } : {}),
+  };
+}
+
 async function dispatch(
   gateway: Gateway,
   call: BridgeCall,
@@ -265,6 +327,43 @@ async function dispatch(
         ...(channelId.length > 0 ? { channelId } : {}),
         ...(Number.isFinite(before) && before > 0 ? { before } : {}),
       });
+    }
+
+    case 'board_list': {
+      needBoardScope(gateway, call.tool);
+      const status = call.args.status;
+      return gateway.boardList({
+        ...(status === 'open' || status === 'in_progress' || status === 'done' ? { status } : {}),
+        ...(call.args.mine === true ? { mine: true } : {}),
+      });
+    }
+
+    case 'board_get': {
+      needBoardScope(gateway, call.tool);
+      return gateway.boardGet(noteNumber(call.args.number));
+    }
+
+    case 'board_create': {
+      needBoardScope(gateway, call.tool);
+      const title = String(call.args.title ?? '').trim();
+      if (title.length === 0) throw new Error('board_create needs a title');
+      return gateway.boardCreate({
+        title,
+        ...noteFields(call.args),
+        ...('assignee' in call.args ? { assignee: assigneeArg(call.args.assignee) } : {}),
+      });
+    }
+
+    case 'board_update': {
+      needBoardScope(gateway, call.tool);
+      const number = noteNumber(call.args.number);
+      const patch = {
+        ...(typeof call.args.title === 'string' ? { title: call.args.title } : {}),
+        ...noteFields(call.args),
+        ...('assignee' in call.args ? { assignee: assigneeArg(call.args.assignee) } : {}),
+      };
+      if (Object.keys(patch).length === 0) throw new Error(`board_update #${number}: say what changes`);
+      return gateway.boardUpdate({ number, ...patch });
     }
 
     case 'workspace_info': {

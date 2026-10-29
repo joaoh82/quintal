@@ -258,7 +258,7 @@ describe('what the harness answers about this machine', () => {
   it('splits the scopes the office granted from the ones it did not', () => {
     const result = report(temp('bare'), { scopes: ['chat', 'dm'] });
     assert.deepEqual(Object.keys(result.quintal_scopes.granted), ['chat', 'dm']);
-    assert.deepEqual(Object.keys(result.quintal_scopes.not_granted), ['move', 'status', 'run']);
+    assert.deepEqual(Object.keys(result.quintal_scopes.not_granted), ['move', 'status', 'board', 'run']);
     assert.match(result.quintal_scopes.granted.chat ?? '', /say/);
     assert.match(result.quintal_scopes.not_granted.move ?? '', /walk/);
     assert.match(result.quintal_scopes.unscoped, /memory_get/);

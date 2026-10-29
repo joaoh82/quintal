@@ -27,10 +27,10 @@ import { tidyDisplayText } from './workspace.js';
  * silence denies. Enforced by the harness, not the office: the office never
  * sees the question, only the audit line that answers it.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'run'] as const;
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'run'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'run'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'run'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
@@ -49,6 +49,7 @@ export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
   move: 'Walk around the office.',
   status: 'Set its own status line.',
   dm: 'Hold a direct message with you.',
+  board: 'Read the office board, write notes on it and hand them to your agents.',
   run: 'Answer the runtime\u2019s "may I run this?" questions automatically, for every turn, with nothing shown to you. Without it each one is put to you and silence denies.',
 };
 
@@ -243,6 +244,12 @@ export const AGENT_EVENT_KINDS = [
   'command.emote',
   'command.look_around',
   'command.messages_get',
+  /** It read the board, or one note. */
+  'command.board_list',
+  'command.board_get',
+  /** It wrote a note, or changed one: the number and what changed. */
+  'command.board_create',
+  'command.board_update',
   'command.memory_get',
   'command.memory_set',
   'command.host_report',

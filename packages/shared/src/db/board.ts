@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
 
-import { and, asc, desc, eq, isNull, ne, notExists, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, ne, notExists, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import {
+  BOARD_OPEN_ITEMS_MAX,
   type BoardAgentRef,
   type BoardColor,
   type BoardCreateInput,
@@ -33,7 +34,7 @@ function newId(): string {
 
 export class BoardItemError extends Error {
   constructor(
-    readonly reason: 'invalid' | 'assignee' | 'not_found',
+    readonly reason: 'invalid' | 'assignee' | 'not_found' | 'full',
     message: string,
   ) {
     super(message);
@@ -47,6 +48,17 @@ export type BoardAuthor = { userId: string } | { agentId: string };
 export interface CreateBoardItemInput extends BoardCreateInput {
   workspaceId: string;
   createdBy: BoardAuthor;
+  /** Most notes up at once before a new one is refused. `BOARD_OPEN_ITEMS_MAX` unless a test says less. */
+  openLimit?: number;
+}
+
+/** Notes up on the board — not done — right now. */
+async function countOpenItems(db: Database, workspaceId: string): Promise<number> {
+  const rows = await db
+    .select({ n: count() })
+    .from(boardItems)
+    .where(and(eq(boardItems.workspaceId, workspaceId), ne(boardItems.status, 'done')));
+  return rows[0]?.n ?? 0;
 }
 
 /** An agent of this office, live, or refuse. */
@@ -80,6 +92,13 @@ export async function createBoardItem(
   input: CreateBoardItemInput,
 ): Promise<BoardItemRef> {
   if (input.assigneeAgentId) await assertAssignee(db, input.workspaceId, input.assigneeAgentId);
+  const openLimit = input.openLimit ?? BOARD_OPEN_ITEMS_MAX;
+  if (input.status !== 'done' && (await countOpenItems(db, input.workspaceId)) >= openLimit) {
+    throw new BoardItemError(
+      'full',
+      `The board has ${openLimit} notes up already. Finish some, or take some down, before pinning another.`,
+    );
+  }
   const id = newId();
   const author =
     'userId' in input.createdBy

@@ -146,6 +146,7 @@ const SCOPE_MEANING: Record<AgentScope, string> = {
   move: 'walk to a person or a zone (`move_to`)',
   status: 'set your status line and show an emote (`set_status`, `emote`)',
   dm: 'take part in direct messages at all',
+  board: 'read the office board, write notes on it and hand them to your owner\'s agents (`board_list`, `board_get`, `board_create`, `board_update`)',
   run: 'your harness may approve the runtime\'s own "may I run this?" questions for you; without it each one is put to your owner, and silence denies',
 };
 

@@ -1,5 +1,6 @@
 import type { AgentScope } from '../agent.js';
 import type { AgentTask } from '../agent-task.js';
+import type { BoardColor, BoardItemRef, BoardStatus } from '../board.js';
 import type { ChannelRef } from '../conversation.js';
 import type { AgentMcpServer, McpServerStatus } from '../mcp.js';
 import type { PlayerKind } from '../player.js';
@@ -38,6 +39,18 @@ export const AgentMessage = {
   LookAround: 'agent:look_around',
   /** Recent messages this agent could legitimately have heard. */
   MessagesGet: 'agent:messages_get',
+  /**
+   * The office board, as the panel shows it: every note, and the agents a
+   * note could be for. Under the `board` scope, like the writes: what an
+   * agent reads it may act on. Only to an office that says `boardVersion: 1`.
+   */
+  BoardList: 'agent:board_list',
+  /** One note, by its number. */
+  BoardGet: 'agent:board_get',
+  /** Pin a note. The office writes it as the agent, for everybody to read. */
+  BoardCreate: 'agent:board_create',
+  /** Change a note by its number: title, body, column, colour, labels, or whose it is. */
+  BoardUpdate: 'agent:board_update',
   /** Read a memory slug. */
   MemoryGet: 'agent:memory_get',
   /** Write a memory slug. Over-size writes are rejected, not truncated. */
@@ -165,6 +178,43 @@ export interface AgentRequest {
 
 export type AgentLookAroundPayload = AgentRequest;
 
+export interface AgentBoardListPayload extends AgentRequest {
+  /** Only notes in this column. Omitted: every column. */
+  status?: BoardStatus;
+  /** Only notes handed to you. */
+  mine?: boolean;
+}
+
+export interface AgentBoardGetPayload extends AgentRequest {
+  /** The note's number, as people say it: `#12` is 12. */
+  number: number;
+}
+
+/**
+ * A note as an agent writes it. The same fields as a person's `board_create`,
+ * except that the note is for somebody by **name**: an agent knows its
+ * colleagues by name, not by id. `"me"` is itself.
+ */
+export interface AgentBoardCreatePayload extends AgentRequest {
+  title: string;
+  body?: string;
+  status?: BoardStatus;
+  color?: BoardColor;
+  labels?: string[];
+  assignee?: string | null;
+}
+
+/** A change to a note by its number. Absent fields stay; `assignee: null` takes it off whoever has it. */
+export interface AgentBoardUpdatePayload extends AgentRequest {
+  number: number;
+  title?: string;
+  body?: string;
+  status?: BoardStatus;
+  color?: BoardColor;
+  labels?: string[];
+  assignee?: string | null;
+}
+
 export interface AgentMessagesGetPayload extends AgentRequest {
   /**
    * `nearby` = within earshot of where you stand now; `zone` = a zone's
@@ -279,6 +329,8 @@ export interface AgentReadyPayload {
   taskVersion?: 1;
   /** Set when this office stores MCP servers and understands `agent:mcp_status`. */
   mcpVersion?: 1;
+  /** Set when this office has a board and answers `agent:board_*`. */
+  boardVersion?: 1;
   /**
    * The MCP servers its owner gave it, for the harness to hand the runtime
    * beside its own tools. Secret values are sealed to the agent's key.
@@ -339,6 +391,9 @@ export interface AgentReadyPayload {
      */
     chatRadiusTiles: number;
     walkUpRadiusTiles: number;
+    /** Board writes allowed per window, and the window. Past it: `rate_limited` with `retryAfterMs`. */
+    boardWritesPerWindow: number;
+    boardWriteWindowMs: number;
     /**
      * How many conversations this agent may answer at once: its own setting,
      * or the office's default. A harness sizes its pool of runtime processes
@@ -527,7 +582,9 @@ export interface AgentErrorPayload {
     /** The office could not answer right now — a database it could not reach. */
     | 'unavailable'
     /** A conditional memory write found the slug changed since it was read. */
-    | 'conflict';
+    | 'conflict'
+    /** In scope, but against the office's rules: a note handed to an agent your owner does not own. */
+    | 'unauthorised';
   message: string;
   /** Present on rate_limited: wait this long before retrying. */
   retryAfterMs?: number;
@@ -559,6 +616,30 @@ export interface MessagesGetResult {
   hasMore: boolean;
 }
 
+/** The board, as an agent reads it: the notes asked for, and who they could be for. */
+export interface BoardListResult {
+  items: BoardItemRef[];
+  /** Every agent of the office a note could be handed to, by name, with whose it is. */
+  agents: Array<{ id: string; name: string; ownerName: string; yours: boolean }>;
+  /** You, as the board knows you, so `mine` and `assignee: "me"` have a referent. */
+  you: { agentId: string; name: string };
+}
+
+export interface BoardGetResult {
+  item: BoardItemRef;
+}
+
+/**
+ * A note written or changed. `handover` is set when the change put the note
+ * in another agent's hands: the line to say where you were asked, naming
+ * them, so they are woken by it the way any mention wakes an agent. The
+ * office posts nothing for you — what you say is yours to say.
+ */
+export interface BoardWriteResult {
+  item: BoardItemRef;
+  handover: string | null;
+}
+
 export interface MemoryGetResult {
   slug: string;
   content: string;
@@ -586,6 +667,15 @@ export interface MemorySetResult {
 
 /** Most messages `messages_get` will return, however many are asked for. */
 export const MESSAGES_GET_MAX = 50;
+
+/**
+ * How many notes an agent may write or change on the board in one window.
+ * Enough for a person asking for a handful of tickets at once; not enough
+ * for a runtime in a loop to paper the office before anybody can stop it.
+ * Every write re-reads the board and sends it to everybody in the room.
+ */
+export const AGENT_BOARD_WRITES_PER_WINDOW = 6;
+export const AGENT_BOARD_WRITE_WINDOW_MS = 10_000;
 
 /** How often the server sends a heartbeat to a connected agent. */
 export const AGENT_HEARTBEAT_MS = 15_000;
