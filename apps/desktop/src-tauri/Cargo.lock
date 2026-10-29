@@ -3148,7 +3148,7 @@ dependencies = [
 
 [[package]]
 name = "quintal-desktop"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "bech32",
  "chacha20poly1305",
