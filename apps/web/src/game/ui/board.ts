@@ -10,6 +10,9 @@ import {
   type ChannelRef,
   type MapZone,
   type RosterEntry,
+  mayMergeFromFacts,
+  type PullRequestAction,
+  type PullRequestStatusRef,
 } from '@quintal/shared';
 
 /**
@@ -224,5 +227,107 @@ export function repoOfPrUrl(url: string): string {
     return owner && repo ? `${parsed.host}/${owner}/${repo}` : parsed.host;
   } catch {
     return url;
+  }
+}
+
+// --- what GitHub said, as the tab shows it -----------------------------------------
+
+/** The state the tab shows: GitHub's when it has answered, else what the harness last said. */
+export function pullStateOf(task: BoardTaskRef): 'open' | 'merged' | 'closed' {
+  return task.github?.known ? task.github.state : (task.pr?.state ?? 'open');
+}
+
+/**
+ * What a member may do to this line's pull request from the board. Nothing
+ * until GitHub has been asked and says it is open; a draft is merged from
+ * GitHub, where it is marked ready first; "update branch" only when GitHub
+ * says the branch is behind, because that is the one thing it fixes.
+ */
+export function pullActionsOf(task: BoardTaskRef): PullRequestAction[] {
+  const github = task.github;
+  if (!github?.known || github.state !== 'open') return [];
+  const actions: PullRequestAction[] = [];
+  if (mayMergeFromFacts(github)) actions.push('squash', 'merge', 'rebase');
+  if (github.mergeableState === 'behind') actions.push('update_branch');
+  actions.push('close');
+  return actions;
+}
+
+export function pullActionLabel(action: PullRequestAction): string {
+  switch (action) {
+    case 'squash':
+      return 'Squash and merge';
+    case 'merge':
+      return 'Merge';
+    case 'rebase':
+      return 'Rebase and merge';
+    case 'update_branch':
+      return 'Update branch';
+    case 'close':
+      return 'Close';
+  }
+}
+
+/** The confirm line under a button: what exactly is about to happen, and to what. */
+export function pullActionConfirm(task: BoardTaskRef, action: PullRequestAction): string {
+  const number = task.pr ? `#${task.pr.number}` : 'this pull request';
+  const base = task.github?.baseRef ? ` into ${task.github.baseRef}` : '';
+  switch (action) {
+    case 'squash':
+      return `Squash ${number}${base} as one commit?`;
+    case 'merge':
+      return `Merge ${number}${base} with a merge commit?`;
+    case 'rebase':
+      return `Rebase ${number} onto ${task.github?.baseRef || 'its base'} and merge?`;
+    case 'update_branch':
+      return `Bring ${number} up to date with ${task.github?.baseRef || 'its base'}?`;
+    case 'close':
+      return `Close ${number} without merging?`;
+  }
+}
+
+/** One short word on the checks, and a tone for it. */
+export function checksLabel(checks: PullRequestStatusRef['checks']): { text: string; tone: 'good' | 'bad' | 'wait' | 'none' } {
+  switch (checks.summary) {
+    case 'passing':
+      return { text: `checks ${checks.passed}/${checks.total}`, tone: 'good' };
+    case 'failing':
+      return { text: `${checks.failed} failing`, tone: 'bad' };
+    case 'pending':
+      return { text: `${checks.pending} running`, tone: 'wait' };
+    default:
+      return { text: 'no checks', tone: 'none' };
+  }
+}
+
+/** GitHub's `mergeable_state`, in words a person uses. */
+export function mergeableLabel(status: Pick<PullRequestStatusRef, 'state' | 'draft' | 'mergeable' | 'mergeableState'>): string {
+  if (status.state !== 'open') return status.state;
+  if (status.draft) return 'draft';
+  if (status.mergeable === false || status.mergeableState === 'dirty') return 'conflicts';
+  switch (status.mergeableState) {
+    case 'clean':
+      return 'ready to merge';
+    case 'behind':
+      return 'behind its base';
+    case 'blocked':
+      return 'blocked by a rule';
+    case 'unstable':
+      return 'checks not green';
+    case 'has_hooks':
+      return 'waiting on hooks';
+    default:
+      return status.mergeable === true ? 'can merge' : 'GitHub still working it out';
+  }
+}
+
+export function reviewLabel(decision: PullRequestStatusRef['reviewDecision']): string | null {
+  switch (decision) {
+    case 'approved':
+      return 'approved';
+    case 'changes_requested':
+      return 'changes requested';
+    default:
+      return null;
   }
 }

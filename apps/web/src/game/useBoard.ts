@@ -3,6 +3,7 @@
 import type {
   BoardCreatePayload,
   BoardPayload,
+  BoardPullActionPayload,
   BoardUpdatePayload,
 } from '@quintal/shared';
 import { useCallback, useEffect, useState, type RefObject } from 'react';
@@ -25,9 +26,19 @@ export interface Board extends BoardPayload {
   create: (note: BoardCreatePayload) => void;
   update: (patch: BoardUpdatePayload) => void;
   remove: (itemId: string) => void;
+  /** Ask GitHub now, about every pull request the office watches or one line. */
+  refreshPulls: (taskId?: string) => void;
+  /** Merge, update or close a pull request with the office's token. */
+  actOnPull: (payload: BoardPullActionPayload) => void;
 }
 
-const EMPTY: BoardPayload = { items: [], agents: [], tasks: [], you: { userId: '', role: null } };
+const EMPTY: BoardPayload = {
+  items: [],
+  agents: [],
+  tasks: [],
+  github: { connected: false, login: null },
+  you: { userId: '', role: null },
+};
 
 export function useBoard(sessionRef: RefObject<OfficeSession | null>): Board {
   const [board, setBoard] = useState<BoardPayload>(EMPTY);
@@ -54,6 +65,14 @@ export function useBoard(sessionRef: RefObject<OfficeSession | null>): Board {
     (itemId: string) => sessionRef.current?.deleteBoardItem(itemId),
     [sessionRef],
   );
+  const refreshPulls = useCallback(
+    (taskId?: string) => sessionRef.current?.refreshPullRequests(taskId),
+    [sessionRef],
+  );
+  const actOnPull = useCallback(
+    (payload: BoardPullActionPayload) => sessionRef.current?.actOnPullRequest(payload),
+    [sessionRef],
+  );
 
-  return { ...board, loaded, create, update, remove };
+  return { ...board, loaded, create, update, remove, refreshPulls, actOnPull };
 }

@@ -139,6 +139,7 @@ import {
   agentTaskOf,
   parseAgentTask,
   isBoardStatus,
+  isPullRequestAction,
   mayAssignBoardItem,
   mayDeleteBoardItem,
   mayWriteBoard,
@@ -148,6 +149,10 @@ import {
   type AgentTask,
   type BoardAgentRef,
   type BoardDeletePayload,
+  type BoardGithubRef,
+  type BoardPullActionPayload,
+  type BoardPullRefreshPayload,
+  type PullRequestStatusRef,
   type BoardItemRef,
   type BoardMessagePayload,
   type BoardTaskRef,
@@ -161,6 +166,11 @@ import {
   findUnlinkedItemForAgent,
   listAgentTasksForWorkspace,
   getBoardItem,
+  boardGithubOf,
+  describeOfficeGithub,
+  pullRequestStatusesForWorkspace,
+  recordBoardEvent,
+  type RecordBoardEventInput,
   noteAgentTask,
   listBoardAgentsForWorkspace,
   listBoardItemsForWorkspace,
@@ -250,6 +260,7 @@ import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine } from './board-brief.js';
 import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
+import { PULL_POLL_MS, PullActionError, PullRequestWatch } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
 import { displayNameFor, verifySessionToken } from '../auth/session.js';
@@ -419,6 +430,13 @@ export class OfficeRoom extends Room<OfficeState> {
   #boardItems: readonly BoardItemRef[] = [];
   #boardAgents: readonly BoardAgentRef[] = [];
   #boardTasks: readonly BoardTaskRef[] = [];
+  /** Whether the office has a GitHub token, and whose. The token itself never comes up here. */
+  #boardGithub: BoardGithubRef = { connected: false, login: null };
+  /** What GitHub last said about each ledger line's pull request, by task id. */
+  #pullStatuses: ReadonlyMap<string, PullRequestStatusRef> = new Map();
+  /** The office's eye on GitHub. Made with the room; the token is read as needed. */
+  #pulls!: PullRequestWatch;
+  #pullTimer: NodeJS.Timeout | null = null;
   /** What the board looked like when it was last sent, so an unchanged one is not sent again. */
   #boardSignature = '';
   /** The first read of the board, so a `board_get` that beats it still gets an answer. */
@@ -592,6 +610,12 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(ClientMessage.BoardDelete, (client, payload: BoardDeletePayload) =>
       void this.#onBoardDelete(client, payload),
     );
+    this.onMessage(ClientMessage.BoardPullRefresh, (client, payload: unknown) =>
+      void this.#onBoardPullRefresh(client, payload),
+    );
+    this.onMessage(ClientMessage.BoardPullAction, (client, payload: unknown) =>
+      void this.#onBoardPullAction(client, payload),
+    );
 
     // --- agent protocol (docs/GATEWAY.md) ---
     this.onMessage('agent:activity', (client, payload: unknown) => {
@@ -659,7 +683,12 @@ export class OfficeRoom extends Room<OfficeState> {
 
     void this.#refreshSettings();
     void this.#refreshChannels();
+    this.#pulls = new PullRequestWatch({ db: getDb(), workspaceId: this.#workspaceId, apiBase: config.githubApi });
     this.#boardLoaded = this.#refreshBoard();
+    // GitHub is asked about the ledger's pull requests while somebody is here
+    // to see the answer. The first look is a minute in: the board is read
+    // first, and a room nobody stays in asks nothing.
+    this.#pullTimer = setInterval(() => void this.#pollPulls(), PULL_POLL_MS);
     this.#settingsTimer = setInterval(() => {
       void this.#refreshSettings();
       void this.#refreshChannels();
@@ -1048,6 +1077,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     if (this.#revocationTimer) clearInterval(this.#revocationTimer);
     if (this.#settingsTimer) clearInterval(this.#settingsTimer);
+    if (this.#pullTimer) clearInterval(this.#pullTimer);
     logger.info(`[office] room ${this.roomId} disposed`);
   }
 
@@ -1727,16 +1757,21 @@ export class OfficeRoom extends Room<OfficeState> {
     const ticket = this.#boardReads.start();
     try {
       const db = getDb();
-      const [items, agents, tasks] = await Promise.all([
+      const [items, agents, tasks, statuses, github] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
         listAgentTasksForWorkspace(db, this.#workspaceId, { endedMax: BOARD_LEDGER_ENDED_MAX }),
+        pullRequestStatusesForWorkspace(db, this.#workspaceId),
+        describeOfficeGithub(db, this.#workspaceId),
       ]);
       if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
       // To the minute: an agent being heard from is not the board changing.
       this.#boardAgents = boardAgentsOf(agents);
-      this.#boardTasks = tasks;
+      // Each line carries what GitHub last said about its pull request, if the office has looked.
+      this.#boardTasks = tasks.map((task) => ({ ...task, github: statuses.get(task.id) ?? null }));
+      this.#pullStatuses = statuses;
+      this.#boardGithub = boardGithubOf(github);
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);
       return;
@@ -1757,7 +1792,134 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   #boardView(): BoardView {
-    return { items: this.#boardItems, agents: this.#boardAgents, tasks: this.#boardTasks };
+    return { items: this.#boardItems, agents: this.#boardAgents, tasks: this.#boardTasks, github: this.#boardGithub };
+  }
+
+  /** Who did what on the board, written down. Fire-and-forget, like the agents' audit: a write must not wait on it. */
+  #boardEvent(input: Omit<RecordBoardEventInput, 'workspaceId'>): void {
+    void recordBoardEvent(getDb(), { workspaceId: this.#workspaceId, ...input }).catch((error: unknown) => {
+      logger.error(`[office] board event write failed (${input.kind})`, error);
+    });
+  }
+
+  // --- GitHub ------------------------------------------------------------------
+
+  /** The minute's look at GitHub, while somebody is here. Whatever changed, the board follows. */
+  async #pollPulls(): Promise<void> {
+    if (!this.#humansPresent()) return;
+    try {
+      if (this.#boardLoaded) await this.#boardLoaded;
+      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses);
+      if (!outcome.configured) return;
+      await this.#followPulls(outcome.changes);
+      if (outcome.looked > 0) await this.#refreshBoard();
+    } catch (error: unknown) {
+      logger.error('[office] could not check GitHub', error);
+    }
+  }
+
+  /**
+   * GitHub's word moves the note: a pull request it says has merged takes
+   * the note it was for to "done", as the harness saying so would. The
+   * ledger line itself was moved by the look that found it.
+   */
+  async #followPulls(changes: readonly { task: BoardTaskRef; merged: boolean }[]): Promise<void> {
+    const db = getDb();
+    for (const change of changes) {
+      if (!change.merged || !change.task.item) continue;
+      try {
+        const item = await getBoardItem(db, this.#workspaceId, change.task.item.id);
+        if (!item) continue;
+        const status = boardStatusAfterTask(item, { linked: false, merged: true });
+        if (status) await updateBoardItem(db, { workspaceId: this.#workspaceId, itemId: item.id, status });
+      } catch (error: unknown) {
+        logger.error('[office] could not move a note after its pull request merged', error);
+      }
+    }
+  }
+
+  /** The person behind a GitHub message: a member, as for writing on the board. */
+  async #pullActor(client: Client): Promise<{ player: OfficePlayer; role: MembershipRole } | null> {
+    return this.#boardWriter(client);
+  }
+
+  async #onBoardPullRefresh(client: Client, payload: unknown): Promise<void> {
+    const actor = await this.#pullActor(client);
+    if (!actor) return;
+    const asked = (payload ?? {}) as Partial<BoardPullRefreshPayload>;
+    const taskId = typeof asked.taskId === 'string' ? asked.taskId : undefined;
+    if (!this.#boardGithub.connected) {
+      this.#sendError(client, 'not_configured', 'This office has no GitHub token. An owner or admin puts one in Settings → Office → GitHub.');
+      return;
+    }
+    const wait = this.#pulls.refreshWaitMs();
+    if (wait > 0) {
+      this.#sendError(client, 'rate_limited', `GitHub was asked a moment ago. Again in ${Math.ceil(wait / 1000)}s.`);
+      return;
+    }
+    try {
+      if (this.#boardLoaded) await this.#boardLoaded;
+      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, taskId ? { taskId } : {});
+      if (!outcome.configured) {
+        this.#sendError(client, 'not_configured', 'This office has no GitHub token any more.');
+        return;
+      }
+      await this.#followPulls(outcome.changes);
+      await this.#refreshBoard();
+      if (outcome.tokenRefused) {
+        this.#sendError(client, 'github', outcome.tokenRefused);
+        return;
+      }
+      this.#sendNotice(
+        client.sessionId,
+        'pull_request',
+        outcome.looked === 0
+          ? 'Nothing on the ledger to ask GitHub about.'
+          : `Checked ${outcome.looked === 1 ? 'the pull request' : `${outcome.looked} pull requests`} with GitHub.`,
+      );
+    } catch (error: unknown) {
+      logger.error('[office] could not check GitHub', error);
+      this.#sendError(client, 'github', 'GitHub could not be checked just now.');
+    }
+  }
+
+  async #onBoardPullAction(client: Client, payload: unknown): Promise<void> {
+    const actor = await this.#pullActor(client);
+    if (!actor) return;
+    const asked = (payload ?? {}) as Partial<BoardPullActionPayload>;
+    if (typeof asked.taskId !== 'string' || !isPullRequestAction(asked.action)) {
+      this.#sendError(client, 'invalid_payload', 'Name the ledger line and what to do to its pull request.');
+      return;
+    }
+    const expectedHeadSha = typeof asked.expectedHeadSha === 'string' && asked.expectedHeadSha ? asked.expectedHeadSha : undefined;
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const task = this.#boardTasks.find((line) => line.id === asked.taskId);
+    if (!task || !task.pr) {
+      this.#sendError(client, 'not_found', 'No such pull request on the ledger.');
+      return;
+    }
+    let said: string;
+    try {
+      ({ said } = await this.#pulls.act(task, asked.action, { userId: actor.player.userId, name: actor.player.name }, expectedHeadSha));
+    } catch (error: unknown) {
+      if (error instanceof PullActionError) {
+        this.#sendError(client, error.code, error.message);
+        return;
+      }
+      logger.error('[office] a pull request action failed', error);
+      this.#sendError(client, 'github', 'GitHub could not be reached just now.');
+      return;
+    }
+    // Then look at it again, so the board says what GitHub now says — merged,
+    // closed, a new head — and the note follows a merge.
+    try {
+      const outcome = await this.#pulls.refresh(this.#boardTasks, this.#pullStatuses, { taskId: task.id });
+      await this.#followPulls(outcome.changes);
+    } catch (error: unknown) {
+      logger.error('[office] could not check GitHub after acting', error);
+    }
+    await this.#refreshBoard();
+    this.#sendNotice(client.sessionId, 'pull_request', said);
   }
 
   /**
@@ -1836,6 +1998,12 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#boardRefused(client, error);
       return;
     }
+    this.#boardEvent({
+      kind: 'item.created',
+      actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+      itemId: created.id,
+      payload: { number: created.number, title: created.title, assignee: created.assignee?.name ?? null },
+    });
     await this.#refreshBoard();
     // A note written straight into an agent's hands is handed over like any other.
     if (created.assignee) {
@@ -1892,6 +2060,12 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#boardRefused(client, error);
       return;
     }
+    this.#boardEvent({
+      kind: 'item.updated',
+      actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+      itemId: after.id,
+      payload: { number: after.number, changed: Object.keys(patch).filter((key) => key !== 'itemId'), ...(patch.status ? { status: patch.status } : {}) },
+    });
     await this.#refreshBoard();
     if (before && before.assignee?.id !== after.assignee?.id) {
       void this.#announceAssignment(client.sessionId, writer.player, before, after);
@@ -2045,6 +2219,11 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#boardRefused(client, error);
       return;
     }
+    this.#boardEvent({
+      kind: 'item.deleted',
+      actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+      payload: { number: item.number, title: item.title },
+    });
     await this.#refreshBoard();
   }
 
@@ -3554,6 +3733,12 @@ export class OfficeRoom extends Room<OfficeState> {
         title: item.title,
         assignee: item.assignee?.name ?? null,
       });
+      this.#boardEvent({
+        kind: 'item.created',
+        actor: { kind: 'agent', id: session.identity.id, name: session.identity.name },
+        itemId: item.id,
+        payload: { number: item.number, title: item.title, assignee: item.assignee?.name ?? null },
+      });
       await this.#refreshBoard();
       this.#reply(client, payload?.requestId, {
         item,
@@ -3609,6 +3794,12 @@ export class OfficeRoom extends Room<OfficeState> {
         number: after.number,
         changed: Object.keys(patch).filter((key) => key !== 'itemId'),
         ...(reassign ? { assignee: after.assignee?.name ?? null } : {}),
+      });
+      this.#boardEvent({
+        kind: 'item.updated',
+        actor: { kind: 'agent', id: session.identity.id, name: session.identity.name },
+        itemId: after.id,
+        payload: { number: after.number, changed: Object.keys(patch).filter((key) => key !== 'itemId') },
       });
       await this.#refreshBoard();
       this.#reply(client, payload?.requestId, {

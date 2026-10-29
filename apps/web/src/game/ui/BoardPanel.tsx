@@ -10,15 +10,17 @@ import {
   mayWriteBoard,
   type BoardAgentRef,
   type BoardColor,
+  type BoardGithubRef,
   type BoardItemRef,
   type BoardStatus,
   type BoardTaskRef,
   type ChannelRef,
   type MapZone,
+  type PullRequestAction,
   type RosterEntry,
 } from '@quintal/shared';
-import { ExternalLink, GitPullRequest, Pin, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { ExternalLink, GitPullRequest, Pin, Plus, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { Board } from '../useBoard';
 import { runtimeLines } from './agentRuntime';
@@ -28,12 +30,19 @@ import {
   agentMatches,
   agentRowsOf,
   branchesWithoutPr,
+  checksLabel,
   columnsOf,
   matchesFilter,
+  mergeableLabel,
   nextStatus,
+  pullActionConfirm,
+  pullActionLabel,
+  pullActionsOf,
   pullRequestMatches,
   pullRequestRowsOf,
+  pullStateOf,
   repoOfPrUrl,
+  reviewLabel,
   taskBadgeOf,
   wallOf,
   type AgentRow,
@@ -155,6 +164,22 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
             </Tab>
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            {tab === 'pulls' && canWrite ? (
+              board.github.connected ? (
+                <button
+                  type="button"
+                  onClick={() => board.refreshPulls()}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                  title={`Ask GitHub now, as ${board.github.login ? `@${board.github.login}` : 'the office'}`}
+                >
+                  <RefreshCw size={11} aria-hidden /> Check GitHub
+                </button>
+              ) : (
+                <a href="/settings" className="text-[11px] text-white/45 underline-offset-2 hover:text-white/80 hover:underline">
+                  Connect GitHub in Settings → Office
+                </a>
+              )
+            ) : null}
             {tab === 'issues' ? (
               <div className="flex rounded border border-white/15 text-[11px]">
                 <ViewButton selected={view === 'kanban'} onClick={() => setView('kanban')}>
@@ -211,7 +236,10 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
                 onBranch={onBranch}
                 now={now}
                 guest={board.you.role === null}
+                github={board.github}
                 onOpenNote={(id) => setDrawer({ kind: 'item', id })}
+                onAct={(taskId, action, expectedHeadSha) => board.actOnPull({ taskId, action, expectedHeadSha })}
+                onRefresh={(taskId) => board.refreshPulls(taskId)}
               />
             ) : board.items.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
@@ -251,7 +279,7 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
   );
 }
 
-function Tab({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+function Tab({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
@@ -392,25 +420,49 @@ function AgentsTab({
 }
 
 /**
- * The ledger's lines with a pull request: what the office last heard about
- * each, from the harness that opened it. Nothing here is fetched from
- * GitHub yet — the state and the time are the ledger's, and the card on the
- * number says so. "Open" goes to the pull request itself.
+ * The ledger's lines with a pull request. Each shows what the office knows:
+ * the harness's word until GitHub has been asked, GitHub's after — state,
+ * checks, mergeability, the review — and, for a member of an office with a
+ * token, the few things to do about it. Every action is two clicks: the
+ * second is a line saying exactly what is about to happen, to what.
  */
 function PullsTab({
   rows,
   onBranch,
   now,
   guest,
+  github,
   onOpenNote,
+  onAct,
+  onRefresh,
 }: {
   rows: BoardTaskRef[];
   onBranch: BoardTaskRef[];
   now: number;
   /** A guest is not sent the ledger: say so rather than that nothing was heard. */
   guest: boolean;
+  github: BoardGithubRef;
   onOpenNote: (itemId: string) => void;
+  onAct: (taskId: string, action: PullRequestAction, expectedHeadSha: string | undefined) => void;
+  onRefresh: (taskId: string) => void;
 }) {
+  /** Which row has its actions open, and which action is waiting on its second click. */
+  const [open, setOpen] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ taskId: string; action: PullRequestAction } | null>(null);
+  /** A row acted on, until the office sends the board again. */
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    setBusy(null);
+    setConfirm(null);
+  }, [rows]);
+
+  const act = (task: BoardTaskRef, action: PullRequestAction) => {
+    setBusy(task.id);
+    setConfirm(null);
+    setOpen(null);
+    onAct(task.id, action, task.github?.headSha || undefined);
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {guest ? (
@@ -421,46 +473,122 @@ function PullsTab({
         </p>
       ) : (
         <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
-          {rows.map((task) => (
-            <li key={task.id} className="grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4 px-4 py-2 text-xs">
-              <PrNumber task={task} now={now} />
-              <div className="min-w-0">
-                <p className="truncate text-white/85">{task.title}</p>
-                <p className="truncate font-mono text-[10px] text-white/45">
-                  {task.repo} · {task.branch}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sky-300/90">
-                  {AGENT_GLYPH} {task.agentName}
-                </p>
-                {task.item ? (
-                  <button
-                    type="button"
-                    onClick={() => onOpenNote(task.item!.id)}
-                    className="truncate text-[10px] text-amber-200/90 underline-offset-2 hover:underline"
-                    title={task.item.title}
-                  >
-                    note #{task.item.number} {task.item.title}
-                  </button>
-                ) : (
-                  <p className="text-[10px] text-white/30">no note</p>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-0.5">
-                <PrState state={task.pr!.state} />
-                <span className="font-mono text-[10px] text-white/35">heard {ageLabel(task.lastSeenAt, now)}</span>
-              </div>
-              <a
-                href={task.pr!.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
-              >
-                Open <ExternalLink size={11} aria-hidden />
-              </a>
-            </li>
-          ))}
+          {rows.map((task) => {
+            const actions = github.connected ? pullActionsOf(task) : [];
+            const live = task.github?.known ? task.github : null;
+            const checks = live ? checksLabel(live.checks) : null;
+            const review = live ? reviewLabel(live.reviewDecision) : null;
+            const pending = confirm?.taskId === task.id ? confirm.action : null;
+            return (
+              <li key={task.id} className={`px-4 py-2 text-xs ${busy === task.id ? 'opacity-60' : ''}`}>
+                <div className="grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1.2fr)_auto_auto] items-center gap-x-4">
+                  <PrNumber task={task} now={now} />
+                  <div className="min-w-0">
+                    <p className="truncate text-white/85">{live?.title || task.title}</p>
+                    <p className="truncate font-mono text-[10px] text-white/45">
+                      {task.repo} · {task.branch}
+                      {live?.baseRef ? ` → ${live.baseRef}` : ''}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sky-300/90">
+                      {AGENT_GLYPH} {task.agentName}
+                    </p>
+                    {task.item ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenNote(task.item!.id)}
+                        className="truncate text-[10px] text-amber-200/90 underline-offset-2 hover:underline"
+                        title={task.item.title}
+                      >
+                        note #{task.item.number} {task.item.title}
+                      </button>
+                    ) : (
+                      <p className="text-[10px] text-white/30">no note</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="flex items-center gap-1.5">
+                      {checks ? <Chip tone={checks.tone}>{checks.text}</Chip> : null}
+                      {review ? <Chip tone={review === 'approved' ? 'good' : 'bad'}>{review}</Chip> : null}
+                      {live?.draft ? <Chip tone="none">draft</Chip> : null}
+                      <PrState state={pullStateOf(task)} />
+                    </span>
+                    <span className="font-mono text-[10px] text-white/35">
+                      {live ? `GitHub · ${mergeableLabel(live)} · checked ${ageLabel(live.fetchedAt, now)}` : `heard ${ageLabel(task.lastSeenAt, now)}`}
+                      {task.github?.error ? <span className="text-rose-300/80"> · {task.github.known ? 'last check failed' : task.github.error}</span> : null}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {actions.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(open === task.id ? null : task.id);
+                          setConfirm(null);
+                        }}
+                        disabled={busy === task.id}
+                        aria-expanded={open === task.id}
+                        className="rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10 disabled:opacity-50"
+                      >
+                        Actions
+                      </button>
+                    ) : null}
+                    <a
+                      href={task.pr!.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                    >
+                      Open <ExternalLink size={11} aria-hidden />
+                    </a>
+                  </div>
+                </div>
+                {open === task.id ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+                    {pending ? (
+                      <>
+                        <span className="text-white/80">{pullActionConfirm(task, pending)}</span>
+                        <button
+                          type="button"
+                          onClick={() => act(task, pending)}
+                          className={`rounded px-2 py-1 text-[11px] font-medium ${pending === 'close' ? 'bg-rose-300 text-black hover:bg-rose-200' : 'bg-emerald-300 text-black hover:bg-emerald-200'}`}
+                        >
+                          Yes, {pullActionLabel(pending).toLowerCase()}
+                        </button>
+                        <button type="button" onClick={() => setConfirm(null)} className="rounded px-2 py-1 text-[11px] text-white/60 hover:bg-white/10">
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {actions.map((action) => (
+                          <button
+                            key={action}
+                            type="button"
+                            onClick={() => setConfirm({ taskId: task.id, action })}
+                            className={`rounded border px-2 py-1 text-[11px] hover:bg-white/10 ${action === 'close' ? 'border-rose-300/30 text-rose-200' : 'border-white/15 text-white/80'}`}
+                          >
+                            {pullActionLabel(action)}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpen(null);
+                            onRefresh(task.id);
+                          }}
+                          className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-[11px] text-white/50 hover:bg-white/10 hover:text-white/80"
+                        >
+                          <RefreshCw size={10} aria-hidden /> Check again
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
       {onBranch.length > 0 ? (
@@ -474,14 +602,28 @@ function PullsTab({
   );
 }
 
+/** A small fact on a row: the checks, the review, a draft. */
+function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; children: ReactNode }) {
+  const colour =
+    tone === 'good'
+      ? 'border-emerald-300/40 text-emerald-200'
+      : tone === 'bad'
+        ? 'border-rose-300/40 text-rose-200'
+        : tone === 'wait'
+          ? 'border-amber-300/40 text-amber-200'
+          : 'border-white/20 text-white/50';
+  return <span className={`rounded border px-1 font-mono text-[9px] tracking-wide ${colour}`}>{children}</span>;
+}
+
 /**
- * The number, with a card on hover: what the ledger knows. A later change
- * puts GitHub's own facts here — checks, mergeability, the review — and
- * actions beside them. Until then the card says plainly where its facts are
- * from, so a state read here is never mistaken for GitHub's.
+ * The number, with a card on hover: what GitHub said when the office last
+ * asked — the checks by name, mergeability, the review, who last acted on
+ * it from here — or, before it has, what the harness last reported, said
+ * plainly so a state read here is never mistaken for GitHub's.
  */
 function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
   const pr = task.pr!;
+  const live = task.github?.known ? task.github : null;
   return (
     <div className="group relative">
       <a
@@ -496,24 +638,72 @@ function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
       <div
         id={`pr-card-${task.id}`}
         role="tooltip"
-        className="pointer-events-none absolute top-full left-0 z-10 mt-1 hidden w-72 rounded-md border border-white/15 bg-[#161a24] p-3 text-[11px] text-white/80 shadow-xl group-hover:block group-focus-within:block"
+        className="pointer-events-none absolute top-full left-0 z-10 mt-1 hidden w-80 rounded-md border border-white/15 bg-[#161a24] p-3 text-[11px] text-white/80 shadow-xl group-hover:block group-focus-within:block"
       >
         <p className="flex items-center gap-2">
           <span className="font-mono text-sky-200">#{pr.number}</span>
-          <PrState state={pr.state} />
+          <PrState state={pullStateOf(task)} />
+          {live?.draft ? <Chip tone="none">draft</Chip> : null}
           <span className="truncate text-white/50">{repoOfPrUrl(pr.url)}</span>
         </p>
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
           <dt className="text-white/40">task</dt>
-          <dd className="truncate">{task.title}</dd>
+          <dd className="truncate">{live?.title || task.title}</dd>
           <dt className="text-white/40">branch</dt>
-          <dd className="truncate font-mono text-white/70">{task.branch}</dd>
+          <dd className="truncate font-mono text-white/70">
+            {task.branch}
+            {live?.baseRef ? ` → ${live.baseRef}` : ''}
+          </dd>
           <dt className="text-white/40">by</dt>
           <dd>
             {AGENT_GLYPH} {task.agentName}
           </dd>
           <dt className="text-white/40">note</dt>
           <dd className="truncate">{task.item ? `#${task.item.number} ${task.item.title}` : 'none'}</dd>
+          {live ? (
+            <>
+              <dt className="text-white/40">merge</dt>
+              <dd>{mergeableLabel(live)}</dd>
+              <dt className="text-white/40">review</dt>
+              <dd>{reviewLabel(live.reviewDecision) ?? 'none yet'}</dd>
+              <dt className="text-white/40">checks</dt>
+              <dd>
+                {live.checks.total === 0 ? (
+                  'none'
+                ) : (
+                  <ul className="flex flex-col gap-0.5">
+                    {live.checks.runs.slice(0, 8).map((run) => (
+                      <li key={run.name} className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                            run.status !== 'completed'
+                              ? 'bg-amber-300'
+                              : run.conclusion === 'success' || run.conclusion === 'neutral' || run.conclusion === 'skipped'
+                                ? 'bg-emerald-400'
+                                : 'bg-rose-400'
+                          }`}
+                          aria-hidden
+                        />
+                        <span className="truncate">{run.name}</span>
+                        <span className="ml-auto font-mono text-[10px] text-white/40">{run.status !== 'completed' ? run.status.replace('_', ' ') : run.conclusion}</span>
+                      </li>
+                    ))}
+                    {live.checks.total > 8 ? <li className="text-white/40">and {live.checks.total - 8} more</li> : null}
+                  </ul>
+                )}
+              </dd>
+              <dt className="text-white/40">head</dt>
+              <dd className="truncate font-mono text-white/60">{live.headSha.slice(0, 10)}</dd>
+              {live.lastAction ? (
+                <>
+                  <dt className="text-white/40">from here</dt>
+                  <dd>
+                    {pullActionLabel(live.lastAction.action).toLowerCase()} by {live.lastAction.byName}, {ageLabel(live.lastAction.at, now)}
+                  </dd>
+                </>
+              ) : null}
+            </>
+          ) : null}
           <dt className="text-white/40">started</dt>
           <dd>{ageLabel(task.startedAt, now)}</dd>
           <dt className="text-white/40">last heard</dt>
@@ -525,7 +715,16 @@ function PrNumber({ task, now }: { task: BoardTaskRef; now: number }) {
             </>
           ) : null}
         </dl>
-        <p className="mt-2 text-[10px] text-white/40">As the agent's harness last reported it. Not checked with GitHub.</p>
+        {live ? (
+          <p className="mt-2 text-[10px] text-white/40">
+            From GitHub, checked {ageLabel(live.fetchedAt, now)}.
+            {task.github?.error ? <span className="text-rose-300/80"> The last check failed: {task.github.error}</span> : null}
+          </p>
+        ) : task.github?.error ? (
+          <p className="mt-2 text-[10px] text-rose-300/80">GitHub could not be asked: {task.github.error}</p>
+        ) : (
+          <p className="mt-2 text-[10px] text-white/40">As the agent's harness last reported it. Not checked with GitHub.</p>
+        )}
       </div>
     </div>
   );

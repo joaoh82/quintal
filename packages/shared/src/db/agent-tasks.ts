@@ -84,6 +84,8 @@ function toRecord({ row, agentName, itemNumber, itemTitle }: RecordRow): AgentTa
     startedAt: row.startedAt.getTime(),
     endedAt: row.endedAt?.getTime() ?? null,
     lastSeenAt: row.lastSeenAt.getTime(),
+    // GitHub's word is joined by the room, from `pullRequestStatusesForWorkspace`.
+    github: null,
   };
 }
 

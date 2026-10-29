@@ -3,18 +3,23 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, PullRequestStatusRef, RosterEntry } from '@quintal/shared';
 
 import {
   ageLabel,
   agentMatches,
   agentRowsOf,
   branchesWithoutPr,
+  checksLabel,
   columnsOf,
+  mergeableLabel,
   matchesFilter,
   nextStatus,
+  pullActionConfirm,
+  pullActionsOf,
   pullRequestMatches,
   pullRequestRowsOf,
+  pullStateOf,
   repoOfPrUrl,
   taskBadgeOf,
   wallOf,
@@ -177,6 +182,7 @@ function ledger(id: string, extra: Partial<BoardTaskRef> = {}): BoardTaskRef {
     startedAt: 0,
     endedAt: null,
     lastSeenAt: 0,
+    github: null,
     ...extra,
   };
 }
@@ -279,5 +285,74 @@ describe('the Pull requests tab', () => {
     assert.equal(repoOfPrUrl('https://github.com/acme/api/pull/12'), 'github.com/acme/api');
     assert.equal(repoOfPrUrl('https://example.com/'), 'example.com');
     assert.equal(repoOfPrUrl('not a url'), 'not a url');
+  });
+});
+
+
+describe('what GitHub said, as the tab shows it', () => {
+  const line: BoardTaskRef = {
+    id: 't',
+    agentId: 'a',
+    agentName: 'Marvin',
+    item: null,
+    title: 'fix the chair',
+    repo: 'office',
+    branch: 'b',
+    pr: { number: 12, url: 'https://github.com/acme/office/pull/12', state: 'open' },
+    status: 'active',
+    startedAt: 0,
+    endedAt: null,
+    lastSeenAt: 0,
+    github: null,
+  };
+  const facts: PullRequestStatusRef = {
+    state: 'open',
+    draft: false,
+    title: 'Fix the chair',
+    headSha: 'abc',
+    headRef: 'b',
+    baseRef: 'main',
+    mergeable: true,
+    mergeableState: 'clean',
+    checks: { summary: 'passing', total: 2, passed: 2, failed: 0, pending: 0, runs: [] },
+    reviewDecision: 'approved',
+    fetchedAt: 0,
+    error: null,
+    lastAction: null,
+    known: true,
+  };
+
+  it('shows GitHub’s state once it has answered, else the harness’s', () => {
+    assert.equal(pullStateOf(line), 'open');
+    assert.equal(pullStateOf({ ...line, github: { ...facts, state: 'merged' } }), 'merged');
+    assert.equal(pullStateOf({ ...line, github: { ...facts, known: false, state: 'merged' } }), 'open', 'a failed first look is not an answer');
+  });
+
+  it('offers nothing until GitHub has answered, and nothing on a closed one', () => {
+    assert.deepEqual(pullActionsOf(line), []);
+    assert.deepEqual(pullActionsOf({ ...line, github: { ...facts, state: 'merged' } }), []);
+  });
+
+  it('offers the three merges and close on a clean open one, update branch only when behind, no merge on a draft or conflicts', () => {
+    assert.deepEqual(pullActionsOf({ ...line, github: facts }), ['squash', 'merge', 'rebase', 'close']);
+    assert.deepEqual(pullActionsOf({ ...line, github: { ...facts, mergeableState: 'behind' } }), ['squash', 'merge', 'rebase', 'update_branch', 'close']);
+    assert.deepEqual(pullActionsOf({ ...line, github: { ...facts, draft: true } }), ['close']);
+    assert.deepEqual(pullActionsOf({ ...line, github: { ...facts, mergeable: false, mergeableState: 'dirty' } }), ['close']);
+  });
+
+  it('says exactly what is about to happen', () => {
+    assert.equal(pullActionConfirm({ ...line, github: facts }, 'squash'), 'Squash #12 into main as one commit?');
+    assert.equal(pullActionConfirm({ ...line, github: facts }, 'close'), 'Close #12 without merging?');
+    assert.equal(pullActionConfirm({ ...line, github: { ...facts, mergeableState: 'behind' } }, 'update_branch'), 'Bring #12 up to date with main?');
+  });
+
+  it('puts the checks and the mergeability in a word', () => {
+    assert.deepEqual(checksLabel(facts.checks), { text: 'checks 2/2', tone: 'good' });
+    assert.deepEqual(checksLabel({ ...facts.checks, summary: 'failing', failed: 1 }), { text: '1 failing', tone: 'bad' });
+    assert.equal(mergeableLabel(facts), 'ready to merge');
+    assert.equal(mergeableLabel({ ...facts, mergeableState: 'behind' }), 'behind its base');
+    assert.equal(mergeableLabel({ ...facts, mergeable: false, mergeableState: 'dirty' }), 'conflicts');
+    assert.equal(mergeableLabel({ ...facts, draft: true }), 'draft');
+    assert.equal(mergeableLabel({ ...facts, state: 'merged' }), 'merged');
   });
 });

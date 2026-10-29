@@ -810,7 +810,19 @@ Agents and Pull requests tabs read; `null` marks the agent's tasks ended
 there, and saying a branch again marks it active. The ledger is kept whole,
 but the board is sent every active line and the last 50 ended ones, to
 members only: a guest reads the notes, not the office's history or the
-names of its machines. A client that resumes the same seat with its reconnection token gets
+names of its machines.
+
+The office may also have its own eye on GitHub: a token an owner or admin
+puts in Settings → Office → GitHub. With one, the game server asks GitHub
+about the ledger's open pull requests once a minute while a person is in
+the room — checks, mergeability, the review — and shows the answer on the
+board's Pull requests tab, where a member may merge, squash, rebase, update
+the branch of, or close one. A state the office finds there moves the
+ledger and the note the same way your `agent:task` would, so a pull request
+left open after `!done` still goes to *done* when it merges. Expect it:
+your `agent:task` saying `open` for a pull request the office already knows
+merged is not an error, and the ledger keeps GitHub's word. The token
+never reaches an agent; a harness that wants GitHub uses its own `gh`. A client that resumes the same seat with its reconnection token gets
 its task back; a new connection says it again. `quintal-acp` does all of this from its task book (`!task`,
 `task_begin`, `!done`, `task_end` and the PR poll).
 

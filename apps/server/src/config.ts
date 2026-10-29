@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_PORT, devGamePort } from '@quintal/shared';
+import { DEFAULT_PORT, GITHUB_API_DEFAULT, devGamePort } from '@quintal/shared';
 import { deploymentOrigin } from '@quintal/shared/db';
 
 /** `apps/server` — same depth whether running from `src/` (tsx) or `dist/` (node). */
@@ -42,6 +42,11 @@ export const config = {
    * learn credentials v2; off refuses both with a message that says why.
    */
   legacyAgentKeys: legacyKeysEnabled(process.env.AGENT_LEGACY_KEYS),
+  /**
+   * Where GitHub's API is. github.com's unless `QUINTAL_GITHUB_API` says
+   * otherwise: an enterprise server, or a stub the smoke test stands up.
+   */
+  githubApi: (process.env.QUINTAL_GITHUB_API ?? GITHUB_API_DEFAULT).replace(/\/$/, ''),
 } as const;
 
 /** `AGENT_LEGACY_KEYS`: anything but an explicit no means yes. */

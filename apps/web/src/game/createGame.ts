@@ -2,6 +2,7 @@ import {
   RECONNECTION_SECONDS,
   type ApprovalOptionId,
   type BoardCreatePayload,
+  type BoardPullActionPayload,
   type BoardUpdatePayload,
   type OfficeState,
 } from '@quintal/shared';
@@ -62,6 +63,10 @@ export interface OfficeSession {
   createBoardItem(note: BoardCreatePayload): void;
   updateBoardItem(patch: BoardUpdatePayload): void;
   deleteBoardItem(itemId: string): void;
+  /** Ask GitHub about the ledger's pull requests now, or one of them. */
+  refreshPullRequests(taskId?: string): void;
+  /** Merge, update or close a pull request on the ledger, with the office's token. */
+  actOnPullRequest(payload: BoardPullActionPayload): void;
   /** The microphone switch. Off by default; M in the office. */
   toggleMute(): void;
   /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
@@ -345,6 +350,12 @@ export async function createGame(
     },
     deleteBoardItem(itemId) {
       scene()?.deleteBoardItem(itemId);
+    },
+    refreshPullRequests(taskId) {
+      scene()?.refreshPullRequests(taskId);
+    },
+    actOnPullRequest(payload) {
+      scene()?.actOnPullRequest(payload);
     },
     toggleMute() {
       voice?.toggleMute();
