@@ -1,0 +1,194 @@
+{
+ "runtime": {
+  "name": "@agentclientprotocol/claude-agent-acp",
+  "title": "Claude Agent",
+  "version": "0.99.1"
+ },
+ "capturedOn": "2026-10-30",
+ "scenario": "quintal-tools MCP stub: workspace_info returns text; broken_tool returns isError (QUIN-58)",
+ "updates": [
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "ToolSearch"
+    }
+   },
+   "toolCallId": "toolu_01PXqq4z32idQbcENBfsYxnE",
+   "sessionUpdate": "tool_call",
+   "name": "ToolSearch",
+   "rawInput": {},
+   "status": "pending",
+   "title": "ToolSearch",
+   "kind": "other",
+   "content": []
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "ToolSearch"
+    }
+   },
+   "toolCallId": "toolu_01PXqq4z32idQbcENBfsYxnE",
+   "sessionUpdate": "tool_call_update",
+   "rawInput": {
+    "query": "select:mcp__quintal-tools__workspace_info,mcp__quintal-tools__broken_tool"
+   }
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "ToolSearch"
+    }
+   },
+   "toolCallId": "toolu_01PXqq4z32idQbcENBfsYxnE",
+   "sessionUpdate": "tool_call_update",
+   "rawInput": {
+    "query": "select:mcp__quintal-tools__workspace_info,mcp__quintal-tools__broken_tool",
+    "max_results": 2
+   }
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolResponse": {
+      "matches": [
+       "mcp__quintal-tools__workspace_info",
+       "mcp__quintal-tools__broken_tool"
+      ],
+      "query": "select:mcp__quintal-tools__workspace_info,mcp__quintal-tools__broken_tool",
+      "total_deferred_tools": 378
+     },
+     "toolName": "ToolSearch"
+    }
+   },
+   "toolCallId": "toolu_01PXqq4z32idQbcENBfsYxnE",
+   "sessionUpdate": "tool_call_update"
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "ToolSearch"
+    }
+   },
+   "toolCallId": "toolu_01PXqq4z32idQbcENBfsYxnE",
+   "sessionUpdate": "tool_call_update",
+   "status": "completed",
+   "rawOutput": [
+    {
+     "type": "tool_reference",
+     "tool_name": "mcp__quintal-tools__workspace_info"
+    },
+    {
+     "type": "tool_reference",
+     "tool_name": "mcp__quintal-tools__broken_tool"
+    }
+   ],
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Tool: mcp__quintal-tools__workspace_info"
+     }
+    },
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Tool: mcp__quintal-tools__broken_tool"
+     }
+    }
+   ]
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "mcp__quintal-tools__workspace_info"
+    }
+   },
+   "toolCallId": "toolu_0138W99VdYzhtebvY9wLzDFq",
+   "sessionUpdate": "tool_call",
+   "name": "mcp__quintal-tools__workspace_info",
+   "rawInput": {},
+   "status": "pending",
+   "title": "mcp__quintal-tools__workspace_info",
+   "kind": "other",
+   "content": []
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolResponse": [
+      {
+       "type": "text",
+       "text": "Workspace: quintal test office, 3 people, 2 agents."
+      }
+     ],
+     "toolName": "mcp__quintal-tools__workspace_info"
+    }
+   },
+   "toolCallId": "toolu_0138W99VdYzhtebvY9wLzDFq",
+   "sessionUpdate": "tool_call_update"
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "mcp__quintal-tools__workspace_info"
+    }
+   },
+   "toolCallId": "toolu_0138W99VdYzhtebvY9wLzDFq",
+   "sessionUpdate": "tool_call_update",
+   "status": "completed",
+   "rawOutput": [
+    {
+     "type": "text",
+     "text": "Workspace: quintal test office, 3 people, 2 agents."
+    }
+   ],
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Workspace: quintal test office, 3 people, 2 agents."
+     }
+    }
+   ]
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "mcp__quintal-tools__broken_tool"
+    }
+   },
+   "toolCallId": "toolu_01KxcYy6oCNcDUHZGVc1rDQu",
+   "sessionUpdate": "tool_call",
+   "name": "mcp__quintal-tools__broken_tool",
+   "rawInput": {},
+   "status": "pending",
+   "title": "mcp__quintal-tools__broken_tool",
+   "kind": "other",
+   "content": []
+  },
+  {
+   "_meta": {
+    "claudeCode": {
+     "toolName": "mcp__quintal-tools__broken_tool"
+    }
+   },
+   "toolCallId": "toolu_01KxcYy6oCNcDUHZGVc1rDQu",
+   "sessionUpdate": "tool_call_update",
+   "status": "failed",
+   "rawOutput": "broken_tool failed: the office is closed.",
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "```\nbroken_tool failed: the office is closed.\n```"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -131,6 +131,38 @@ test('captured installed ACP runtimes report the three command outcomes correctl
   }
 });
 
+test('captured MCP tool calls: a quintal tool that answered succeeds, one that errored fails', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const runtime of ['codex-mcp', 'claude-mcp']) {
+    const fixture = JSON.parse(
+      await readFile(new URL(`./fixtures/activity/${runtime}.json`, import.meta.url), 'utf8'),
+    );
+    const turn = new PublicTurn({}, () => {});
+    for (const update of fixture.updates) turn.tool(update);
+    turn.finish('completed');
+    const step = (tool: string) =>
+      turn.value.items.find((item) => item.kind === 'tool' && item.text.includes(tool));
+    assert.equal(step('workspace_info')?.state, 'success', runtime);
+    assert.equal(step('broken_tool')?.state, 'failed', runtime);
+  }
+});
+
+test('an MCP result is read where Codex puts it, and only counts when it says something', () => {
+  const answered = { content: [{ type: 'text', text: 'ok' }], structuredContent: null };
+  assert.equal(toolOutcome({ status: 'completed', rawOutput: { result: answered, error: null } }), 'success');
+  assert.equal(
+    toolOutcome({ status: 'completed', rawOutput: { result: { ...answered, isError: true }, error: null } }),
+    'failed',
+  );
+  assert.equal(
+    toolOutcome({ status: 'completed', rawOutput: { result: null, error: { message: 'timed out' } } }),
+    'failed',
+  );
+  // No evidence stays unknown: an empty answer, or no answer at all.
+  assert.equal(toolOutcome({ status: 'completed', rawOutput: { result: { content: [] }, error: null } }), 'unknown');
+  assert.equal(toolOutcome({ status: 'completed', rawOutput: { result: null, error: null } }), 'unknown');
+});
+
 test('a result arriving after a completed patch resolves unknown without restarting the tool', () => {
   const turn = new PublicTurn({}, () => {});
   turn.tool({ toolCallId: 'partial', status: 'completed' });

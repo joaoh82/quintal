@@ -1,0 +1,225 @@
+{
+ "runtime": {
+  "name": "@agentclientprotocol/codex-acp",
+  "title": "Codex",
+  "version": "2.5.0"
+ },
+ "capturedOn": "2026-10-30",
+ "scenario": "quintal-tools MCP stub: workspace_info returns text; broken_tool returns isError (QUIN-58)",
+ "updates": [
+  {
+   "sessionUpdate": "tool_call",
+   "toolCallId": "exec-77a73c08-402a-4aaf-95bf-79e6bdf110cb",
+   "kind": "execute",
+   "title": "mcp.quintal-tools.workspace_info",
+   "status": "in_progress",
+   "rawInput": {
+    "server": "quintal-tools",
+    "tool": "workspace_info",
+    "arguments": {}
+   },
+   "_meta": {
+    "is_mcp_tool_call": true
+   }
+  },
+  {
+   "sessionUpdate": "tool_call",
+   "toolCallId": "guardian_assessment:8bbf1324-a760-414b-9b00-e43f6918279c",
+   "kind": "think",
+   "title": "Guardian Review",
+   "status": "in_progress",
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Status: In progress\nAction: MCP workspace_info on quintal-tools"
+     }
+    }
+   ],
+   "rawInput": {
+    "threadId": "01a18ee3-6e0e-7643-89c0-9a336866e582",
+    "turnId": "01a18ee3-6f4e-7bd2-893a-eaadc29b597b",
+    "startedAtMs": 1793398638611,
+    "reviewId": "8bbf1324-a760-414b-9b00-e43f6918279c",
+    "targetItemId": "exec-77a73c08-402a-4aaf-95bf-79e6bdf110cb",
+    "review": {
+     "status": "inProgress",
+     "riskLevel": null,
+     "userAuthorization": null,
+     "rationale": null
+    },
+    "action": {
+     "type": "mcpToolCall",
+     "server": "quintal-tools",
+     "toolName": "workspace_info",
+     "connectorId": null,
+     "connectorName": null,
+     "toolTitle": null
+    }
+   }
+  },
+  {
+   "sessionUpdate": "tool_call_update",
+   "toolCallId": "guardian_assessment:8bbf1324-a760-414b-9b00-e43f6918279c",
+   "status": "completed",
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Status: Approved\nAction: MCP workspace_info on quintal-tools\nRisk: low\nAuthorization: high\nRationale: The user explicitly authorized one workspace_info call, which is a routine read-only workspace description."
+     }
+    }
+   ],
+   "rawOutput": {
+    "threadId": "01a18ee3-6e0e-7643-89c0-9a336866e582",
+    "turnId": "01a18ee3-6f4e-7bd2-893a-eaadc29b597b",
+    "startedAtMs": 1793398638611,
+    "completedAtMs": 1793398641292,
+    "reviewId": "8bbf1324-a760-414b-9b00-e43f6918279c",
+    "targetItemId": "exec-77a73c08-402a-4aaf-95bf-79e6bdf110cb",
+    "decisionSource": "agent",
+    "review": {
+     "status": "approved",
+     "riskLevel": "low",
+     "userAuthorization": "high",
+     "rationale": "The user explicitly authorized one workspace_info call, which is a routine read-only workspace description."
+    },
+    "action": {
+     "type": "mcpToolCall",
+     "server": "quintal-tools",
+     "toolName": "workspace_info",
+     "connectorId": null,
+     "connectorName": null,
+     "toolTitle": null
+    }
+   }
+  },
+  {
+   "sessionUpdate": "tool_call_update",
+   "toolCallId": "exec-77a73c08-402a-4aaf-95bf-79e6bdf110cb",
+   "status": "completed",
+   "rawOutput": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "Workspace: quintal test office, 3 people, 2 agents."
+      }
+     ],
+     "structuredContent": null,
+     "_meta": null
+    },
+    "error": null
+   }
+  },
+  {
+   "sessionUpdate": "tool_call",
+   "toolCallId": "exec-940c82d8-4ce4-4d20-925a-f4c21e1575ce",
+   "kind": "execute",
+   "title": "mcp.quintal-tools.broken_tool",
+   "status": "in_progress",
+   "rawInput": {
+    "server": "quintal-tools",
+    "tool": "broken_tool",
+    "arguments": {}
+   },
+   "_meta": {
+    "is_mcp_tool_call": true
+   }
+  },
+  {
+   "sessionUpdate": "tool_call",
+   "toolCallId": "guardian_assessment:bfa7cce2-1138-431c-b829-768a6681fcba",
+   "kind": "think",
+   "title": "Guardian Review",
+   "status": "in_progress",
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Status: In progress\nAction: MCP broken_tool on quintal-tools"
+     }
+    }
+   ],
+   "rawInput": {
+    "threadId": "01a18ee3-6e0e-7643-89c0-9a336866e582",
+    "turnId": "01a18ee3-6f4e-7bd2-893a-eaadc29b597b",
+    "startedAtMs": 1793398643393,
+    "reviewId": "bfa7cce2-1138-431c-b829-768a6681fcba",
+    "targetItemId": "exec-940c82d8-4ce4-4d20-925a-f4c21e1575ce",
+    "review": {
+     "status": "inProgress",
+     "riskLevel": null,
+     "userAuthorization": null,
+     "rationale": null
+    },
+    "action": {
+     "type": "mcpToolCall",
+     "server": "quintal-tools",
+     "toolName": "broken_tool",
+     "connectorId": null,
+     "connectorName": null,
+     "toolTitle": null
+    }
+   }
+  },
+  {
+   "sessionUpdate": "tool_call_update",
+   "toolCallId": "guardian_assessment:bfa7cce2-1138-431c-b829-768a6681fcba",
+   "status": "completed",
+   "content": [
+    {
+     "type": "content",
+     "content": {
+      "type": "text",
+      "text": "Status: Approved\nAction: MCP broken_tool on quintal-tools\nRisk: low\nAuthorization: high\nRationale: The user explicitly authorized one invocation of broken_tool; the call is routine and described as always reporting an error, with no indicated side effects."
+     }
+    }
+   ],
+   "rawOutput": {
+    "threadId": "01a18ee3-6e0e-7643-89c0-9a336866e582",
+    "turnId": "01a18ee3-6f4e-7bd2-893a-eaadc29b597b",
+    "startedAtMs": 1793398643393,
+    "completedAtMs": 1793398645124,
+    "reviewId": "bfa7cce2-1138-431c-b829-768a6681fcba",
+    "targetItemId": "exec-940c82d8-4ce4-4d20-925a-f4c21e1575ce",
+    "decisionSource": "agent",
+    "review": {
+     "status": "approved",
+     "riskLevel": "low",
+     "userAuthorization": "high",
+     "rationale": "The user explicitly authorized one invocation of broken_tool; the call is routine and described as always reporting an error, with no indicated side effects."
+    },
+    "action": {
+     "type": "mcpToolCall",
+     "server": "quintal-tools",
+     "toolName": "broken_tool",
+     "connectorId": null,
+     "connectorName": null,
+     "toolTitle": null
+    }
+   }
+  },
+  {
+   "sessionUpdate": "tool_call_update",
+   "toolCallId": "exec-940c82d8-4ce4-4d20-925a-f4c21e1575ce",
+   "status": "failed",
+   "rawOutput": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "broken_tool failed: the office is closed."
+      }
+     ],
+     "structuredContent": null,
+     "_meta": null
+    },
+    "error": null
+   }
+  }
+ ]
+}

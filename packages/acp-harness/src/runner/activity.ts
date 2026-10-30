@@ -25,6 +25,13 @@ export function toolOutcome(update: Record<string, unknown>): StepState | undefi
     result.details && typeof result.details === 'object'
       ? (result.details as Record<string, unknown>)
       : {};
+  // Codex reports an MCP call — every quintal tool — as `{ result, error }`,
+  // where `result` is the server's own CallToolResult. Its content is the
+  // evidence, one level down (QUIN-58).
+  const mcp =
+    result.result && typeof result.result === 'object'
+      ? (result.result as Record<string, unknown>)
+      : {};
   // Observed ACP payloads: Codex exit_code; opencode metadata.exit; OMP details.exitCode.
   const code =
     update.exitCode ??
@@ -37,6 +44,7 @@ export function toolOutcome(update: Record<string, unknown>): StepState | undefi
     (typeof code === 'number' && code !== 0) ||
     update.status === 'failed' ||
     result.isError === true ||
+    mcp.isError === true ||
     result.error
   )
     return 'failed';
@@ -47,6 +55,7 @@ export function toolOutcome(update: Record<string, unknown>): StepState | undefi
       (key) => typeof result[key] === 'string',
     ) ||
     (Array.isArray(result.content) && result.content.length > 0) ||
+    (Array.isArray(mcp.content) && mcp.content.length > 0) ||
     (Array.isArray(update.content) && update.content.length > 0);
   if (update.status === 'completed') return hasResult ? 'success' : 'unknown';
   if (update.status === 'in_progress') return 'running';
