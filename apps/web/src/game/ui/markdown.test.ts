@@ -44,6 +44,13 @@ describe('an agent reply as Markdown', () => {
     assert.match(html, /<pre[^>]*><code[^>]*>const y = 1;\n<\/code><\/pre>/);
   });
 
+  it('keeps the number an ordered list starts at', async () => {
+    const html = await render('4. Resume at step four\n5. Finish');
+    assert.match(html, /<ol start="4"[^>]*>/);
+    const fromOne = await render('1. one\n2. two');
+    assert.doesNotMatch(fromOne, /start=/);
+  });
+
   it('shows raw HTML as the text it was', async () => {
     const html = await render('look <script>alert(1)</script> and <img src=x onerror=alert(1)>');
     assert.doesNotMatch(html, /<script/);

@@ -84,7 +84,13 @@ const components: Components = {
   h5: ({ children }) => <p className="mb-1 mt-2 font-medium text-white/90">{children}</p>,
   h6: ({ children }) => <p className="mb-1 mt-2 font-medium text-white/90">{children}</p>,
   ul: ({ children }) => <ul className="my-1 list-disc space-y-0.5 pl-5">{children}</ul>,
-  ol: ({ children }) => <ol className="my-1 list-decimal space-y-0.5 pl-5">{children}</ol>,
+  // `start` carries a list that picks up mid-way ("4. Resume…"), including
+  // one continued from the previous post of a split reply.
+  ol: ({ children, start }) => (
+    <ol start={start} className="my-1 list-decimal space-y-0.5 pl-5">
+      {children}
+    </ol>
+  ),
   li: ({ children }) => <li className="break-words [&>p]:my-0">{children}</li>,
   blockquote: ({ children }) => (
     <blockquote className="my-1 border-l-2 border-white/20 pl-3 text-white/70">{children}</blockquote>
