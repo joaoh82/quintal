@@ -12,6 +12,7 @@ import {
   activityPresentation,
   collapsedActivityItems,
 } from './activityPresentation';
+import { Markdown } from './Markdown';
 
 const glyph = {
   pending: '○',
@@ -27,9 +28,9 @@ const elapsed = (start: number, end: number) =>
 
 function Message({ item }: { item: ActivityItem }) {
   return (
-    <p data-activity-message data-message-id={item.id} className="my-1 whitespace-pre-wrap break-words leading-snug text-white/90">
-      {item.text}
-    </p>
+    <div data-activity-message data-message-id={item.id} className="my-1 leading-snug text-white/90 [&>:first-child]:mt-0 [&>:last-child]:mb-0">
+      <Markdown text={item.text} />
+    </div>
   );
 }
 
