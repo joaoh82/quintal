@@ -14,6 +14,8 @@
  * but the renderer should never produce them in the first place.
  */
 
+import type { TeamRef } from '@quintal/shared';
+
 export type Segment =
   /** Words, as written. */
   | { kind: 'text'; text: string }
@@ -105,8 +107,12 @@ export function segments(line: string, teams: readonly string[] = []): Segment[]
   return out;
 }
 
-/** A stretch of prose, with its `@team`s picked out. */
-function textOrTeams(text: string, teams: readonly string[]): Segment[] {
+/**
+ * A stretch of prose, with its `@team`s picked out and nothing else. The
+ * Markdown renderer has found the links already, and calls this only on
+ * prose — never on code, where `@team` is something being written about.
+ */
+export function textOrTeams(text: string, teams: readonly string[]): Segment[] {
   if (teams.length === 0) return [{ kind: 'text', text }];
   const byLower = new Map(teams.map((name) => [name.toLowerCase(), name]));
   const out: Segment[] = [];
@@ -121,4 +127,14 @@ function textOrTeams(text: string, teams: readonly string[]): Segment[] {
   }
   if (cursor < text.length) out.push({ kind: 'text', text: text.slice(cursor) });
   return out;
+}
+
+/** "engineering: Claude, Codex and Grok" — the tooltip on a team chip. */
+export function describeTeam(name: string, teams: readonly TeamRef[]): string {
+  const team = teams.find((candidate) => candidate.name === name);
+  const names = team?.members.map((member) => member.name) ?? [];
+  if (names.length === 0) return `${name}: a team with nobody on it`;
+  const list =
+    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${name}: ${list}`;
 }

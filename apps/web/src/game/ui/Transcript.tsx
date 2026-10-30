@@ -10,7 +10,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { ApprovalState } from '../approvals';
 import { ApprovalCard } from './ApprovalCard';
-import { segments } from './links';
+import { describeTeam, segments } from './links';
+import { Markdown } from './Markdown';
 import { TurnActivity } from './TurnActivity';
 
 /**
@@ -25,12 +26,13 @@ export function timeOf(sentAt: number): string {
 }
 
 /**
- * One line of chat, with its addresses live. Text stays text — the line is
- * whatever was typed, never markup — and each `http(s)://` or `www.` in it
- * becomes an anchor that opens away from the office: a new tab on the web,
- * the system browser in the desktop app, which sends every off-origin
- * `_blank` there. The click stays in the anchor so nothing behind the
- * transcript (the overlay's close-on-backdrop, the map) takes it as its own.
+ * One line of chat from a person, with its addresses live. Text stays text —
+ * the line is whatever was typed, never markup — and each `http(s)://` or
+ * `www.` in it becomes an anchor that opens away from the office: a new tab
+ * on the web, the system browser in the desktop app, which sends every
+ * off-origin `_blank` there. The click stays in the anchor so nothing behind
+ * the transcript (the overlay's close-on-backdrop, the map) takes it as its
+ * own. An agent's line is Markdown instead: see `Markdown`.
  */
 function MessageText({ text, teams }: { text: string; teams: readonly TeamRef[] }) {
   return segments(
@@ -60,16 +62,6 @@ function MessageText({ text, teams }: { text: string; teams: readonly TeamRef[] 
       <Fragment key={index}>{segment.text}</Fragment>
     ),
   );
-}
-
-/** "engineering: Claude, Codex and Grok" — the tooltip on a team chip. */
-function describeTeam(name: string, teams: readonly TeamRef[]): string {
-  const team = teams.find((candidate) => candidate.name === name);
-  const names = team?.members.map((member) => member.name) ?? [];
-  if (names.length === 0) return `${name}: a team with nobody on it`;
-  const list =
-    names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  return `${name}: ${list}`;
 }
 
 interface TranscriptProps {
@@ -190,17 +182,25 @@ export function Transcript({
             detailLevel={activityDetailLevel}
           />
         ) : (
-          <p key={`${message.from}-${message.sentAt}`} className="leading-snug">
+          <div key={`${message.from}-${message.sentAt}`} className="leading-snug">
             <span className="font-mono text-[10px] text-white/35">{timeOf(message.sentAt)} </span>
             <span className={message.fromKind === 'agent' ? 'text-sky-300' : 'text-emerald-300'}>
               {message.fromKind === 'agent' ? '◆ ' : ''}
               {message.fromName}
             </span>
             <span className="text-white/45">: </span>
-            <span className="whitespace-pre-wrap break-words text-white/90">
-              <MessageText text={message.text} teams={teams ?? []} />
-            </span>
-          </p>
+            {message.fromKind === 'agent' ? (
+              // A reply that opens with a sentence keeps it on the speaker's
+              // line, as plain chat does; a table or a list starts below.
+              <div className="contents text-white/90 [&>p:first-child]:inline">
+                <Markdown text={message.text} teams={teams ?? []} />
+              </div>
+            ) : (
+              <span className="whitespace-pre-wrap break-words text-white/90">
+                <MessageText text={message.text} teams={teams ?? []} />
+              </span>
+            )}
+          </div>
         ))
       )}
     </div>
