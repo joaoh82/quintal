@@ -464,6 +464,63 @@ describe('posting in a channel', () => {
     for (const post of posts) assert.ok(post.length <= 250, `post too long: ${post.length}`);
   });
 
+  /** Every fence opened in a post is closed in the same post. */
+  const fencesBalance = (post: string): boolean =>
+    (post.match(/^\s*```/gm) ?? []).length % 2 === 0;
+
+  it('never cuts a fenced block at a blank line inside it', () => {
+    const fence = ['```ts', 'const a = 1;', '', 'const b = 2;', '```'].join('\n');
+    // Long enough that a cut at any blank line would fall inside the fence.
+    const text = [`Intro. ${'x'.repeat(165)}`, fence, `Outro. ${'w'.repeat(100)}`].join('\n\n');
+    const posts = toPosts(text, 200);
+
+    assert.ok(posts.length > 1);
+    for (const post of posts) assert.ok(fencesBalance(post), `unbalanced fence in: ${post}`);
+    assert.ok(posts.some((post) => post.includes(fence)), 'the block arrives whole, blank line and all');
+    assert.equal(posts.join('\n\n'), text, 'nothing was lost');
+  });
+
+  it('closes and reopens a fenced block too long for one post', () => {
+    const lines = Array.from({ length: 30 }, (_, i) => `line ${i} ${'c'.repeat(20)}`);
+    const text = ['Here:', ['```sh', ...lines, '```'].join('\n')].join('\n\n');
+    const posts = toPosts(text, 250);
+
+    assert.ok(posts.length > 2);
+    for (const post of posts) {
+      assert.ok(post.length <= 250, `post too long: ${post.length}`);
+      assert.ok(fencesBalance(post), `unbalanced fence in: ${post}`);
+    }
+    assert.match(posts[0] ?? '', /^Here:\n\n```sh\n/, 'the block starts in the post already going');
+    const pieces = posts.flatMap((post) => [...post.matchAll(/```sh\n([\s\S]*?)\n```/g)].map((m) => m[1]!));
+    assert.equal(pieces.length, posts.length, 'each piece reopens with its info string');
+    assert.deepEqual(pieces.join('\n').split('\n'), lines, 'every line of code, in order, once');
+  });
+
+  it('repeats a long table\'s header in every piece', () => {
+    const header = '| file | change |\n| --- | --- |';
+    const rows = Array.from({ length: 20 }, (_, i) => `| f${i}.ts | ${'r'.repeat(20)} |`);
+    const posts = toPosts(`${header}\n${rows.join('\n')}`, 200);
+
+    assert.ok(posts.length > 1);
+    for (const post of posts) {
+      assert.ok(post.length <= 200, `post too long: ${post.length}`);
+      assert.ok(post.startsWith(`${header}\n`), `a piece without its header: ${post}`);
+    }
+    assert.deepEqual(posts.flatMap((post) => post.split('\n').slice(2)), rows);
+  });
+
+  it('keeps the note that there is more out of a fence', () => {
+    const fence = (i: number): string => ['```', ...Array.from({ length: 8 }, () => `${i} ${'q'.repeat(20)}`), '```'].join('\n');
+    const text = Array.from({ length: 12 }, (_, i) => fence(i)).join('\n\n');
+    const posts = toPosts(text, 250);
+
+    assert.equal(posts.length, MAX_POSTS);
+    const last = posts[MAX_POSTS - 1] ?? '';
+    assert.ok(last.length <= 250, `post too long: ${last.length}`);
+    assert.ok(fencesBalance(last), `the note landed inside code: ${last}`);
+    assert.match(last, /```\n\n…\(continued — ask me for more\)$/);
+  });
+
   it('posts nothing when there is nothing to post', () => {
     assert.deepEqual(toPosts('  \n '), []);
   });
