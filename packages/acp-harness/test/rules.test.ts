@@ -464,9 +464,17 @@ describe('posting in a channel', () => {
     for (const post of posts) assert.ok(post.length <= 250, `post too long: ${post.length}`);
   });
 
-  /** Every fence opened in a post is closed in the same post. */
+  /**
+   * Every fence opened in a post is closed in the same post, as a Markdown
+   * renderer reads it: a fence line indented four spaces or more is code, so
+   * one there means a fence that did not open or a close that did not close.
+   */
   const fencesBalance = (post: string): boolean =>
-    (post.match(/^\s*```/gm) ?? []).length % 2 === 0;
+    !/^ {4,}```/m.test(post) && (post.match(/^ {0,3}```/gm) ?? []).length % 2 === 0;
+
+  /** The fences in the text before `marker` are all closed. */
+  const outsideCode = (post: string, marker: string): boolean =>
+    post.includes(marker) && fencesBalance(post.slice(0, post.indexOf(marker)));
 
   it('never cuts a fenced block at a blank line inside it', () => {
     const fence = ['```ts', 'const a = 1;', '', 'const b = 2;', '```'].join('\n');
@@ -494,6 +502,32 @@ describe('posting in a channel', () => {
     const pieces = posts.flatMap((post) => [...post.matchAll(/```sh\n([\s\S]*?)\n```/g)].map((m) => m[1]!));
     assert.equal(pieces.length, posts.length, 'each piece reopens with its info string');
     assert.deepEqual(pieces.join('\n').split('\n'), lines, 'every line of code, in order, once');
+  });
+
+  it('moves a fence nested in a list item to the margin when it starts a post', () => {
+    const code = Array.from({ length: 8 }, (_, i) => `    code ${i}`);
+    const text = ['10. Run this:', ['    ```js', ...code, '    ```'].join('\n'), 'Done and more'].join('\n\n');
+    const posts = toPosts(text, 100);
+
+    assert.ok(posts.length > 1);
+    for (const post of posts) {
+      assert.ok(post.length <= 100, `post too long: ${post.length}`);
+      assert.ok(fencesBalance(post), `unbalanced fence in: ${JSON.stringify(post)}`);
+    }
+    const last = posts.find((post) => post.includes('Done and more')) ?? '';
+    assert.ok(outsideCode(last, 'Done and more'), `swallowed by code: ${JSON.stringify(last)}`);
+    const inside = posts.flatMap((post) => [...post.matchAll(/^```js\n([\s\S]*?)\n```$/gm)].map((m) => m[1]!));
+    assert.deepEqual(inside.join('\n').split('\n'), code.map((line) => line.trim()));
+  });
+
+  it('reads a reply that opens with an indented fence as that fence', () => {
+    const code = Array.from({ length: 12 }, (_, i) => `    line ${i}`);
+    const text = [['    ```', ...code, '    ```'].join('\n'), 'After.'].join('\n\n');
+    const posts = toPosts(text, 80);
+
+    for (const post of posts) assert.ok(fencesBalance(post), `unbalanced fence in: ${JSON.stringify(post)}`);
+    assert.ok(posts.some((post) => outsideCode(post, 'After.')));
+    assert.deepEqual(toPosts('    ```js\n    x\n    ```\n\nDone'), ['```js\nx\n```\n\nDone']);
   });
 
   it('repeats a long table\'s header in every piece', () => {

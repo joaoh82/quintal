@@ -103,30 +103,38 @@ export const MAX_POSTS = 5;
  * one block whatever blank lines it holds, and one too long for a post is
  * cut between its lines — a fence closed and reopened, a table with its
  * header again — so every post is Markdown that stands up alone. A line
- * longer than a post is cut rather than dropped. Past five posts the last
+ * longer than a post is cut rather than dropped. A block that starts a post
+ * starts it at column 0, all its lines moved together: a fence nested in a
+ * list item arrives as a fence, not as an opening line with its indent
+ * trimmed off and a closing line that, still indented, closes nothing. Past
+ * five posts the last
  * one says there is more, as the bubbles do — an agent that stops
  * mid-thought reads as broken, in a channel as much as aloud.
  */
 export function toPosts(text: string, maxLength: number = CHANNEL_POST_MAX_LENGTH): string[] {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return [];
-  if (trimmed.length <= maxLength) return [trimmed];
+  // Blank lines off the front and whitespace off the end, but not the first
+  // line's indent: it is how the block that line opens is read.
+  const trimmed = text.replace(/^(?:[ \t]*\n)+/, '').trimEnd();
+  if (trimmed.trim().length === 0) return [];
+  if (trimmed.length <= maxLength && !/^\s/.test(trimmed)) return [trimmed];
 
   const all: string[] = [];
   let current = '';
   const flush = (): void => {
-    if (current.trim().length > 0) all.push(current.trim());
+    if (current.trim().length > 0) all.push(current.trimEnd());
     current = '';
   };
 
-  for (const block of markdownBlocks(trimmed)) {
-    const body = block.lines.join('\n');
-    const candidate = current.length === 0 ? body : `${current}${block.before}${body}`;
-    if (candidate.length <= maxLength) {
+  for (const found of markdownBlocks(trimmed)) {
+    const candidate = `${current}${found.before}${found.lines.join('\n')}`;
+    if (current.length > 0 && candidate.length <= maxLength) {
       current = candidate;
       continue;
     }
 
+    // From here the block starts a post, or is cut into pieces that do.
+    const block = atColumnZero(found);
+    const body = block.lines.join('\n');
     if (body.length <= maxLength) {
       flush();
       current = body;
@@ -194,6 +202,26 @@ function startsTable(lines: readonly string[], index: number): boolean {
     delimiter.includes('|') &&
     TABLE_DELIMITER.test(delimiter)
   );
+}
+
+/**
+ * A block moved to the left margin as a whole: every line loses the first
+ * line's indent, as far as it has it, and a fence's closing line is put at
+ * the margin with its opening line. Read alone, an indent four spaces deep
+ * makes a fence into an indented code block, and a closing fence into code.
+ */
+function atColumnZero(block: Block): Block {
+  const indent = /^[ \t]*/.exec(block.lines[0]!)![0].length;
+  const lines = indent === 0 ? [...block.lines] : block.lines.map((line) => {
+    const lead = /^[ \t]*/.exec(line)![0].length;
+    return line.slice(Math.min(lead, indent));
+  });
+  if (block.kind === 'fence' && lines.length > 1) {
+    const fence = fenceOpening(lines[0]!)!.fence;
+    const last = lines.length - 1;
+    if (closesFence(lines[last]!, fence)) lines[last] = lines[last]!.trimStart();
+  }
+  return { ...block, lines };
 }
 
 /** The text, as the blocks it is made of, in order. */
@@ -282,7 +310,8 @@ function cutBlock(block: Block, maxLength: number, firstRoom: number): Cut {
     const opening = fenceOpening(open)!;
     const last = block.lines[block.lines.length - 1]!;
     const closed = block.lines.length > 1 && closesFence(last, opening.fence);
-    const close = closed ? last : `${opening.indent}${opening.fence}`;
+    // The block is at column 0 by now, so the close is too.
+    const close = closed ? last : opening.fence;
     const inside = block.lines.slice(1, closed ? -1 : undefined);
     const frame = open.length + close.length + 2;
     if (maxLength - frame > 0 && inside.length > 0) {
