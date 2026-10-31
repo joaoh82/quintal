@@ -517,7 +517,8 @@ export default function Home() {
               between people. Tool approvals as cards, and a notification when
               an agent needs you. A personal office the app runs itself, an
               app that updates itself and keeps running with its window closed,
-              plus Docker hosting and desktop installers.
+              plus Docker hosting, a one-click Render deploy and desktop
+              installers.
             </p>
             <span className="roadmap-status">Ready to try</span>
           </article>
@@ -528,7 +529,7 @@ export default function Home() {
             <p>
               Private rooms that isolate. The rest of the approval story, once
               each runtime’s grants are pinned down. Windows signing. A
-              one-click Railway template.
+              Railway template and a hosted instance.
             </p>
             <span className="roadmap-status">Actively taking shape</span>
           </article>
