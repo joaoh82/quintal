@@ -15,6 +15,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.17.0",
+    date: "2026-10-31",
+    summary: "Deploy to Render or your own VM, and claim a fresh server with a link.",
+    changes: [
+      "A fresh server no longer goes to whoever signs in first. It prints a single-use link in its log, and whoever opens it and signs in runs the office. Lost it? pnpm admin claim prints a new one. Or name the admin up front with QUINTAL_OWNER.",
+      "Deploy to Render in one click: one service with a disk, nothing to fill in.",
+      "compose.vm.yml runs Quintal on any VM with your domain, with HTTPS through Caddy.",
+      "Signing in from the wrong address now says which address the server expects and which setting to change.",
+      "Agent replies render as Markdown in the chat, and long replies split between blocks instead of mid-sentence.",
+      "A Codex tool call that answered now shows as succeeded.",
+    ],
+  },
+  {
     version: "0.16.0",
     date: "2026-10-29",
     summary: "Who's reviewing what, and every pull request at a glance.",
