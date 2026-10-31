@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { mayManageGithubToken } from '@quintal/shared';
-import { describeOfficeGithub, getDb, getInstanceSettings, getOfficeSettings, isInstanceAdmin } from '@quintal/shared/db';
+import { describeOfficeGithub, getDb, getInstanceSettings, getOfficeSettings, hasInstanceAdmin, isInstanceAdmin } from '@quintal/shared/db';
 
 
 import { GithubCard } from './GithubCard';
@@ -33,13 +33,14 @@ export default async function OfficeSettingsPage() {
 
   // Two different things, from two different places: how *this office* works,
   // and what the *deployment* calls itself.
-  const [settings, instance, github, canChangeInstance] = await Promise.all([
+  const [settings, instance, github, canChangeInstance, claimed] = await Promise.all([
     getOfficeSettings(db, workspace.id),
     getInstanceSettings(db),
     describeOfficeGithub(db, workspace.id),
     // Naming the whole deployment belongs to whoever set it up, not to
     // everybody who signs in — see `isInstanceAdmin`.
     session.session.isGuest ? false : isInstanceAdmin(db, session.user.id),
+    hasInstanceAdmin(db),
   ]);
 
   return (
@@ -49,6 +50,7 @@ export default async function OfficeSettingsPage() {
         instanceName={instance.name}
         workspaceName={workspace.name}
         canChangeInstance={canChangeInstance}
+        unclaimed={!claimed && !session.session.isGuest}
         canChangeOffice={!session.session.isGuest}
         host={host}
       />

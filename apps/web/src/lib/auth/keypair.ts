@@ -10,6 +10,7 @@ import {
   isPubkeyHex,
   isSignatureHex,
   parseAuthPayload,
+  instanceOwner,
   PERSONAL_REFUSALS,
   personalMode,
   verifyAuthSignature,
@@ -19,7 +20,7 @@ import {
 import {
   ensurePersonalWorkspace,
   getDb,
-  hasInstanceAdmin,
+  redeemClaimToken,
   redeemInviteLink,
   users,
   type Database,
@@ -59,6 +60,8 @@ const verifyBody = z.object({
   payload: z.string(),
   /** Present when arriving through a guest link. */
   inviteToken: z.string().optional(),
+  /** Present when arriving through the claim link of an instance nobody runs. */
+  claimToken: z.string().optional(),
   /**
    * With a guest link: what to call the person walking in. A guest keeps the
    * name they arrived with, so arrival is the one moment they choose it.
@@ -101,11 +104,34 @@ function expectedOrigin(baseURL: string): string {
  * future desktop app sends none. So this closes the browser attack without
  * shutting the door on non-browser clients.
  */
-function crossOriginRequest(headers: Headers | undefined, baseURL: string): boolean {
+function crossOriginRequest(headers: Headers | undefined, baseURL: string): string | null {
   const origin = headers?.get('origin');
-  if (!origin) return false;
-  return origin !== expectedOrigin(baseURL);
+  if (!origin || origin === expectedOrigin(baseURL)) return null;
+  return origin;
 }
+
+/**
+ * What to say when a sign-in arrives from an origin this server is not set up
+ * for. Usually not an attack at all but a deployment whose `BETTER_AUTH_URL`
+ * is not the address people type — and then the person reading this is the
+ * one who can fix it, so it names both values and the variable.
+ */
+export function wrongOriginMessage(origin: string, expected: string): string {
+  return (
+    `This office is set up for ${expected}, but this page is at ${origin}. ` +
+    `Open ${expected} instead — or, if ${origin} is the right address, ` +
+    `set BETTER_AUTH_URL=${origin} on the server and restart it.`
+  );
+}
+
+/** Why a claim link was refused, in words for the person holding it. */
+export const CLAIM_REFUSALS = {
+  unknown:
+    'That claim link is not the current one. Each restart prints a new link, and `pnpm admin claim` makes another.',
+  claimed: 'This office already has somebody in charge. Ask them, or use `pnpm admin grant` on the server.',
+  personal: 'This is a personal office. Its owner already runs it.',
+  guest: 'A guest link and a claim link cannot be used together.',
+} as const;
 
 export interface KeypairAuthOptions {
   /**
@@ -120,11 +146,17 @@ export interface KeypairAuthOptions {
    * an owner without setting a process-wide variable.
    */
   personal?: PersonalMode | null;
+  /**
+   * The key named in `QUINTAL_OWNER`, if any — see `instanceOwner`. Defaults
+   * to the environment, for the same reason as `personal`.
+   */
+  owner?: string | null;
 }
 
 export const keypairAuth = (options: KeypairAuthOptions = {}) => {
   const database = () => options.db ?? getDb();
   const personal = () => (options.personal === undefined ? personalMode() : options.personal);
+  const owner = () => (options.owner === undefined ? instanceOwner() : options.owner);
 
   return {
     id: 'keypair',
@@ -172,6 +204,14 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
         { method: 'POST', body: challengeBody },
         async (ctx) => {
           const { pubkey } = ctx.body;
+          // The same refusal `verify` makes, made before anybody is asked to
+          // sign: a misconfigured origin should not cost an extension prompt.
+          const elsewhere = crossOriginRequest(ctx.headers, ctx.context.baseURL);
+          if (elsewhere) {
+            throw new APIError('FORBIDDEN', {
+              message: wrongOriginMessage(elsewhere, expectedOrigin(ctx.context.baseURL)),
+            });
+          }
           if (!isPubkeyHex(pubkey)) {
             throw new APIError('BAD_REQUEST', {
               message: 'pubkey must be a 32-byte x-only public key in hex.',
@@ -211,14 +251,15 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
         '/verify',
         { method: 'POST', body: verifyBody, requireHeaders: true },
         async (ctx) => {
-          const { pubkey, sig, payload, inviteToken, name: askedName } = ctx.body;
+          const { pubkey, sig, payload, inviteToken, claimToken, name: askedName } = ctx.body;
 
           const invalid = (message: string) =>
             new APIError('UNAUTHORIZED', { message });
 
-          if (crossOriginRequest(ctx.headers, ctx.context.baseURL)) {
+          const elsewhere = crossOriginRequest(ctx.headers, ctx.context.baseURL);
+          if (elsewhere) {
             throw new APIError('FORBIDDEN', {
-              message: 'Sign-in must come from this site.',
+              message: wrongOriginMessage(elsewhere, expectedOrigin(ctx.context.baseURL)),
             });
           }
 
@@ -274,6 +315,12 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             if (pubkey !== mode.owner) {
               throw new APIError('FORBIDDEN', { message: PERSONAL_REFUSALS.notOwner });
             }
+            if (claimToken !== undefined) {
+              throw new APIError('FORBIDDEN', { message: CLAIM_REFUSALS.personal });
+            }
+          }
+          if (claimToken !== undefined && inviteToken !== undefined) {
+            throw new APIError('FORBIDDEN', { message: CLAIM_REFUSALS.guest });
           }
 
           const db = database();
@@ -302,10 +349,12 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             // they give here, and the Guest badge says the rest.
             const name =
               inviteToken !== undefined ? (normaliseDisplayName(askedName) ?? '') : '';
-            // The first account on an instance is the person standing it up,
-            // and somebody has to be able to name the place. After that, admin
-            // is granted deliberately — see `pnpm admin` — or not at all.
-            const instanceAdmin = !(await hasInstanceAdmin(db));
+            // Not "the first account in", any more: on a public URL that was a
+            // race won by whoever found the sign-in page first. The admin is
+            // named — the personal office's owner, or `QUINTAL_OWNER` — or
+            // arrives through the claim link below, or is granted later with
+            // `pnpm admin`.
+            const instanceAdmin = pubkey === (mode?.owner ?? owner());
             await db.insert(users).values({ id, name, pubkey, instanceAdmin });
             user = { id, name, pubkey };
           }
@@ -318,6 +367,16 @@ export const keypairAuth = (options: KeypairAuthOptions = {}) => {
             name: user.name,
             pubkey,
           });
+
+          // After the account exists, because the claim is a grant to it — and
+          // before the session, so a refused link refuses the sign-in it came
+          // with rather than quietly signing somebody in as a member.
+          if (claimToken !== undefined) {
+            const claimed = await redeemClaimToken(db, claimToken, user.id);
+            if (!claimed.ok) {
+              throw new APIError('FORBIDDEN', { message: CLAIM_REFUSALS[claimed.reason] });
+            }
+          }
 
           let isGuest = false;
           let guestWorkspaceId: string | null = null;

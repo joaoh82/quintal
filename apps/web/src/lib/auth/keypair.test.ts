@@ -14,6 +14,8 @@ import {
 import {
   createInviteLink,
   findMembership,
+  isInstanceAdmin,
+  mintClaimToken,
   listWorkspacesForUser,
   schema,
   sessions,
@@ -25,7 +27,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { eq } from 'drizzle-orm';
 
-import { keypairAuth } from './keypair';
+import { CLAIM_REFUSALS, keypairAuth, wrongOriginMessage } from './keypair';
 
 /**
  * The sign-in path, end to end, against a real database.
@@ -39,7 +41,7 @@ import { keypairAuth } from './keypair';
 
 const ORIGIN = 'https://office.example.test';
 
-function buildAuth(db: Database, personal: PersonalMode | null = null) {
+function buildAuth(db: Database, personal: PersonalMode | null = null, owner: string | null = null) {
   return betterAuth({
     appName: 'Quintal test',
     baseURL: ORIGIN,
@@ -55,13 +57,13 @@ function buildAuth(db: Database, personal: PersonalMode | null = null) {
     // Explicit rather than read from the environment, so a developer with a
     // personal office configured in their shell does not get a different test
     // suite from CI.
-    plugins: [keypairAuth({ db, personal })],
+    plugins: [keypairAuth({ db, personal, owner })],
   });
 }
 
-async function setup(personal: PersonalMode | null = null) {
+async function setup(personal: PersonalMode | null = null, owner: string | null = null) {
   const db = await createTestDb();
-  return { db, auth: buildAuth(db, personal) };
+  return { db, auth: buildAuth(db, personal, owner) };
 }
 
 function keypair() {
@@ -87,6 +89,7 @@ interface VerifyInput {
   sig: string;
   payload: string;
   inviteToken?: string;
+  claimToken?: string;
   name?: string;
 }
 
@@ -102,9 +105,10 @@ async function verify(
 async function verifyFails(
   auth: ReturnType<typeof buildAuth>,
   body: VerifyInput,
+  headers: Headers = new Headers(),
 ): Promise<string> {
   try {
-    await verify(auth, body);
+    await verify(auth, body, headers);
   } catch (error: unknown) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -401,7 +405,23 @@ describe('verify', () => {
     } catch (error: unknown) {
       message = error instanceof Error ? error.message : String(error);
     }
-    assert.match(message, /must come from this site/i);
+    // Usually not an attack but a BETTER_AUTH_URL that is not the address
+    // people type, so the refusal names both and the variable to change.
+    assert.equal(message, wrongOriginMessage('https://evil.example.test', ORIGIN));
+    assert.match(message, /set up for https:\/\/office\.example\.test, but this page is at https:\/\/evil\.example\.test/);
+    assert.match(message, /BETTER_AUTH_URL=https:\/\/evil\.example\.test/);
+  });
+
+  it('refuses the challenge from another origin too, before anybody signs', async () => {
+    const { auth } = await setup();
+    const { pubkey } = keypair();
+    await assert.rejects(
+      auth.api.keypairChallenge({ body: { pubkey }, headers: new Headers({ origin: 'http://localhost:3000' }) }),
+      (error: Error) => error.message === wrongOriginMessage('http://localhost:3000', ORIGIN),
+    );
+    // Same origin, and no origin at all, still get a nonce.
+    await auth.api.keypairChallenge({ body: { pubkey }, headers: new Headers({ origin: ORIGIN }) });
+    await auth.api.keypairChallenge({ body: { pubkey }, headers: new Headers() });
   });
 
   it('still accepts a request with no Origin, for non-browser clients', async () => {
@@ -775,5 +795,103 @@ describe('a personal office', () => {
     const { auth } = await setup(null);
     await verify(auth, await attempt(auth, keypair()));
     await verify(auth, await attempt(auth, keypair()));
+  });
+});
+
+/**
+ * Who ends up running a shared server (QUIN-87). It used to be whoever signed
+ * in first — on a public URL, whoever found the sign-in page first.
+ */
+describe('who runs a shared server', () => {
+  async function attempt(
+    auth: ReturnType<typeof buildAuth>,
+    who: ReturnType<typeof keypair>,
+    extra: { claimToken?: string; inviteToken?: string } = {},
+  ): Promise<VerifyInput> {
+    const nonce = await challenge(auth, who.pubkey);
+    const payload = buildAuthPayload({ origin: ORIGIN, nonce, timestamp: nowSeconds() });
+    return { pubkey: who.pubkey, sig: signAuthPayload(who.secretKey, payload), payload, ...extra };
+  }
+
+  const adminOf = async (db: Database, pubkey: string) => {
+    const [row] = await db.select().from(users).where(eq(users.pubkey, pubkey));
+    return row?.instanceAdmin;
+  };
+
+  it('is not whoever signs in first on a fresh instance', async () => {
+    const { db, auth } = await setup();
+    const first = keypair();
+    await verify(auth, await attempt(auth, first));
+    assert.equal(await adminOf(db, first.pubkey), false);
+  });
+
+  it('is whoever signs in with the claim link, and only once', async () => {
+    const { db, auth } = await setup();
+    // Somebody else got to the sign-in page first. It no longer matters.
+    const racer = keypair();
+    await verify(auth, await attempt(auth, racer));
+
+    const token = await mintClaimToken(db);
+    const josh = keypair();
+    await verify(auth, await attempt(auth, josh, { claimToken: token }));
+    assert.equal(await adminOf(db, josh.pubkey), true);
+    assert.equal(await adminOf(db, racer.pubkey), false);
+
+    const late = keypair();
+    const message = await verifyFails(auth, await attempt(auth, late, { claimToken: token }));
+    assert.equal(message, CLAIM_REFUSALS.claimed);
+    assert.equal(await adminOf(db, late.pubkey), false);
+  });
+
+  it('lets somebody who already has an account claim with it', async () => {
+    const { db, auth } = await setup();
+    const josh = keypair();
+    await verify(auth, await attempt(auth, josh));
+    const token = await mintClaimToken(db);
+    await verify(auth, await attempt(auth, josh, { claimToken: token }));
+    assert.equal(await adminOf(db, josh.pubkey), true);
+  });
+
+  it('refuses a link a newer one replaced, and does not sign in with it', async () => {
+    const { db, auth } = await setup();
+    const old = await mintClaimToken(db);
+    await mintClaimToken(db);
+    const josh = keypair();
+    const message = await verifyFails(auth, await attempt(auth, josh, { claimToken: old }));
+    assert.equal(message, CLAIM_REFUSALS.unknown);
+    const sessionsFor = await db.select().from(sessions);
+    assert.equal(sessionsFor.length, 0, 'a refused claim is a refused sign-in, not a quiet member one');
+  });
+
+  it('refuses a claim made through a guest link', async () => {
+    const { db, auth } = await setup();
+    const host = await createTestUser(db, 'Host');
+    const { token: inviteToken } = await createInviteLink(db, {
+      workspaceId: host.workspaceId,
+      createdByUserId: host.id,
+    });
+    const claimToken = await mintClaimToken(db);
+    const guest = keypair();
+    const message = await verifyFails(auth, await attempt(auth, guest, { claimToken, inviteToken }));
+    assert.equal(message, CLAIM_REFUSALS.guest);
+    assert.equal(await isInstanceAdmin(db, host.id), false);
+  });
+
+  it('refuses a claim on a personal office, whose owner already runs it', async () => {
+    const owner = keypair();
+    const { db, auth } = await setup({ owner: owner.pubkey });
+    const claimToken = await mintClaimToken(db);
+    const message = await verifyFails(auth, await attempt(auth, owner, { claimToken }));
+    assert.equal(message, CLAIM_REFUSALS.personal);
+  });
+
+  it('is the key named in QUINTAL_OWNER from its first sign-in, and nobody else', async () => {
+    const owner = keypair();
+    const { db, auth } = await setup(null, owner.pubkey);
+    const before = keypair();
+    await verify(auth, await attempt(auth, before));
+    await verify(auth, await attempt(auth, owner));
+    assert.equal(await adminOf(db, owner.pubkey), true);
+    assert.equal(await adminOf(db, before.pubkey), false, 'signing in first earns nothing');
   });
 });

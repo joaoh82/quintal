@@ -114,6 +114,12 @@ signature is bound to that origin, so a signature phished by another site — or
 made for a different Quintal instance — will not verify here. Set it to the
 origin people actually type.
 
+Get it wrong and sign-in says so, naming both addresses: *This office is set
+up for https://office.example.com, but this page is at http://203.0.113.7:3000*,
+with the variable to change. The boot log prints the origin sign-in is bound
+to, and a value that is not a full `http(s)://` address stops the process at
+boot rather than serving a sign-in page that refuses everybody.
+
 Two consequences worth stating plainly:
 
 - **A lost key cannot be recovered.** We never had it. Tell your users to put
@@ -138,10 +144,39 @@ the name, because two deployments can be called the same thing and "am I on
 staging or production" is worth being able to answer at a glance.
 
 Only an instance admin can change it, along with the other instance-wide
-settings. The first account to sign in on a fresh instance becomes one, because
-somebody has to be able to name the place.
+settings.
 
-After that it is granted deliberately, from a shell on the machine:
+### Claiming a fresh instance
+
+Signing in first does not make you the admin: on a public URL that would hand
+the place to whoever found the sign-in page first. Instead, while nobody runs
+the instance, the server prints a **claim link** when it boots:
+
+```
+[quintal] Nobody runs this server yet. Open this link to claim it — it works once,
+[quintal] and a restart or `pnpm admin claim` replaces it:
+[quintal]   https://office.example.com/claim?t=claim1.…
+```
+
+Open it and sign in with the key you want to run the place with; that key
+becomes the admin, and the link stops working. Everybody who signs in without
+it is a member. Only a hash of the link is stored, there is one live link at a
+time, and every restart replaces it — so the newest line in the log is the one
+that works. Lost it? Print a fresh one:
+
+```bash
+pnpm admin claim
+# in the Docker image:
+docker compose exec quintal node packages/shared/dist/cli/admin.js claim
+```
+
+Or skip the link and name yourself up front: set `QUINTAL_OWNER=npub1…` (or the
+hex key) and that key is the admin from its first sign-in, with no link
+printed. A malformed value stops the server at boot.
+
+### Changing who runs it
+
+After that, admin is granted deliberately, from a shell on the machine:
 
 ```bash
 pnpm admin                 # who is in charge
@@ -149,14 +184,17 @@ pnpm admin grant  npub1…   # add somebody
 pnpm admin revoke npub1…   # remove somebody
 ```
 
+In the Docker image, `pnpm admin …` is `node packages/shared/dist/cli/admin.js …`
+via `docker compose exec quintal`.
+
 They have to have signed in at least once — an account appears when somebody
 arrives with a key, and inventing one from a shell would put a person in the
 office who has never been to it.
 
 There is no admin panel and this is not one. It is the smaller thing underneath:
 a way to say who may touch instance-wide settings, correctable from outside the
-app. That matters because "the first account" is often not the person running
-things — on any instance that has seen testing, the earliest key may be one
+app. That matters because whoever claimed the place is not always the person
+running it later — on any instance that has seen testing, it may be a key
 nobody uses.
 
 ## Running two servers on one machine

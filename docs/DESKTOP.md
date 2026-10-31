@@ -246,8 +246,8 @@ installs from, and the Node it runs on is the official build pinned in
    keychain — and tells the server whose office this is. Only that key can
    sign in; every other key is refused, and guest links can be neither made
    nor redeemed. This is not politeness: loopback is reachable by every
-   process on the machine, and a fresh database would otherwise make its
-   first account the admin.
+   process on the machine, and anything on it could otherwise sign in to
+   your office.
 2. It picks a loopback port. The one it used last time if that is free, so
    the address stays put; otherwise whatever the OS hands out. Never port
    3000, and never anything but `127.0.0.1` — the server's own default is

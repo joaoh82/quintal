@@ -285,6 +285,8 @@ export async function signIn(
     inviteToken?: string;
     /** With a guest link: what to call the person walking in. Ignored otherwise. */
     name?: string;
+    /** From a claim link: become the admin of an instance nobody runs yet. */
+    claimToken?: string;
   } = {},
 ): Promise<void> {
   const { nonce, origin } = await postJson<ChallengeResponse>(
@@ -312,5 +314,6 @@ export async function signIn(
     payload,
     ...(options.inviteToken ? { inviteToken: options.inviteToken } : {}),
     ...(options.inviteToken && options.name ? { name: options.name } : {}),
+    ...(options.claimToken ? { claimToken: options.claimToken } : {}),
   });
 }
