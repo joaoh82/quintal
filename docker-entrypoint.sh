@@ -45,4 +45,20 @@ if [ -z "${BETTER_AUTH_SECRET:-}" ]; then
   export BETTER_AUTH_SECRET
 fi
 
+# The address people open the office at, which every sign-in is bound to. Set
+# it yourself for a custom domain. Otherwise a platform that publishes the
+# service says where — Render as a full URL, Railway as a bare hostname — so a
+# one-click deploy works before anybody knows what its address will be. Only
+# then the local default.
+if [ -z "${BETTER_AUTH_URL:-}" ]; then
+  if [ -n "${RENDER_EXTERNAL_URL:-}" ]; then
+    BETTER_AUTH_URL=$RENDER_EXTERNAL_URL
+  elif [ -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]; then
+    BETTER_AUTH_URL="https://$RAILWAY_PUBLIC_DOMAIN"
+  else
+    BETTER_AUTH_URL=http://localhost:3000
+  fi
+  export BETTER_AUTH_URL
+fi
+
 exec node apps/server/dist/index.js

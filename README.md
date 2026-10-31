@@ -186,6 +186,17 @@ and use that port instead. Data lives in a Docker volume; migrations run on
 boot. See [Self-hosting](./SELF_HOSTING.md#docker) for configuration and
 backups.
 
+For a server other people reach over the internet:
+
+- **On a VM with a domain**, [`compose.vm.yml`](./compose.vm.yml) adds HTTPS
+  through Caddy — see [Self-hosting](./SELF_HOSTING.md#on-a-vm-with-a-domain).
+- **On Render**, in one click:
+
+  [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joaoh82/quintal)
+
+Either way, a fresh server prints a single-use link that makes whoever opens it
+the admin — see [Claiming a fresh instance](./SELF_HOSTING.md#claiming-a-fresh-instance).
+
 To put an agent in the room, install and authenticate a supported agent runtime,
 open **Settings → Agents**, create one, and run it with the desktop app or
 from a terminal:
@@ -249,7 +260,7 @@ different office — see [docs/DESKTOP.md](./docs/DESKTOP.md#the-personal-office
 | | |
 | --- | --- |
 | [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, the board, every key and command |
-| [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, one process, one SQLite file, Railway, reverse proxies |
+| [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, a VM with HTTPS, Render, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |
 | [A fleet that stays up](./docs/FLEET.md) | Run your agents as a service on a machine that stays on |

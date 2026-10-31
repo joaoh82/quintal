@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { manifests, root, setVersion, validateVersion } from './set-version.mjs';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { blueprint, manifests, root, setVersion, validateVersion } from './set-version.mjs';
 
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 if (process.argv.length !== 3) throw new Error('Usage: just release <semver>');
@@ -16,7 +18,8 @@ if (git('tag', '--list', tag)) throw new Error(`${tag} already exists; never mov
 git('var', 'GIT_AUTHOR_IDENT');
 git('var', 'GIT_COMMITTER_IDENT');
 setVersion(version);
-git('add', '--', ...manifests(), 'apps/desktop/src-tauri/Cargo.toml', 'apps/desktop/src-tauri/Cargo.lock');
+git('add', '--', ...manifests(), 'apps/desktop/src-tauri/Cargo.toml', 'apps/desktop/src-tauri/Cargo.lock',
+  ...(existsSync(join(root, blueprint)) ? [blueprint] : []));
 git('commit', '-s', '-m', `release: ${tag}`);
 git('tag', '-a', tag, '-m', `Quintal ${tag}`);
 // Either both refs land, or neither does. A failed push leaves recoverable local refs.
