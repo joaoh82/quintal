@@ -37,5 +37,20 @@ export function loadRootEnv(): void {
  * error would look like a bad key.
  */
 export function deploymentOrigin(): string {
-  return new URL(process.env.BETTER_AUTH_URL ?? `http://localhost:${devWebPort()}`).origin;
+  const raw = process.env.BETTER_AUTH_URL ?? `http://localhost:${devWebPort()}`;
+  // Read at boot by the room server's config, so a malformed value stops the
+  // process here, naming the variable, instead of as a bare "Invalid URL" or a
+  // sign-in page that refuses everybody.
+  let url: URL | null = null;
+  try {
+    url = new URL(raw);
+  } catch {
+    // reported below
+  }
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) {
+    throw new Error(
+      `BETTER_AUTH_URL must be the full address people open the office at, like https://office.example.com — not ${JSON.stringify(raw)}`,
+    );
+  }
+  return url.origin;
 }

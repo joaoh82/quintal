@@ -292,6 +292,15 @@ export const instanceSettings = sqliteTable('instance_settings', {
    * at a URL sees before they have an account here.
    */
   name: text('name').notNull().default(''),
+  /**
+   * SHA-256 of the one live claim link, while nobody runs the instance.
+   *
+   * One column on the one row, so there is never more than one link: minting a
+   * new one replaces the last. Only the hash is kept, as with guest links — a
+   * database that leaks should not hand out the place. Null once claimed, and
+   * on any instance that never needed one.
+   */
+  claimTokenHash: text('claim_token_hash'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .default(now)
     .$onUpdate(() => new Date())

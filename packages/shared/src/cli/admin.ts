@@ -1,10 +1,12 @@
 import { eq } from 'drizzle-orm';
 
 import { npubDecode, npubEncode, parsePubkey } from '../identity.js';
+import { claimUrl, mintClaimToken } from '../db/claim.js';
 import { closeDb, getDb } from '../db/client.js';
-import { loadRootEnv } from '../db/env.js';
+import { deploymentOrigin, loadRootEnv } from '../db/env.js';
 import { users } from '../db/schema.js';
 import {
+  hasInstanceAdmin,
   listInstanceAdmins,
   setInstanceAdmin,
 } from '../db/settings.js';
@@ -14,10 +16,10 @@ import { resolveDatabaseUrl } from '../db/url.js';
  * `pnpm admin` — who may change instance-wide settings.
  *
  * The whole reason this exists rather than a setting somewhere: whoever is in
- * charge has to be correctable from outside the app. The first account on an
- * instance is made admin automatically, and on an instance that has been
- * through any testing that first account may well be a stale identity nobody
- * uses — which is exactly what happened here.
+ * charge has to be correctable from outside the app. A fresh instance is
+ * claimed through a link it prints on boot (see `db/claim.ts`), and whoever
+ * claimed it — or, before that existed, whoever signed in first — may well be
+ * a stale identity nobody uses.
  *
  * There is no admin panel; the plan cuts one. This is the smaller thing that
  * has to exist underneath: a way to say who is in charge, from a shell, on a
@@ -26,6 +28,7 @@ import { resolveDatabaseUrl } from '../db/url.js';
  *   pnpm admin                       who is in charge
  *   pnpm admin grant  npub1…         add somebody
  *   pnpm admin revoke npub1…         remove somebody
+ *   pnpm admin claim                 a fresh claim link, while nobody runs it
  */
 function usage(): void {
   console.log(
@@ -33,6 +36,7 @@ function usage(): void {
       'pnpm admin                 list who may change instance settings',
       'pnpm admin grant  <npub>   let somebody change them',
       'pnpm admin revoke <npub>   stop somebody changing them',
+      'pnpm admin claim           print a new claim link, while nobody runs the instance',
     ].join('\n'),
   );
 }
@@ -93,6 +97,24 @@ async function change(raw: string, admin: boolean): Promise<void> {
   console.log(`${user.name} ${admin ? 'can' : 'can no longer'} change instance settings.`);
 }
 
+/**
+ * A new claim link, for when the one printed on boot is lost — scrolled out of
+ * a platform's log, or never seen. Replaces it: only the newest link works.
+ */
+async function claim(): Promise<void> {
+  const db = getDb();
+  if (await hasInstanceAdmin(db)) {
+    // A link is for an instance nobody runs. With somebody in charge it would
+    // be refused at the door anyway, so say what to do instead.
+    console.error('Somebody already runs this instance. Use `pnpm admin grant <npub>` to add another admin.');
+    process.exitCode = 1;
+    return;
+  }
+  const token = await mintClaimToken(db);
+  console.log('Open this to claim the instance. It works once, and replaces any earlier link:');
+  console.log(`  ${claimUrl(deploymentOrigin(), token)}`);
+}
+
 async function main(): Promise<void> {
   loadRootEnv();
   const [command, who] = process.argv.slice(2);
@@ -100,6 +122,9 @@ async function main(): Promise<void> {
   if (command === undefined) {
     console.log(`[admin] ${resolveDatabaseUrl().url}`);
     await list();
+  } else if (command === 'claim' && who === undefined) {
+    console.log(`[admin] ${resolveDatabaseUrl().url}`);
+    await claim();
   } else if ((command === 'grant' || command === 'revoke') && who) {
     console.log(`[admin] ${resolveDatabaseUrl().url}`);
     await change(who, command === 'grant');

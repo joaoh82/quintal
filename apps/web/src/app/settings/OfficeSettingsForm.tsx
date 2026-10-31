@@ -56,6 +56,7 @@ export function OfficeSettingsForm({
   instanceName,
   workspaceName,
   canChangeInstance,
+  unclaimed,
   canChangeOffice,
   host,
 }: {
@@ -72,6 +73,12 @@ export function OfficeSettingsForm({
    * are told it is live within ten seconds while nothing has changed.
    */
   canChangeInstance: boolean;
+  /**
+   * Nobody runs this server yet. Said to a member, because otherwise the
+   * missing "This server" field looks like a permission they were refused
+   * rather than a seat nobody has taken.
+   */
+  unclaimed: boolean;
   /**
    * Whether this person may tune this office. Everybody but a guest — a guest
    * is here for one visit and the room is not theirs to reshape.
@@ -157,6 +164,12 @@ export function OfficeSettingsForm({
               className="sm:max-w-sm"
             />
           </div>
+        ) : unclaimed ? (
+          <p className="text-muted-foreground mt-1 border-t py-4 text-xs">
+            Nobody runs this server yet, so nobody can name it. Whoever set it
+            up has a claim link in the server&apos;s log, or can print a new one
+            with <code>pnpm admin claim</code>.
+          </p>
         ) : null}
       </section>
 

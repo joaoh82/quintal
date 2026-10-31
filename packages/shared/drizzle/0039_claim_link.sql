@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `claim_token_hash` text;

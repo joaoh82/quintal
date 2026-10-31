@@ -4,9 +4,9 @@
  * The desktop app can run a private copy of this server for one person, on
  * loopback, with nothing else on the machine meant to reach it. Loopback is
  * not an access control, though: every process on the computer can open a
- * socket to 127.0.0.1, and on a fresh database the first key to sign in
- * becomes the instance admin. A personal office would otherwise be claimable
- * by whichever local process asked first.
+ * socket to 127.0.0.1. A personal office would otherwise let any of them in —
+ * and back when the first key to sign in became the instance admin, it was
+ * claimable by whichever local process asked first.
  *
  * So the app names the owner up front. With `QUINTAL_PERSONAL_OWNER` set to a
  * public key, sign-in is accepted for that key and refused for every other,

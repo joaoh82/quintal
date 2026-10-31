@@ -61,6 +61,21 @@ export default function LoginPage() {
   // moment ago has nothing to forget yet.
   const [wasSaved, setWasSaved] = useState(false);
   const [confirmForget, setConfirmForget] = useState(false);
+  /**
+   * From `/claim`: the instance's claim link, presented with the signature so
+   * this sign-in is also the one that puts this person in charge. Read after
+   * mount, like the extension, rather than through `useSearchParams` — which
+   * would make the whole page wait on a Suspense boundary for one optional
+   * value.
+   */
+  const [claimToken, setClaimToken] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    setClaimToken(new URLSearchParams(window.location.search).get('claim') ?? undefined);
+  }, []);
+
+  // Somebody who just claimed the place came to set it up.
+  const next = claimToken ? '/settings' : '/office';
 
   // `window.nostr` is injected by an extension, which may not have run by the
   // time this component first renders — so it is checked after mount, not
@@ -141,8 +156,8 @@ export default function LoginPage() {
       } else if (action === 'forget') {
         forgetSavedNsec();
       }
-      await signIn(withIdentity);
-      router.push('/office');
+      await signIn(withIdentity, { claimToken });
+      router.push(next);
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'Could not sign in.');
       setBusy(false);
@@ -159,8 +174,8 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      await signIn(await identityFromHost());
-      router.push('/office');
+      await signIn(await identityFromHost(), { claimToken });
+      router.push(next);
     } catch (cause: unknown) {
       setError(
         isHostError(cause) && cause.code === 'locked'
@@ -201,8 +216,8 @@ export default function LoginPage() {
       setBusy(true);
       try {
         await host.importIdentity(nsecInput.trim());
-        await signIn(await identityFromHost());
-        router.push('/office');
+        await signIn(await identityFromHost(), { claimToken });
+        router.push(next);
       } catch (cause: unknown) {
         setError(cause instanceof Error ? cause.message : 'Could not import that key.');
         setBusy(false);
@@ -225,10 +240,11 @@ export default function LoginPage() {
       <Wordmark size="lg" className="self-center" />
       <Card>
         <CardHeader>
-          <CardTitle>Sign in to Quintal</CardTitle>
+          <CardTitle>{claimToken ? 'Claim this office' : 'Sign in to Quintal'}</CardTitle>
           <CardDescription>
-            Your identity is a key you hold, not an account we keep. There is
-            nothing to remember and no address to verify.
+            {claimToken
+              ? 'Sign in with the key you want to run this server with. That key becomes its admin.'
+              : 'Your identity is a key you hold, not an account we keep. There is nothing to remember and no address to verify.'}
           </CardDescription>
         </CardHeader>
 

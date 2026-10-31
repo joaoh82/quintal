@@ -7,15 +7,20 @@ import {
   COLYSEUS_PATH,
   devWebPort,
   HEALTH_PATH,
+  instanceOwner,
+  npubEncode,
   personalMode,
   ROOM_OFFICE,
   VOICE_PATH,
 } from '@quintal/shared';
 import {
+  claimUrl,
   closeDb,
+  getDb,
   loadRootEnv,
   resolveDatabaseUrl,
   runMigrations,
+  settleInstanceAdmin,
 } from '@quintal/shared/db';
 import {
   assertStorageFitForProduction,
@@ -49,7 +54,26 @@ logger.info(`[storage] ${describeStorage(storage)}`);
 // logged: it is public, but a log line is not where anybody should learn it.
 if (personalMode()) {
   logger.info('[quintal] personal office: sign-in is restricted to its owner and there are no guest links');
+} else {
+  // A shared server needs somebody in charge, and "whoever signs in first" is
+  // a race on a public URL. Either the owner was named up front, or this
+  // prints the link that makes whoever opens it the admin — see `db/claim.ts`.
+  const settled = await settleInstanceAdmin(getDb(), instanceOwner());
+  if (settled.kind === 'owner') {
+    logger.info(
+      `[quintal] admin: ${npubEncode(settled.pubkey)} (QUINTAL_OWNER)${settled.signedIn ? '' : ', from their first sign-in'}`,
+    );
+  } else if (settled.kind === 'claim') {
+    logger.info(
+      [
+        '[quintal] Nobody runs this server yet. Open this link to claim it — it works once,',
+        '[quintal] and a restart or `pnpm admin claim` replaces it:',
+        `[quintal]   ${claimUrl(config.origin, settled.token)}`,
+      ].join('\n'),
+    );
+  }
 }
+logger.info(`[auth] sign-in is bound to ${config.origin}; the office must be opened at exactly that address`);
 
 const nextHandler: NextRequestHandler | undefined = config.isProduction
   ? await createNextHandler(config.webDir)
