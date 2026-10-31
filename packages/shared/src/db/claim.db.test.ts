@@ -65,6 +65,12 @@ describe('a claim link', () => {
     assert.deepEqual(await checkClaimToken(db, token), { ok: false, reason: 'claimed' });
     assert.deepEqual(await redeemClaimToken(db, token, late.id), { ok: false, reason: 'claimed' });
     assert.equal(await isInstanceAdmin(db, late.id), false);
+
+    // And it stays dead when the last admin is revoked again, without a restart.
+    await setInstanceAdmin(db, owner.id, false);
+    assert.deepEqual(await checkClaimToken(db, token), { ok: false, reason: 'unknown' });
+    assert.deepEqual(await redeemClaimToken(db, token, late.id), { ok: false, reason: 'unknown' });
+    assert.equal(await isInstanceAdmin(db, late.id), false);
   });
 
   it('lets exactly one of several people opening it at once in', async () => {

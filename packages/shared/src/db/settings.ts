@@ -133,7 +133,18 @@ export async function setInstanceAdmin(
   userId: string,
   admin: boolean,
 ): Promise<void> {
-  await db.update(users).set({ instanceAdmin: admin }).where(eq(users.id, userId));
+  const grant = db.update(users).set({ instanceAdmin: admin }).where(eq(users.id, userId));
+  if (!admin) {
+    await grant;
+    return;
+  }
+  // Somebody is in charge now, so the bootstrap claim link is spent for good —
+  // not merely suspended until the last admin is revoked again. One batch, so
+  // there is no moment with an admin and a live link.
+  await db.batch([
+    grant,
+    db.update(instanceSettings).set({ claimTokenHash: null }).where(eq(instanceSettings.id, GLOBAL)),
+  ]);
 }
 
 /**

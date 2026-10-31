@@ -20,8 +20,9 @@ import { hasInstanceAdmin } from './settings.js';
  * there is one live link at most: minting replaces the last.
  *
  * The link is good only while nobody is in charge. Once anybody is — through
- * a claim, `QUINTAL_OWNER` or `pnpm admin grant` — every outstanding link is
- * worthless, whether or not its hash has been cleared yet.
+ * a claim, `QUINTAL_OWNER` or `pnpm admin grant` — the link is spent: every
+ * grant clears the stored hash, so revoking the last admin later does not
+ * bring an old link back to life.
  */
 
 /** Current token format. Distinct from a guest link's `v2.` so neither is mistaken for the other. */
