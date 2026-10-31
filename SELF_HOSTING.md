@@ -321,9 +321,10 @@ and back up `data/objects/` with the database.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joaoh82/quintal)
 
-The button reads [`render.yaml`](./render.yaml): one web service running the
-released image `ghcr.io/joaoh82/quintal:latest`, with a 1 GB disk at `/data`
-for the database, uploads and session secret. There is nothing to fill in.
+The button reads [`render.yaml`](./render.yaml): one web service running a
+released image, with a 1 GB disk at `/data` for the database, uploads and
+session secret. There is nothing to fill in. It needs v0.17 or newer — the
+first release that takes its address from Render and prints a claim link.
 
 - **The address** comes from Render: the image's entrypoint uses
   `RENDER_EXTERNAL_URL` (`https://<service>.onrender.com`) when
@@ -339,14 +340,16 @@ for the database, uploads and session secret. There is nothing to fill in.
 - **Deploys** stop the old instance before starting the new one, because a
   disk cannot be shared — a few seconds in which the office reconnects. Render
   snapshots the disk daily and keeps snapshots for seven days.
-- **Upgrading** is **Manual Deploy → Deploy latest reference**, which pulls
-  the newest release.
+- **Upgrading.** The blueprint pins a release line (`quintal:0.17`), not
+  `latest`, so a new minor version never arrives without notice. **Manual
+  Deploy → Deploy latest reference** pulls the newest patch on that line; to
+  move to a new line, change the image tag in the service's **Settings**.
 
 Prefer no disk — Turso and a bucket, so deploys overlap? Remove the disk and
 set `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `STORAGE_URL` and the `S3_*` values
-described under [Storage](#storage). Unset `STORAGE_ALLOW_LOCAL` too: the image
-allows local storage for Docker, and without a disk `/data` does not survive a
-deploy.
+described under [Storage](#storage). Set `STORAGE_ALLOW_LOCAL=0` too: the
+image allows local storage for Docker, Render can override that but not unset
+it, and without a disk `/data` does not survive a deploy.
 
 ## Deploying on Railway
 
@@ -392,8 +395,10 @@ schema and the same migrations, and brings point-in-time recovery with it.
 
 **Add a bucket.** Railway Buckets are S3-compatible, with free API calls and
 egress: create one in the project, and set `STORAGE_URL=s3://<bucket>` with the
-`S3_ENDPOINT`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` it shows you. Without
-one the process refuses to boot in production, on purpose — see
+`S3_ENDPOINT`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` it shows you. Set
+`STORAGE_ALLOW_LOCAL=0` as well: the image allows local storage for Docker, and
+with that overridden a missing bucket refuses to boot instead of keeping uploads
+on a filesystem the next deploy throws away — see
 [Objects](#objects-avatars-and-attachments-later).
 
 ## Behind a reverse proxy

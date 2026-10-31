@@ -11,6 +11,7 @@ const paths = ['package.json', 'apps/server/package.json', 'apps/desktop/package
   'packages/acp-harness/package.json', 'apps/desktop/src-tauri/tauri.conf.json'];
 const cargo = 'apps/desktop/src-tauri/Cargo.toml';
 const lock = 'apps/desktop/src-tauri/Cargo.lock';
+const blueprintAt = (line: string) => `services:\n  - image:\n      url: ghcr.io/joaoh82/quintal:${line}\n    plan: starter\n`;
 function fixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'quintal-version-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -26,6 +27,7 @@ function fixture(t: TestContext) {
   mkdirSync(join(dir, 'apps/desktop/src-tauri/src'));
   writeFileSync(join(dir, 'apps/desktop/src-tauri/src/lib.rs'), '');
   writeFileSync(join(dir, lock), 'version = 3\n\n[[package]]\nname = "quintal-desktop"\nversion = "0.0.1"\n');
+  writeFileSync(join(dir, 'render.yaml'), blueprintAt('0.0'));
   return dir;
 }
 function node(dir: string, script: string, ...args: string[]) {
@@ -39,6 +41,8 @@ for (const version of ['1.2.3', '1.2.3-rc.1']) {
     for (const path of paths) assert.equal(JSON.parse(readFileSync(join(dir, path), 'utf8')).version, version, path);
     assert.ok(readFileSync(join(dir, cargo), 'utf8').includes(`version = "${version}"`));
     assert.ok(readFileSync(join(dir, lock), 'utf8').includes(`version = "${version}"`));
+    // A prerelease has no {major}.{minor} image tag, so the Render pin stays put.
+    assert.equal(readFileSync(join(dir, 'render.yaml'), 'utf8'), blueprintAt(version.includes('-') ? '0.0' : '1.2'));
     assert.equal(node(dir, 'check-release-version.mjs', `v${version}`).status, 0);
     const mismatch = node(dir, 'check-release-version.mjs', 'v9.9.9');
     assert.notEqual(mismatch.status, 0);
@@ -56,9 +60,9 @@ test('malformed versions are refused without changing files', (t) => {
 test('a failed Cargo update restores all manifests', (t) => {
   const dir = fixture(t);
   writeFileSync(join(dir, cargo), readFileSync(join(dir, cargo), 'utf8') + '\nnot valid TOML\n');
-  const before = [...paths, cargo, lock].map((path) => readFileSync(join(dir, path), 'utf8'));
+  const before = [...paths, cargo, lock, 'render.yaml'].map((path) => readFileSync(join(dir, path), 'utf8'));
   assert.notEqual(node(dir, 'set-version.mjs', '1.2.3').status, 0);
-  assert.deepEqual([...paths, cargo, lock].map((path) => readFileSync(join(dir, path), 'utf8')), before);
+  assert.deepEqual([...paths, cargo, lock, 'render.yaml'].map((path) => readFileSync(join(dir, path), 'utf8')), before);
 });
 test('release signs off and atomically pushes one matching version and tag to a local remote', (t) => {
   const dir = fixture(t);
@@ -89,6 +93,8 @@ test('release signs off and atomically pushes one matching version and tag to a 
   assert.equal(result.status, 0, result.stderr);
   assert.match(git('log', '-1', '--format=%B'), /release: v1.2.3[\s\S]*Signed-off-by: Release Test/);
   assert.equal(git('rev-parse', 'HEAD'), git('rev-parse', 'v1.2.3^{commit}'));
+  assert.match(git('show', 'HEAD:render.yaml'), /quintal:1\.2\n/, 'the release commit moves the Render pin');
+  assert.equal(git('status', '--porcelain'), '');
   assert.equal(git('rev-parse', 'HEAD'), git('rev-parse', 'origin/main'));
   assert.match(git('ls-remote', 'origin', 'refs/tags/v1.2.3'), /refs\/tags\/v1.2.3/);
   assert.equal(node(dir, 'check-release-version.mjs', 'v1.2.3').status, 0);

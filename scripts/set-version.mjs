@@ -24,11 +24,18 @@ export function manifests(directory = root) {
   ), 'apps/desktop/src-tauri/tauri.conf.json'];
 }
 
+// The Render blueprint pins an image release line, not :latest, so the deploy
+// button never hands out an image older than the blueprint expects. A stable
+// release moves it forward; a prerelease has no {major}.{minor} tag to point at.
+export const blueprint = 'render.yaml';
+const blueprintImage = /(ghcr\.io\/joaoh82\/quintal:)\d+\.\d+(?=\s)/;
+
 export function setVersion(version, directory = root) {
   validateVersion(version);
   const cargo = 'apps/desktop/src-tauri/Cargo.toml';
   const lock = 'apps/desktop/src-tauri/Cargo.lock';
-  const originals = new Map([...manifests(directory), cargo, lock].map((path) =>
+  const pinned = existsSync(join(directory, blueprint)) ? [blueprint] : [];
+  const originals = new Map([...manifests(directory), cargo, lock, ...pinned].map((path) =>
     [path, readFileSync(join(directory, path), 'utf8')],
   ));
   try {
@@ -43,6 +50,12 @@ export function setVersion(version, directory = root) {
       throw new Error('Could not locate Cargo package version');
     }
     writeFileSync(join(directory, cargo), updated);
+    if (pinned.length && !version.includes('-')) {
+      const [major, minor] = version.split('.');
+      const yaml = originals.get(blueprint);
+      if (!blueprintImage.test(yaml)) throw new Error(`Could not locate the image line in ${blueprint}`);
+      writeFileSync(join(directory, blueprint), yaml.replace(blueprintImage, `$1${major}.${minor}`));
+    }
     execFileSync('cargo', ['update', '-w', '--manifest-path', join(directory, cargo)], { stdio: 'inherit' });
   } catch (error) {
     for (const [path, contents] of originals) writeFileSync(join(directory, path), contents);
