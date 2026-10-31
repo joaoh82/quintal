@@ -1,0 +1,75 @@
+# Quintal on a VM with a domain — HTTPS included.
+#
+# For a machine on the internet: a VPS, a cloud VM, a box with a public IP.
+# Caddy sits in front and gets a certificate for DOMAIN on its own; the office
+# itself is never published on a port. For a run on this machine, use
+# compose.yml instead.
+#
+# 1. Point DOMAIN's DNS (an A or AAAA record) at this machine, and open ports
+#    80 and 443.
+# 2. In an empty folder:
+#      curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.vm.yml
+#      echo DOMAIN=office.example.com > .env
+#      docker compose -f compose.vm.yml up -d
+# 3. Open the claim link the office prints once it is up:
+#      docker compose -f compose.vm.yml logs quintal | grep -A2 'Nobody runs'
+#
+# Needs Compose 2.24+ (the inline Caddy config and the optional .env form).
+# See SELF_HOSTING.md, "On a VM with a domain".
+
+services:
+  quintal:
+    image: ghcr.io/joaoh82/quintal:${QUINTAL_VERSION:-latest}
+    environment:
+      # Derived, not asked for twice: sign-in is bound to this origin, and a
+      # DOMAIN that disagreed with it would refuse every sign-in.
+      BETTER_AUTH_URL: https://${DOMAIN:?Set DOMAIN to the hostname that points at this machine, e.g. DOMAIN=office.example.com in .env}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # The machine has a disk, so the database and uploads live on it. Back
+      # this volume up — see SELF_HOSTING.md, "Docker".
+      - quintal-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      # Certificates. Keep them across restarts, or Let's Encrypt's rate limits
+      # will catch up with a box that is recreated often.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      quintal:
+        condition: service_healthy
+    restart: unless-stopped
+
+configs:
+  caddyfile:
+    # Compose fills in DOMAIN. Caddy proxies the game's WebSocket on
+    # /colyseus without a rule of its own, and passes the Host through.
+    content: |
+      ${DOMAIN} {
+        encode zstd gzip
+        reverse_proxy quintal:3000
+      }
+
+volumes:
+  quintal-data:
+    name: ${QUINTAL_VOLUME:-quintal-data}
+  caddy-data:
+  caddy-config:

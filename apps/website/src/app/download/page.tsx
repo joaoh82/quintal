@@ -103,6 +103,9 @@ export default function Download() {
           Docker volume. Then add <code>http://localhost:3000</code> in the app’s server picker.</p>
         <p>Port 3000 taken? Set <code>QUINTAL_PORT=8080</code> in a <code>.env</code> file
           beside <code>compose.yml</code> before starting, then use <code>http://localhost:8080</code> in the app.</p>
+        <p>For a server people reach over the internet, <a className="text-link" href={`${REPO}/blob/main/SELF_HOSTING.md#on-a-vm-with-a-domain`}>run it on a VM with your domain</a>,
+          with HTTPS through Caddy, or <a className="text-link" href={`https://render.com/deploy?repo=${REPO}`}>deploy it to Render</a> in
+          one click. A fresh server prints a single-use link in its log that makes whoever opens it the admin.</p>
         <a className="text-link" href={`${REPO}/blob/main/SELF_HOSTING.md#docker`}>Server configuration, backups and hosting</a>
       </section>
     </main>

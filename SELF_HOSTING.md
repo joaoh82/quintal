@@ -62,10 +62,44 @@ docker run --rm -v quintal-data:/data -v "$PWD":/backup alpine \
 
 **Reverse proxy.** The container listens on 3000 inside the compose network;
 the [nginx block](#behind-a-reverse-proxy) is unchanged. TLS on a public
-hostname is a reverse-proxy concern, not something the image does.
+hostname is a reverse-proxy concern, not something the image does —
+[`compose.vm.yml`](#on-a-vm-with-a-domain) is that, with Caddy.
 
 **Agents stay on the machine.** The harness runs next to the repos — in the
 desktop app — never in this image.
+
+## On a VM with a domain
+
+For a machine on the internet — a VPS, a cloud VM, a box with a public IP —
+[`compose.vm.yml`](./compose.vm.yml) runs the office behind
+[Caddy](https://caddyserver.com), which gets and renews a certificate for your
+domain on its own. One file, two containers, HTTPS included.
+
+1. Point an A (or AAAA) record for your domain at the machine, and open ports
+   80 and 443.
+2. With Docker and Compose 2.24+ installed, in an empty folder:
+
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/joaoh82/quintal/main/compose.vm.yml
+   echo DOMAIN=office.example.com > .env
+   docker compose -f compose.vm.yml up -d
+   ```
+
+3. Claim it: the office prints a single-use link once it is up
+   ([Claiming a fresh instance](#claiming-a-fresh-instance)).
+
+   ```bash
+   docker compose -f compose.vm.yml logs quintal | grep -A2 'Nobody runs'
+   ```
+
+`BETTER_AUTH_URL` is set from `DOMAIN`, so the two cannot disagree, and the
+office is only reachable through Caddy — it publishes no port of its own. The
+WebSocket under `/colyseus` needs no extra rule. Everything else in `.env`
+reaches the office as it does with `compose.yml`: `QUINTAL_OWNER`, a Turso
+database, a bucket. Without those, the database and uploads live in the
+`quintal-data` volume, which is fine on a machine with a disk; back it up the
+same way as [above](#docker). Upgrade with
+`docker compose -f compose.vm.yml pull && docker compose -f compose.vm.yml up -d`.
 
 ## Requirements
 
@@ -283,17 +317,53 @@ process stops at boot and says why. If you are genuinely on a machine with a
 disk — a VPS, a box under the desk — say so once with `STORAGE_ALLOW_LOCAL=1`
 and back up `data/objects/` with the database.
 
+## Deploying on Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joaoh82/quintal)
+
+The button reads [`render.yaml`](./render.yaml): one web service running the
+released image `ghcr.io/joaoh82/quintal:latest`, with a 1 GB disk at `/data`
+for the database, uploads and session secret. There is nothing to fill in.
+
+- **The address** comes from Render: the image's entrypoint uses
+  `RENDER_EXTERNAL_URL` (`https://<service>.onrender.com`) when
+  `BETTER_AUTH_URL` is not set. Add a custom domain later and set
+  `BETTER_AUTH_URL` to it.
+- **Claim it** from the service's **Logs**: the office prints a single-use
+  link on boot — see [Claiming a fresh instance](#claiming-a-fresh-instance).
+  Or set `QUINTAL_OWNER` in the service's environment before the first boot.
+- **The plan** is the smallest paid instance. A disk needs one, and the free
+  instance sleeps when idle, dropping everybody in the room.
+- **One instance, always.** The blueprint pins `numInstances: 1`; see the
+  note under Railway for why a second instance is a second office.
+- **Deploys** stop the old instance before starting the new one, because a
+  disk cannot be shared — a few seconds in which the office reconnects. Render
+  snapshots the disk daily and keeps snapshots for seven days.
+- **Upgrading** is **Manual Deploy → Deploy latest reference**, which pulls
+  the newest release.
+
+Prefer no disk — Turso and a bucket, so deploys overlap? Remove the disk and
+set `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `STORAGE_URL` and the `S3_*` values
+described under [Storage](#storage). Unset `STORAGE_ALLOW_LOCAL` too: the image
+allows local storage for Docker, and without a disk `/data` does not survive a
+deploy.
+
 ## Deploying on Railway
 
-One service. The app, the game server and the migrations are a single process,
-so there is nothing to split apart.
+There is no one-click template yet; this is the setup by hand. One service,
+from the image `ghcr.io/joaoh82/quintal:latest`. The app, the game server and
+the migrations are a single process, so there is nothing to split apart.
 
 ```bash
 DATABASE_URL=libsql://your-db.turso.io
 DATABASE_AUTH_TOKEN=...
 BETTER_AUTH_SECRET=...        # openssl rand -base64 32
-BETTER_AUTH_URL=https://office.example.com
+BETTER_AUTH_URL=https://office.example.com   # optional on a railway.app domain
 ```
+
+Leave `BETTER_AUTH_URL` out to use the service's Railway domain: the image's
+entrypoint builds it from `RAILWAY_PUBLIC_DOMAIN`. Then claim the office from
+the deploy logs — see [Claiming a fresh instance](#claiming-a-fresh-instance).
 
 Create the database first — `turso db create quintal`, then `turso db show
 --url` and `turso db tokens create` for the two values above. The free tier is

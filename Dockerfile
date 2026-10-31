@@ -86,8 +86,9 @@ ENV NODE_ENV=production \
     QUINTAL_DATA_ROOT=/data \
     DATABASE_URL=file:/data/quintal.db \
     STORAGE_URL=file:/data/objects \
-    STORAGE_ALLOW_LOCAL=1 \
-    BETTER_AUTH_URL=http://localhost:3000
+    STORAGE_ALLOW_LOCAL=1
+# BETTER_AUTH_URL is defaulted by docker-entrypoint.sh, which can see the
+# public address a hosting platform hands the container.
 
 EXPOSE 3000
 

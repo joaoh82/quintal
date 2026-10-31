@@ -1,0 +1,33 @@
+# Quintal on Render: one web service, one disk. The "Deploy to Render" button
+# in the README reads this file. See SELF_HOSTING.md, "Deploying on Render".
+#
+# Nothing to fill in. The office's address comes from Render
+# (RENDER_EXTERNAL_URL, picked up by docker-entrypoint.sh) until you add a
+# custom domain and set BETTER_AUTH_URL to it. Once it is live, open the claim
+# link in the service's logs to become its admin.
+services:
+  - type: web
+    name: quintal
+    # The released image, not this repository's main branch: a deploy runs
+    # what was tagged. Redeploying pulls the newest release.
+    runtime: image
+    image:
+      url: ghcr.io/joaoh82/quintal:latest
+    # A disk needs a paid instance, and the free one sleeps when idle, which
+    # drops everybody's connection to the room.
+    plan: 0.5c-512mb
+    # Rooms live in the memory of the process that made them. A second
+    # instance would be a second office that cannot see the first.
+    numInstances: 1
+    healthCheckPath: /health
+    # The database, uploads and the session secret, all under /data, as in the
+    # Docker image. Render snapshots it daily. A disk means a deploy stops the
+    # old instance before starting the new one: a few seconds in which the
+    # office reconnects.
+    disk:
+      name: quintal-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
