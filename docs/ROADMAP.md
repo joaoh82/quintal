@@ -143,6 +143,10 @@ knowing whether any of it is working.
   Settings; the office checks those pull requests — checks, mergeability,
   the review — and members merge, update or close them from the board,
   pinned to the head they looked at.
+- **A server you can put on the internet.** A Deploy to Render button (one
+  service, one disk, nothing to fill in) and `compose.vm.yml` for any VM with
+  a domain, HTTPS through Caddy. A fresh server is claimed with a single-use
+  link from its log, not by whoever signs in first.
 
 ## What is next
 
@@ -158,8 +162,8 @@ quarter.
   choices stay hidden until that is settled.
 - **Finish the desktop app.** Windows signing, and the last native
   affordances.
-- **Package for the world.** A one-click Railway template, and a hosted
-  instance. The personal office covered the person who wants no server at
+- **Package for the world.** Render and a VM are one step each; a Railway
+  template and a hosted instance are left. The personal office covered the person who wants no server at
   all; this is for the one who wants a server without running it.
 - **Know whether it works.** Latency is measured; use is not. Light
   instrumentation and an effortless way to send feedback.
