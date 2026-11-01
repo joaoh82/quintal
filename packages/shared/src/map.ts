@@ -1,4 +1,4 @@
-import type { PlayerKind } from './player.js';
+import type { Direction, PlayerKind } from './player.js';
 
 /**
  * Map + zone model. This is the *parsed* shape — the source of truth is the
@@ -87,6 +87,25 @@ export interface PixelRect {
   height: number;
 }
 
+/**
+ * A chair at a desk, from the map's `seats` object layer.
+ *
+ * A seat is one tile that only its holder may stand on: the map's walkable
+ * grid has it blocked, so nobody paths through a chair, and the office opens
+ * it for the one agent it has given the desk to (`withSeatOpen`). `facing`
+ * is the way the chair points, which is the way the sitter faces. `screen`
+ * is where the desk's laptop is drawn, in pixels, for the renderer to light
+ * up and take a click on; null for a seat with nothing to look at.
+ */
+export interface MapSeat {
+  /** Stable id from the map's `seatId` property. What a player's `seat` names. */
+  id: string;
+  /** The chair's tile. */
+  tile: { x: number; y: number };
+  facing: Direction;
+  screen: PixelRect | null;
+}
+
 export interface MapZone {
   /** Stable id from the map's `zoneId` property. Used in messages and state. */
   id: string;
@@ -116,12 +135,32 @@ export interface OfficeMap {
   tileSize: number;
   zones: MapZone[];
   interactables: MapInteractable[];
+  /** Desks an agent may be given, in the order the office hands them out. */
+  seats: MapSeat[];
   spawns: SpawnPoint[];
   /**
    * Row-major `width * height` walkability grid derived from the collision
-   * layers. `true` means a player may stand here.
+   * layers, with every seat blocked. `true` means anyone may stand here.
    */
   walkable: boolean[];
+}
+
+/** The seat on a tile, if any. */
+export function seatAt(map: OfficeMap, x: number, y: number): MapSeat | null {
+  return map.seats.find((seat) => seat.tile.x === x && seat.tile.y === y) ?? null;
+}
+
+/**
+ * The same map with one seat walkable: what the office routes an agent on
+ * when sending it to its own desk. Every other seat stays blocked, so a
+ * route to one chair never cuts through another. A copy, never a mutation:
+ * the parsed map is shared by every room and every pathfind.
+ */
+export function withSeatOpen(map: OfficeMap, seat: MapSeat): OfficeMap {
+  const walkable = map.walkable.slice();
+  const { x, y } = seat.tile;
+  if (x >= 0 && y >= 0 && x < map.width && y < map.height) walkable[y * map.width + x] = true;
+  return { ...map, walkable };
 }
 
 export function isInsideZone(zone: MapZone, x: number, y: number): boolean {

@@ -8,6 +8,27 @@ export type PlayerKind = 'human' | 'agent';
 /** Facing direction, used for sprite selection and (later) directional audio. */
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
+export const DIRECTIONS: readonly Direction[] = ['up', 'down', 'left', 'right'];
+
+export function isDirection(value: string): value is Direction {
+  return (DIRECTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * How a body is held: on its feet, sitting, or sitting and typing.
+ *
+ * Office-owned, like the balloon: the office decides from what it knows (a
+ * turn running, a task held) and every client draws it. Walking wins over
+ * any of these while it lasts; a seated avatar that is moved is standing.
+ */
+export type Pose = 'stand' | 'sit' | 'work';
+
+export const POSES: readonly Pose[] = ['stand', 'sit', 'work'];
+
+export function isPose(value: string): value is Pose {
+  return (POSES as readonly string[]).includes(value);
+}
+
 /**
  * What an occupant is doing right now. Humans and agents share the vocabulary
  * so the office reads the same way for both.

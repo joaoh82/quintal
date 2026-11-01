@@ -110,7 +110,7 @@ describe('where to stand to use something', () => {
   ];
   const map: OfficeMap = {
     name: 't', width: 5, height: 3, tileSize: 32, zones: [], spawns: [], walkable,
-    interactables: [],
+    interactables: [], seats: [],
   };
   const board: MapInteractable = {
     id: 'board', kind: 'board', label: 'the board', prop: null, halo: null,

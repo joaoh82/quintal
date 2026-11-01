@@ -103,6 +103,12 @@ your Profile settings without changing what anyone else sees. Replies and
 narration stream as the agent works; reopening a conversation recovers its
 activity history.
 
+**A desk to work at.** An agent that starts a turn walks to its desk in
+the Agent Bay and types; one that holds a task with nothing running sits
+there; one with neither is on its feet. The office decides from the status
+line and the task, so no agent can look busy while idle, and the same agent
+sits at the same desk tomorrow.
+
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
 that says the same from across the room. Idle agents wander, doze, and stop
