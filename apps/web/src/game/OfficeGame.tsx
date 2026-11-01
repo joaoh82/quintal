@@ -30,6 +30,7 @@ import { VoiceBar } from './ui/VoiceBar';
 import { useAlerts } from './useAlerts';
 import { useBoard } from './useBoard';
 import { useConversations } from './useConversations';
+import { useScreenTurn } from './useScreenTurn';
 
 interface Hud {
   mapName: string;
@@ -100,7 +101,12 @@ export default function OfficeGame({
   const [boardOpen, setBoardOpen] = useState(false);
   /** Whose card is open from a click on them or their desk, by session. */
   const [inspected, setInspected] = useState<string | null>(null);
+  /** Counts clicks, so clicking the same agent again asks the office again. */
+  const [inspectCount, setInspectCount] = useState(0);
   const [followed, setFollowed] = useState<ActivityFollowedPayload | null>(null);
+  /** How tall the chat box is, so the desk panel ends above it rather than under it. */
+  const [chatHeight, setChatHeight] = useState(0);
+  const chatRef = useRef<HTMLDivElement | null>(null);
   const [overlayKey, setOverlayKey] = useState('`');
   const [voice, setVoice] = useState<VoiceUiState | null>(null);
   const [activityDetailLevel, setActivityDetailLevel] = useState(initialActivityDetailLevel);
@@ -293,7 +299,10 @@ export default function OfficeGame({
         if (interactable.kind === 'board') setBoardOpen(true);
       }),
       gameBridge.on('roster', ({ players }) => setRoster(players)),
-      gameBridge.on('inspect', ({ sessionId }) => setInspected(sessionId)),
+      gameBridge.on('inspect', ({ sessionId }) => {
+        setInspected(sessionId);
+        setInspectCount((count) => count + 1);
+      }),
       gameBridge.on('activityFollowed', (reply) => setFollowed(reply)),
       // A DM you opened from a card is a conversation you meant to type in.
       gameBridge.on('dmOpened', () => setChatFocused(true)),
@@ -368,10 +377,35 @@ export default function OfficeGame({
   useEffect(() => {
     if (inspected && !inspectedEntry) setInspected(null);
   }, [inspected, inspectedEntry]);
+  useEffect(() => setFollowed(null), [inspectedAgentId]);
+  // Asked on opening, and again whenever what the office would answer could
+  // have changed: a step taken (earshot is measured from where you stand),
+  // a conversation switched (which zone you are reading), the channels you
+  // are in, or the same agent clicked again. The count of what is withheld
+  // has to move by the same rule as the steps do. Debounced, because a walk
+  // is many steps.
+  const { active: activeConversation, channels: myChannels } = conversations;
   useEffect(() => {
-    setFollowed(null);
-    if (inspectedAgentId) sessionRef.current?.followActivity(inspectedAgentId);
-  }, [inspectedAgentId]);
+    if (!inspectedAgentId) return;
+    const timer = window.setTimeout(
+      () => sessionRef.current?.followActivity(inspectedAgentId),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [inspectedAgentId, inspectCount, hud.tile.x, hud.tile.y, activeConversation, myChannels]);
+  const held = useScreenTurn(inspectedAgentId);
+  // The chat box shares the left edge and is the later sibling: it paints
+  // over the desk and takes its clicks. The desk column ends above it.
+  useEffect(() => {
+    const box = chatRef.current;
+    if (!box) return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) setChatHeight(rect.height);
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
   const closeDesk = useCallback(() => setInspected(null), []);
   const viewer = roster.find((player) => player.isSelf);
   const messageInspected =
@@ -416,12 +450,16 @@ export default function OfficeGame({
       </div>
 
       {inspectedEntry && !boardOpen && !overlayOpen ? (
-        <div className="pointer-events-none absolute bottom-12 left-3 top-3 flex items-start">
+        <div
+          className="pointer-events-none absolute left-3 top-3 flex items-start"
+          style={{ bottom: `calc(2.5rem + ${chatHeight}px + 0.5rem)` }}
+        >
           <DeskPanel
             entry={inspectedEntry}
             transcripts={conversations.transcripts}
             channels={conversations.channels}
             zones={conversations.zones}
+            held={held}
             followed={followed?.agentId === inspectedAgentId ? followed : null}
             activityDetailLevel={activityDetailLevel}
             onClose={closeDesk}
@@ -431,7 +469,7 @@ export default function OfficeGame({
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute bottom-10 left-3">
+      <div ref={chatRef} className="pointer-events-none absolute bottom-10 left-3">
         <ChatPanel
           conversations={conversations}
           focused={chatFocused}

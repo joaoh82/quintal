@@ -5,12 +5,13 @@ import type {
   ActivityFollowedPayload,
   ChannelRef,
   MapZone,
+  PublicActivity,
   RosterEntry,
 } from '@quintal/shared';
 import { useEffect, useMemo } from 'react';
 
 import type { ConversationKey, Transcript } from '../useConversations';
-import { currentTurn, destinations } from './desk';
+import { destinations, screenTurn } from './desk';
 import { AgentCard, PersonCard } from './RosterPanel';
 import { TurnActivity } from './TurnActivity';
 
@@ -19,7 +20,9 @@ interface DeskPanelProps {
   transcripts: Record<ConversationKey, Transcript>;
   channels: ChannelRef[];
   zones: MapZone[];
-  /** The office's answer to `activity_follow`, once it has come. */
+  /** The agent's turn held since the panel opened; see `useScreenTurn`. */
+  held: PublicActivity | null;
+  /** The office's latest answer to `activity_follow`, once it has come. */
   followed: ActivityFollowedPayload | null;
   activityDetailLevel: ActivityDetailLevel;
   onClose: () => void;
@@ -43,6 +46,7 @@ export function DeskPanel({
   transcripts,
   channels,
   zones,
+  held,
   followed,
   activityDetailLevel,
   onClose,
@@ -59,8 +63,8 @@ export function DeskPanel({
 
   const agent = entry.kind === 'agent';
   const turn = useMemo(
-    () => (agent ? currentTurn(transcripts, entry.identityId) : null),
-    [agent, transcripts, entry.identityId],
+    () => (agent ? screenTurn(held, transcripts, entry.identityId) : null),
+    [agent, held, transcripts, entry.identityId],
   );
   const where = useMemo(
     () => (agent ? destinations(entry, turn, channels, zones) : []),
@@ -95,7 +99,7 @@ export function DeskPanel({
         )}
         {withheld > 0 ? (
           <p className="text-[11px] text-white/45">
-            Working in {withheld === 1 ? 'a conversation' : `${withheld} conversations`} you are not in.
+            {turn ? 'Also working' : 'Working'} in {withheld === 1 ? 'a conversation' : `${withheld} conversations`} you are not in.
           </p>
         ) : null}
         {where.length > 0 ? (

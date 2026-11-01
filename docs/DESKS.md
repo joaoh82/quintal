@@ -206,10 +206,15 @@ panel**, at the left of the room, built from parts that exist:
    runtime, model, the audit log.
 2. **The screen**: the agent's running turn, or its most recent, rendered
    by `TurnActivity` at your detail level, live. The panel reads it from
-   the transcripts this client already holds; opening the panel sends
+   the transcripts this client already holds, and from a copy held for
+   the panel from the moment it opens (`useScreenTurn`), because a
+   transcript keeps its newest 500 lines and a turn that has run while a
+   busy channel said 500 things has fallen off it. Opening the panel sends
    `activity_follow { agentId }`, and the office answers with the agent's
    running turns, as `activity` messages, and `activity_followed`, which
-   counts the ones it did not send.
+   counts the ones it did not send. Asked again whenever the answer could
+   have changed — a step taken, a conversation switched, the channels you
+   are in — so the count moves by the same rule as the steps.
 3. **Go to the conversation**: one button per conversation the agent can
    be read in — the one its shown turn is in, and the ones `workingIn`
    names that this client is a member of — which calls `openConversation`.

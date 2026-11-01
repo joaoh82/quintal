@@ -3,6 +3,7 @@ import {
   FLOOR_ZONE_LABEL,
   WORKING_IN_ZONE,
   activityTerminal,
+  mergeActivity,
   workingInTokens,
   type ChannelRef,
   type MapZone,
@@ -55,6 +56,42 @@ function newer(candidate: PublicActivity, held: PublicActivity): boolean {
   const heldOpen = !activityTerminal(held.state);
   if (candidateOpen !== heldOpen) return candidateOpen;
   return candidate.updatedAt > held.updatedAt;
+}
+
+/** The conversation a turn is in, as this client names it. */
+export function keyOf(activity: PublicActivity): ConversationKey {
+  if (activity.channelId) return channelKey(activity.channelId);
+  if (activity.zoneId) return zoneKey(activity.zoneId);
+  return NEARBY;
+}
+
+/**
+ * The better of two turns to hold: the same turn by sequence, as every
+ * transcript merges it; otherwise the one the screen would show. Returns
+ * one of its arguments, never a copy, so a caller can tell which won.
+ */
+export function preferTurn(held: PublicActivity | null, candidate: PublicActivity): PublicActivity {
+  if (!held) return candidate;
+  if (held.turnId === candidate.turnId) return mergeActivity(held, candidate);
+  return newer(candidate, held) ? candidate : held;
+}
+
+/**
+ * What goes on the screen: the turn held since the panel opened (see
+ * `useScreenTurn`), or the transcripts' — whichever `preferTurn` picks.
+ * The held copy is there for the turn a transcript has let go of; the
+ * transcripts are there for the turn that ended before the panel opened.
+ */
+export function screenTurn(
+  held: PublicActivity | null,
+  transcripts: Record<ConversationKey, Transcript>,
+  agentId: string,
+): FoundTurn | null {
+  const found = currentTurn(transcripts, agentId);
+  if (!held) return found;
+  if (!found) return { key: keyOf(held), activity: held };
+  const best = preferTurn(held, found.activity);
+  return best === found.activity ? found : { key: keyOf(held), activity: best };
 }
 
 export interface Destination {

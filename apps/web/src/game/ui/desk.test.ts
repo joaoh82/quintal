@@ -5,7 +5,7 @@ import { FLOOR_ZONE_ID } from '@quintal/shared';
 import type { ChannelRef, ChatBroadcastPayload, MapZone, PublicActivity, RosterEntry } from '@quintal/shared';
 
 import type { Transcript } from '../useConversations';
-import { currentTurn, destinations, labelFor } from './desk';
+import { currentTurn, destinations, labelFor, preferTurn, screenTurn } from './desk';
 
 const NOW = 1_700_000_000_000;
 
@@ -124,5 +124,32 @@ describe('where to go', () => {
     assert.equal(labelFor(`zone:${FLOOR_ZONE_ID}`, channels, zones), 'the open floor');
     assert.equal(labelFor('nearby', channels, zones), 'nearby');
     assert.equal(labelFor('channel:ch-unknown', channels, zones), 'a channel');
+  });
+});
+
+describe('the turn held for the screen', () => {
+  it('shows the held turn when the transcript has let it go', () => {
+    const held = activity({ turnId: 'long', zoneId: 'bay', sequence: 900 });
+    assert.deepEqual(screenTurn(held, {}, 'marvin'), { key: 'zone:bay', activity: held });
+  });
+
+  it('keeps the same turn by sequence, whichever side has the later one', () => {
+    const early = activity({ sequence: 2, updatedAt: NOW });
+    const late = activity({ sequence: 3, updatedAt: NOW + 1, receivedAt: NOW + 1 });
+    assert.equal(preferTurn(early, late), late);
+    assert.equal(preferTurn(late, early), late);
+    const transcripts = { 'channel:ch-eng': transcript(late) };
+    assert.equal(screenTurn(early, transcripts, 'marvin')?.activity, late);
+    assert.equal(screenTurn(late, transcripts, 'marvin')?.key, 'channel:ch-eng');
+  });
+
+  it('lets a running turn in the transcripts beat a finished held one, and the reverse', () => {
+    const done = activity({ turnId: 'done', state: 'completed', updatedAt: NOW + 5 });
+    const running = activity({ turnId: 'live', state: 'running', channelId: 'ch-eng', updatedAt: NOW });
+    assert.equal(screenTurn(done, { 'channel:ch-eng': transcript(running) }, 'marvin')?.activity, running);
+    assert.deepEqual(screenTurn(running, { 'channel:dm-josh': transcript(done) }, 'marvin'), {
+      key: 'channel:ch-eng',
+      activity: running,
+    });
   });
 });
