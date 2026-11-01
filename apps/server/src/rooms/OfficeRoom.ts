@@ -152,6 +152,7 @@ import {
   mayAssignBoardItem,
   mayCreateOfficeCommands,
   mayEditOfficeCommand,
+  mayManageRoutine,
   normaliseOfficeCommandName,
   officeCommandAuthorLabel,
   officeCommandUsage,
@@ -217,6 +218,15 @@ import {
   OfficeCommandError,
   createOfficeCommand,
   updateOfficeCommand,
+  claimRoutineRun,
+  getRoutine,
+  listDueRoutines,
+  markRoutineRan,
+  missedRoutineRuns,
+  settleRoutineRun,
+  updateRoutine,
+  type RoutineRunRef,
+  type RoutineSummary,
   type OfficeCommandSummary,
   type OfficeCommandTargetInput,
   listPeopleForWorkspace,
@@ -286,6 +296,15 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
+import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
+
+/** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
+interface RoutineWhere {
+  actor: ChannelActor;
+  channel: (ChannelRef & { members: ReadonlyMap<string, ChannelMember> }) | null;
+  sessionId: string | null;
+  agent: { present: boolean; busyHere: boolean };
+}
 import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
 import { PULL_POLL_MS, PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
@@ -487,6 +506,9 @@ export class OfficeRoom extends Room<OfficeState> {
   /** The office's eye on GitHub. Made with the room; the token is read as needed. */
   #pulls!: PullRequestWatch;
   #pullTimer: NodeJS.Timeout | null = null;
+  #routineTimer: NodeJS.Timeout | null = null;
+  /** One tick at a time: a slow database must not stack ticks that each claim the same slots. */
+  #routineTicking = false;
   /** What the board looked like when it was last sent, so an unchanged one is not sent again. */
   #boardSignature = '';
   /** The first read of the board, so a `board_get` that beats it still gets an answer. */
@@ -759,6 +781,9 @@ export class OfficeRoom extends Room<OfficeState> {
     // to see the answer. The first look is a minute in: the board is read
     // first, and a room nobody stays in asks nothing.
     this.#pullTimer = setInterval(() => void this.#pollPulls(), PULL_POLL_MS);
+    // Routines fire whether or not a person is here: the point of one is
+    // that the agent works while its owner is not watching.
+    this.#routineTimer = setInterval(() => void this.#tickRoutines(), ROUTINE_TICK_MS);
     this.#settingsTimer = setInterval(() => {
       void this.#refreshSettings();
       void this.#refreshChannels();
@@ -1150,6 +1175,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (this.#revocationTimer) clearInterval(this.#revocationTimer);
     if (this.#settingsTimer) clearInterval(this.#settingsTimer);
     if (this.#pullTimer) clearInterval(this.#pullTimer);
+    if (this.#routineTimer) clearInterval(this.#routineTimer);
     logger.info(`[office] room ${this.roomId} disposed`);
   }
 
@@ -2488,8 +2514,8 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /** Something a person should know that is not a refusal. Agents are not told: it is not for them. */
-  #sendNotice(sessionId: string, code: NoticePayload['code'], message: string | null): void {
-    if (message === null || this.#agents.has(sessionId)) return;
+  #sendNotice(sessionId: string | null, code: NoticePayload['code'], message: string | null): void {
+    if (message === null || sessionId === null || this.#agents.has(sessionId)) return;
     const client = this.clients.getById(sessionId);
     client?.send(ServerMessage.Notice, { code, message } satisfies NoticePayload);
   }
@@ -2649,8 +2675,9 @@ export class OfficeRoom extends Room<OfficeState> {
    * turn is given has the conversation the mention was part of.
    */
   #deliverChannelChat(
-    sessionId: string,
-    speaker: OfficePlayer,
+    /** The speaker's session, or null for a line the office speaks in a member's name while they are not here: a routine firing. */
+    sessionId: string | null,
+    speaker: Pick<OfficePlayer, 'userId' | 'name' | 'kind'>,
     channel: ChannelRef & { members: ReadonlyMap<string, ChannelMember> },
     text: string,
     requestId?: string,
@@ -2690,12 +2717,12 @@ export class OfficeRoom extends Room<OfficeState> {
     const mentioned = new Set(resolved.reached.keys());
     let commandHeard = false;
     // Whether naming anybody may start a turn — see `hops.ts`.
-    const hop = hopOf(speaker.kind, this.#wakeHops.lastWake(sessionId, channel.id));
+    const hop = hopOf(speaker.kind, sessionId === null ? undefined : this.#wakeHops.lastWake(sessionId, channel.id));
     const wakes = mayWake(hop, this.#settings.mentionMaxHops);
 
     const line = {
       ...(requestId ? { requestId } : {}),
-      from: sessionId,
+      from: sessionId ?? '',
       fromUserId: speaker.userId,
       fromName: speaker.name,
       fromKind: speaker.kind,
@@ -2752,7 +2779,7 @@ export class OfficeRoom extends Room<OfficeState> {
     }
 
     if (!wakes && mentioned.size > 0) {
-      const agent = this.#agents.get(sessionId);
+      const agent = sessionId === null ? undefined : this.#agents.get(sessionId);
       if (agent) {
         audit(agent.id, 'effect.mention_suppressed', {
           hop,
@@ -4059,6 +4086,154 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     logger.error('[office] board write by an agent failed', error);
     this.#replyError(client, requestId, { code: 'unavailable', message: 'The board could not be written.' });
+  }
+
+  // --- routines ------------------------------------------------------------
+
+  /** The session of an agent that is in the room, by its identity; null when it is away. */
+  #agentSessionIdOf(agentId: string): string | null {
+    for (const [sessionId, session] of this.#agents) {
+      if (session.id === agentId) return sessionId;
+    }
+    return null;
+  }
+
+  /** Whether the agent at this session is on a turn in this conversation right now. */
+  #agentBusyIn(sessionId: string, conversationId: string): boolean {
+    for (const entry of this.#activity.values()) {
+      if (entry.owner === sessionId && entry.conversationId === conversationId && !activityTerminal(entry.value.state)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Every fifteen seconds: what is due, and what was missed and can be made
+   * up. Each due slot is claimed by writing its run and moving the routine
+   * past it in one transaction — the unique index decides between two rooms
+   * of one office — so a slot is handled once whatever came of it. A slot to
+   * be spoken is written `missed` and settled as it is spoken, so a room
+   * that stops between the two leaves a slot to make up, not a line on the
+   * record that nobody heard. See `docs/ROUTINES.md`.
+   */
+  async #tickRoutines(): Promise<void> {
+    if (this.#routineTicking) return;
+    this.#routineTicking = true;
+    try {
+      const db = getDb();
+      const now = Date.now();
+      for (const routine of await listDueRoutines(db, this.#workspaceId, now)) {
+        const dueAt = routine.nextDueAt;
+        if (dueAt === null) continue;
+        const where = await this.#routineWhere(routine);
+        const decision = decideSlot(where.agent);
+        const run = await claimRoutineRun(db, {
+          routine,
+          dueAt,
+          outcome: decision.fire ? 'missed' : decision.outcome,
+          note: decision.fire ? '' : decision.note,
+        });
+        if (!run) continue; // another room of this office has the slot
+        if (decision.fire) {
+          await this.#fireRoutine(routine, run, where, 'fired');
+        } else {
+          audit(routine.agentId, decision.outcome === 'missed' ? 'routine.missed' : 'routine.skipped', {
+            routineId: routine.id,
+            name: routine.name,
+            dueAt,
+            reason: decision.note,
+          });
+        }
+      }
+      for (const run of await missedRoutineRuns(db, this.#workspaceId)) {
+        const routine = await getRoutine(db, this.#workspaceId, run.routineId);
+        if (!routine || routine.paused) continue;
+        const where = await this.#routineWhere(routine);
+        if (!shouldMakeUp({ now, nextDueAt: routine.nextDueAt, agent: where.agent })) continue;
+        await this.#fireRoutine(routine, run, where, 'made_up');
+      }
+    } catch (error: unknown) {
+      logger.error('[office] could not tick routines', error);
+    } finally {
+      this.#routineTicking = false;
+    }
+  }
+
+  /**
+   * Where a routine would speak, and whether its agent is there to hear:
+   * the owner's DM with the agent, opened as the owner would open it, so an
+   * owner who has left or an agent without `dm` has no door and the slot
+   * says so rather than speaking into nothing.
+   */
+  async #routineWhere(routine: RoutineSummary): Promise<RoutineWhere> {
+    const actor = await this.#actorForUser(routine.agentOwnerUserId);
+    const channel = mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })
+      ? await this.#dmWith(actor, routine.agentId)
+      : null;
+    const sessionId = this.#agentSessionIdOf(routine.agentId);
+    return {
+      actor,
+      channel,
+      sessionId,
+      agent: {
+        present: sessionId !== null,
+        busyHere: sessionId !== null && channel !== null && this.#agentBusyIn(sessionId, channel.id),
+      },
+    };
+  }
+
+  /**
+   * Settle the run as spoken and speak the line in the owner's name, with
+   * the brief. The settle is the claim to speak: it moves the run off
+   * `missed`, and only the room whose write lands says the line — two rooms
+   * making up one slot both try, one speaks — with the line following in the
+   * same turn of the event loop, so nothing of the office's comes between.
+   * No door — the owner gone, the agent without `dm` or revoked — pauses
+   * the routine and records why: a routine that cannot be spoken should not
+   * keep trying every slot in silence, and its card should say so.
+   */
+  async #fireRoutine(
+    routine: RoutineSummary,
+    run: RoutineRunRef,
+    where: RoutineWhere,
+    outcome: 'fired' | 'made_up',
+  ): Promise<void> {
+    const db = getDb();
+    const now = Date.now();
+    const agent = where.channel ? await findAgentById(db, routine.agentId) : null;
+    if (!where.channel || !agent) {
+      const note = !where.channel ? (where.actor.role === null ? 'owner_left' : 'no_dm') : 'agent_gone';
+      const won = await settleRoutineRun(db, run.id, { outcome: 'skipped', note, firedAt: null, conversationId: null });
+      if (!won) return;
+      await updateRoutine(db, { workspaceId: this.#workspaceId, routineId: routine.id, paused: true, now });
+      audit(routine.agentId, 'routine.skipped', { routineId: routine.id, name: routine.name, dueAt: run.dueAt, reason: note });
+      logger.warn(`[office] routine "${routine.name}" paused: ${note}`);
+      return;
+    }
+    // The owner speaks, from their session when they are here and from nowhere when not.
+    let ownerSessionId: string | null = null;
+    for (const [sessionId, player] of this.state.players) {
+      if (player.kind === 'human' && player.userId === routine.agentOwnerUserId) {
+        ownerSessionId = sessionId;
+        break;
+      }
+    }
+    const command = routine.command ? this.#commands.find((candidate) => candidate.id === routine.command?.id) ?? null : null;
+    const won = await settleRoutineRun(db, run.id, { outcome, firedAt: now, conversationId: where.channel.id });
+    if (!won) return; // another room of this office spoke it
+    this.#deliverChannelChat(
+      ownerSessionId,
+      { userId: routine.agentOwnerUserId, name: agent.ownerName, kind: 'human' },
+      where.channel,
+      routineLine(routine),
+      undefined,
+      routineBrief(routine, command, run.dueAt),
+    );
+    await markRoutineRan(db, routine, now);
+    audit(routine.agentId, outcome === 'fired' ? 'routine.fired' : 'routine.made_up', {
+      routineId: routine.id,
+      name: routine.name,
+      dueAt: run.dueAt,
+    });
   }
 
   // --- the office's commands, for agents -----------------------------------

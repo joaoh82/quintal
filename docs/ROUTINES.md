@@ -62,11 +62,16 @@ routines per agent.
 ## How a firing works
 
 1. Every fifteen seconds the room asks the database for routines due.
-2. For each, it inserts a `routine_runs` row keyed on (routine, due slot).
-   The unique index is the lock: whichever room's insert lands fires, the
-   other sees the conflict and moves on.
-3. It speaks `@Marvin routine "hourly PR check" is due.` in the owner's DM
-   with the agent, as the owner, with a brief attached:
+2. For each, it inserts a `routine_runs` row keyed on (routine, due slot)
+   and moves the routine past the slot, in one transaction. The unique
+   index is the lock: whichever room's insert lands has the slot, the other
+   sees the conflict and moves on. The row says `missed` until the line is
+   spoken; a slot the agent is too busy for is written `skipped` and is
+   done.
+3. It settles the row as `fired` — the one write that may happen once, so
+   two rooms making up the same slot cannot both speak — and in the same
+   turn speaks `@Marvin routine "hourly PR check" is due.` in the owner's
+   DM with the agent, as the owner, with a brief attached:
 
    ```
    [Routine hourly-pr-check — set up by Josh, runs every hour]
@@ -78,7 +83,9 @@ routines per agent.
    The harness renders that through a small addition beside
    `commandSection`. An older harness renders it as a `[Command]` section
    and still does the work.
-4. The run row records the message, and later the outcome.
+4. A room that stops between the claim and the line leaves a `missed`
+   row, which is made up like any other; nothing is ever on the record as
+   fired that the agent did not hear.
 
 **Edge rules.**
 
@@ -130,9 +137,11 @@ board's, each under a scope of its own that is on by default.
 
 - Firings are DM-only.
 - Schedules are stored as cron plus an IANA time zone; next-run computation
-  uses a small dependency (`cron-parser`) rather than hand-written DST rules.
-- The time zone defaults to the browser's when made in Settings and to an
-  office setting when made by an agent.
+  uses a small dependency (`croner`, no dependencies of its own, runs in
+  the browser too) rather than hand-written DST rules.
+- The time zone is the browser's when made in Settings, and the harness
+  machine's when made by an agent (step 3) — an agent usually runs on its
+  owner's computer, and no office setting is needed for it.
 - No `command_delete` tool.
 
 ## Plan
@@ -144,12 +153,13 @@ Five pull requests, each shippable on its own.
       reusing the db functions with the owner's actor; the four tools in the
       harness and the protocol types; the "via" attribution in the brief's
       heading; prompt guidance; tests; `docs/guide/commands.md`.
-- [ ] **2. Routines core.** `packages/shared/src/routine.ts` (spec parsing,
-      next-due, caps); `routines` and `routine_runs` tables and db module;
-      the room tick, the slot lock and the DM delivery, with a variant of
-      `#deliverChannelChat` that speaks for an owner who is not in the room;
-      the harness's `[Routine]` section; audit events; Settings → Routines
-      and its tab.
+- [x] **2. Routines core.** `packages/shared/src/routine.ts` (phrases to
+      cron or a moment, next-due, the floor, labels); `routines` and
+      `routine_runs` tables and `db/routines.ts`; the room's tick every
+      fifteen seconds, the slot lock, missed slots made up, and the DM
+      delivery through `#deliverChannelChat` speaking for an owner who is
+      not in the room; the harness's `[Routine]` heading; audit events;
+      Settings → Routines and its tab.
 - [ ] **3. Routine tools.** The `routine_*` tools, phrase parsing, the
       `routines` scope, base-prompt guidance.
 - [ ] **4. Visibility.** Routines in the board payload; the Routines tab;

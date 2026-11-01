@@ -992,6 +992,98 @@ export const agentTasks = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Routines
+// ---------------------------------------------------------------------------
+
+export const ROUTINE_SCHEDULE_KINDS = ['cron', 'once'] as const;
+export const ROUTINE_RUN_OUTCOMES = ['fired', 'missed', 'made_up', 'skipped'] as const;
+
+/**
+ * A standing request on one agent, with a schedule — see `docs/ROUTINES.md`.
+ *
+ * An office object like a command, owned by one person: the agent's owner,
+ * because a firing speaks in their DM with the agent as them. What it asks
+ * is either its own `instructions` or one of the office's commands with
+ * `args`; both may be set, and the command's brief comes first. The
+ * schedule is `cron` with a zone, or `once` at `runAt`. `nextDueAt` is
+ * kept on the row so "what is due" is one indexed read, and recomputed
+ * after every firing; null for a once routine that has had its moment, or
+ * a paused one.
+ */
+export const routines = sqliteTable(
+  'routines',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: text('kind', { enum: ROUTINE_SCHEDULE_KINDS }).notNull(),
+    /** Five fields; empty for `once`. */
+    cron: text('cron').notNull().default(''),
+    tz: text('tz').notNull().default('UTC'),
+    /** The moment, for `once`; null for `cron`. */
+    runAt: integer('run_at', { mode: 'timestamp_ms' }),
+    instructions: text('instructions').notNull().default(''),
+    commandId: text('command_id').references(() => officeCommands.id, { onDelete: 'set null' }),
+    args: text('args').notNull().default(''),
+    paused: integer('paused', { mode: 'boolean' }).notNull().default(false),
+    nextDueAt: integer('next_due_at', { mode: 'timestamp_ms' }),
+    lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    /** The agent that made it for `createdBy`, when one did. */
+    createdByAgentId: text('created_by_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    index('routines_workspace_idx').on(table.workspaceId),
+    index('routines_agent_idx').on(table.agentId),
+    // The tick's read: everything in the office due by now.
+    index('routines_due_idx').on(table.workspaceId, table.nextDueAt),
+  ],
+);
+
+/**
+ * One slot of a routine: when it was due, and what came of it. Inserting
+ * the row is the lock — the unique index on (routine, due slot) means two
+ * rooms of one office ticking at once fire it once. `fired` says the line
+ * was spoken; `missed` that the agent was away, and `made_up` that it was
+ * then spoken when the agent came back; `skipped` that it was not and will
+ * not be, with `note` saying why — the agent was still on the previous run,
+ * or had nowhere to be spoken to.
+ */
+export const routineRuns = sqliteTable(
+  'routine_runs',
+  {
+    id: text('id').primaryKey(),
+    routineId: text('routine_id')
+      .notNull()
+      .references(() => routines.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    dueAt: integer('due_at', { mode: 'timestamp_ms' }).notNull(),
+    outcome: text('outcome', { enum: ROUTINE_RUN_OUTCOMES }).notNull(),
+    /** Why, for a skipped run: `busy`, `no_dm`, `owner_left`. Empty otherwise. */
+    note: text('note').notNull().default(''),
+    /** When the line was spoken; null while missed. */
+    firedAt: integer('fired_at', { mode: 'timestamp_ms' }),
+    /** The DM the line went to, when it did. */
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
+  },
+  (table) => [
+    uniqueIndex('routine_runs_slot_idx').on(table.routineId, table.dueAt),
+    index('routine_runs_routine_idx').on(table.routineId, table.dueAt),
+    index('routine_runs_workspace_idx').on(table.workspaceId, table.dueAt),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // GitHub
 // ---------------------------------------------------------------------------
 

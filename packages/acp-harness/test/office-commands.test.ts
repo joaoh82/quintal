@@ -9,7 +9,7 @@ import type { AgentCommandCall } from '@quintal/shared';
 
 import type { Gateway } from '../src/gateway/client.js';
 import { AgentRunner } from '../src/runner/AgentRunner.js';
-import { commandSection } from '../src/runner/context.js';
+import { commandSection, routineSection } from '../src/runner/context.js';
 import type { AgentConfig } from '../src/config.js';
 
 const FAKE = fileURLToPath(new URL('./fixtures/fake-acp-agent.mjs', import.meta.url));
@@ -218,5 +218,42 @@ describe('the command section of a prompt', () => {
         'They gave it nothing after the command.',
       ].join('\n'),
     );
+  });
+});
+
+describe('a routine firing', () => {
+  it('is headed as a routine, with its schedule and the moment it was due, and ends where the answer goes', () => {
+    const text = routineSection(
+      {
+        name: 'hourly-pr-check',
+        instructions: 'Review the open pull requests.',
+        args: '',
+        definedBy: 'Josh',
+        addressed: true,
+        routine: { name: 'hourly PR check', schedule: 'every hour', dueAt: Date.UTC(2026, 10, 2, 14, 0), tz: 'Europe/Lisbon' },
+      },
+      'Josh',
+    );
+    assert.match(text, /^\[Routine hourly PR check — set up by Josh, runs every hour\]/);
+    assert.match(text, /not Josh typing/);
+    assert.match(text, /due Monday,? 2 November,? (?:at )?14:00 \(Europe\/Lisbon\)/);
+    assert.match(text, /Review the open pull requests\./);
+    assert.match(text, /report here, in this conversation/);
+    assert.doesNotMatch(text, /What it gives/);
+  });
+
+  it('carries what the routine gives its command', () => {
+    const text = routineSection(
+      {
+        name: 'review',
+        instructions: 'Read the diff.',
+        args: 'whatever is open in acme/api',
+        definedBy: 'Josh',
+        addressed: true,
+        routine: { name: 'morning review', schedule: 'weekdays at 09:00 (Europe/Lisbon)', dueAt: 0, tz: 'UTC' },
+      },
+      'Josh',
+    );
+    assert.match(text, /What it gives: whatever is open in acme\/api/);
   });
 });

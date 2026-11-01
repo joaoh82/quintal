@@ -52,6 +52,13 @@ export function describe(kind: string, payload: unknown): string {
       return `!${String(data.name ?? '?')}${typeof data.defaultTarget === 'string' ? ` · for ${data.defaultTarget}` : ''}`;
     case 'command.command_update':
       return `!${String(data.name ?? '?')} · ${asList(data.fields).join(', ') || 'no change'}`;
+    case 'routine.fired':
+    case 'routine.made_up':
+    case 'routine.missed':
+    case 'routine.skipped':
+      return `“${String(data.name ?? '?')}” · due ${typeof data.dueAt === 'number' ? new Date(data.dueAt).toLocaleString() : '?'}${
+        typeof data.reason === 'string' ? ` · ${data.reason}` : ''
+      }`;
     case 'effect.task_changed':
       if (typeof data.branch !== 'string') return 'no task';
       return `“${String(data.title ?? '')}” · ${data.branch}${
