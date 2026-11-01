@@ -93,6 +93,14 @@ import {
   type BoardGetResult,
   type BoardListResult,
   type BoardWriteResult,
+  type AgentCommandCreatePayload,
+  type AgentCommandGetPayload,
+  type AgentCommandListPayload,
+  type AgentCommandRef,
+  type AgentCommandUpdatePayload,
+  type CommandGetResult,
+  type CommandListResult,
+  type CommandWriteResult,
   type AgentMoveToPayload,
   type AgentOccupant,
   type AgentReadyPayload,
@@ -142,6 +150,11 @@ import {
   isBoardStatus,
   isPullRequestAction,
   mayAssignBoardItem,
+  mayCreateOfficeCommands,
+  mayEditOfficeCommand,
+  normaliseOfficeCommandName,
+  officeCommandAuthorLabel,
+  officeCommandUsage,
   mayDeleteBoardItem,
   mayWriteBoard,
   noteForTask,
@@ -201,7 +214,11 @@ import {
   type TeamSummary,
   listOfficeCommandsForWorkspace,
   officeCommandRef,
+  OfficeCommandError,
+  createOfficeCommand,
+  updateOfficeCommand,
   type OfficeCommandSummary,
+  type OfficeCommandTargetInput,
   listPeopleForWorkspace,
   removeChannelMember,
   getDb,
@@ -387,6 +404,8 @@ export class OfficeRoom extends Room<OfficeState> {
    * the board and a copy to everybody in it.
    */
   readonly #boardPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
+  /** Command writes, paced like board writes and counted apart from them. */
+  readonly #commandPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -678,6 +697,18 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(AgentMessage.BoardUpdate, (client, payload: AgentBoardUpdatePayload) =>
       void this.#onAgentBoardUpdate(client, payload),
+    );
+    this.onMessage(AgentMessage.CommandList, (client, payload: AgentCommandListPayload) =>
+      void this.#onAgentCommandList(client, payload),
+    );
+    this.onMessage(AgentMessage.CommandGet, (client, payload: AgentCommandGetPayload) =>
+      void this.#onAgentCommandGet(client, payload),
+    );
+    this.onMessage(AgentMessage.CommandCreate, (client, payload: AgentCommandCreatePayload) =>
+      void this.#onAgentCommandCreate(client, payload),
+    );
+    this.onMessage(AgentMessage.CommandUpdate, (client, payload: AgentCommandUpdatePayload) =>
+      void this.#onAgentCommandUpdate(client, payload),
     );
     this.onMessage(AgentMessage.MemoryGet, (client, payload: AgentMemoryGetPayload) =>
       void this.#onAgentMemoryGet(client, payload),
@@ -980,6 +1011,7 @@ export class OfficeRoom extends Room<OfficeState> {
       taskVersion: 1,
       mcpVersion: 1,
       boardVersion: 1,
+      commandsVersion: 1,
       mcpServers: mcp?.servers ?? [],
       agentId: identity.id,
       sessionId: client.sessionId,
@@ -3964,6 +3996,227 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     logger.error('[office] board write by an agent failed', error);
     this.#replyError(client, requestId, { code: 'unavailable', message: 'The board could not be written.' });
+  }
+
+  // --- the office's commands, for agents -----------------------------------
+
+  /**
+   * An agent's session, if the call is in its `commands` scope. Reads are
+   * under it too: the instructions are the office's briefs to its agents,
+   * and an owner who does not want an agent rewriting them may not want it
+   * quoting them either.
+   */
+  #agentCommandSession(client: Client, payload: AgentRequest | undefined): AgentSession | null {
+    const session = this.#agentSession(client);
+    if (!session) return null;
+    if (!hasScope(session.identity, 'commands')) {
+      const message = 'This agent has no "commands" scope.';
+      audit(session.identity.id, 'command.rejected', { code: 'missing_scope', message });
+      this.#replyError(client, payload?.requestId, { code: 'missing_scope', message });
+      return null;
+    }
+    return session;
+  }
+
+  /** A command as an agent reads it, with whether this agent's owner may change it. */
+  #agentCommandRef(command: OfficeCommandSummary, actor: ChannelActor): AgentCommandRef {
+    return {
+      name: command.name,
+      summary: command.summary,
+      argumentHint: command.argumentHint,
+      instructions: command.instructions,
+      usage: officeCommandUsage(officeCommandRef(command)),
+      defaultTarget: command.defaultTarget ? { kind: command.defaultTarget.kind, name: command.defaultTarget.name } : null,
+      by: officeCommandAuthorLabel(command),
+      yours: mayEditOfficeCommand(actor, command),
+      updatedAt: command.updatedAt,
+    };
+  }
+
+  /** The command a name says, from the list the room keeps, read fresh so a write just made is found. */
+  async #agentCommandNamed(client: Client, wanted: unknown, requestId: unknown): Promise<OfficeCommandSummary | null> {
+    const name = normaliseOfficeCommandName(wanted);
+    if (name.length === 0) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: 'Name the command.' });
+      return null;
+    }
+    await this.#refreshChannels();
+    const command = this.#commands.find((candidate) => candidate.name === name);
+    if (!command) {
+      this.#replyError(client, requestId, { code: 'not_found', message: `There is no !${name} in this office. command_list names them.` });
+      return null;
+    }
+    return command;
+  }
+
+  /**
+   * A default target as an agent says it: an agent or a team of the office,
+   * by name. Null for none. `undefined` after a refusal, which is already
+   * sent. "me" is the agent itself.
+   */
+  async #agentCommandTarget(
+    client: Client,
+    session: AgentSession,
+    wanted: unknown,
+    requestId: unknown,
+  ): Promise<OfficeCommandTargetInput | null | undefined> {
+    if (wanted === null || wanted === undefined) return null;
+    if (typeof wanted !== 'string') {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: 'defaultTarget is an agent or a team, by name, or null.' });
+      return undefined;
+    }
+    const needle = wanted.trim().replace(/^@/, '').toLowerCase();
+    if (needle.length === 0 || needle === 'nobody') return null;
+    await this.#boardLoaded;
+    const self = session.identity;
+    if (needle === 'me' || needle === self.name.toLowerCase()) return { kind: 'agent', id: self.id };
+    const agents = this.#boardAgents.filter((agent) => agent.name.toLowerCase() === needle);
+    const teams = this.#teams.filter((team) => team.name.toLowerCase() === needle);
+    if (agents.length + teams.length !== 1) {
+      this.#replyError(client, requestId, {
+        code: 'not_found',
+        message:
+          agents.length + teams.length === 0
+            ? `No agent or team here called ${wanted.trim()}.`
+            : `More than one agent or team here is called ${wanted.trim()}; leave the default off and say so.`,
+      });
+      return undefined;
+    }
+    return agents[0] ? { kind: 'agent', id: agents[0].id } : { kind: 'team', id: teams[0]!.id };
+  }
+
+  /** One write's worth of the agent's command pace, or a refusal with how long to wait. */
+  #agentCommandPaced(client: Client, session: AgentSession, requestId: unknown): boolean {
+    const now = Date.now();
+    if (this.#commandPace.tryConsume(session.identity.id, now)) return true;
+    const retryAfterMs = this.#commandPace.retryAfterSeconds(session.identity.id, now) * 1000;
+    const message = `Agents may write commands ${AGENT_BOARD_WRITES_PER_WINDOW} times every ${AGENT_BOARD_WRITE_WINDOW_MS / 1000}s.`;
+    audit(session.identity.id, 'command.rejected', { code: 'rate_limited', message });
+    this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs });
+    return false;
+  }
+
+  #agentCommandRefused(client: Client, requestId: unknown, error: unknown): void {
+    if (error instanceof OfficeCommandError) {
+      this.#replyError(client, requestId, {
+        code: error.reason === 'target' ? 'not_found' : 'invalid_payload',
+        message: error.message,
+      });
+      return;
+    }
+    logger.error('[office] command write by an agent failed', error);
+    this.#replyError(client, requestId, { code: 'unavailable', message: 'The command could not be written.' });
+  }
+
+  async #onAgentCommandList(client: Client, payload: AgentCommandListPayload): Promise<void> {
+    const session = this.#agentCommandSession(client, payload);
+    if (!session) return;
+    audit(session.identity.id, 'command.command_list', {});
+    markSeen(session.identity.id);
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    await this.#refreshChannels();
+    const result: CommandListResult = {
+      commands: this.#commands.map((command) => this.#agentCommandRef(command, actor)),
+    };
+    this.#reply(client, payload?.requestId, result);
+  }
+
+  async #onAgentCommandGet(client: Client, payload: AgentCommandGetPayload): Promise<void> {
+    const session = this.#agentCommandSession(client, payload);
+    if (!session) return;
+    audit(session.identity.id, 'command.command_get', { name: String(payload?.name ?? '') });
+    markSeen(session.identity.id);
+    const command = await this.#agentCommandNamed(client, payload?.name, payload?.requestId);
+    if (!command) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    this.#reply(client, payload?.requestId, { command: this.#agentCommandRef(command, actor) } satisfies CommandGetResult);
+  }
+
+  /**
+   * An agent makes a command as its owner: it may where its owner may, and
+   * the row records both. The name rules are the database's, as for a
+   * person, and come back as a sentence the agent can say.
+   */
+  async #onAgentCommandCreate(client: Client, payload: AgentCommandCreatePayload): Promise<void> {
+    const session = this.#agentCommandSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentCommandPaced(client, session, payload?.requestId)) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    if (!mayCreateOfficeCommands(actor)) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you cannot make commands for it.',
+      });
+      return;
+    }
+    const target = await this.#agentCommandTarget(client, session, payload?.defaultTarget, payload?.requestId);
+    if (target === undefined) return;
+    try {
+      const made = await createOfficeCommand(getDb(), {
+        workspaceId: this.#workspaceId,
+        name: String(payload?.name ?? ''),
+        summary: typeof payload?.summary === 'string' ? payload.summary : undefined,
+        argumentHint: typeof payload?.argumentHint === 'string' ? payload.argumentHint : undefined,
+        instructions: typeof payload?.instructions === 'string' ? payload.instructions : undefined,
+        defaultTarget: target,
+        createdBy: session.identity.ownerUserId,
+        createdByAgentId: session.identity.id,
+      });
+      audit(session.identity.id, 'command.command_create', { name: made.name, defaultTarget: made.defaultTarget?.name ?? null });
+      await this.#refreshChannels();
+      this.#reply(client, payload?.requestId, { command: this.#agentCommandRef(made, actor) } satisfies CommandWriteResult);
+    } catch (error: unknown) {
+      this.#agentCommandRefused(client, payload?.requestId, error);
+    }
+  }
+
+  /** Change a command its owner may change. The agent becomes its "via". */
+  async #onAgentCommandUpdate(client: Client, payload: AgentCommandUpdatePayload): Promise<void> {
+    const session = this.#agentCommandSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentCommandPaced(client, session, payload?.requestId)) return;
+    const command = await this.#agentCommandNamed(client, payload?.name, payload?.requestId);
+    if (!command) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    if (!mayEditOfficeCommand(actor, command)) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'unauthorised',
+        message: `!${command.name} was made by ${command.createdByName || 'somebody else'}; only they, or an office admin, change it. Say what you would have changed instead.`,
+      });
+      return;
+    }
+    const target =
+      'defaultTarget' in (payload ?? {})
+        ? await this.#agentCommandTarget(client, session, payload.defaultTarget, payload.requestId)
+        : null;
+    if (target === undefined) return;
+    const patch = {
+      ...(typeof payload?.newName === 'string' ? { name: payload.newName } : {}),
+      ...(typeof payload?.summary === 'string' ? { summary: payload.summary } : {}),
+      ...(typeof payload?.argumentHint === 'string' ? { argumentHint: payload.argumentHint } : {}),
+      ...(typeof payload?.instructions === 'string' ? { instructions: payload.instructions } : {}),
+      ...('defaultTarget' in (payload ?? {}) ? { defaultTarget: target } : {}),
+    };
+    if (Object.keys(patch).length === 0) {
+      this.#replyError(client, payload?.requestId, { code: 'invalid_payload', message: `command_update !${command.name}: say what changes.` });
+      return;
+    }
+    try {
+      await updateOfficeCommand(getDb(), {
+        workspaceId: this.#workspaceId,
+        commandId: command.id,
+        ...patch,
+        changedByAgentId: session.identity.id,
+      });
+      audit(session.identity.id, 'command.command_update', { name: command.name, fields: Object.keys(patch) });
+      await this.#refreshChannels();
+      const after = this.#commands.find((candidate) => candidate.id === command.id) ?? command;
+      this.#reply(client, payload?.requestId, { command: this.#agentCommandRef(after, actor) } satisfies CommandWriteResult);
+    } catch (error: unknown) {
+      this.#agentCommandRefused(client, payload?.requestId, error);
+    }
   }
 
   async #onAgentMemoryGet(client: Client, payload: AgentMemoryGetPayload): Promise<void> {

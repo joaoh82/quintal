@@ -43,6 +43,25 @@ A command has:
   the name of whoever made the command. Up to 16,000 characters: room for a
   whole checklist, since they are sent only on the turn the command starts.
 
+## Asking an agent to make one
+
+An agent with the `commands` scope (on by default) can do what the settings
+page does: list the office's commands, say what one does, make one, and
+change one. "Marvin, make a `!triage` command that reads the open notes on
+the board and says which you could take" ends with the command in the
+picker and Marvin saying how it is used.
+
+The agent acts as you. It can make a command where you could, and change a
+command you made, or any command if you are an office admin — not somebody
+else's. A command an agent wrote says so wherever it is read: **by Josh, via
+Marvin** in Settings, and `set up in this office by Josh, via Marvin` in the
+heading every agent it later reaches sees. You answer for it; they can tell
+a brief a colleague wrote from one a person did. Saving the command by hand
+in Settings makes it yours alone again. Deleting is yours only, in Settings.
+
+Take the `commands` scope away under Settings → Agents to have an agent that
+can neither read nor write them.
+
 ## Using one
 
 Type `!` in the chat box: the office's commands are offered after the

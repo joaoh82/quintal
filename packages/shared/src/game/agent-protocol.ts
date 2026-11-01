@@ -51,6 +51,18 @@ export const AgentMessage = {
   BoardCreate: 'agent:board_create',
   /** Change a note by its number: title, body, column, colour, labels, or whose it is. */
   BoardUpdate: 'agent:board_update',
+  /**
+   * The office's own `!` commands, under the `commands` scope: every one, by
+   * name, with its instructions. Only to an office that says
+   * `commandsVersion: 1`.
+   */
+  CommandList: 'agent:command_list',
+  /** One command, by name. */
+  CommandGet: 'agent:command_get',
+  /** Make a command, as the agent's owner. The office records the agent beside them. */
+  CommandCreate: 'agent:command_create',
+  /** Change a command by name. Absent fields stay. */
+  CommandUpdate: 'agent:command_update',
   /** Read a memory slug. */
   MemoryGet: 'agent:memory_get',
   /** Write a memory slug. Over-size writes are rejected, not truncated. */
@@ -215,6 +227,36 @@ export interface AgentBoardUpdatePayload extends AgentRequest {
   assignee?: string | null;
 }
 
+export type AgentCommandListPayload = AgentRequest;
+
+export interface AgentCommandGetPayload extends AgentRequest {
+  /** The command's name, with or without the `!`. */
+  name: string;
+}
+
+/**
+ * A command as an agent writes it: the same fields as the settings form.
+ * The default target is by **name** — an agent or a team as the agent knows
+ * them — or null for none.
+ */
+export interface AgentCommandCreatePayload extends AgentRequest {
+  name: string;
+  summary?: string;
+  argumentHint?: string;
+  instructions?: string;
+  defaultTarget?: string | null;
+}
+
+/** A change to a command by its name. Absent fields stay; `defaultTarget: null` clears it. */
+export interface AgentCommandUpdatePayload extends AgentRequest {
+  name: string;
+  newName?: string;
+  summary?: string;
+  argumentHint?: string;
+  instructions?: string;
+  defaultTarget?: string | null;
+}
+
 export interface AgentMessagesGetPayload extends AgentRequest {
   /**
    * `nearby` = within earshot of where you stand now; `zone` = a zone's
@@ -331,6 +373,8 @@ export interface AgentReadyPayload {
   mcpVersion?: 1;
   /** Set when this office has a board and answers `agent:board_*`. */
   boardVersion?: 1;
+  /** Set when this office answers `agent:command_*`. */
+  commandsVersion?: 1;
   /**
    * The MCP servers its owner gave it, for the harness to hand the runtime
    * beside its own tools. Secret values are sealed to the agent's key.
@@ -638,6 +682,38 @@ export interface BoardGetResult {
 export interface BoardWriteResult {
   item: BoardItemRef;
   handover: string | null;
+}
+
+/**
+ * A command as an agent reads it: what the picker shows, plus the
+ * instructions — the agent is asked about them and may be asked to change
+ * them — and who it is by. `yours` is whether this agent may change it: its
+ * owner made it, or its owner is an office admin.
+ */
+export interface AgentCommandRef {
+  name: string;
+  summary: string;
+  argumentHint: string;
+  instructions: string;
+  /** `!review @reviewers <pull request link>`. */
+  usage: string;
+  defaultTarget: { kind: 'agent' | 'team'; name: string } | null;
+  /** "Josh", or "Josh, via Marvin" when an agent wrote it for them. */
+  by: string;
+  yours: boolean;
+  updatedAt: number;
+}
+
+export interface CommandListResult {
+  commands: AgentCommandRef[];
+}
+
+export interface CommandGetResult {
+  command: AgentCommandRef;
+}
+
+export interface CommandWriteResult {
+  command: AgentCommandRef;
 }
 
 export interface MemoryGetResult {

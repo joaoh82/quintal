@@ -10,6 +10,7 @@ import {
   normaliseOfficeCommandInstructions,
   normaliseOfficeCommandName,
   normaliseOfficeCommandSummary,
+  officeCommandAuthorLabel,
 } from '../office-command.js';
 import { createAgent, revokeAgent } from './agents.js';
 import {
@@ -104,6 +105,53 @@ describe('making a command', () => {
     const bo = await member(ana.db, 'Bo');
     await createOfficeCommand(ana.db, { workspaceId: ana.owner.workspaceId, name: 'review', createdBy: ana.owner.id });
     await createOfficeCommand(ana.db, { workspaceId: bo.workspaceId, name: 'review', createdBy: bo.id });
+  });
+});
+
+describe('a command an agent wrote', () => {
+  it('is credited to its owner, via the agent, until a person saves it by hand', async () => {
+    const { db, owner, agent } = await office('Ana');
+    const marvin = await agent('Marvin');
+    const made = await createOfficeCommand(db, {
+      workspaceId: owner.workspaceId,
+      name: 'triage',
+      instructions: 'Read the open notes; say which you could take.',
+      createdBy: owner.id,
+      createdByAgentId: marvin.id,
+    });
+    assert.equal(made.createdByName, 'Ana');
+    assert.equal(made.createdByAgentId, marvin.id);
+    assert.equal(made.createdByAgentName, 'Marvin');
+    assert.equal(officeCommandAuthorLabel(made), 'Ana, via Marvin');
+
+    // Changed by another of Ana's agents: that one is now the "via".
+    const arthur = await agent('Arthur');
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage the board', changedByAgentId: arthur.id });
+    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Arthur');
+
+    // Saved by hand: Ana read what she saved, so it is hers alone again.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage', changedByAgentId: null });
+    const byHand = await getOfficeCommand(db, owner.workspaceId, made.id);
+    assert.equal(byHand?.createdByAgentId, null);
+    assert.equal(officeCommandAuthorLabel(byHand!), 'Ana');
+
+    // A change that says nothing about who made it leaves the credit alone.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, changedByAgentId: marvin.id });
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Still triage' });
+    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Marvin');
+  });
+
+  it('keeps the agent’s name on it after the agent is revoked', async () => {
+    const { db, owner, agent } = await office('Ana');
+    const marvin = await agent('Marvin');
+    const made = await createOfficeCommand(db, {
+      workspaceId: owner.workspaceId,
+      name: 'triage',
+      createdBy: owner.id,
+      createdByAgentId: marvin.id,
+    });
+    await revokeAgent(db, marvin.id, owner.id);
+    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Marvin');
   });
 });
 

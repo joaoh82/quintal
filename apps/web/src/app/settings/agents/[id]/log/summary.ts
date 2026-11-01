@@ -44,6 +44,14 @@ export function describe(kind: string, payload: unknown): string {
       return `#${String(data.number ?? '?')} · ${asList(data.changed).join(', ') || 'no change'}${
         'assignee' in data ? ` · for ${typeof data.assignee === 'string' ? data.assignee : 'nobody'}` : ''
       }`;
+    case 'command.command_list':
+      return 'every command';
+    case 'command.command_get':
+      return `!${String(data.name ?? '?')}`;
+    case 'command.command_create':
+      return `!${String(data.name ?? '?')}${typeof data.defaultTarget === 'string' ? ` · for ${data.defaultTarget}` : ''}`;
+    case 'command.command_update':
+      return `!${String(data.name ?? '?')} · ${asList(data.fields).join(', ') || 'no change'}`;
     case 'effect.task_changed':
       if (typeof data.branch !== 'string') return 'no task';
       return `“${String(data.title ?? '')}” · ${data.branch}${

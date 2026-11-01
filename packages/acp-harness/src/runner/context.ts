@@ -303,7 +303,7 @@ export function commandSection(command: AgentCommandCall, fromName: string): str
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update.',
+  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update, command_list, command_get, command_create, command_update.',
   'say posts a line now, into the conversation this turn is in — use it to say',
   'you have picked something up and to report when it lands or blocks, rather',
   'than holding everything for your final answer. Your final answer is posted',
@@ -317,6 +317,10 @@ export const TOOL_HINT = [
   'what runtime and machine you are on and which scopes you hold — one call, instead',
   'of exploring with pwd, ls or git remote. It reads this machine only: access to',
   'anything beyond it is unknown until you check it deliberately.',
+  'The office\'s !commands are standing requests people type in chat. When asked what',
+  'commands there are or what one does, read them with command_list and command_get',
+  'rather than guessing; when asked to make or change one, use command_create or',
+  'command_update — describing a command in conversation does not make it exist.',
 ].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */

@@ -12,6 +12,7 @@ import {
   normaliseOfficeCommandInstructions,
   normaliseOfficeCommandName,
   OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH,
+  officeCommandAuthorLabel,
   officeCommandUsage,
   type OfficeCommandRef,
 } from './office-command.js';
@@ -41,6 +42,15 @@ describe('office command names', () => {
     assert.ok(isReservedCommandName('cancel'));
     assert.ok(isReservedCommandName('Task'));
     assert.equal(isReservedCommandName('review'), false);
+  });
+});
+
+describe('who a command is by', () => {
+  it('is the person, or the person via the agent that wrote it for them', () => {
+    assert.equal(officeCommandAuthorLabel({ createdByName: 'Josh' }), 'Josh');
+    assert.equal(officeCommandAuthorLabel({ createdByName: 'Josh', createdByAgentName: 'Marvin' }), 'Josh, via Marvin');
+    assert.equal(officeCommandAuthorLabel({ createdByName: '', createdByAgentName: 'Marvin' }), 'Marvin, an agent');
+    assert.equal(officeCommandAuthorLabel({ createdByName: '', createdByAgentName: null }), '');
   });
 });
 

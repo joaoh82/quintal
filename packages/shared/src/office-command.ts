@@ -120,6 +120,25 @@ export function mayEditOfficeCommand(
   return actor.role !== null && command.createdBy === actor.userId;
 }
 
+/**
+ * Who a command is said to be by, wherever that is read: in the brief's
+ * heading an agent sees, and beside the command in Settings.
+ *
+ * A command an agent wrote on its owner's behalf is "Josh, via Marvin": the
+ * owner answers for it, and the agents it later reaches can tell a brief a
+ * colleague wrote from one a person did. Empty when the author has left and
+ * no agent wrote it.
+ */
+export function officeCommandAuthorLabel(command: {
+  createdByName: string;
+  createdByAgentName?: string | null;
+}): string {
+  const person = command.createdByName.trim();
+  const agent = (command.createdByAgentName ?? '').trim();
+  if (agent.length === 0) return person;
+  return person.length > 0 ? `${person}, via ${agent}` : `${agent}, an agent`;
+}
+
 /** The office command a parsed `!` line names, if it names one. */
 export function findOfficeCommand<T extends Pick<OfficeCommandRef, 'name'>>(
   parsed: ParsedCommand | null,

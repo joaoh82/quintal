@@ -169,6 +169,42 @@ function needBoardScope(gateway: Gateway, tool: string): void {
   );
 }
 
+/** The commands are one scope, reads included, as the board is. */
+function needCommandsScope(gateway: Gateway, tool: string): void {
+  if (gateway.ready?.scopes?.includes('commands')) return;
+  throw new Error(
+    `${tool}: this agent has no "commands" scope. Its owner grants it under Settings → Agents. ` +
+      'Until then, say what the command would be and leave making it to them.',
+  );
+}
+
+/** `"review"`, `"!review"` or `" Review "`: a command's name as people write it. */
+export function commandName(value: unknown): string {
+  const name = String(value ?? '').trim().replace(/^!/, '').toLowerCase();
+  if (name.length === 0) throw new Error('name the command, as it is typed after !');
+  return name;
+}
+
+/** `"@reviewers"`, `"reviewers"`, `"me"`; `null`, `""` or `"nobody"` is none. */
+function targetArg(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const name = String(value).trim().replace(/^@/, '');
+  return name.length === 0 || name.toLowerCase() === 'nobody' ? null : name;
+}
+
+/** The fields a command create and update share, only those given. */
+function commandFields(args: Record<string, unknown>): {
+  summary?: string;
+  argumentHint?: string;
+  instructions?: string;
+} {
+  return {
+    ...(typeof args.summary === 'string' ? { summary: args.summary } : {}),
+    ...(typeof args.argument_hint === 'string' ? { argumentHint: args.argument_hint } : {}),
+    ...(typeof args.instructions === 'string' ? { instructions: args.instructions } : {}),
+  };
+}
+
 /** `12`, `"12"` or `"#12"`: the note's number as people write it. */
 export function noteNumber(value: unknown): number {
   const text = String(value ?? '').trim().replace(/^#/, '');
@@ -364,6 +400,37 @@ async function dispatch(
       };
       if (Object.keys(patch).length === 0) throw new Error(`board_update #${number}: say what changes`);
       return gateway.boardUpdate({ number, ...patch });
+    }
+
+    case 'command_list': {
+      needCommandsScope(gateway, call.tool);
+      return gateway.commandList();
+    }
+
+    case 'command_get': {
+      needCommandsScope(gateway, call.tool);
+      return gateway.commandGet(commandName(call.args.name));
+    }
+
+    case 'command_create': {
+      needCommandsScope(gateway, call.tool);
+      return gateway.commandCreate({
+        name: commandName(call.args.name),
+        ...commandFields(call.args),
+        ...('default_target' in call.args ? { defaultTarget: targetArg(call.args.default_target) } : {}),
+      });
+    }
+
+    case 'command_update': {
+      needCommandsScope(gateway, call.tool);
+      const name = commandName(call.args.name);
+      const patch = {
+        ...(typeof call.args.new_name === 'string' ? { newName: commandName(call.args.new_name) } : {}),
+        ...commandFields(call.args),
+        ...('default_target' in call.args ? { defaultTarget: targetArg(call.args.default_target) } : {}),
+      };
+      if (Object.keys(patch).length === 0) throw new Error(`command_update !${name}: say what changes`);
+      return gateway.commandUpdate({ name, ...patch });
     }
 
     case 'workspace_info': {

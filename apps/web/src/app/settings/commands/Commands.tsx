@@ -7,6 +7,7 @@ import {
   OFFICE_COMMAND_SUMMARY_MAX_LENGTH,
   mayCreateOfficeCommands,
   mayEditOfficeCommand,
+  officeCommandAuthorLabel,
   officeCommandUsage,
   type MembershipRole,
 } from '@quintal/shared';
@@ -195,8 +196,8 @@ function CommandCard({
         {command.summary ? (
           <span className="text-muted-foreground text-xs">{command.summary}</span>
         ) : null}
-        {command.createdByName ? (
-          <span className="text-muted-foreground text-xs">by {command.createdByName}</span>
+        {officeCommandAuthorLabel(command) ? (
+          <span className="text-muted-foreground text-xs">by {officeCommandAuthorLabel(command)}</span>
         ) : null}
         {canEdit ? (
           <div className="ml-auto flex items-center gap-2">

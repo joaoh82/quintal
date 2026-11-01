@@ -153,6 +153,17 @@ knowing whether any of it is working.
 Roughly in order. Each of these is a few days of work with an agent, not a
 quarter.
 
+- **Routines.** A standing request on one of your agents with a schedule:
+  "every hour, review the open pull requests", "weekdays at nine, see what
+  is on the board", "in an hour, check the deploy". Today each runtime
+  schedules in its own way or not at all, and the office sees none of it.
+  A routine is the office's: it fires as a line in your DM with the agent,
+  with a brief, the way a board hand-over does; it is made in Settings or
+  by asking the agent; and it shows on the agent's card, on the board's
+  Agents tab and on a Routines tab with every run. The first step is
+  letting an agent list, read, make and change the office's commands
+  through tools, since a routine often runs one. The design and the plan
+  are in [ROUTINES.md](./ROUTINES.md).
 - **Private rooms that actually isolate.** Step into a meeting room and only
   its occupants hear you, humans and agents alike. The zones are already in
   the map and already scope conversations; what is missing is earshot and the
