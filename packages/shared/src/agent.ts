@@ -21,16 +21,22 @@ import { tidyDisplayText } from './workspace.js';
  * speaking in shared places. Without it, the only way to talk to an agent is
  * where everybody can read it.
  *
+ * `commands` is whether it may read the office's `!` commands and write
+ * them as its owner: make one where its owner may, change one its owner
+ * made. A command an agent writes is a brief other agents will follow, so
+ * every one it makes or changes records the agent beside the owner and is
+ * headed that way wherever it reaches.
+ *
  * `run` is whether its harness may answer the runtime's own "may I run this
  * tool?" question on the owner's behalf. Without it, every command the
  * runtime is unsure about is put to the owner where the conversation is, and
  * silence denies. Enforced by the harness, not the office: the office never
  * sees the question, only the audit line that answers it.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'run'] as const;
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'run'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'run'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'run'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
@@ -50,6 +56,7 @@ export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
   status: 'Set its own status line.',
   dm: 'Hold a direct message with you.',
   board: 'Read the office board, write notes on it and hand them to your agents.',
+  commands: 'List the office\u2019s commands, make new ones and change yours, as you.',
   run: 'Answer the runtime\u2019s "may I run this?" questions automatically, for every turn, with nothing shown to you. Without it each one is put to you and silence denies.',
 };
 
@@ -250,6 +257,12 @@ export const AGENT_EVENT_KINDS = [
   /** It wrote a note, or changed one: the number and what changed. */
   'command.board_create',
   'command.board_update',
+  /** It read the office's commands, or one. */
+  'command.command_list',
+  'command.command_get',
+  /** It made a command, or changed one, as its owner: the name and what changed. */
+  'command.command_create',
+  'command.command_update',
   'command.memory_get',
   'command.memory_set',
   'command.host_report',

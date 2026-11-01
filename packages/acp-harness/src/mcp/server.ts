@@ -306,6 +306,77 @@ const TOOLS = [
     },
   },
   {
+    name: 'command_list',
+    description:
+      'The office\'s own !commands: every one, with its name, what it does, how to use it, its ' +
+      'instructions, who set it up, and whether you may change it (yours: your owner made it, or ' +
+      'your owner is an office admin). Read this when asked what commands there are, what one ' +
+      'does, or before making one that might already exist. People use these by typing !name in ' +
+      'chat; you cannot use one yourself — writing !review is talking about it.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'command_get',
+    description:
+      'One of the office\'s !commands by name ("review" or "!review"): its whole instructions, how ' +
+      'to use it, who set it up and whether you may change it. Read a command before you are asked ' +
+      'to explain or change it.',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'command_create',
+    description:
+      'Make one of the office\'s !commands, as your owner. When someone asks you for a command that ' +
+      'does something, write one worth keeping: a one-word name people will type after !, a one-line ' +
+      'summary for the picker, a hint for what to type after it, and instructions that tell whoever ' +
+      'it reaches exactly what to do and what done looks like — up to 16,000 characters, so a ' +
+      'checklist fits. The office records it as made by your owner, via you, and every agent it ' +
+      'later reaches is told so. Say back how it is used ("!review @reviewers <link>"). Never make ' +
+      'one nobody asked for.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'One word: letters, digits, - or _. What people type after !.' },
+        summary: { type: 'string', description: 'One line, up to 120 characters: what it does.' },
+        argument_hint: { type: 'string', description: 'What to type after it, as a hint: "<pull request link>". Empty for nothing.' },
+        instructions: { type: 'string', description: 'What it asks of whoever it reaches. Up to 16,000 characters.' },
+        default_target: {
+          type: ['string', 'null'],
+          description: 'An agent or a team, by name, or "me", that the command goes to when the line names nobody. Omit for none.',
+        },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'command_update',
+    description:
+      'Change one of the office\'s !commands by name: its name, summary, hint, instructions or ' +
+      'default target. Only what you pass changes. You may change a command your owner made (or any, ' +
+      'if your owner is an office admin); for anybody else\'s, say what you would have changed. ' +
+      'Read it with command_get first and rewrite the instructions whole — they replace, not append. ' +
+      'The office records the change as your owner\'s, via you.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The command to change, as typed after !.' },
+        new_name: { type: 'string', description: 'A new name for it.' },
+        summary: { type: 'string' },
+        argument_hint: { type: 'string' },
+        instructions: { type: 'string', description: 'The whole new instructions.' },
+        default_target: { type: ['string', 'null'], description: 'An agent or team by name, "me", or null for none.' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'memory_get',
     description:
       'Read one of your memory slugs. "core" holds your identity, standing ' +

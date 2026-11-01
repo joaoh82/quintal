@@ -1,5 +1,6 @@
 import {
   findOfficeCommand,
+  officeCommandAuthorLabel,
   officeCommandUsage,
   parseAgentCommand,
   type AgentCommandCall,
@@ -85,7 +86,7 @@ export function commandCallFor(
     name: line.command.name,
     instructions: line.command.instructions,
     args: line.args,
-    definedBy: line.command.createdByName,
+    definedBy: officeCommandAuthorLabel(line.command),
     addressed,
   };
 }

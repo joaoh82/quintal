@@ -15,8 +15,10 @@ place to stand and people to talk to.
   Engineer.");
 - **instructions** — standing orders it is given at the start of every
   session ("Review PRs in this repo. Be terse.");
-- **scopes** — what it may do: `chat`, `move`, `status`, `dm`, and `run`.
-  `run` means its harness answers the runtime's "may I run this?" questions
+- **scopes** — what it may do: `chat`, `move`, `status`, `dm`, `board`,
+  `commands` and `run`. `board` lets it read and write the [office
+  board](./board.md); `commands` lets it read the office's
+  [commands](./commands.md) and make or change them as you. `run` means its harness answers the runtime's "may I run this?" questions
   for it — ongoing, every turn, with nothing shown to you. Without `run`,
   every command its runtime is unsure about is put to you in the channel or
   room you asked from, as a card with the tool and the command on it: click

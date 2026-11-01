@@ -12,6 +12,7 @@ import {
   normaliseOfficeCommandInstructions,
   normaliseOfficeCommandName,
   OFFICE_COMMAND_INSTRUCTIONS_MAX_LENGTH,
+  officeCommandAuthorLabel,
   officeCommandUsage,
   type OfficeCommandRef,
 } from './office-command.js';
@@ -41,6 +42,28 @@ describe('office command names', () => {
     assert.ok(isReservedCommandName('cancel'));
     assert.ok(isReservedCommandName('Task'));
     assert.equal(isReservedCommandName('review'), false);
+  });
+});
+
+describe('who a command is by', () => {
+  const ana = { createdBy: 'u-ana', createdByName: 'Ana' };
+  it('is its maker, via the agent that wrote it for them', () => {
+    assert.equal(officeCommandAuthorLabel(ana), 'Ana');
+    assert.equal(officeCommandAuthorLabel({ ...ana, writtenBy: 'u-ana', writtenByName: 'Ana' }), 'Ana');
+    assert.equal(officeCommandAuthorLabel({ ...ana, writtenBy: 'u-ana', writtenByName: 'Ana', writtenByAgentName: 'Marvin' }), 'Ana, via Marvin');
+  });
+  it('names whoever rewrote it when that is somebody else, agent and all', () => {
+    assert.equal(officeCommandAuthorLabel({ ...ana, writtenBy: 'u-josh', writtenByName: 'Josh' }), 'Ana, changed by Josh');
+    assert.equal(
+      officeCommandAuthorLabel({ ...ana, writtenBy: 'u-josh', writtenByName: 'Josh', writtenByAgentName: 'Arthur' }),
+      'Ana, changed by Josh, via Arthur',
+    );
+  });
+  it('says what it can when people have left', () => {
+    assert.equal(officeCommandAuthorLabel({ createdBy: null, createdByName: '', writtenBy: null, writtenByAgentName: 'Marvin' }), 'Marvin, an agent');
+    assert.equal(officeCommandAuthorLabel({ createdBy: null, createdByName: '', writtenBy: 'u-josh', writtenByName: 'Josh' }), 'Josh');
+    assert.equal(officeCommandAuthorLabel({ ...ana, writtenBy: 'u-gone', writtenByName: '' }), 'Ana');
+    assert.equal(officeCommandAuthorLabel({ createdBy: null, createdByName: '' }), '');
   });
 });
 

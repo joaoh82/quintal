@@ -15,6 +15,11 @@ import {
   type AgentBoardGetPayload,
   type AgentBoardListPayload,
   type AgentBoardUpdatePayload,
+  type AgentCommandCreatePayload,
+  type AgentCommandUpdatePayload,
+  type CommandGetResult,
+  type CommandListResult,
+  type CommandWriteResult,
   type BoardGetResult,
   type BoardListResult,
   type BoardWriteResult,
@@ -468,6 +473,30 @@ export class GatewayClient {
     return this.#request<T>(type, payload);
   }
 
+  /** The office's `!` commands. Refused here, as the board is, against an office that predates the tools. */
+  commandList(): Promise<CommandListResult> {
+    return this.#commandRequest<CommandListResult>(AgentMessage.CommandList, {});
+  }
+
+  commandGet(name: string): Promise<CommandGetResult> {
+    return this.#commandRequest<CommandGetResult>(AgentMessage.CommandGet, { name });
+  }
+
+  commandCreate(input: Omit<AgentCommandCreatePayload, 'requestId'>): Promise<CommandWriteResult> {
+    return this.#commandRequest<CommandWriteResult>(AgentMessage.CommandCreate, input);
+  }
+
+  commandUpdate(input: Omit<AgentCommandUpdatePayload, 'requestId'>): Promise<CommandWriteResult> {
+    return this.#commandRequest<CommandWriteResult>(AgentMessage.CommandUpdate, input);
+  }
+
+  #commandRequest<T>(type: string, payload: Record<string, unknown>): Promise<T> {
+    if (this.#ready && this.#ready.commandsVersion !== 1) {
+      return Promise.reject(new Error('this office does not answer the command tools: it predates them'));
+    }
+    return this.#request<T>(type, payload);
+  }
+
   memoryGet(slug: string): Promise<MemoryGetResult> {
     return this.#request<MemoryGetResult>(AgentMessage.MemoryGet, { slug });
   }
@@ -554,6 +583,10 @@ export type Gateway = Pick<
   | 'boardGet'
   | 'boardCreate'
   | 'boardUpdate'
+  | 'commandList'
+  | 'commandGet'
+  | 'commandCreate'
+  | 'commandUpdate'
   | 'memoryGet'
   | 'memorySet'
   | 'occupants'
