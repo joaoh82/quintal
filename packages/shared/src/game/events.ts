@@ -4,6 +4,7 @@ import type { MapInteractable, MapZone, OfficeMap, TileRect } from '../map.js';
 import type { Direction, PlayerKind } from '../player.js';
 import type { VoiceUiState } from '../voice.js';
 import type {
+  ActivityFollowedPayload,
   ChannelChatPayload,
   ChannelsPayload,
   ChatBroadcastPayload,
@@ -124,6 +125,14 @@ export type GameEvents = {
   interactable: { interactable: MapInteractable | null };
   /** You used something: pressed E by it, or clicked it and have arrived. */
   interact: { interactable: MapInteractable };
+  /**
+   * You clicked somebody, or the screen of the desk they hold: open their
+   * card. The session, not the identity, because that is what the roster is
+   * keyed by and what tells one tab of a person from another.
+   */
+  inspect: { sessionId: string };
+  /** The office answered `activity_follow`. */
+  activityFollowed: ActivityFollowedPayload;
   /** Local player position, in tiles. Fires only when the tile changes. */
   tile: { x: number; y: number; direction: Direction; kind: PlayerKind };
   /** Debug overlay toggled with Z. */

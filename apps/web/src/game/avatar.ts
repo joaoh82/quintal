@@ -188,7 +188,10 @@ export class Avatar {
       // position the server tracks is where it stands — and where it stands is
       // also what it sorts by against the furniture.
       .setOrigin(BODY_ORIGIN.x, BODY_ORIGIN.y)
-      .setDepth(player.y);
+      .setDepth(player.y)
+      // Anybody can be clicked for their card. The hand cursor says so; the
+      // scene decides what the click does.
+      .setInteractive({ useHandCursor: true });
     // Started here and not left to `setFacing`, which short-circuits when
     // nothing changed — and standing still facing south is exactly the state
     // an avatar is born in.

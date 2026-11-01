@@ -30,6 +30,8 @@ import {
   type ChannelLeavePayload,
   type ReadPayload,
   type ChannelsPayload,
+  type ActivityFollowPayload,
+  type ActivityFollowedPayload,
   type FollowZonePayload,
   type ZoneChatPayload,
   type ChatBroadcastPayload,
@@ -145,6 +147,8 @@ export class OfficeScene extends Phaser.Scene {
   readonly #interactableSprites = new Map<string, Phaser.GameObjects.Image>();
   /** The halo behind each of those props, and the breathing it does while you stand by. */
   readonly #halos = new Map<string, { halo: Phaser.GameObjects.Rectangle; breath: Phaser.Tweens.Tween | null }>();
+  /** The screen of each desk, by seat id: a click on it is a click on whoever holds the desk. */
+  readonly #screens = new Map<string, Phaser.GameObjects.Zone>();
   /** Something clicked from afar, to be used when the route ends on its doorstep. */
   #useOnArrival: string | null = null;
   /** Signature of the last roster we published, to avoid pointless re-renders. */
@@ -220,6 +224,7 @@ export class OfficeScene extends Phaser.Scene {
     if (!tilemap.getLayer('collision')) throw new Error('Map is missing the "collision" layer');
 
     this.#createProps(tilemap);
+    this.#createScreens();
     this.#createAnimations();
     this.#zoneLabels();
     this.#debugStatic = this.add.graphics().setDepth(DEPTH.debug).setVisible(false);
@@ -350,6 +355,9 @@ export class OfficeScene extends Phaser.Scene {
     });
     room.onMessage(ServerMessage.Board, (board: BoardMessagePayload) => {
       this.#bridge.emit('board', board);
+    });
+    room.onMessage(ServerMessage.ActivityFollowed, (followed: ActivityFollowedPayload) => {
+      this.#bridge.emit('activityFollowed', followed);
     });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
@@ -508,10 +516,17 @@ export class OfficeScene extends Phaser.Scene {
       if (!this.#inputCaptured) this.#toggleDebug();
     });
 
-    // A click on the noticeboard uses it; a click anywhere else walks there.
+    // A click on somebody, or on the screen of a desk somebody holds, opens
+    // their card; a click on the noticeboard uses it; a click anywhere else
+    // walks there.
     this.input.on(
       'pointerdown',
       (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+        const somebody = this.#avatarUnder(over) ?? this.#sitterUnder(over);
+        if (somebody) {
+          if (!this.#inputCaptured) this.#bridge.emit('inspect', { sessionId: somebody });
+          return;
+        }
         const clicked = this.#interactableUnder(over);
         if (clicked) this.#use(clicked);
         else this.#walkTo(pointer.worldX, pointer.worldY);
@@ -649,6 +664,40 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   // --- using things ----------------------------------------------------------
+
+  /** Whose body is under the pointer, if anybody's. */
+  #avatarUnder(over: readonly Phaser.GameObjects.GameObject[]): string | null {
+    for (const [sessionId, avatar] of this.#avatars) {
+      if (over.includes(avatar.sprite)) return sessionId;
+    }
+    return null;
+  }
+
+  /** Who holds the desk whose screen is under the pointer, if anybody. */
+  #sitterUnder(over: readonly Phaser.GameObjects.GameObject[]): string | null {
+    for (const [seatId, screen] of this.#screens) {
+      if (!over.includes(screen)) continue;
+      for (const [sessionId, player] of this.#room.state.players) {
+        if (player.seat === seatId) return sessionId;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * One hit area per desk screen, from the map's seats. Nothing is drawn: the
+   * desk sprite already has its monitor. The pointer becomes a hand over it
+   * only while somebody holds the desk — see `#publishRoster` — because a
+   * hand over an empty desk promises something a click does not yet do.
+   */
+  #createScreens(): void {
+    for (const seat of this.#map.seats) {
+      if (!seat.screen) continue;
+      const { x, y, width, height } = seat.screen;
+      const zone = this.add.zone(x + width / 2, y + height / 2, width, height).setInteractive();
+      this.#screens.set(seat.id, zone);
+    }
+  }
 
   /** The interactable whose prop is under the pointer, if any. */
   #interactableUnder(over: readonly Phaser.GameObjects.GameObject[]): MapInteractable | null {
@@ -823,6 +872,11 @@ export class OfficeScene extends Phaser.Scene {
     this.#room.send(ClientMessage.FollowZone, { zoneId } satisfies FollowZonePayload);
   }
 
+  /** Ask for an agent's running turns. The office answers with what we may read, and a count of the rest. */
+  followActivity(agentId: string): void {
+    this.#room.send(ClientMessage.ActivityFollow, { agentId } satisfies ActivityFollowPayload);
+  }
+
   joinChannel(slug: string): void {
     this.#room.send(ClientMessage.ChannelJoin, { slug } satisfies ChannelJoinPayload);
   }
@@ -969,7 +1023,9 @@ export class OfficeScene extends Phaser.Scene {
 
   #publishRoster(): void {
     const players: RosterEntry[] = [];
+    const held = new Set<string>();
     for (const [sessionId, player] of this.#room.state.players) {
+      if (player.seat) held.add(player.seat);
       players.push({
         sessionId,
         name: player.name,
@@ -997,6 +1053,9 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
+    for (const [seatId, screen] of this.#screens) {
+      if (screen.input) screen.input.cursor = held.has(seatId) ? 'pointer' : 'default';
+    }
 
     // Cheaper than it looks, and far cheaper than re-rendering a React list
     // twenty times a second because somebody took a step.

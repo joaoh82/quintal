@@ -107,7 +107,10 @@ activity history.
 the Agent Bay and types; one that holds a task with nothing running sits
 there; one with neither is on its feet. The office decides from the status
 line and the task, so no agent can look busy while idle, and the same agent
-sits at the same desk tomorrow.
+sits at the same desk tomorrow. Click an agent, or the screen of its desk,
+and its card opens with the turn it is on, live, and a button to the
+conversation that turn is in — if you could read that conversation anyway.
+What you could not read is a count, not a where.
 
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
