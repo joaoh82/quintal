@@ -117,6 +117,26 @@ describe('making a routine', () => {
     for (let i = 0; i < 20; i += 1) await hourly(db, owner.workspaceId, marvin.id, owner.id, `routine ${i}`);
     await assert.rejects(hourly(db, owner.workspaceId, marvin.id, owner.id, 'one more'), (error: unknown) => error instanceof RoutineError && error.reason === 'full');
   });
+
+  it('refuses a second routine of one name on one agent, so a retried create schedules nothing twice', async () => {
+    const { db, owner, agent } = await office('Josh');
+    const marvin = await agent('Marvin');
+    const arthur = await agent('Arthur');
+    const first = await hourly(db, owner.workspaceId, marvin.id, owner.id, 'hourly PR check');
+    await assert.rejects(
+      hourly(db, owner.workspaceId, marvin.id, owner.id, 'Hourly PR Check'),
+      (error: unknown) => error instanceof RoutineError && error.reason === 'invalid' && /already has a routine called/.test(error.message),
+    );
+    const onArthur = await hourly(db, owner.workspaceId, arthur.id, owner.id, 'hourly PR check');
+    assert.notEqual(onArthur.id, first.id, 'another agent may have one of the same name');
+    const other = await hourly(db, owner.workspaceId, marvin.id, owner.id, 'daily digest');
+    await assert.rejects(
+      updateRoutine(db, { workspaceId: owner.workspaceId, routineId: other.id, name: 'hourly pr check', now: NOW }),
+      (error: unknown) => error instanceof RoutineError && error.reason === 'invalid' && /already has a routine called/.test(error.message),
+    );
+    await updateRoutine(db, { workspaceId: owner.workspaceId, routineId: first.id, name: 'Hourly PR check', now: NOW });
+    assert.equal((await getRoutine(db, owner.workspaceId, first.id))?.name, 'Hourly PR check', 'a routine may keep its own name, recased');
+  });
 });
 
 describe('changing a routine', () => {

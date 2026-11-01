@@ -105,6 +105,29 @@ async function commandHere(db: Database, workspaceId: string, commandId: string 
   return rows[0].id;
 }
 
+/**
+ * Whether an agent already has a routine of this name, another than
+ * `exceptId`. A name is how a routine is picked — by a person in Settings,
+ * by an agent through the tools — so two on one agent would leave "stop
+ * that" unable to choose, and a retried create would schedule the work
+ * twice. Case does not tell them apart.
+ */
+async function nameTaken(db: Database, workspaceId: string, agentId: string, name: string, exceptId: string | null): Promise<boolean> {
+  const rows = await db
+    .select({ id: routines.id })
+    .from(routines)
+    .where(
+      and(
+        eq(routines.workspaceId, workspaceId),
+        eq(routines.agentId, agentId),
+        sql`lower(${routines.name}) = lower(${name})`,
+        ...(exceptId ? [sql`${routines.id} <> ${exceptId}`] : []),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 function scheduleColumns(schedule: RoutineSchedule, after: number) {
   return {
     kind: schedule.kind,
@@ -149,6 +172,9 @@ export async function createRoutine(db: Database, input: CreateRoutineInput): Pr
     throw new RoutineError('invalid', 'Say what the routine asks: instructions of its own, or a command to run.');
   }
   const agent = await agentHere(db, input.workspaceId, input.agentId);
+  if (await nameTaken(db, input.workspaceId, agent.id, name, null)) {
+    throw new RoutineError('invalid', `That agent already has a routine called "${name}"; change it, or pick another name.`);
+  }
   const count = await db
     .select({ n: sql<number>`count(*)` })
     .from(routines)
@@ -199,6 +225,9 @@ export async function updateRoutine(db: Database, input: UpdateRoutineInput): Pr
   if (input.name !== undefined) {
     const name = normaliseRoutineName(input.name);
     if (name === null) throw new RoutineError('invalid', 'A routine needs a name, on one line.');
+    if (await nameTaken(db, input.workspaceId, current.agentId, name, current.id)) {
+      throw new RoutineError('invalid', `That agent already has a routine called "${name}"; pick another name.`);
+    }
     patch.name = name;
   }
   let schedule = current.schedule;

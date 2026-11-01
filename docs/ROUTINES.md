@@ -127,11 +127,16 @@ board's, each under a scope of its own that is on by default.
   follow is the one new risk here, and attribution is how it is kept
   honest. Deleting stays in Settings.
 - **`routines`** — `routine_list`, `routine_get`, `routine_create`,
-  `routine_update` (pause and resume included), `routine_delete`. "In an
-  hour", "every weekday at 9" and a raw cron line are all accepted; the
-  phrase is resolved in `@quintal/shared` so the settings form and the tool
-  agree. The base prompt tells the model to use these rather than any
-  scheduler of its own.
+  `routine_update` (pause and resume included), `routine_delete`. An agent
+  sees and keeps the routines on its owner's agents — its own and the
+  others' — and nobody else's: a routine speaks in the owner's DM, so its
+  words are the owner's business. "In an hour", "every weekday at 9" and a
+  raw cron line are all accepted; the phrase is resolved in `@quintal/shared`
+  by the same `parseRoutineWhen` the settings form uses, in the zone the
+  harness sends (its machine's). A routine is named by its name, or its id
+  when two of the owner's agents share a name. The base prompt tells the
+  model to use these rather than any scheduler of its own, and to pause a
+  routine when asked to stop rather than agree in conversation.
 
 ## Decisions taken, open to change
 
@@ -160,7 +165,7 @@ Five pull requests, each shippable on its own.
       delivery through `#deliverChannelChat` speaking for an owner who is
       not in the room; the harness's `[Routine]` heading; audit events;
       Settings → Routines and its tab.
-- [ ] **3. Routine tools.** The `routine_*` tools, phrase parsing, the
+- [x] **3. Routine tools.** The `routine_*` tools, phrase parsing, the
       `routines` scope, base-prompt guidance.
 - [ ] **4. Visibility.** Routines in the board payload; the Routines tab;
       the Agents tab toggle; the roster card row.
