@@ -18,6 +18,7 @@ export * from './preferences.js';
 export * from './migrate.js';
 export * from './reads.js';
 export * from './schema.js';
+export * from './sealed.js';
 export * from './avatars.js';
 export * from './board.js';
 export * from './github.js';

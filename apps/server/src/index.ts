@@ -20,6 +20,7 @@ import {
   loadRootEnv,
   resolveDatabaseUrl,
   runMigrations,
+  sealOfficeGithubTokens,
   settleInstanceAdmin,
 } from '@quintal/shared/db';
 import {
@@ -74,6 +75,14 @@ if (personalMode()) {
   }
 }
 logger.info(`[auth] sign-in is bound to ${config.origin}; the office must be opened at exactly that address`);
+
+// Office GitHub tokens saved before they were encrypted at rest are encrypted
+// now. One that cannot be opened stays as it is and shows in Settings.
+const githubTokens = await sealOfficeGithubTokens(getDb());
+if (githubTokens.sealed > 0) logger.info(`[github] encrypted ${githubTokens.sealed} office GitHub token(s) saved in plain text`);
+if (githubTokens.unreadable > 0) {
+  logger.warn(`[github] ${githubTokens.unreadable} office GitHub token(s) cannot be decrypted with this server's BETTER_AUTH_SECRET; an owner or admin pastes them again in Settings`);
+}
 
 const nextHandler: NextRequestHandler | undefined = config.isProduction
   ? await createNextHandler(config.webDir)

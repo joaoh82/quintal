@@ -9,7 +9,15 @@ import {
   normaliseGithubToken,
   type OfficeGithubRef,
 } from '@quintal/shared';
-import { clearOfficeGithub, describeOfficeGithub, getDb, setOfficeGithub, setOfficeGithubRepos } from '@quintal/shared/db';
+import {
+  clearOfficeGithub,
+  describeOfficeGithub,
+  getDb,
+  NO_SEALING_KEY,
+  sealingKey,
+  setOfficeGithub,
+  setOfficeGithubRepos,
+} from '@quintal/shared/db';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
@@ -20,7 +28,7 @@ import { currentOffice } from '@/lib/workspace';
  * The office's GitHub token: put in, replaced, or taken out by an owner or
  * admin. The token is tried against GitHub before it is kept, so what is
  * saved is known to work and known to be whose; it is never read back to a
- * page. The game server picks it up on its next look, within a minute.
+ * page, and it is kept encrypted (`db/sealed.ts`). The game server picks it up on its next look, within a minute.
  */
 
 export interface GithubState {
@@ -43,6 +51,8 @@ export async function saveGithubTokenAction(_previous: GithubState, formData: Fo
   try {
     const who = await officeAdmin();
     if ('error' in who) return { ok: false, error: who.error };
+    // Before GitHub hears of it: a token this server cannot encrypt is not kept.
+    if (!sealingKey()) return { ok: false, error: NO_SEALING_KEY };
     const token = normaliseGithubToken(formData.get('token'));
     if (!token) return { ok: false, error: 'That is not a GitHub token. Paste the token itself, as GitHub showed it.' };
 

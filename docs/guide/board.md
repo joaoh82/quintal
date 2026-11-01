@@ -65,7 +65,7 @@ An owner or admin can give the office a GitHub token in **Settings → Office
 → GitHub**, with the list of repositories it is for. A fine-grained token
 with *Pull requests: read and write* and *Contents: read and write* on those
 repositories is enough. The token is tried before it is kept, stays on the
-server, and is never shown again.
+server, is stored encrypted, and is never shown again.
 
 With one, the office checks the listed pull requests once a minute while
 somebody is in the room: the checks by name, whether it can merge, the

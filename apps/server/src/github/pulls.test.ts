@@ -5,6 +5,7 @@ import type { BoardTaskRef, PullRequestStatusRef } from '@quintal/shared';
 import {
   createAgent,
   describeOfficeGithub,
+  getOfficeGithub,
   listBoardEvents,
   listAgentTasksForWorkspace,
   noteAgentTask,
@@ -16,6 +17,9 @@ import { createTestDb, createTestUser } from '@quintal/shared/db/testing';
 import { PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS, tasksToWatch } from './pulls.js';
 
 const API = 'https://api.github.test';
+
+// The office's token is kept encrypted under the server's secret.
+process.env.BETTER_AUTH_SECRET ??= 'pulls-test-secret-at-least-thirty-two-characters';
 
 /** A GitHub that answers from a table and keeps what it was asked. */
 function fakeGithub(routes: Record<string, { status?: number; body?: unknown }>) {
@@ -193,6 +197,24 @@ describe('a look at GitHub', () => {
     assert.equal(outcome.looked, 0);
     assert.equal(github.calls.length, 0, 'GitHub was not called');
     assert.equal((await pullRequestStatusesForWorkspace(db, owner.workspaceId)).size, 0, 'and nothing was written down');
+  });
+
+  it('does not call GitHub with a token it cannot decrypt, and says so on the office', async () => {
+    const { db, owner, onPull } = await office();
+    const first = await onPull(1, 1000);
+    const github = fakeGithub(pullRoutes(1));
+    const secret = process.env.BETTER_AUTH_SECRET;
+    process.env.BETTER_AUTH_SECRET = 'a-rotated-secret-that-is-thirty-two-characters';
+    try {
+      const watch = new PullRequestWatch({ db, workspaceId: owner.workspaceId, apiBase: API, fetch: github.fetch, now: () => 7000 });
+      const outcome = await watch.refresh([first], new Map());
+      assert.equal(outcome.configured, false);
+      assert.equal(github.calls.length, 0);
+      const stored = await getOfficeGithub(db, owner.workspaceId);
+      assert.match(stored?.lastError ?? '', /different BETTER_AUTH_SECRET/);
+    } finally {
+      process.env.BETTER_AUTH_SECRET = secret;
+    }
   });
 
   it('keeps a failed look as an error on that line, and a refused token on the office', async () => {
