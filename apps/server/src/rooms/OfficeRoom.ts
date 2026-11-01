@@ -351,12 +351,15 @@ interface PlayerSim {
    */
   seatWalk?: boolean;
   /**
-   * The pose the agent's state last called for (see `seating.ts`). Kept so
-   * the walk to the desk happens on the change — a turn starting, a task
-   * taken — and not every second: an agent its model has walked across the
-   * room mid-turn stays where it was sent, standing, until the next change.
+   * The pose the office last arranged for this session (see `seating.ts`):
+   * recorded when it walked the agent to its desk, sat it down or got it up,
+   * and left alone when it could not — a desk wanted and not had is asked
+   * about again. Kept so the walk to the desk happens on the change — a turn
+   * starting, a task taken — and not every second: an agent its model has
+   * walked across the room mid-turn stays where it was sent, standing, until
+   * the next change.
    */
-  wantedPose?: Pose;
+  arranged?: Pose;
   /**
    * The last movement command read, not yet published as `inputSeq`. Held
    * until the tick that acts on it, so the count never reaches the browser
@@ -1161,8 +1164,17 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #seatOf(agentId: string): MapSeat | null {
     const seatId = this.#seats.seatOf(agentId);
-    if (seatId === undefined) return null;
+    return seatId === undefined ? null : this.#seatNamed(seatId);
+  }
+
+  #seatNamed(seatId: string): MapSeat | null {
     return this.#map.seats.find((seat) => seat.id === seatId) ?? null;
+  }
+
+  /** Is anybody still connected as this agent? */
+  #hasAgentSession(agentId: string): boolean {
+    for (const identity of this.#agents.values()) if (identity.id === agentId) return true;
+    return false;
   }
 
   /** Walk to the middle of a named zone. The agent-facing way to say "go here". */
@@ -4299,57 +4311,64 @@ export class OfficeRoom extends Room<OfficeState> {
       const player = this.state.players.get(sessionId);
       if (!sim.agent || !player || sim.away) continue;
 
-      const seat = this.#seatOf(sim.agent.identity.id);
+      const agentId = sim.agent.identity.id;
+      const seat = this.#seatOf(agentId);
       const atSeat = seat !== null && this.#onTile(player, seat.tile) && sim.path.length === 0;
       if (seated(player.pose) && !atSeat) player.pose = 'stand';
 
       const wanted = wantedPose({ busy: !idleCapable(player.status), onTask: player.taskBranch.length > 0 });
-      if (!seated(wanted)) {
-        sim.wantedPose = wanted;
-        // Up from the chair, so it is not left standing on one: a chair is
-        // nobody's floor, and idle life could never wander it off from there.
-        if (atSeat && hasScope(sim.agent.identity, 'move')) {
-          const beside = tileBeside(this.#map, seat.tile.x, seat.tile.y);
+      const plan = this.#seats.plan(
+        { agentId, wanted, arranged: sim.arranged, atSeat, canMove: hasScope(sim.agent.identity, 'move') },
+        now,
+      );
+      switch (plan.kind) {
+        case 'wait':
+          // Every desk is held by somebody here. Nothing arranged, nothing
+          // recorded: the next sweep asks again, and the first desk a leaver
+          // frees is this one's.
+          break;
+        case 'stay':
+          if (!seated(wanted)) sim.arranged = 'stand';
+          // Still wanted at the desk and already there: keep the drawing honest.
+          else if (atSeat && player.pose !== wanted) player.pose = wanted;
+          break;
+        case 'rise': {
+          // Up from the chair, so it is not left standing on one: a chair is
+          // nobody's floor, and idle life could never wander it off from there.
+          sim.arranged = 'stand';
+          const chair = this.#seatNamed(plan.seat);
+          const beside = chair && tileBeside(this.#map, chair.tile.x, chair.tile.y);
           if (beside && this.walkTo(sessionId, beside.x, beside.y)) sim.idleWalk = true;
+          break;
         }
-        continue;
+        case 'settle':
+          sim.arranged = plan.pose;
+          this.#settle(sessionId, sim, player);
+          break;
+        case 'walk': {
+          const chair = this.#seatNamed(plan.seat);
+          // Arranged only once the walk is under way: a desk it cannot reach
+          // from here is asked about again, not written off.
+          if (chair && this.walkTo(sessionId, chair.tile.x, chair.tile.y)) {
+            sim.arranged = plan.pose;
+            sim.seatWalk = true;
+          }
+          break;
+        }
       }
-
-      if (wanted === sim.wantedPose) {
-        // Still wanted at the desk and already there: keep the drawing honest.
-        if (atSeat && player.pose !== wanted) player.pose = wanted;
-        continue;
-      }
-      sim.wantedPose = wanted;
-
-      if (atSeat) {
-        this.#settle(sessionId, sim, player);
-        continue;
-      }
-      if (!hasScope(sim.agent.identity, 'move')) continue;
-      const desk = seat ?? this.#claimSeat(sim.agent.identity.id, now);
-      if (!desk) continue;
-      if (this.walkTo(sessionId, desk.tile.x, desk.tile.y)) sim.seatWalk = true;
     }
   }
 
   /** On the chair: face the desk and take the pose the state calls for. */
   #settle(sessionId: string, sim: PlayerSim, player: OfficePlayer): void {
     const seat = sim.agent ? this.#seatOf(sim.agent.identity.id) : null;
-    const wanted = sim.wantedPose ?? 'stand';
+    const wanted = sim.arranged ?? 'stand';
     if (!seat || !this.#onTile(player, seat.tile) || !seated(wanted)) return;
     if (player.seat !== seat.id) player.seat = seat.id;
     if (player.dir !== seat.facing) player.dir = seat.facing;
     if (player.pose !== wanted) player.pose = wanted;
     // Sitting down is something happening: it is not idle, whatever the clock says.
     this.#noteActivity(sessionId);
-  }
-
-  /** A desk for this agent, if the book has one to give. */
-  #claimSeat(agentId: string, now: number): MapSeat | null {
-    const seatId = this.#seats.claim(agentId, now);
-    if (seatId === null) return null;
-    return this.#map.seats.find((seat) => seat.id === seatId) ?? null;
   }
 
   #onTile(player: OfficePlayer, tile: TilePoint): boolean {
@@ -4383,7 +4402,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const tile = this.#tileOf(player);
       // Thinking of a line is the banter, not work that ends it. A desk to
       // be at is, so an agent on a task sits rather than wanders.
-      const busy = record.talk?.banter ? false : !idleCapable(player.status) || seated(sim.wantedPose ?? 'stand');
+      const busy = record.talk?.banter ? false : !idleCapable(player.status) || seated(sim.arranged ?? 'stand');
       const action = stepIdle(record, { now, busy, zoneId: zoneIdAt(this.#map, tile) }, Math.random);
 
       switch (action.kind) {
@@ -4713,11 +4732,18 @@ export class OfficeRoom extends Room<OfficeState> {
     if (record?.talk) this.#endTalkWith(record.talk.partner, sessionId);
     this.#idle.delete(sessionId);
     const agentLeaving = this.#agents.get(sessionId);
-    if (agentLeaving) this.#seats.left(agentLeaving.id, Date.now());
     this.#roles.delete(sessionId);
     this.state.players.delete(sessionId);
     this.#sims.delete(sessionId);
     this.#agents.delete(sessionId);
+    // Its desk is up for taking only once its last session is gone. A fresh
+    // connection can arrive while the old socket is still in its reconnection
+    // grace, and that old session timing out must not put a present agent's
+    // chair under somebody else — with the agent still standing on it, on a
+    // map that no longer opens that tile to it.
+    if (agentLeaving && !this.#hasAgentSession(agentLeaving.id)) {
+      this.#seats.left(agentLeaving.id, Date.now());
+    }
     this.#credentials.delete(sessionId);
     this.#chatLimiter.forget(sessionId);
     this.#readLimiter.forget(sessionId);

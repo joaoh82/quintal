@@ -38,6 +38,36 @@ export function seated(pose: Pose): boolean {
   return pose !== 'stand';
 }
 
+/** One agent, as the room sees it on a sweep. */
+export interface SeatingInput {
+  agentId: string;
+  /** The pose its state calls for. */
+  wanted: Pose;
+  /**
+   * The pose the office last arranged for this session, if any: recorded by
+   * the room when a plan is carried out, and never for `wait`. Per session,
+   * not per agent, because a fresh session spawns at the door whatever its
+   * last one had been given.
+   */
+  arranged: Pose | undefined;
+  /** Standing still on its own chair. */
+  atSeat: boolean;
+  /** Whether the office may move it. */
+  canMove: boolean;
+}
+
+export type SeatingPlan =
+  /** Nothing to do: as arranged, or standing somewhere on purpose. */
+  | { kind: 'stay' }
+  /** Off the chair, which is nobody's floor. */
+  | { kind: 'rise'; seat: string }
+  /** On the chair already: take the pose. */
+  | { kind: 'settle'; seat: string; pose: Pose }
+  /** To the desk, which is this agent's from now. */
+  | { kind: 'walk'; seat: string; pose: Pose }
+  /** Wants a desk and every one is held by somebody here. Asked again next sweep. */
+  | { kind: 'wait' };
+
 /**
  * The book of desks: which agent holds which seat.
  *
@@ -119,5 +149,30 @@ export class SeatBook {
   release(agentId: string): void {
     this.#held.delete(agentId);
     this.#leftAt.delete(agentId);
+  }
+
+  /**
+   * What to do about one agent this sweep.
+   *
+   * Driven by change, not by the clock: a seated pose already arranged for
+   * this session is `stay` wherever the agent is, because an agent its model
+   * walked across the room mid-turn is standing there on purpose. `wait` is
+   * the exception. An agent that wanted a desk and got none has had nothing
+   * arranged, so the room records nothing and asks again next sweep, and the
+   * first desk a leaver frees is this agent's. Recording the refusal as
+   * handled was how an agent stood through a whole turn beside a chair that
+   * had since come free.
+   */
+  plan(input: SeatingInput, now: number): SeatingPlan {
+    const { agentId, wanted, arranged, atSeat, canMove } = input;
+    const seat = this.#held.get(agentId);
+    if (!seated(wanted)) {
+      return atSeat && canMove && seat !== undefined ? { kind: 'rise', seat } : { kind: 'stay' };
+    }
+    if (arranged === wanted) return { kind: 'stay' };
+    if (atSeat && seat !== undefined) return { kind: 'settle', seat, pose: wanted };
+    if (!canMove) return { kind: 'stay' };
+    const desk = this.claim(agentId, now);
+    return desk === null ? { kind: 'wait' } : { kind: 'walk', seat: desk, pose: wanted };
   }
 }

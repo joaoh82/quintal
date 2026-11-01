@@ -162,6 +162,13 @@ that never seats two agents on one chair.
 The book is sticky by the agent's id, not its session: a reconnect keeps
 the chair, and an agent that leaves keeps its desk until a present agent
 needs one and none is free, when the longest-absent holder's goes first.
+An agent is absent only once its last session has gone — a fresh
+connection can arrive while the old socket is still in its reconnection
+grace, and that old session timing out must not put a present agent's
+chair under somebody else. An agent that wants a desk when every one is
+held by somebody present waits, and is asked about again every sweep:
+nothing was arranged for it, so nothing is recorded as done, and the first
+desk a leaver frees is its.
 
 ### Act-outs, by tool class
 

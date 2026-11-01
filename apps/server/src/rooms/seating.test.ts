@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { SeatBook, seated, wantedPose } from './seating.js';
+import { SeatBook, seated, wantedPose, type SeatingInput } from './seating.js';
 
 /**
  * Two rules, both pinned: the pose follows the state and nothing else, and
@@ -82,5 +82,75 @@ describe('the book of desks', () => {
     book.release('arthur');
     assert.equal(book.seatOf('arthur'), undefined);
     assert.equal(book.claim('marvin', now), 'bay-1');
+  });
+});
+
+describe('what the office does about an agent each sweep', () => {
+  const now = 1_000_000;
+  const asks = (over: Partial<SeatingInput>): SeatingInput => ({
+    agentId: 'arthur',
+    wanted: 'work',
+    arranged: undefined,
+    atSeat: false,
+    canMove: true,
+    ...over,
+  });
+
+  it('walks a newly busy agent to a desk of its own, and only on the change', () => {
+    const book = new SeatBook(['bay-1']);
+    assert.deepEqual(book.plan(asks({}), now), { kind: 'walk', seat: 'bay-1', pose: 'work' });
+    assert.deepEqual(
+      book.plan(asks({ arranged: 'work' }), now),
+      { kind: 'stay' },
+      'walked off mid-turn by its model, it stands there on purpose',
+    );
+    assert.deepEqual(book.plan(asks({ arranged: 'work', atSeat: true, wanted: 'sit' }), now), {
+      kind: 'settle',
+      seat: 'bay-1',
+      pose: 'sit',
+    });
+  });
+
+  it('gets an agent up when it has nothing to sit for, however often it is asked', () => {
+    const book = new SeatBook(['bay-1']);
+    book.claim('arthur', now);
+    const up = asks({ wanted: 'stand', arranged: 'stand', atSeat: true });
+    assert.deepEqual(book.plan(up, now), { kind: 'rise', seat: 'bay-1' });
+    assert.deepEqual(book.plan(up, now + 1), { kind: 'rise', seat: 'bay-1' }, 'a chair is nobody\'s floor');
+    assert.deepEqual(book.plan(asks({ wanted: 'stand' }), now), { kind: 'stay' });
+    assert.deepEqual(
+      book.plan(asks({ wanted: 'stand', atSeat: true, canMove: false }), now),
+      { kind: 'stay' },
+      'one it may not move stays put',
+    );
+  });
+
+  it('keeps asking for a desk until one comes free', () => {
+    const book = new SeatBook(['bay-1']);
+    book.arrived('arthur');
+    assert.deepEqual(book.plan(asks({ agentId: 'arthur' }), now), { kind: 'walk', seat: 'bay-1', pose: 'work' });
+
+    book.arrived('marvin');
+    const marvin = asks({ agentId: 'marvin' });
+    assert.deepEqual(book.plan(marvin, now + 1), { kind: 'wait' });
+    assert.deepEqual(book.plan(marvin, now + 2), { kind: 'wait' }, 'nothing recorded, so nothing to stop asking');
+    assert.equal(book.seatOf('marvin'), undefined);
+
+    book.left('arthur', now + 3);
+    assert.deepEqual(
+      book.plan(marvin, now + 4),
+      { kind: 'walk', seat: 'bay-1', pose: 'work' },
+      'the first desk a leaver frees is the waiting agent\'s',
+    );
+    assert.equal(book.seatOf('arthur'), undefined);
+  });
+
+  it('sends a returning agent back to the same desk', () => {
+    const book = new SeatBook(['bay-1', 'bay-2']);
+    book.claim('arthur', now);
+    book.left('arthur', now + 1);
+    book.arrived('arthur');
+    // A fresh session: nothing arranged for it yet, whatever the last one had.
+    assert.deepEqual(book.plan(asks({ wanted: 'sit' }), now + 2), { kind: 'walk', seat: 'bay-1', pose: 'sit' });
   });
 });
