@@ -51,7 +51,7 @@ interface RosterPanelProps {
  * Anybody who is not you, for a person. For an agent: yours, and one that is
  * allowed to be messaged at all.
  */
-function canMessage(viewer: RosterEntry | undefined, entry: RosterEntry): boolean {
+export function canMessage(viewer: RosterEntry | undefined, entry: RosterEntry): boolean {
   if (!viewer || entry.isSelf || viewer.isGuest) return false;
   if (entry.kind === 'human') return true;
   return entry.ownerUserId === viewer.identityId && entry.scopes.includes('dm');
@@ -211,7 +211,7 @@ export function RosterPanel({ players, connection, speaking = [], onMessage }: R
  * What an agent is, in one card: whose it is, what it's doing, what it's allowed
  * to do, and a way straight to everything it has ever done.
  */
-function AgentCard({
+export function AgentCard({
   agent,
   onClose,
   onMessage,
@@ -350,7 +350,7 @@ function AgentCard({
  * thing. That is the whole reason it is here rather than floating over their
  * head, where nobody would read it.
  */
-function PersonCard({
+export function PersonCard({
   person,
   onClose,
   onMessage,

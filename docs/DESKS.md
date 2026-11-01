@@ -195,32 +195,38 @@ Both are public. They carry no words.
 
 ### Click the desk
 
-Avatars and screens become interactive, with one new bridge event,
-`inspect`, carrying `{ agentId, deskId }`. It opens the **desk panel**, a
-sibling of the board, built from parts that exist:
+Avatars and desk screens are interactive, with one bridge event,
+`inspect`, carrying the clicked session. A click on a body is a click on
+that person or agent; a click on a desk's screen (the seat's `screen`
+rectangle, from the map) is a click on whoever holds the desk, and the
+pointer is a hand over it only while somebody does. It opens the **desk
+panel**, at the left of the room, built from parts that exist:
 
-1. The agent's card (`AgentCard`): name, runtime, model, owner.
-2. What it is on, from the Agents tab row: the task title, branch, pull
-   request and its checks, and where it is working ("in #engineering", "with
-   Josh").
-3. **The current turn**, rendered by `TurnActivity` at your detail level,
-   live. This needs one server addition: `activity:follow { agentId }`, which
-   sends the agent's open turn and its updates to that client, and
-   `activity:unfollow` when the panel closes.
-4. **Go to the conversation**, which maps `workingIn` to a conversation key
-   (`channel:<id>`, `zone:<id>`, `nearby`) and calls `openConversation`.
+1. The agent's card (`AgentCard`): name, owner, status, task, scopes,
+   runtime, model, the audit log.
+2. **The screen**: the agent's running turn, or its most recent, rendered
+   by `TurnActivity` at your detail level, live. The panel reads it from
+   the transcripts this client already holds; opening the panel sends
+   `activity_follow { agentId }`, and the office answers with the agent's
+   running turns, as `activity` messages, and `activity_followed`, which
+   counts the ones it did not send.
+3. **Go to the conversation**: one button per conversation the agent can
+   be read in — the one its shown turn is in, and the ones `workingIn`
+   names that this client is a member of — which calls `openConversation`.
    The task's own thread, when it started from a board note, is the DM the
    hand-over landed in.
 
-The privacy rule, enforced on the server in `activity:follow`, not by the
-panel: the turn is sent only if the follower would have received it by the
-existing rule, as a member of that channel or DM, or within earshot or
-following that zone. Otherwise the panel shows the card, the task and the
-status line, and says "working in a conversation you are not in". The
-button appears only when the conversation would open.
+The privacy rule is `canSeeTurn`, one function the office asks on every
+path — publishing a step, raising an approval card, answering a follow: a
+turn in a channel or DM is for its members; a turn in a zone is for earshot
+of where it began and for whoever is reading that zone. A turn the asker
+may not read is a count in the reply and nothing else, and the panel says
+"working in a conversation you are not in", not where. There is nothing to
+unfollow: later steps reach the panel by the same rule, or do not.
 
-Clicking a human opens their card too; it is the same event. A keyboard
-path as well: `E` on a desk's doorstep, as on the board.
+Clicking a human opens their card; it is the same event. Not yet: a
+keyboard path, `E` on a desk's doorstep, which wants the desk interactable
+of phase 3.
 
 ### Click an empty desk: begin a task from the station
 
@@ -263,8 +269,9 @@ room. Nothing is tracked only by a chair.
    postures. Pure presence; the office feels inhabited and nothing else
    changes. Tests: the seating rules and the posture decision, pinned.
 2. **Click to look.** The `inspect` event, the desk panel from existing
-   parts, `activity:follow` with the privacy rule, and the conversation
-   jump. Test: a follower who is not a member never receives a step.
+   parts, `activity_follow` with the privacy rule, and the conversation
+   jump. Tests: a follower who is not a member never receives a step, the
+   turn the screen shows, and where the buttons go.
 3. **Begin from the station.** The begin-task panel over the existing
    hand-over, free-agent listing, seat reservation on Begin, a typed task
    becoming a note. Then the harness reporting checkouts.

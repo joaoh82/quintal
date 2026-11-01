@@ -7,6 +7,8 @@ import {
   type PublicApprovalRequest,
 } from '@quintal/shared';
 
+import { canSeeTurn, type Viewer } from './audience.js';
+
 /**
  * Who may answer a tool approval, and whether this answer still counts.
  *
@@ -82,26 +84,16 @@ export function judgeDecision(
 /**
  * Whether this person should see this card at all.
  *
- * The same audience rule as activity — channel membership, or earshot, or a
- * zone they are following — because the card sits in the transcript beside
- * the turn it belongs to. The owner is separately guaranteed a copy; see
- * `needsPrivateCopy`.
+ * The same audience rule as activity — `canSeeTurn`, literally — because the
+ * card sits in the transcript beside the turn it belongs to. The owner is
+ * separately guaranteed a copy; see `needsPrivateCopy`.
  */
 export function canSeeApproval(
   tracked: Pick<TrackedApproval, 'value' | 'x' | 'y'>,
-  viewer: {
-    x: number;
-    y: number;
-    /** Whether the viewer is a member of the card's channel, when it has one. */
-    inChannel: boolean;
-    /** The zone this viewer is reading, if any. */
-    followedZone: string | null;
-  },
+  viewer: Viewer,
   radius: number,
 ): boolean {
-  if (tracked.value.channelId) return viewer.inChannel;
-  if (viewer.followedZone && viewer.followedZone === tracked.value.zoneId) return true;
-  return Math.hypot(viewer.x - tracked.x, viewer.y - tracked.y) <= radius;
+  return canSeeTurn(tracked.value, tracked, viewer, radius);
 }
 
 /**

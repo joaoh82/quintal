@@ -2,6 +2,7 @@
 
 import {
   type ActivityDetailLevel,
+  type ActivityFollowedPayload,
   type ConnectionStatus,
   type MapInteractable,
   type MapZone,
@@ -21,9 +22,10 @@ import type { OfficeSession } from './createGame';
 import { BoardPanel } from './ui/BoardPanel';
 import { ChatPanel } from './ui/ChatPanel';
 import { CommsOverlay } from './ui/CommsOverlay';
+import { DeskPanel } from './ui/DeskPanel';
 import { HelpPanel } from './ui/HelpPanel';
 import { Minimap } from './ui/Minimap';
-import { RosterPanel } from './ui/RosterPanel';
+import { RosterPanel, canMessage } from './ui/RosterPanel';
 import { VoiceBar } from './ui/VoiceBar';
 import { useAlerts } from './useAlerts';
 import { useBoard } from './useBoard';
@@ -96,6 +98,9 @@ export default function OfficeGame({
   const [helpOpen, setHelpOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  /** Whose card is open from a click on them or their desk, by session. */
+  const [inspected, setInspected] = useState<string | null>(null);
+  const [followed, setFollowed] = useState<ActivityFollowedPayload | null>(null);
   const [overlayKey, setOverlayKey] = useState('`');
   const [voice, setVoice] = useState<VoiceUiState | null>(null);
   const [activityDetailLevel, setActivityDetailLevel] = useState(initialActivityDetailLevel);
@@ -288,6 +293,8 @@ export default function OfficeGame({
         if (interactable.kind === 'board') setBoardOpen(true);
       }),
       gameBridge.on('roster', ({ players }) => setRoster(players)),
+      gameBridge.on('inspect', ({ sessionId }) => setInspected(sessionId)),
+      gameBridge.on('activityFollowed', (reply) => setFollowed(reply)),
       // A DM you opened from a card is a conversation you meant to type in.
       gameBridge.on('dmOpened', () => setChatFocused(true)),
       gameBridge.on('connection', ({ status, detail }) => {
@@ -353,6 +360,35 @@ export default function OfficeGame({
     [conversations],
   );
 
+  // The desk panel: whoever was clicked, while they are still here. Opening
+  // it on an agent asks the office for its running turns; the answer, and
+  // the steps that follow, arrive by the same rule as every other step.
+  const inspectedEntry = roster.find((player) => player.sessionId === inspected) ?? null;
+  const inspectedAgentId = inspectedEntry?.kind === 'agent' ? inspectedEntry.identityId : null;
+  useEffect(() => {
+    if (inspected && !inspectedEntry) setInspected(null);
+  }, [inspected, inspectedEntry]);
+  useEffect(() => {
+    setFollowed(null);
+    if (inspectedAgentId) sessionRef.current?.followActivity(inspectedAgentId);
+  }, [inspectedAgentId]);
+  const closeDesk = useCallback(() => setInspected(null), []);
+  const viewer = roster.find((player) => player.isSelf);
+  const messageInspected =
+    inspectedEntry && canMessage(viewer, inspectedEntry)
+      ? () => {
+          openDm(inspectedEntry);
+          setInspected(null);
+        }
+      : null;
+  const goFromDesk = useCallback(
+    (key: ConversationKey) => {
+      setInspected(null);
+      openConversation(key);
+    },
+    [openConversation],
+  );
+
   const closeOverlay = useCallback(() => setOverlayOpen(false), []);
   const closeBoard = useCallback(() => setBoardOpen(false), []);
   // From a note to the agent it is for: the board closes and the DM opens.
@@ -378,6 +414,22 @@ export default function OfficeGame({
           onMessage={openDm}
         />
       </div>
+
+      {inspectedEntry && !boardOpen && !overlayOpen ? (
+        <div className="pointer-events-none absolute bottom-12 left-3 top-3 flex items-start">
+          <DeskPanel
+            entry={inspectedEntry}
+            transcripts={conversations.transcripts}
+            channels={conversations.channels}
+            zones={conversations.zones}
+            followed={followed?.agentId === inspectedAgentId ? followed : null}
+            activityDetailLevel={activityDetailLevel}
+            onClose={closeDesk}
+            onMessage={messageInspected}
+            onOpenConversation={goFromDesk}
+          />
+        </div>
+      ) : null}
 
       <div className="pointer-events-none absolute bottom-10 left-3">
         <ChatPanel
