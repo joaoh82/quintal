@@ -537,6 +537,14 @@ export interface AgentCommandCall {
   /** Who made the command, by name, so the agent can say whose brief it followed. */
   definedBy: string;
   /**
+   * Set when the line is a routine firing rather than a person using a
+   * command: the routine's name, its schedule in words, and the moment it
+   * was due. The harness heads the brief `[Routine …]` instead of
+   * `[Command …]`; one that predates routines reads it as a command and
+   * does the work all the same.
+   */
+  routine?: { name: string; schedule: string; dueAt: number; tz: string };
+  /**
    * True when the office aimed the line at this agent — by its name, a team
    * it is on, or the command's default target when the line named nobody.
    * False when the line was aimed at nobody: then it is for whoever a plain

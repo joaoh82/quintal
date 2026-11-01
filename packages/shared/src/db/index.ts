@@ -17,6 +17,7 @@ export * from './messages.js';
 export * from './preferences.js';
 export * from './migrate.js';
 export * from './reads.js';
+export * from './routines.js';
 export * from './schema.js';
 export * from './sealed.js';
 export * from './avatars.js';

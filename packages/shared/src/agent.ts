@@ -263,6 +263,12 @@ export const AGENT_EVENT_KINDS = [
   /** It made a command, or changed one, as its owner: the name and what changed. */
   'command.command_create',
   'command.command_update',
+  /** A routine of its fired: the line was spoken in its owner's DM. `made_up` when it was due while the agent was away. */
+  'routine.fired',
+  'routine.made_up',
+  /** A routine of its was due and not spoken: the agent was away, or still on the previous run. */
+  'routine.missed',
+  'routine.skipped',
   'command.memory_get',
   'command.memory_set',
   'command.host_report',

@@ -130,9 +130,11 @@ board's, each under a scope of its own that is on by default.
 
 - Firings are DM-only.
 - Schedules are stored as cron plus an IANA time zone; next-run computation
-  uses a small dependency (`cron-parser`) rather than hand-written DST rules.
-- The time zone defaults to the browser's when made in Settings and to an
-  office setting when made by an agent.
+  uses a small dependency (`croner`, no dependencies of its own, runs in
+  the browser too) rather than hand-written DST rules.
+- The time zone is the browser's when made in Settings, and the harness
+  machine's when made by an agent (step 3) — an agent usually runs on its
+  owner's computer, and no office setting is needed for it.
 - No `command_delete` tool.
 
 ## Plan
@@ -144,12 +146,13 @@ Five pull requests, each shippable on its own.
       reusing the db functions with the owner's actor; the four tools in the
       harness and the protocol types; the "via" attribution in the brief's
       heading; prompt guidance; tests; `docs/guide/commands.md`.
-- [ ] **2. Routines core.** `packages/shared/src/routine.ts` (spec parsing,
-      next-due, caps); `routines` and `routine_runs` tables and db module;
-      the room tick, the slot lock and the DM delivery, with a variant of
-      `#deliverChannelChat` that speaks for an owner who is not in the room;
-      the harness's `[Routine]` section; audit events; Settings → Routines
-      and its tab.
+- [x] **2. Routines core.** `packages/shared/src/routine.ts` (phrases to
+      cron or a moment, next-due, the floor, labels); `routines` and
+      `routine_runs` tables and `db/routines.ts`; the room's tick every
+      fifteen seconds, the slot lock, missed slots made up, and the DM
+      delivery through `#deliverChannelChat` speaking for an owner who is
+      not in the room; the harness's `[Routine]` heading; audit events;
+      Settings → Routines and its tab.
 - [ ] **3. Routine tools.** The `routine_*` tools, phrase parsing, the
       `routines` scope, base-prompt guidance.
 - [ ] **4. Visibility.** Routines in the board payload; the Routines tab;

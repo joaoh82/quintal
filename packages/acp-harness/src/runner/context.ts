@@ -256,7 +256,11 @@ export function buildEnvelope(input: EnvelopeInput): string {
   }
   for (const trigger of commands.values()) {
     lines.push('');
-    lines.push(commandSection(trigger.command!, trigger.fromName));
+    lines.push(
+      trigger.command!.routine !== undefined
+        ? routineSection(trigger.command!, trigger.fromName)
+        : commandSection(trigger.command!, trigger.fromName),
+    );
   }
 
   return lines.join('\n');
@@ -285,6 +289,45 @@ export function commandSection(command: AgentCommandCall, fromName: string): str
     }`,
     instructions,
     args.length > 0 ? `What they gave it: ${args}` : 'They gave it nothing after the command.',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+}
+
+/**
+ * What a routine asks, said beside the line that fired it.
+ *
+ * Not a person using a command: nobody typed anything, the office spoke the
+ * line in the owner's name because the hour came. So the heading says so,
+ * names the schedule, and says when this firing was due — the model has no
+ * clock of its own, and "every hour" without "it is 14:00" leaves it
+ * unable to say what the last hour was. The ask is the routine's own words,
+ * or the command's with what the routine gives it, and it ends where the
+ * answer goes: here, so the owner reads the run where they set it up.
+ */
+export function routineSection(command: AgentCommandCall, fromName: string): string {
+  const routine = command.routine!;
+  const instructions = command.instructions.trim();
+  const args = command.args.trim();
+  const by = command.definedBy.trim();
+  const due = new Date(routine.dueAt);
+  const when = new Intl.DateTimeFormat('en-GB', {
+    timeZone: routine.tz,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(due);
+  return [
+    `[Routine ${routine.name} — set up by ${by.length > 0 ? by : fromName}, runs ${routine.schedule}]`,
+    `This is a routine of yours firing, not ${fromName} typing: it was due ${when} (${routine.tz}). ` +
+      (instructions.length > 0 ? 'This is what it asks each time:' : 'It carries no instructions of its own.'),
+    instructions,
+    args.length > 0 ? `What it gives: ${args}` : '',
+    'Do it now, then report here, in this conversation, what you did and what you found — briefly, and ' +
+      'without asking whether to proceed. If nothing needs doing, say so in a line.',
   ]
     .filter((line) => line !== '')
     .join('\n');
