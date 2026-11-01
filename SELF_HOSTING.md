@@ -135,6 +135,12 @@ BETTER_AUTH_URL=https://office.example.com
 Everything else has a working default. See [.env.example](./.env.example) for
 the complete list.
 
+`BETTER_AUTH_SECRET` also encrypts the office's GitHub token in the database
+(AES-GCM, with a key derived from the secret), so a copied database is not a
+copied GitHub key. Keep it with your backups. Change it and everybody signs in
+again, and an owner or admin pastes the GitHub token again; Settings says so.
+A server without the secret refuses to save a GitHub token at all.
+
 ## Sign-in
 
 There is nothing to configure. Identity is a keypair: people sign in by signing

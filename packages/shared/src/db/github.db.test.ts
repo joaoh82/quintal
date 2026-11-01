@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { eq } from 'drizzle-orm';
+
 import type { PullRequestFacts } from '../github.js';
 import { noteAgentTask } from './agent-tasks.js';
 import { createAgent } from './agents.js';
@@ -15,10 +17,21 @@ import {
   recordBoardEvent,
   savePullRequestStatus,
   setAgentTaskPullRequestState,
+  sealOfficeGithubTokens,
   setOfficeGithub,
   setOfficeGithubRepos,
 } from './github.js';
+import { officeGithub } from './schema.js';
 import { createTestDb, createTestUser } from './testing.js';
+
+// The token is kept encrypted under the server's secret; these are two of them.
+const SECRET = 'github-test-secret-at-least-thirty-two-characters';
+const OTHER = { BETTER_AUTH_SECRET: 'another-secret-entirely-also-thirty-two-chars' };
+process.env.BETTER_AUTH_SECRET = SECRET;
+
+async function storedToken(db: Awaited<ReturnType<typeof createTestDb>>): Promise<string | undefined> {
+  return (await db.select({ token: officeGithub.token }).from(officeGithub))[0]?.token;
+}
 
 async function office() {
   const db = await createTestDb();
@@ -89,6 +102,84 @@ describe('the office’s GitHub token', () => {
     assert.deepEqual((await describeOfficeGithub(db, owner.workspaceId)).repos, ['acme/office', 'acme/web'], 'a new token keeps the list');
     await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_three', login: 'ana', setByUserId: owner.id, repos: ['acme/api'] });
     assert.deepEqual((await describeOfficeGithub(db, owner.workspaceId)).repos, ['acme/api'], 'unless one is given');
+  });
+});
+
+describe('the office’s GitHub token at rest', () => {
+  it('is never in the database in plain text', async () => {
+    const { db, owner } = await office();
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_secret', login: 'josh', setByUserId: owner.id });
+    const stored = await storedToken(db);
+    assert.match(stored ?? '', /^sealed1\./);
+    assert.ok(!stored?.includes('ghp_secret'));
+    assert.equal((await getOfficeGithub(db, owner.workspaceId))?.token, 'ghp_secret');
+  });
+
+  it('is refused, not kept in plain text, on a server with no secret', async () => {
+    const { db, owner } = await office();
+    await assert.rejects(
+      setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_secret', login: 'josh', setByUserId: owner.id }, {}),
+      /BETTER_AUTH_SECRET is not set/,
+    );
+    assert.equal(await storedToken(db), undefined);
+  });
+
+  it('does not open under another secret, and Settings says to paste it again', async () => {
+    const { db, owner } = await office();
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_secret', login: 'josh', setByUserId: owner.id });
+    const row = await getOfficeGithub(db, owner.workspaceId, OTHER);
+    assert.equal(row?.token, null);
+    assert.match(row?.unreadable ?? '', /different BETTER_AUTH_SECRET/);
+    const described = await describeOfficeGithub(db, owner.workspaceId, OTHER);
+    assert.equal(described.connected, true);
+    assert.match(described.lastError ?? '', /Paste the token again/);
+    assert.equal((await describeOfficeGithub(db, owner.workspaceId)).lastError, null, 'the right secret still opens it');
+  });
+
+  it('is bound to its office: copied onto another, it does not open', async () => {
+    const { db, owner } = await office();
+    const ana = await createTestUser(db, 'Ana');
+    await setOfficeGithub(db, { workspaceId: owner.workspaceId, token: 'ghp_secret', login: 'josh', setByUserId: owner.id });
+    await setOfficeGithub(db, { workspaceId: ana.workspaceId, token: 'ghp_other', login: 'ana', setByUserId: ana.id });
+    const sealed = await storedToken(db);
+    await db.update(officeGithub).set({ token: sealed! }).where(eq(officeGithub.workspaceId, ana.workspaceId));
+    const row = await getOfficeGithub(db, ana.workspaceId);
+    assert.equal(row?.token, null);
+    assert.match(row?.unreadable ?? '', /cannot be decrypted/);
+  });
+
+  it('saved in plain text before this, is encrypted on boot', async () => {
+    const { db, owner } = await office();
+    await db.insert(officeGithub).values({
+      workspaceId: owner.workspaceId,
+      token: 'ghp_legacy',
+      login: 'josh',
+      setByUserId: owner.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    assert.deepEqual(await sealOfficeGithubTokens(db, {}), { sealed: 0, unreadable: 1, scrubbed: true }, 'nothing to seal with: left alone');
+    assert.equal(await storedToken(db), 'ghp_legacy');
+    assert.equal((await getOfficeGithub(db, owner.workspaceId, {}))?.token, null, 'and not used in plain text either');
+
+    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 1, unreadable: 0, scrubbed: true });
+    assert.match((await storedToken(db)) ?? '', /^sealed1\./);
+    assert.equal((await getOfficeGithub(db, owner.workspaceId))?.token, 'ghp_legacy');
+    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 0, unreadable: 0, scrubbed: true }, 'once');
+  });
+
+  it('saved in plain text and read before the boot pass, is encrypted by the read', async () => {
+    const { db, owner } = await office();
+    await db.insert(officeGithub).values({
+      workspaceId: owner.workspaceId,
+      token: 'ghp_legacy',
+      login: 'josh',
+      setByUserId: owner.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    assert.equal((await getOfficeGithub(db, owner.workspaceId))?.token, 'ghp_legacy');
+    assert.match((await storedToken(db)) ?? '', /^sealed1\./);
   });
 });
 

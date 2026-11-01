@@ -994,6 +994,7 @@ export const officeGithub = sqliteTable('office_github', {
   workspaceId: text('workspace_id')
     .primaryKey()
     .references(() => workspaces.id, { onDelete: 'cascade' }),
+  /** Sealed (`sealed.ts`): `sealed1.…`, opened only with the server's secret. */
   token: text('token').notNull(),
   /** The GitHub account the token is for, as GitHub said when it was saved. */
   login: text('login').notNull().default(''),

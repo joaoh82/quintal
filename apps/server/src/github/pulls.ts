@@ -166,6 +166,11 @@ export class PullRequestWatch {
   async #office(): Promise<{ client: GithubClient; repos: string[] } | null> {
     const row = await getOfficeGithub(this.#db, this.#workspaceId);
     if (!row) return null;
+    if (row.token === null) {
+      // Saved, but not openable here: say so where Settings shows it.
+      if (row.lastError !== row.unreadable) await noteOfficeGithubCheck(this.#db, this.#workspaceId, row.unreadable, this.#now());
+      return null;
+    }
     return {
       client: new GithubClient(row.token, { apiBase: this.#apiBase, ...(this.#fetch ? { fetch: this.#fetch } : {}) }),
       repos: row.repos,

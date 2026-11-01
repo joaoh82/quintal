@@ -7,12 +7,17 @@ import type { BoardEventRef, BoardGithubRef, BoardPullReviewRef, OfficeGithubRef
 import type { PullRequestAction, PullRequestFacts, PullRequestStatusRef } from '../github.js';
 import type { Database } from './client.js';
 import { agentTasks, boardEvents, officeGithub, pullRequestStatus, users } from './schema.js';
+import { isSealed, NO_SEALING_KEY, openSecret, sealingKey, sealSecret, type OpenFailure, type SealingKey } from './sealed.js';
 
 /**
  * The office's GitHub: its token, what GitHub last said about the ledger's
  * pull requests, and what was done to them from the board. The token is
  * read by one function, for the game server; everything a page or a client
  * sees goes through `describeOfficeGithub`, which leaves it out.
+ *
+ * The token is sealed at rest (`sealed.ts`), bound to its workspace. It is
+ * the one secret in the database that writes somewhere else — it merges and
+ * closes pull requests — so a leaked database must not be a leaked key.
  */
 
 function newId(): string {
@@ -23,7 +28,9 @@ function newId(): string {
 
 export interface OfficeGithubRow {
   workspaceId: string;
-  token: string;
+  /** Null when this server cannot open what was saved; `unreadable` says why. */
+  token: string | null;
+  unreadable: string | null;
   login: string;
   repos: string[];
   setByUserId: string | null;
@@ -32,14 +39,83 @@ export interface OfficeGithubRow {
   updatedAt: number;
 }
 
+/** What an owner or admin is told when the saved token cannot be opened. */
+export function unreadableTokenMessage(reason: OpenFailure): string {
+  switch (reason) {
+    case 'no_key':
+      return 'BETTER_AUTH_SECRET is not set, so the saved token cannot be decrypted. Set it and restart.';
+    case 'other_key':
+      return 'The saved token was encrypted under a different BETTER_AUTH_SECRET. Paste the token again.';
+    case 'damaged':
+      return 'The saved token cannot be decrypted. Paste the token again.';
+  }
+}
+
+type TokenRead = { token: string; unreadable: null } | { token: null; unreadable: string };
+
+/**
+ * Replace plain-text tokens so that they are gone from the file, not only from
+ * the row. SQLite leaves a rewritten cell's old bytes in the page's free space,
+ * and in WAL mode the new page sits in the -wal file while the database file
+ * keeps the old one until a checkpoint. So: `secure_delete` for the rewrite,
+ * which zeroes what it frees, then a TRUNCATE checkpoint, which writes the
+ * pages home and empties the WAL — old frames included. Remote libSQL keeps
+ * its own files; there is nothing here to scrub.
+ *
+ * True when the checkpoint completed. False means a reader held it off and
+ * the old bytes may linger until the next one.
+ */
+async function rewritingPlaintext(db: Database, rewrite: () => Promise<void>): Promise<boolean> {
+  const client = db.$client;
+  if (client.protocol !== 'file') {
+    await rewrite();
+    return true;
+  }
+  const was = Number((await client.execute('PRAGMA secure_delete')).rows[0]?.[0] ?? 0);
+  await client.execute('PRAGMA secure_delete = ON');
+  try {
+    await rewrite();
+  } finally {
+    await client.execute(`PRAGMA secure_delete = ${was ? 'ON' : 'OFF'}`);
+  }
+  // Rows of (busy, frames in the WAL, frames checkpointed). Not in WAL mode
+  // (an in-memory test database), there is nothing to checkpoint.
+  const busy = (await client.execute('PRAGMA wal_checkpoint(TRUNCATE)')).rows[0]?.[0] ?? 0;
+  return Number(busy) === 0;
+}
+
+/**
+ * Open the stored token. One saved before tokens were sealed is sealed now,
+ * when there is a key to do it with — the boot pass does the same for every
+ * office (`sealOfficeGithubTokens`), this covers a row that slipped past it.
+ */
+async function readToken(db: Database, workspaceId: string, stored: string, key: SealingKey | null): Promise<TokenRead> {
+  if (!isSealed(stored)) {
+    if (!key) return { token: null, unreadable: unreadableTokenMessage('no_key') };
+    await rewritingPlaintext(db, async () => {
+      await db
+        .update(officeGithub)
+        .set({ token: sealSecret(stored, workspaceId, key) })
+        .where(and(eq(officeGithub.workspaceId, workspaceId), eq(officeGithub.token, stored)));
+    });
+    return { token: stored, unreadable: null };
+  }
+  const opened = openSecret(stored, workspaceId, key);
+  return opened.ok ? { token: opened.value, unreadable: null } : { token: null, unreadable: unreadableTokenMessage(opened.reason) };
+}
+
 /** The token and all. Server-side only: never hand this to a client. */
-export async function getOfficeGithub(db: Database, workspaceId: string): Promise<OfficeGithubRow | null> {
+export async function getOfficeGithub(
+  db: Database,
+  workspaceId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OfficeGithubRow | null> {
   const rows = await db.select().from(officeGithub).where(eq(officeGithub.workspaceId, workspaceId)).limit(1);
   const row = rows[0];
   if (!row) return null;
   return {
     workspaceId: row.workspaceId,
-    token: row.token,
+    ...(await readToken(db, workspaceId, row.token, sealingKey(env))),
     login: row.login,
     repos: row.repos ?? [],
     setByUserId: row.setByUserId,
@@ -49,8 +125,16 @@ export async function getOfficeGithub(db: Database, workspaceId: string): Promis
   };
 }
 
-/** What a page or the board may know: that there is a token, whose, who set it, and whether it still works. */
-export async function describeOfficeGithub(db: Database, workspaceId: string): Promise<OfficeGithubRef> {
+/**
+ * What a page or the board may know: that there is a token, whose, who set
+ * it, and whether it still works. A token this server cannot open shows as
+ * the error, so Settings asks for it again without waiting for a poll.
+ */
+export async function describeOfficeGithub(
+  db: Database,
+  workspaceId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<OfficeGithubRef> {
   const rows = await db
     .select({ row: officeGithub, setByName: users.name })
     .from(officeGithub)
@@ -66,8 +150,51 @@ export async function describeOfficeGithub(db: Database, workspaceId: string): P
     setByName: found.setByName ?? null,
     updatedAt: found.row.updatedAt.getTime(),
     lastCheckedAt: found.row.lastCheckedAt?.getTime() ?? null,
-    lastError: found.row.lastError,
+    lastError: unreadableReason(found.row.token, workspaceId, sealingKey(env)) ?? found.row.lastError,
   };
+}
+
+/** Why the stored token does not open, without opening a plain-text one or sealing anything. */
+function unreadableReason(stored: string, workspaceId: string, key: SealingKey | null): string | null {
+  if (!isSealed(stored)) return key ? null : unreadableTokenMessage('no_key');
+  const opened = openSecret(stored, workspaceId, key);
+  return opened.ok ? null : unreadableTokenMessage(opened.reason);
+}
+
+/**
+ * Seal every token saved before tokens were sealed, and scrub the plain text
+ * from the database file (`rewritingPlaintext`). Run on boot; does nothing
+ * without a key, and leaves alone what it cannot open — those wait for an
+ * owner or admin to paste the token again. `scrubbed` is false when the
+ * checkpoint could not finish, so the old bytes may still be on disk.
+ */
+export async function sealOfficeGithubTokens(
+  db: Database,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ sealed: number; unreadable: number; scrubbed: boolean }> {
+  const key = sealingKey(env);
+  const rows = await db.select({ workspaceId: officeGithub.workspaceId, token: officeGithub.token }).from(officeGithub);
+  let unreadable = 0;
+  const plain: { workspaceId: string; token: string }[] = [];
+  for (const row of rows) {
+    if (isSealed(row.token)) {
+      if (!openSecret(row.token, row.workspaceId, key).ok) unreadable += 1;
+    } else if (!key) {
+      unreadable += 1;
+    } else {
+      plain.push(row);
+    }
+  }
+  if (!key || plain.length === 0) return { sealed: 0, unreadable, scrubbed: true };
+  const scrubbed = await rewritingPlaintext(db, async () => {
+    for (const row of plain) {
+      await db
+        .update(officeGithub)
+        .set({ token: sealSecret(row.token, row.workspaceId, key) })
+        .where(and(eq(officeGithub.workspaceId, row.workspaceId), eq(officeGithub.token, row.token)));
+    }
+  });
+  return { sealed: plain.length, unreadable, scrubbed };
 }
 
 /** For the board payload: what the panel acts on. */
@@ -85,15 +212,26 @@ export interface SetOfficeGithubInput {
   repos?: string[];
 }
 
-/** Put the token in, or replace it. A new token starts with a clean record; the list stays unless given. */
-export async function setOfficeGithub(db: Database, input: SetOfficeGithubInput): Promise<void> {
+/**
+ * Put the token in, or replace it. A new token starts with a clean record;
+ * the list stays unless given. Refused, with `NO_SEALING_KEY` as the
+ * message, on a server with no secret to seal it under.
+ */
+export async function setOfficeGithub(
+  db: Database,
+  input: SetOfficeGithubInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const key = sealingKey(env);
+  if (!key) throw new Error(NO_SEALING_KEY);
+  const token = sealSecret(input.token, input.workspaceId, key);
   const at = new Date();
   const repos = input.repos ? { repos: [...input.repos] } : {};
   await db
     .insert(officeGithub)
     .values({
       workspaceId: input.workspaceId,
-      token: input.token,
+      token,
       login: input.login,
       repos: input.repos ?? [],
       setByUserId: input.setByUserId,
@@ -104,7 +242,7 @@ export async function setOfficeGithub(db: Database, input: SetOfficeGithubInput)
     })
     .onConflictDoUpdate({
       target: officeGithub.workspaceId,
-      set: { token: input.token, login: input.login, ...repos, setByUserId: input.setByUserId, lastCheckedAt: at, lastError: null, updatedAt: at },
+      set: { token, login: input.login, ...repos, setByUserId: input.setByUserId, lastCheckedAt: at, lastError: null, updatedAt: at },
     });
 }
 
