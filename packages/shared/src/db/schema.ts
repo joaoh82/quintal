@@ -795,11 +795,16 @@ export const officeCommands = sqliteTable(
     defaultTeamId: text('default_team_id').references(() => teams.id, { onDelete: 'set null' }),
     createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
     /**
-     * The agent that wrote it, or last changed it, on `createdBy`'s behalf —
-     * null when a person did. A command is a brief other agents follow, so
-     * one an agent wrote says so wherever it is read: "by Josh, via Marvin".
+     * Who last wrote what it says — the person answerable for the brief as it
+     * stands, and the agent that wrote it for them when one did. `createdBy`
+     * is whose command it is and decides who may change it; these say whose
+     * words are in it now. An admin's agent may rewrite a colleague's
+     * command, and the brief then has to say so wherever it is read: "Ana,
+     * changed by Josh, via Arthur", not Ana's name over Josh's words. Null
+     * on a command nobody has written to since the office was given it.
      */
-    createdByAgentId: text('created_by_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+    writtenBy: text('written_by').references(() => users.id, { onDelete: 'set null' }),
+    writtenByAgentId: text('written_by_agent_id').references(() => agents.id, { onDelete: 'set null' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).default(now).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },

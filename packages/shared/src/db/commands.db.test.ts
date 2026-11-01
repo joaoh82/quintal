@@ -23,7 +23,7 @@ import {
   updateOfficeCommand,
 } from './commands.js';
 import type { Database } from './client.js';
-import { officeCommands } from './schema.js';
+import { memberships, officeCommands } from './schema.js';
 import { STARTER_OFFICE_COMMANDS } from './starter-commands.js';
 import { createTeam, deleteTeam } from './teams.js';
 import { createTestDb, createTestUser } from './testing.js';
@@ -108,8 +108,8 @@ describe('making a command', () => {
   });
 });
 
-describe('a command an agent wrote', () => {
-  it('is credited to its owner, via the agent, until a person saves it by hand', async () => {
+describe('whose words a command is', () => {
+  it('is its maker’s, via the agent that wrote it, until a person saves it by hand', async () => {
     const { db, owner, agent } = await office('Ana');
     const marvin = await agent('Marvin');
     const made = await createOfficeCommand(db, {
@@ -117,28 +117,65 @@ describe('a command an agent wrote', () => {
       name: 'triage',
       instructions: 'Read the open notes; say which you could take.',
       createdBy: owner.id,
-      createdByAgentId: marvin.id,
+      writtenByAgentId: marvin.id,
     });
     assert.equal(made.createdByName, 'Ana');
-    assert.equal(made.createdByAgentId, marvin.id);
-    assert.equal(made.createdByAgentName, 'Marvin');
+    assert.equal(made.writtenBy, owner.id);
+    assert.equal(made.writtenByAgentName, 'Marvin');
     assert.equal(officeCommandAuthorLabel(made), 'Ana, via Marvin');
 
     // Changed by another of Ana's agents: that one is now the "via".
     const arthur = await agent('Arthur');
-    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage the board', changedByAgentId: arthur.id });
-    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Arthur');
+    await updateOfficeCommand(db, {
+      workspaceId: owner.workspaceId,
+      commandId: made.id,
+      summary: 'Triage the board',
+      writtenBy: { userId: owner.id, agentId: arthur.id },
+    });
+    assert.equal(officeCommandAuthorLabel((await getOfficeCommand(db, owner.workspaceId, made.id))!), 'Ana, via Arthur');
 
-    // Saved by hand: Ana read what she saved, so it is hers alone again.
-    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage', changedByAgentId: null });
+    // Saved by hand: Ana read what she saved, so the words are hers alone again.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage', writtenBy: { userId: owner.id, agentId: null } });
     const byHand = await getOfficeCommand(db, owner.workspaceId, made.id);
-    assert.equal(byHand?.createdByAgentId, null);
+    assert.equal(byHand?.writtenByAgentId, null);
     assert.equal(officeCommandAuthorLabel(byHand!), 'Ana');
 
-    // A change that says nothing about who made it leaves the credit alone.
-    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, changedByAgentId: marvin.id });
+    // A change that says nothing about who is writing leaves the credit alone.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, writtenBy: { userId: owner.id, agentId: marvin.id } });
     await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Still triage' });
-    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Marvin');
+    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.writtenByAgentName, 'Marvin');
+  });
+
+  it('names an admin who rewrote a colleague’s command, by hand or through an agent', async () => {
+    const { db, owner } = await office('Ana');
+    const josh = await createTestUser(db, 'Josh', { workspaceId: owner.workspaceId });
+    await db.insert(memberships).values({ id: 'm-josh', workspaceId: owner.workspaceId, userId: josh.id, role: 'admin' });
+    const arthur = await createAgent(db, { workspaceId: owner.workspaceId, ownerUserId: josh.id, name: 'Arthur', spriteKey: 'slate' });
+    const made = await createOfficeCommand(db, {
+      workspaceId: owner.workspaceId,
+      name: 'triage',
+      instructions: 'Read the open notes.',
+      createdBy: owner.id,
+    });
+
+    // Josh's agent replaces the instructions: the brief is Josh's now, and says so. Ana still owns the command.
+    await updateOfficeCommand(db, {
+      workspaceId: owner.workspaceId,
+      commandId: made.id,
+      instructions: 'Read the open notes; take the oldest.',
+      writtenBy: { userId: josh.id, agentId: arthur.id },
+    });
+    const byArthur = await getOfficeCommand(db, owner.workspaceId, made.id);
+    assert.equal(byArthur?.createdBy, owner.id);
+    assert.equal(officeCommandAuthorLabel(byArthur!), 'Ana, changed by Josh, via Arthur');
+
+    // Josh by hand: the same, without the agent.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage', writtenBy: { userId: josh.id, agentId: null } });
+    assert.equal(officeCommandAuthorLabel((await getOfficeCommand(db, owner.workspaceId, made.id))!), 'Ana, changed by Josh');
+
+    // Ana saves it herself: hers again.
+    await updateOfficeCommand(db, { workspaceId: owner.workspaceId, commandId: made.id, summary: 'Triage!', writtenBy: { userId: owner.id, agentId: null } });
+    assert.equal(officeCommandAuthorLabel((await getOfficeCommand(db, owner.workspaceId, made.id))!), 'Ana');
   });
 
   it('keeps the agent’s name on it after the agent is revoked', async () => {
@@ -148,10 +185,10 @@ describe('a command an agent wrote', () => {
       workspaceId: owner.workspaceId,
       name: 'triage',
       createdBy: owner.id,
-      createdByAgentId: marvin.id,
+      writtenByAgentId: marvin.id,
     });
     await revokeAgent(db, marvin.id, owner.id);
-    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.createdByAgentName, 'Marvin');
+    assert.equal((await getOfficeCommand(db, owner.workspaceId, made.id))?.writtenByAgentName, 'Marvin');
   });
 });
 

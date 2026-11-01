@@ -113,8 +113,8 @@ export async function updateCommandAction(
       argumentHint: String(formData.get('argumentHint') ?? ''),
       instructions: String(formData.get('instructions') ?? ''),
       defaultTarget: targetFrom(formData),
-      // Saved by hand: whoever is saving read it, so it is theirs again.
-      changedByAgentId: null,
+      // Saved by hand: the words are now the saver's own.
+      writtenBy: { userId: actor.userId, agentId: null },
     });
     revalidatePath('/settings/commands');
     return { ok: true };

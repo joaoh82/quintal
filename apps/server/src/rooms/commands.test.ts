@@ -43,8 +43,10 @@ function command(overrides: Partial<OfficeCommandSummary> = {}): OfficeCommandSu
     defaultTarget: null,
     createdBy: josh.id,
     createdByName: 'Josh',
-    createdByAgentId: null,
-    createdByAgentName: '',
+    writtenBy: josh.id,
+    writtenByName: 'Josh',
+    writtenByAgentId: null,
+    writtenByAgentName: '',
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -77,7 +79,7 @@ describe('reading an office command', () => {
   });
 
   it('names the agent that wrote the brief beside the person it wrote it for', () => {
-    const viaClaude = command({ createdByAgentId: claude.id, createdByAgentName: 'Claude' });
+    const viaClaude = command({ writtenByAgentId: claude.id, writtenByAgentName: 'Claude' });
     const { line, resolved } = deliver('!review @codex https://github.com/o/r/pull/1', [viaClaude]);
     assert.ok(line);
     assert.equal(commandCallFor(line, resolved.reached.get(codex.id))?.definedBy, 'Josh, via Claude');

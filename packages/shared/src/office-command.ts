@@ -124,19 +124,33 @@ export function mayEditOfficeCommand(
  * Who a command is said to be by, wherever that is read: in the brief's
  * heading an agent sees, and beside the command in Settings.
  *
- * A command an agent wrote on its owner's behalf is "Josh, via Marvin": the
- * owner answers for it, and the agents it later reaches can tell a brief a
- * colleague wrote from one a person did. Empty when the author has left and
- * no agent wrote it.
+ * Whose it is, then whose words are in it when that is somebody else. A
+ * command its maker wrote is "Ana". One Ana's agent wrote for her is "Ana,
+ * via Marvin": she answers for it, and the agents it reaches can tell a
+ * brief a colleague wrote from one a person did. One an admin rewrote — by
+ * hand or through an agent of theirs — is "Ana, changed by Josh" or "Ana,
+ * changed by Josh, via Arthur", because the brief is now Josh's and Ana's
+ * name alone over it would be a lie. Empty when nobody is left to name.
  */
 export function officeCommandAuthorLabel(command: {
+  createdBy: string | null;
   createdByName: string;
-  createdByAgentName?: string | null;
+  writtenBy?: string | null;
+  writtenByName?: string | null;
+  writtenByAgentName?: string | null;
 }): string {
-  const person = command.createdByName.trim();
-  const agent = (command.createdByAgentName ?? '').trim();
-  if (agent.length === 0) return person;
-  return person.length > 0 ? `${person}, via ${agent}` : `${agent}, an agent`;
+  const owner = command.createdByName.trim();
+  const writer = (command.writtenByName ?? '').trim();
+  const agent = (command.writtenByAgentName ?? '').trim();
+  const via = agent.length > 0 ? `, via ${agent}` : '';
+  const sameHand = command.writtenBy === null || command.writtenBy === undefined || command.writtenBy === command.createdBy;
+  if (sameHand) {
+    if (owner.length > 0) return `${owner}${via}`;
+    return agent.length > 0 ? `${agent}, an agent` : '';
+  }
+  const by = writer.length > 0 ? `${writer}${via}` : agent.length > 0 ? `${agent}, an agent` : '';
+  if (by.length === 0) return owner;
+  return owner.length > 0 ? `${owner}, changed by ${by}` : by;
 }
 
 /** The office command a parsed `!` line names, if it names one. */

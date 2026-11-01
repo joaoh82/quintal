@@ -4161,7 +4161,7 @@ export class OfficeRoom extends Room<OfficeState> {
         instructions: typeof payload?.instructions === 'string' ? payload.instructions : undefined,
         defaultTarget: target,
         createdBy: session.identity.ownerUserId,
-        createdByAgentId: session.identity.id,
+        writtenByAgentId: session.identity.id,
       });
       audit(session.identity.id, 'command.command_create', { name: made.name, defaultTarget: made.defaultTarget?.name ?? null });
       await this.#refreshChannels();
@@ -4208,7 +4208,7 @@ export class OfficeRoom extends Room<OfficeState> {
         workspaceId: this.#workspaceId,
         commandId: command.id,
         ...patch,
-        changedByAgentId: session.identity.id,
+        writtenBy: { userId: session.identity.ownerUserId, agentId: session.identity.id },
       });
       audit(session.identity.id, 'command.command_update', { name: command.name, fields: Object.keys(patch) });
       await this.#refreshChannels();

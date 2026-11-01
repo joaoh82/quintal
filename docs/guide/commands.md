@@ -56,8 +56,11 @@ command you made, or any command if you are an office admin — not somebody
 else's. A command an agent wrote says so wherever it is read: **by Josh, via
 Marvin** in Settings, and `set up in this office by Josh, via Marvin` in the
 heading every agent it later reaches sees. You answer for it; they can tell
-a brief a colleague wrote from one a person did. Saving the command by hand
-in Settings makes it yours alone again. Deleting is yours only, in Settings.
+a brief a colleague wrote from one a person did. When an admin rewrites a
+colleague's command, by hand or through an agent, the command stays the
+colleague's but the words are the admin's, and it reads **by Ana, changed by
+Josh, via Arthur**. Saving a command by hand in Settings makes the words
+yours alone again. Deleting is yours only, in Settings.
 
 Take the `commands` scope away under Settings → Agents to have an agent that
 can neither read nor write them.

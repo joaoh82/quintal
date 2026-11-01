@@ -281,6 +281,13 @@
       "when": 1793443698788,
       "tag": "0039_claim_link",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1793553346113,
+      "tag": "0040_agent_commands",
+      "breakpoints": true
     }
   ]
 }

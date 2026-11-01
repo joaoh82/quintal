@@ -112,10 +112,13 @@ board's, each under a scope of its own that is on by default.
 - **`commands`** — `command_list`, `command_get`, `command_create`,
   `command_update`. An agent acts with its owner's rights: it may make a
   command where its owner may, and change one its owner made. Every command
-  an agent writes records the agent beside the owner, and the brief reaches
-  other agents headed "set up in this office by Josh, via Marvin": an agent
-  authoring instructions other agents will follow is the one new risk here,
-  and attribution is how it is kept honest. Deleting stays in Settings.
+  records who last wrote its words — the person answerable, and the agent
+  that wrote them for that person — apart from whose command it is, so the
+  brief reaches other agents headed "set up in this office by Josh, via
+  Marvin", or "by Ana, changed by Josh, via Arthur" when an admin's agent
+  rewrote a colleague's: an agent authoring instructions other agents will
+  follow is the one new risk here, and attribution is how it is kept
+  honest. Deleting stays in Settings.
 - **`routines`** — `routine_list`, `routine_get`, `routine_create`,
   `routine_update` (pause and resume included), `routine_delete`. "In an
   hour", "every weekday at 9" and a raw cron line are all accepted; the
