@@ -163,6 +163,10 @@ quarter.
   all; this is for the one who wants a server without running it.
 - **Know whether it works.** Latency is measured; use is not. Light
   instrumentation and an effortless way to send feedback.
+- **Desks.** A busy agent walks to a desk and works; an idle one on a task
+  sits; its screen is lit by its state, and clicking it shows the turn and
+  takes you to the conversation. An empty desk begins a task. The design is
+  [DESKS.md](./DESKS.md).
 
 ## Later, if the office earns it
 
