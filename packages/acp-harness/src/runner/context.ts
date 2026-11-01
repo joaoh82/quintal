@@ -367,8 +367,9 @@ export const TOOL_HINT = [
   'When asked to do something on a schedule or later — "every hour, check the PRs",',
   '"tomorrow at 9, …" — make a routine with routine_create rather than any loop, timer,',
   'cron or scheduler of your runtime\'s own: the office keeps it and fires it after this',
-  'session ends, as a line in your owner\'s direct message with you. routine_list says',
-  'what you already have; to stop one, routine_update with paused, or routine_delete.',
+  'session ends, as a line in your owner\'s direct message with the agent it is on — you,',
+  'unless you put it on another of your owner\'s agents. routine_list says what there',
+  'already is; to stop one, routine_update with paused, or routine_delete.',
 ].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */

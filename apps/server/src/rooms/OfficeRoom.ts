@@ -4528,6 +4528,7 @@ export class OfficeRoom extends Room<OfficeState> {
       id: routine.id,
       name: routine.name,
       agent: routine.agentName,
+      agentId: routine.agentId,
       schedule: routine.scheduleLabel,
       when: routineWhenPhrase(routine.schedule),
       tz: routine.schedule.tz,
@@ -4550,41 +4551,52 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
-   * The agent a routine is on or goes on, as the caller names it: nothing
-   * or "me" for itself, else one of its owner's agents by name. Only the
-   * owner's: a routine speaks as the owner, so the owner's agents are the
-   * bound. Null after a refusal, which is already sent.
+   * The agent a routine is on or goes on, as the caller names it. Nothing
+   * or "me" is the caller: the session is that agent, and no roster has to
+   * agree. Otherwise one of its owner's agents by name or id, read from
+   * the database now rather than the board's ten-second cache, so an agent
+   * made a moment ago is found. Only the owner's: a routine speaks as the
+   * owner, so the owner's agents are the bound. Agent names are not
+   * unique, so a name two of them share — the caller's included — asks for
+   * the id instead. Null after a refusal, which is already sent;
+   * `createRoutine` still checks the row is in this office and not revoked.
    */
-  async #agentRoutineAgent(client: Client, session: AgentSession, wanted: unknown, requestId: unknown): Promise<BoardAgentRef | null> {
-    if (this.#boardLoaded) await this.#boardLoaded;
+  async #agentRoutineAgent(
+    client: Client,
+    session: AgentSession,
+    wanted: unknown,
+    requestId: unknown,
+  ): Promise<{ id: string; name: string; ownerUserId: string } | null> {
     const self = session.identity;
-    const needle = typeof wanted === 'string' ? wanted.trim().replace(/^@/, '').toLowerCase() : '';
-    const mine = this.#boardAgents.filter((agent) => agent.ownerUserId === self.ownerUserId);
-    if (needle.length === 0 || needle === 'me' || needle === self.name.toLowerCase()) {
-      const own = mine.find((agent) => agent.id === self.id);
-      if (own) return own;
-      this.#replyError(client, requestId, { code: 'not_found', message: 'You are not on this office\'s roster, so no routine can be kept on you.' });
-      return null;
-    }
-    const found = mine.filter((agent) => agent.name.toLowerCase() === needle);
+    const needle = typeof wanted === 'string' ? wanted.trim().replace(/^@/, '') : '';
+    if (needle.length === 0 || needle.toLowerCase() === 'me') return { id: self.id, name: self.name, ownerUserId: self.ownerUserId };
+    const mine = (await listAgentsForWorkspace(getDb(), this.#workspaceId)).filter(
+      (agent) => agent.ownerUserId === self.ownerUserId && !agent.revokedAt,
+    );
+    const byId = mine.find((agent) => agent.id === needle);
+    if (byId) return byId;
+    const found = mine.filter((agent) => agent.name.toLowerCase() === needle.toLowerCase());
     if (found.length === 1) return found[0]!;
-    const named = String(wanted).trim();
     this.#replyError(client, requestId, {
-      code: 'not_found',
+      code: found.length === 0 ? 'not_found' : 'invalid_payload',
       message:
         found.length === 0
-          ? `No agent of your owner's is called ${named}. A routine goes on one of your owner's agents: ${
+          ? `No agent of your owner's is called ${needle}. A routine goes on one of your owner's agents: ${
               mine.map((agent) => agent.name).join(', ') || 'only you'
             }.`
-          : `More than one agent of your owner's is called ${named}; ask them to rename one.`,
+          : `${found.length} of your owner's agents are called ${needle}; say which by id: ${found
+              .map((agent) => `${agent.name} (${agent.id})`)
+              .join(', ')}.`,
     });
     return null;
   }
 
   /**
    * The routine a name or an id says, among the owner's. A name two of the
-   * owner's agents share needs `agent` to pick. Null after a refusal, which
-   * is already sent.
+   * owner's agents share needs `agent` to pick; a name two routines on one
+   * agent share — which `createRoutine` no longer allows, but rows from
+   * before may — needs the id, and the refusal names them. Null after a
+   * refusal, which is already sent.
    */
   async #agentRoutineNamed(
     client: Client,
@@ -4607,12 +4619,17 @@ export class OfficeRoom extends Room<OfficeState> {
       candidates = candidates.filter((routine) => routine.agentId === agent.id);
     }
     if (candidates.length === 1) return candidates[0]!;
+    const onOneAgent = new Set(candidates.map((routine) => routine.agentId)).size === 1;
     this.#replyError(client, requestId, {
       code: candidates.length === 0 ? 'not_found' : 'invalid_payload',
       message:
         candidates.length === 0
           ? `No routine called "${wanted}" on your owner's agents. routine_list names them.`
-          : `${candidates.map((routine) => routine.agentName).join(' and ')} each have a routine called "${wanted}"; say which with agent.`,
+          : onOneAgent
+            ? `${candidates[0]!.agentName} has ${candidates.length} routines called "${wanted}"; say which by id: ${candidates
+                .map((routine) => routine.id)
+                .join(', ')}.`
+            : `${candidates.map((routine) => routine.agentName).join(' and ')} each have a routine called "${wanted}"; say which with agent.`,
     });
     return null;
   }

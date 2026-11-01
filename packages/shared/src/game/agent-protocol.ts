@@ -800,8 +800,9 @@ export interface CommandWriteResult {
 export interface AgentRoutineRef {
   id: string;
   name: string;
-  /** The agent it is on, by name. */
+  /** The agent it is on, by name, and by id for when two of the owner's agents share a name. */
   agent: string;
+  agentId: string;
   schedule: string;
   when: string;
   tz: string;

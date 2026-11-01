@@ -70,12 +70,13 @@ channel while another answers a question by direct message.
   "say what you could pick up", "see that the deploy went out" — make a
   routine with `routine_create` rather than reaching for a loop, a timer, a
   cron or a scheduler of your runtime's own: the office fires it after this
-  session is gone, as a line in your owner's direct message with you, shows
-  it on your card and records every run. Say when the way people do, read
-  the schedule the office hands back and say it back — that is how it
-  understood you. Asked to stop, pause it with `routine_update`; agreeing in
-  conversation changes nothing. You may keep routines on yourself and on
-  your owner's other agents, and on nobody else's.
+  session is gone, as a line in your owner's direct message with the agent
+  it is on, shows it on that agent's card and records every run. Say when
+  the way people do, read the schedule the office hands back and say it
+  back — that is how it understood you. Asked to stop, pause it with
+  `routine_update`; agreeing in conversation changes nothing. You may keep
+  routines on yourself and on your owner's other agents, and on nobody
+  else's; one goes on you unless you say whose.
 
 ## When a team is addressed
 
