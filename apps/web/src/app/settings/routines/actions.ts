@@ -1,6 +1,6 @@
 'use server';
 
-import { mayManageRoutine, parseRoutineWhen, type MembershipRole } from '@quintal/shared';
+import { mayManageRoutine, parseRoutineWhen, routineWhenPhrase, type MembershipRole } from '@quintal/shared';
 import {
   RoutineError,
   createRoutine,
@@ -105,11 +105,11 @@ export async function updateRoutineAction(_previous: RoutineActionState, formDat
     const routine = await getRoutine(db, workspaceId, routineId);
     if (!routine) return { ok: false, error: 'No such routine.' };
     if (!mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })) return { ok: false, error: NOT_YOURS };
-    // The schedule is re-read only when the words changed: a save that kept
-    // "in 45 minutes" as typed must not restart the clock.
+    // The schedule is re-read only when the words changed from what the box
+    // was filled with: a save that left them must not restart the clock.
     const when = text(formData, 'when').trim();
     let schedule = undefined;
-    if (when.length > 0 && when !== routine.scheduleLabel) {
+    if (when.length > 0 && when !== routineWhenPhrase(routine.schedule)) {
       const parsed = parseRoutineWhen(when, { now: Date.now(), tz: zoneOf(formData) });
       if (!parsed.ok) return { ok: false, error: parsed.error };
       schedule = parsed.schedule;

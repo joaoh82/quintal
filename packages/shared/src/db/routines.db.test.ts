@@ -6,7 +6,6 @@ import type { Database } from './client.js';
 import { createOfficeCommand, deleteOfficeCommand } from './commands.js';
 import {
   RoutineError,
-  advanceRoutine,
   claimRoutineRun,
   createRoutine,
   deleteRoutine,
@@ -15,6 +14,7 @@ import {
   listRoutineRuns,
   listRoutinesForAgent,
   listRoutinesForWorkspace,
+  markRoutineRan,
   missedRoutineRun,
   missedRoutineRuns,
   settleRoutineRun,
@@ -162,17 +162,49 @@ describe('slots and runs', () => {
     assert.deepEqual(await listDueRoutines(db, owner.workspaceId, oneOClock - 1), []);
     assert.deepEqual((await listDueRoutines(db, owner.workspaceId, oneOClock)).map((routine) => routine.id), [made.id]);
 
-    const first = await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: oneOClock, outcome: 'fired', firedAt: oneOClock + 5 });
+    const first = await claimRoutineRun(db, { routine: made, dueAt: oneOClock, outcome: 'missed' });
     assert.ok(first);
-    const second = await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: oneOClock, outcome: 'fired', firedAt: oneOClock + 9 });
-    assert.equal(second, null, 'the second room loses the slot');
-
-    assert.equal(await advanceRoutine(db, made, { after: oneOClock, ranAt: oneOClock + 5 }), Date.UTC(2026, 10, 1, 14, 0));
-    const after = (await getRoutine(db, owner.workspaceId, made.id))!;
-    assert.equal(after.nextDueAt, Date.UTC(2026, 10, 1, 14, 0));
-    assert.equal(after.lastRunAt, oneOClock + 5);
+    assert.equal(first.outcome, 'missed', 'a slot says missed until it is spoken');
+    const twoOClock = Date.UTC(2026, 10, 1, 14, 0);
+    assert.equal((await getRoutine(db, owner.workspaceId, made.id))?.nextDueAt, twoOClock, 'the claim moves the routine past the slot');
     assert.deepEqual(await listDueRoutines(db, owner.workspaceId, oneOClock), []);
-    assert.deepEqual((await listRoutineRuns(db, made.id)).map((run) => run.outcome), ['fired']);
+
+    const second = await claimRoutineRun(db, { routine: made, dueAt: oneOClock, outcome: 'missed' });
+    assert.equal(second, null, 'the second room loses the slot');
+    assert.equal((await getRoutine(db, owner.workspaceId, made.id))?.nextDueAt, twoOClock, 'and moves nothing');
+
+    assert.equal(await settleRoutineRun(db, first.id, { outcome: 'fired', firedAt: oneOClock + 5, conversationId: null }), true);
+    assert.equal(
+      await settleRoutineRun(db, first.id, { outcome: 'made_up', firedAt: oneOClock + 9, conversationId: null }),
+      false,
+      'a slot is spoken once: the second settle loses',
+    );
+    await markRoutineRan(db, made, oneOClock + 5);
+    const after = (await getRoutine(db, owner.workspaceId, made.id))!;
+    assert.equal(after.nextDueAt, twoOClock);
+    assert.equal(after.lastRunAt, oneOClock + 5);
+    assert.deepEqual(
+      (await listRoutineRuns(db, made.id)).map((run) => [run.outcome, run.firedAt, run.conversationId]),
+      [['fired', oneOClock + 5, null]],
+    );
+  });
+
+  it('a claim is one transaction: a routine no longer at the slot is left where it is', async () => {
+    const { db, owner, agent } = await office('Josh');
+    const marvin = await agent('Marvin');
+    const made = await hourly(db, owner.workspaceId, marvin.id, owner.id);
+    // The owner moved it to a daily routine between the room's read and its claim.
+    await updateRoutine(db, {
+      workspaceId: owner.workspaceId,
+      routineId: made.id,
+      schedule: { kind: 'cron', cron: '0 9 * * *', tz: 'Europe/Lisbon' },
+      now: Date.UTC(2026, 10, 1, 12, 59),
+    });
+    const nineTomorrow = Date.UTC(2026, 10, 2, 9, 0);
+    assert.equal((await getRoutine(db, owner.workspaceId, made.id))?.nextDueAt, nineTomorrow);
+    const stale = await claimRoutineRun(db, { routine: made, dueAt: Date.UTC(2026, 10, 1, 13, 0), outcome: 'missed' });
+    assert.ok(stale, 'the stale slot is still written');
+    assert.equal((await getRoutine(db, owner.workspaceId, made.id))?.nextDueAt, nineTomorrow, 'but the routine is not moved off its new slot');
   });
 
   it('a once routine has its moment and no next', async () => {
@@ -188,7 +220,7 @@ describe('slots and runs', () => {
       now: NOW,
     });
     assert.equal(made.nextDueAt, NOW + 3_600_000);
-    assert.equal(await advanceRoutine(db, made, { after: NOW + 3_600_000, ranAt: NOW + 3_600_000 }), null);
+    assert.ok(await claimRoutineRun(db, { routine: made, dueAt: NOW + 3_600_000, outcome: 'missed' }));
     assert.equal((await getRoutine(db, owner.workspaceId, made.id))?.nextDueAt, null);
   });
 
@@ -197,11 +229,16 @@ describe('slots and runs', () => {
     const marvin = await agent('Marvin');
     const made = await hourly(db, owner.workspaceId, marvin.id, owner.id);
     const due = Date.UTC(2026, 10, 1, 13, 0);
-    const missed = await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: due, outcome: 'missed' });
+    const missed = await claimRoutineRun(db, { routine: made, dueAt: due, outcome: 'missed', note: 'away' });
     assert.ok(missed);
     assert.equal((await missedRoutineRun(db, made.id))?.id, missed.id);
     assert.deepEqual((await missedRoutineRuns(db, owner.workspaceId)).map((run) => run.id), [missed.id]);
-    await settleRoutineRun(db, missed.id, { outcome: 'made_up', firedAt: due + 600_000, conversationId: null });
+    assert.equal(await settleRoutineRun(db, missed.id, { outcome: 'made_up', firedAt: due + 600_000, conversationId: null }), true);
+    assert.equal(
+      await settleRoutineRun(db, missed.id, { outcome: 'made_up', firedAt: due + 600_001, conversationId: null }),
+      false,
+      'the other room asked too, and loses',
+    );
     assert.equal(await missedRoutineRun(db, made.id), null);
     assert.deepEqual(await missedRoutineRuns(db, owner.workspaceId), []);
     assert.deepEqual((await listRoutineRuns(db, made.id)).map((run) => [run.outcome, run.firedAt]), [['made_up', due + 600_000]]);
@@ -213,11 +250,11 @@ describe('slots and runs', () => {
     const marvin = await agent('Marvin');
     const made = await hourly(db, owner.workspaceId, marvin.id, owner.id);
     const one = Date.UTC(2026, 10, 1, 13, 0);
-    await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: one, outcome: 'missed' });
-    await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: one + 3_600_000, outcome: 'skipped', note: 'busy' });
+    await claimRoutineRun(db, { routine: made, dueAt: one, outcome: 'missed' });
+    await claimRoutineRun(db, { routine: made, dueAt: one + 3_600_000, outcome: 'skipped', note: 'busy' });
     assert.equal(await missedRoutineRun(db, made.id), null, 'the hour it was for has gone');
     assert.deepEqual(await missedRoutineRuns(db, owner.workspaceId), []);
-    const again = await claimRoutineRun(db, { routineId: made.id, workspaceId: owner.workspaceId, dueAt: one + 7_200_000, outcome: 'missed' });
+    const again = await claimRoutineRun(db, { routine: made, dueAt: one + 7_200_000, outcome: 'missed' });
     assert.deepEqual((await missedRoutineRuns(db, owner.workspaceId)).map((run) => run.id), [again!.id]);
   });
 });

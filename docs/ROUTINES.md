@@ -62,11 +62,16 @@ routines per agent.
 ## How a firing works
 
 1. Every fifteen seconds the room asks the database for routines due.
-2. For each, it inserts a `routine_runs` row keyed on (routine, due slot).
-   The unique index is the lock: whichever room's insert lands fires, the
-   other sees the conflict and moves on.
-3. It speaks `@Marvin routine "hourly PR check" is due.` in the owner's DM
-   with the agent, as the owner, with a brief attached:
+2. For each, it inserts a `routine_runs` row keyed on (routine, due slot)
+   and moves the routine past the slot, in one transaction. The unique
+   index is the lock: whichever room's insert lands has the slot, the other
+   sees the conflict and moves on. The row says `missed` until the line is
+   spoken; a slot the agent is too busy for is written `skipped` and is
+   done.
+3. It settles the row as `fired` — the one write that may happen once, so
+   two rooms making up the same slot cannot both speak — and in the same
+   turn speaks `@Marvin routine "hourly PR check" is due.` in the owner's
+   DM with the agent, as the owner, with a brief attached:
 
    ```
    [Routine hourly-pr-check — set up by Josh, runs every hour]
@@ -78,7 +83,9 @@ routines per agent.
    The harness renders that through a small addition beside
    `commandSection`. An older harness renders it as a `[Command]` section
    and still does the work.
-4. The run row records the message, and later the outcome.
+4. A room that stops between the claim and the line leaves a `missed`
+   row, which is made up like any other; nothing is ever on the record as
+   fired that the agent did not hear.
 
 **Edge rules.**
 

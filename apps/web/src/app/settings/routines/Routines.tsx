@@ -5,6 +5,7 @@ import {
   ROUTINE_INSTRUCTIONS_MAX_LENGTH,
   ROUTINE_NAME_MAX_LENGTH,
   mayManageRoutine,
+  routineWhenPhrase,
   type MembershipRole,
 } from '@quintal/shared';
 import type { RoutineSummary } from '@quintal/shared/db';
@@ -155,7 +156,8 @@ function RoutineFields({
           <Input
             name="when"
             placeholder="every hour · weekdays at 9 · in 45 minutes · 0 9 * * 1-5"
-            defaultValue={routine?.scheduleLabel}
+            // A phrase the parser reads back, not the card's label: a changed time in it must save.
+            defaultValue={routine ? routineWhenPhrase(routine.schedule) : undefined}
             className="w-80 font-mono"
             required
           />

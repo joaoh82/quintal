@@ -320,71 +320,69 @@ export async function listDueRoutines(db: Database, workspaceId: string, now: nu
 }
 
 export interface ClaimRoutineRunInput {
-  routineId: string;
-  workspaceId: string;
+  routine: Pick<RoutineSummary, 'id' | 'workspaceId' | 'schedule'>;
   dueAt: number;
-  outcome: RoutineRunOutcome;
+  /** `missed` until the line is spoken and the run settled; `skipped` is final. */
+  outcome: 'missed' | 'skipped';
   note?: string;
-  firedAt?: number | null;
-  conversationId?: string | null;
 }
 
 /**
- * Take a slot. The insert is the lock: a second claim of the same (routine,
- * due moment) hits the unique index and gets null, and does nothing else.
+ * Take a slot: write its run and move the routine past it, in one
+ * transaction. The insert is the lock — a second claim of the same (routine,
+ * due moment) hits the unique index and gets null — and the advance moves
+ * only a routine still standing at that slot, so the loser's leaves the
+ * winner's alone. A slot to be spoken is written `missed` here and settled
+ * when it is (`settleRoutineRun`): a room that stops in between leaves a
+ * slot to be made up, not one recorded as fired. A once routine ends here,
+ * its `nextDueAt` null.
  */
 export async function claimRoutineRun(db: Database, input: ClaimRoutineRunInput): Promise<RoutineRunRef | null> {
-  const rows = await db
-    .insert(routineRuns)
-    .values({
-      id: newId(),
-      routineId: input.routineId,
-      workspaceId: input.workspaceId,
-      dueAt: new Date(input.dueAt),
-      outcome: input.outcome,
-      note: input.note ?? '',
-      firedAt: toDate(input.firedAt ?? null),
-      conversationId: input.conversationId ?? null,
-    })
-    .onConflictDoNothing({ target: [routineRuns.routineId, routineRuns.dueAt] })
-    .returning();
-  return rows[0] ? runRef(rows[0]) : null;
+  const { routine } = input;
+  const next = nextRoutineDue(routine.schedule, input.dueAt);
+  const [inserted] = await db.batch([
+    db
+      .insert(routineRuns)
+      .values({
+        id: newId(),
+        routineId: routine.id,
+        workspaceId: routine.workspaceId,
+        dueAt: new Date(input.dueAt),
+        outcome: input.outcome,
+        note: input.note ?? '',
+      })
+      .onConflictDoNothing({ target: [routineRuns.routineId, routineRuns.dueAt] })
+      .returning(),
+    db
+      .update(routines)
+      .set({ nextDueAt: toDate(next) })
+      .where(
+        and(eq(routines.id, routine.id), eq(routines.workspaceId, routine.workspaceId), eq(routines.nextDueAt, new Date(input.dueAt))),
+      ),
+  ]);
+  return inserted[0] ? runRef(inserted[0]) : null;
 }
 
-/** Settle a run claimed earlier: a missed one made up, say. */
+/**
+ * Settle a run claimed as `missed`: spoken (`fired`, or `made_up` when its
+ * slot had gone by) or `skipped` for good. Only a run still saying `missed`
+ * is settled, and the caller speaks only when this says it won: two rooms
+ * making up one slot both ask, and one gets it.
+ */
 export async function settleRoutineRun(
   db: Database,
   runId: string,
-  outcome: { outcome: RoutineRunOutcome; note?: string; firedAt: number | null; conversationId: string | null },
-): Promise<void> {
-  await db
+  outcome: { outcome: Exclude<RoutineRunOutcome, 'missed'>; note?: string; firedAt: number | null; conversationId: string | null },
+): Promise<boolean> {
+  const rows = await db
     .update(routineRuns)
     .set({ outcome: outcome.outcome, note: outcome.note ?? '', firedAt: toDate(outcome.firedAt), conversationId: outcome.conversationId })
-    .where(eq(routineRuns.id, runId));
+    .where(and(eq(routineRuns.id, runId), eq(routineRuns.outcome, 'missed')))
+    .returning({ id: routineRuns.id });
+  return rows.length > 0;
 }
 
-/**
- * Move a routine past a slot: the next due moment after `after`, and the
- * last run stamped when the slot was spoken. A once routine ends here, its
- * `nextDueAt` null.
- */
-export async function advanceRoutine(
-  db: Database,
-  routine: Pick<RoutineSummary, 'id' | 'workspaceId' | 'schedule'>,
-  input: { after: number; ranAt: number | null },
-): Promise<number | null> {
-  const next = nextRoutineDue(routine.schedule, input.after);
-  await db
-    .update(routines)
-    .set({
-      nextDueAt: toDate(next),
-      ...(input.ranAt !== null ? { lastRunAt: new Date(input.ranAt) } : {}),
-    })
-    .where(and(eq(routines.id, routine.id), eq(routines.workspaceId, routine.workspaceId)));
-  return next;
-}
-
-/** Stamp when a routine last ran, leaving its next slot as it is: a missed slot made up. */
+/** Stamp when a routine last ran, leaving its next slot as it is: the claim already moved it. */
 export async function markRoutineRan(db: Database, routine: Pick<RoutineSummary, 'id' | 'workspaceId'>, ranAt: number): Promise<void> {
   await db
     .update(routines)

@@ -218,7 +218,6 @@ import {
   OfficeCommandError,
   createOfficeCommand,
   updateOfficeCommand,
-  advanceRoutine,
   claimRoutineRun,
   getRoutine,
   listDueRoutines,
@@ -4046,10 +4045,12 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /**
    * Every fifteen seconds: what is due, and what was missed and can be made
-   * up. Each due slot is claimed by writing its run — the unique index
-   * decides between two rooms of one office — and the routine is moved past
-   * it whatever came of it, so a slot is handled exactly once. See
-   * `docs/ROUTINES.md`.
+   * up. Each due slot is claimed by writing its run and moving the routine
+   * past it in one transaction — the unique index decides between two rooms
+   * of one office — so a slot is handled once whatever came of it. A slot to
+   * be spoken is written `missed` and settled as it is spoken, so a room
+   * that stops between the two leaves a slot to make up, not a line on the
+   * record that nobody heard. See `docs/ROUTINES.md`.
    */
   async #tickRoutines(): Promise<void> {
     if (this.#routineTicking) return;
@@ -4063,14 +4064,12 @@ export class OfficeRoom extends Room<OfficeState> {
         const where = await this.#routineWhere(routine);
         const decision = decideSlot(where.agent);
         const run = await claimRoutineRun(db, {
-          routineId: routine.id,
-          workspaceId: this.#workspaceId,
+          routine,
           dueAt,
-          outcome: decision.fire ? 'fired' : decision.outcome,
+          outcome: decision.fire ? 'missed' : decision.outcome,
           note: decision.fire ? '' : decision.note,
         });
         if (!run) continue; // another room of this office has the slot
-        await advanceRoutine(db, routine, { after: dueAt, ranAt: decision.fire ? now : null });
         if (decision.fire) {
           await this.#fireRoutine(routine, run, where, 'fired');
         } else {
@@ -4120,10 +4119,14 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   /**
-   * Speak the line in the owner's name, with the brief, and settle the run.
-   * No door — the owner gone, the agent without `dm` — pauses the routine
-   * and records why: a routine that cannot be spoken should not keep
-   * trying every slot in silence, and its card should say so.
+   * Settle the run as spoken and speak the line in the owner's name, with
+   * the brief. The settle is the claim to speak: it moves the run off
+   * `missed`, and only the room whose write lands says the line — two rooms
+   * making up one slot both try, one speaks — with the line following in the
+   * same turn of the event loop, so nothing of the office's comes between.
+   * No door — the owner gone, the agent without `dm` or revoked — pauses
+   * the routine and records why: a routine that cannot be spoken should not
+   * keep trying every slot in silence, and its card should say so.
    */
   async #fireRoutine(
     routine: RoutineSummary,
@@ -4133,16 +4136,16 @@ export class OfficeRoom extends Room<OfficeState> {
   ): Promise<void> {
     const db = getDb();
     const now = Date.now();
-    if (!where.channel) {
-      const note = where.actor.role === null ? 'owner_left' : 'no_dm';
-      await settleRoutineRun(db, run.id, { outcome: 'skipped', note, firedAt: null, conversationId: null });
+    const agent = where.channel ? await findAgentById(db, routine.agentId) : null;
+    if (!where.channel || !agent) {
+      const note = !where.channel ? (where.actor.role === null ? 'owner_left' : 'no_dm') : 'agent_gone';
+      const won = await settleRoutineRun(db, run.id, { outcome: 'skipped', note, firedAt: null, conversationId: null });
+      if (!won) return;
       await updateRoutine(db, { workspaceId: this.#workspaceId, routineId: routine.id, paused: true, now });
       audit(routine.agentId, 'routine.skipped', { routineId: routine.id, name: routine.name, dueAt: run.dueAt, reason: note });
       logger.warn(`[office] routine "${routine.name}" paused: ${note}`);
       return;
     }
-    const agent = await findAgentById(db, routine.agentId);
-    if (!agent) return;
     // The owner speaks, from their session when they are here and from nowhere when not.
     let ownerSessionId: string | null = null;
     for (const [sessionId, player] of this.state.players) {
@@ -4152,6 +4155,8 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     }
     const command = routine.command ? this.#commands.find((candidate) => candidate.id === routine.command?.id) ?? null : null;
+    const won = await settleRoutineRun(db, run.id, { outcome, firedAt: now, conversationId: where.channel.id });
+    if (!won) return; // another room of this office spoke it
     this.#deliverChannelChat(
       ownerSessionId,
       { userId: routine.agentOwnerUserId, name: agent.ownerName, kind: 'human' },
@@ -4160,8 +4165,7 @@ export class OfficeRoom extends Room<OfficeState> {
       undefined,
       routineBrief(routine, command, run.dueAt),
     );
-    await settleRoutineRun(db, run.id, { outcome, firedAt: now, conversationId: where.channel.id });
-    if (outcome === 'made_up') await markRoutineRan(db, routine, now);
+    await markRoutineRan(db, routine, now);
     audit(routine.agentId, outcome === 'fired' ? 'routine.fired' : 'routine.made_up', {
       routineId: routine.id,
       name: routine.name,

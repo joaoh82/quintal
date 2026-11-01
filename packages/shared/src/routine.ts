@@ -195,6 +195,22 @@ export function wallClockToEpoch(
   return guess;
 }
 
+/**
+ * A clock time some civil days on from a date, in `tz`. The date moves and
+ * the clock stays, and the moment comes from `wallClockToEpoch`: "tomorrow
+ * at 9" across a DST night is 09:00 tomorrow, not now plus twenty-four
+ * hours, which lands on 10:00 in spring and 08:00 in autumn.
+ */
+function clockOnDay(
+  from: { year: number; month: number; day: number },
+  daysOn: number,
+  clock: { hour: number; minute: number },
+  tz: string,
+): number {
+  const date = new Date(Date.UTC(from.year, from.month - 1, from.day + daysOn));
+  return wallClockToEpoch({ year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), ...clock }, tz);
+}
+
 export type RoutineWhenResult = RoutineScheduleResult;
 
 const UNIT_MS: Record<string, number> = {
@@ -286,12 +302,9 @@ export function parseRoutineWhen(text: unknown, context: { now: number; tz: stri
         // "on monday at 9" is once: the next such day.
         const target = indexes[0]!;
         const today = wallClock(context.now, tz);
-        let ahead = (target - today.weekday + 7) % 7;
-        let at = wallClockToEpoch({ ...today, ...clock }, tz) + ahead * 86_400_000;
-        if (at <= context.now) {
-          ahead = ahead === 0 ? 7 : ahead;
-          at = wallClockToEpoch({ ...today, ...clock }, tz) + ahead * 86_400_000;
-        }
+        const ahead = (target - today.weekday + 7) % 7;
+        let at = clockOnDay(today, ahead, clock, tz);
+        if (at <= context.now) at = clockOnDay(today, ahead + 7, clock, tz); // today's has passed: next week's
         return once(at);
       }
       const unique = [...new Set(indexes as number[])].sort((a, b) => a - b);
@@ -313,9 +326,8 @@ export function parseRoutineWhen(text: unknown, context: { now: number; tz: stri
     const clock = match[2] === 'tonight' || when === 'tonight' ? { hour: 20, minute: 0 } : parseClock(match[2]!);
     if (clock && (when !== undefined || match[2] === 'tonight' || /^(at )/.test(lower) || parseClock(lower))) {
       const today = wallClock(context.now, tz);
-      let at = wallClockToEpoch({ ...today, ...clock }, tz);
-      if (when === 'tomorrow') at += 86_400_000;
-      else if (at <= context.now && when !== 'today') at += 86_400_000;
+      let at = clockOnDay(today, when === 'tomorrow' ? 1 : 0, clock, tz);
+      if (at <= context.now && when !== 'today' && when !== 'tomorrow') at = clockOnDay(today, 1, clock, tz);
       if (at <= context.now) return { ok: false, error: 'That time has passed today; say "tomorrow at …".' };
       return once(at);
     }
@@ -357,20 +369,33 @@ function clockOfCron(minute: string, hour: string): string | null {
   return `${two(Number(hour))}:${two(Number(minute))}`;
 }
 
-function dayNames(field: string): string | null {
-  const names: string[] = [];
+/**
+ * The days a cron's day-of-week field names, Sunday first, each once; null
+ * when the field is not plain days and ranges. croner reads 7 as Sunday as
+ * well as 0, so `1-7` is the whole week and `0-7` says Sunday twice.
+ */
+function dayIndexes(field: string): number[] | null {
+  const days = new Set<number>();
   for (const part of field.split(',')) {
     const range = /^(\d)-(\d)$/.exec(part);
+    const single = /^\d$/.test(part) ? Number(part) : null;
     if (range) {
-      for (let day = Number(range[1]); day <= Number(range[2]); day += 1) names.push(DAYS[day]!);
-    } else if (/^\d$/.test(part)) {
-      names.push(DAYS[Number(part) % 7]!);
+      for (let day = Number(range[1]); day <= Number(range[2]); day += 1) days.add(day % 7);
+    } else if (single !== null && single <= 7) {
+      days.add(single % 7);
     } else {
       return null;
     }
   }
+  return days.size === 0 ? null : [...days].sort((a, b) => a - b);
+}
+
+function dayNames(days: number[]): string {
   const cap = (name: string) => name[0]!.toUpperCase() + name.slice(1);
-  return names.map(cap).join(', ').replace(/, ([^,]+)$/, ' and $1');
+  return days
+    .map((day) => cap(DAYS[day]!))
+    .join(', ')
+    .replace(/, ([^,]+)$/, ' and $1');
 }
 
 /**
@@ -396,14 +421,31 @@ export function describeRoutineSchedule(schedule: RoutineSchedule, options: { zo
     if (everyHours && minute === '0' && dow === '*') return `every ${everyHours[1]} hours`;
     const clock = clockOfCron(minute, hour);
     if (clock) {
-      if (dow === '*') return `daily at ${clock}${zone}`;
-      if (dow === '1-5') return `weekdays at ${clock}${zone}`;
-      if (dow === '0,6' || dow === '6,0') return `weekends at ${clock}${zone}`;
-      const days = dayNames(dow);
-      if (days) return `every ${days} at ${clock}${zone}`;
+      const days = dow === '*' ? null : dayIndexes(dow);
+      if (dow === '*' || days?.length === 7) return `daily at ${clock}${zone}`;
+      if (days?.join() === '1,2,3,4,5') return `weekdays at ${clock}${zone}`;
+      if (days?.join() === '0,6') return `weekends at ${clock}${zone}`;
+      if (days) return `every ${dayNames(days)} at ${clock}${zone}`;
     }
   }
   return `${schedule.cron}${zone}`;
+}
+
+/**
+ * The schedule as a phrase `parseRoutineWhen` reads back to the same
+ * schedule: what an edit box is filled with, so that changing "09:00" to
+ * "10:00" in it saves. The zone is left out — the form carries it on its
+ * own — and a once moment is its date, `on 2026-11-02 at 09:00`. A cron
+ * whose words would not read back to it is given as itself.
+ */
+export function routineWhenPhrase(schedule: RoutineSchedule): string {
+  if (schedule.kind === 'once') {
+    const clock = wallClock(schedule.at, schedule.tz);
+    return `on ${clock.year}-${two(clock.month)}-${two(clock.day)} at ${two(clock.hour)}:${two(clock.minute)}`;
+  }
+  const phrase = describeRoutineSchedule(schedule, { zone: false });
+  const back = parseRoutineWhen(phrase, { now: 0, tz: schedule.tz });
+  return back.ok && back.schedule.kind === 'cron' && back.schedule.cron === schedule.cron ? phrase : schedule.cron;
 }
 
 // --- fields and rules ------------------------------------------------------

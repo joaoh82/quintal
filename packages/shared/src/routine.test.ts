@@ -9,6 +9,7 @@ import {
   nextRoutineDue,
   parseClock,
   parseRoutineWhen,
+  routineWhenPhrase,
   routineSlug,
   validateRoutineSchedule,
   wallClockToEpoch,
@@ -119,6 +120,26 @@ describe('reading "when"', () => {
     assert.equal(onceAt('2026-11-05T09:00:00Z'), Date.UTC(2026, 10, 5, 9, 0));
   });
 
+  it('keeps the clock across a DST night: tomorrow at 9 is 09:00 tomorrow, not now plus a day', () => {
+    // Saturday 28 Mar 2026, 12:00 WET; clocks go forward that night, so Sunday 09:00 is 08:00Z.
+    const springEve = Date.UTC(2026, 2, 28, 12, 0);
+    const spring = (text: string) => {
+      const result = parseRoutineWhen(text, { now: springEve, tz: LISBON });
+      assert.ok(result.ok && result.schedule.kind === 'once', text);
+      return result.schedule.kind === 'once' ? result.schedule.at : 0;
+    };
+    assert.equal(spring('tomorrow at 9'), Date.UTC(2026, 2, 29, 8, 0));
+    assert.equal(spring('at 9'), Date.UTC(2026, 2, 29, 8, 0), 'rolls forward to tomorrow at the same clock');
+    assert.equal(spring('on sunday at 9'), Date.UTC(2026, 2, 29, 8, 0));
+    assert.equal(spring('on saturday at 9'), Date.UTC(2026, 3, 4, 8, 0), 'next week, by the calendar');
+    assert.equal(spring('in 2 days'), springEve + 2 * 86_400_000, 'a duration stays on the clock');
+    // Saturday 24 Oct 2026, 12:00 WEST; clocks go back that night, so Sunday 09:00 is 09:00Z.
+    const autumnEve = Date.UTC(2026, 9, 24, 11, 0);
+    const autumn = parseRoutineWhen('tomorrow at 9', { now: autumnEve, tz: LISBON });
+    assert.ok(autumn.ok && autumn.schedule.kind === 'once');
+    assert.equal(autumn.schedule.at, Date.UTC(2026, 9, 25, 9, 0));
+  });
+
   it('reads the same clock in another zone as another moment', () => {
     const ny = parseRoutineWhen('tomorrow at 9', { now: NOW, tz: 'America/New_York' });
     assert.ok(ny.ok && ny.schedule.kind === 'once');
@@ -189,6 +210,42 @@ describe('a schedule in words', () => {
   });
   it('shows a cron the words do not cover as itself', () => {
     assert.equal(describeRoutineSchedule(when('0 9 1 * *')), '0 9 1 * * (Europe/Lisbon)');
+  });
+  it('reads 7 as Sunday, as croner does, so a week written 1-7 is daily and 0-7 names Sunday once', () => {
+    assert.equal(describeRoutineSchedule(when('0 9 * * 1-7', 'UTC')), 'daily at 09:00');
+    assert.equal(describeRoutineSchedule(when('0 9 * * 0-7', 'UTC')), 'daily at 09:00');
+    assert.equal(describeRoutineSchedule(when('0 9 * * 5-7', 'UTC')), 'every Sunday, Friday and Saturday at 09:00');
+    assert.equal(describeRoutineSchedule(when('0 9 * * 7', 'UTC')), 'every Sunday at 09:00');
+  });
+});
+
+describe('a schedule as a phrase to edit', () => {
+  it('reads back to the same schedule, zone left to the form', () => {
+    for (const text of [
+      'every 15 minutes',
+      'every hour',
+      'every hour at :30',
+      'every 2 hours',
+      'daily at 9',
+      'weekdays at 17:30',
+      'every weekend at noon',
+      'every monday at 9',
+      'every monday and thursday at 9',
+      'every sunday, monday and tuesday at 9',
+    ]) {
+      const schedule = when(text);
+      const phrase = routineWhenPhrase(schedule);
+      assert.ok(!phrase.includes('('), `${text}: "${phrase}" names no zone`);
+      const back = parseRoutineWhen(phrase, { now: NOW, tz: LISBON });
+      assert.ok(back.ok, `${text}: "${phrase}" reads back`);
+      assert.deepEqual(back.schedule, schedule, `${text}: "${phrase}" is the same schedule`);
+    }
+  });
+  it('gives a once moment as its date, and a cron its words would not read back as itself', () => {
+    assert.equal(routineWhenPhrase(when('tomorrow at 9')), 'on 2026-11-02 at 09:00');
+    assert.equal(onceAt(routineWhenPhrase(when('tomorrow at 9'))), onceAt('tomorrow at 9'));
+    assert.equal(routineWhenPhrase(when('0 9 * * 1-7')), '0 9 * * 1-7', 'its words say daily, which is another cron');
+    assert.equal(routineWhenPhrase(when('0 9 1 * *')), '0 9 1 * *');
   });
 });
 
