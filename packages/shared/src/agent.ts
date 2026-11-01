@@ -33,10 +33,10 @@ import { tidyDisplayText } from './workspace.js';
  * silence denies. Enforced by the harness, not the office: the office never
  * sees the question, only the audit line that answers it.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'run'] as const;
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'run'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'run'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'run'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
@@ -57,6 +57,7 @@ export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
   dm: 'Hold a direct message with you.',
   board: 'Read the office board, write notes on it and hand them to your agents.',
   commands: 'List the office\u2019s commands, make new ones and change yours, as you.',
+  routines: 'Keep routines on itself and your other agents: list, make, change, pause and delete them, as you.',
   run: 'Answer the runtime\u2019s "may I run this?" questions automatically, for every turn, with nothing shown to you. Without it each one is put to you and silence denies.',
 };
 
@@ -263,6 +264,11 @@ export const AGENT_EVENT_KINDS = [
   /** It made a command, or changed one, as its owner: the name and what changed. */
   'command.command_create',
   'command.command_update',
+  'command.routine_list',
+  'command.routine_get',
+  'command.routine_create',
+  'command.routine_update',
+  'command.routine_delete',
   /** A routine of its fired: the line was spoken in its owner's DM. `made_up` when it was due while the agent was away. */
   'routine.fired',
   'routine.made_up',

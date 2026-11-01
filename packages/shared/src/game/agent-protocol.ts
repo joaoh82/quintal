@@ -63,6 +63,20 @@ export const AgentMessage = {
   CommandCreate: 'agent:command_create',
   /** Change a command by name. Absent fields stay. */
   CommandUpdate: 'agent:command_update',
+  /**
+   * Routines — standing requests with a schedule — on the agent and on its
+   * owner's other agents, under the `routines` scope. Only to an office that
+   * says `routinesVersion: 1`. See `docs/ROUTINES.md`.
+   */
+  RoutineList: 'agent:routine_list',
+  /** One routine, by name or id, with its recent runs. */
+  RoutineGet: 'agent:routine_get',
+  /** Make a routine, as the agent's owner, on itself or one of its owner's agents. */
+  RoutineCreate: 'agent:routine_create',
+  /** Change a routine: words, schedule, command, paused. Absent fields stay. */
+  RoutineUpdate: 'agent:routine_update',
+  /** Delete a routine, runs and all. */
+  RoutineDelete: 'agent:routine_delete',
   /** Read a memory slug. */
   MemoryGet: 'agent:memory_get',
   /** Write a memory slug. Over-size writes are rejected, not truncated. */
@@ -257,6 +271,56 @@ export interface AgentCommandUpdatePayload extends AgentRequest {
   defaultTarget?: string | null;
 }
 
+/** Which routines: every one on the owner's agents, or those on one agent by name ("me" for the caller). */
+export interface AgentRoutineListPayload extends AgentRequest {
+  agent?: string;
+}
+
+/**
+ * A routine as an agent names it: its name as `routine_list` shows it, or
+ * its id. A name shared by two of the owner's agents needs `agent` too.
+ */
+export interface AgentRoutineGetPayload extends AgentRequest {
+  routine: string;
+  agent?: string;
+}
+
+/**
+ * A routine as an agent writes it. `when` is a phrase or a cron line —
+ * "every hour", "weekdays at 9", "in 45 minutes", "0 9 * * 1-5" — read in
+ * `tz`, the harness machine's zone (UTC when an older harness sends none).
+ * `agent` is who it is on: "me", or one of the owner's agents by name;
+ * absent means the caller. It asks either its own `instructions` or one of
+ * the office's commands by name, with `args` for it, or both.
+ */
+export interface AgentRoutineCreatePayload extends AgentRequest {
+  name: string;
+  when: string;
+  tz?: string;
+  agent?: string;
+  instructions?: string;
+  command?: string | null;
+  args?: string;
+}
+
+/** A change to a routine. Absent fields stay; `command: null` drops the command; `paused` pauses or resumes. */
+export interface AgentRoutineUpdatePayload extends AgentRequest {
+  routine: string;
+  agent?: string;
+  newName?: string;
+  when?: string;
+  tz?: string;
+  instructions?: string;
+  command?: string | null;
+  args?: string;
+  paused?: boolean;
+}
+
+export interface AgentRoutineDeletePayload extends AgentRequest {
+  routine: string;
+  agent?: string;
+}
+
 export interface AgentMessagesGetPayload extends AgentRequest {
   /**
    * `nearby` = within earshot of where you stand now; `zone` = a zone's
@@ -375,6 +439,8 @@ export interface AgentReadyPayload {
   boardVersion?: 1;
   /** Set when this office answers `agent:command_*`. */
   commandsVersion?: 1;
+  /** Set when this office keeps routines and answers `agent:routine_*`. */
+  routinesVersion?: 1;
   /**
    * The MCP servers its owner gave it, for the harness to hand the runtime
    * beside its own tools. Secret values are sealed to the agent's key.
@@ -722,6 +788,61 @@ export interface CommandGetResult {
 
 export interface CommandWriteResult {
   command: AgentCommandRef;
+}
+
+/**
+ * A routine as an agent reads it. `schedule` is the words a card shows
+ * ("every hour", "daily at 09:00 (Europe/Lisbon)"); `when` is a phrase
+ * `routine_update` takes back. `yours` is whether this agent may change it:
+ * it is on one of its owner's agents, which is also the only kind it is
+ * shown.
+ */
+export interface AgentRoutineRef {
+  id: string;
+  name: string;
+  /** The agent it is on, by name. */
+  agent: string;
+  schedule: string;
+  when: string;
+  tz: string;
+  paused: boolean;
+  nextDueAt: number | null;
+  lastRunAt: number | null;
+  instructions: string;
+  command: { name: string } | null;
+  args: string;
+  /** "Josh", or "Josh, via Marvin" when an agent made it for them. */
+  by: string;
+  yours: boolean;
+  updatedAt: number;
+}
+
+/** One slot of a routine and what came of it. */
+export interface AgentRoutineRunRef {
+  dueAt: number;
+  outcome: 'fired' | 'missed' | 'made_up' | 'skipped';
+  /** Why, for a missed or skipped slot: "away", "busy", "owner_left", "no_dm". */
+  note: string;
+  firedAt: number | null;
+}
+
+export interface RoutineListResult {
+  routines: AgentRoutineRef[];
+}
+
+export interface RoutineGetResult {
+  routine: AgentRoutineRef;
+  /** Newest first, up to twenty. */
+  runs: AgentRoutineRunRef[];
+}
+
+export interface RoutineWriteResult {
+  routine: AgentRoutineRef;
+}
+
+export interface RoutineDeleteResult {
+  deleted: true;
+  name: string;
 }
 
 export interface MemoryGetResult {

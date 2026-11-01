@@ -98,6 +98,16 @@ import {
   type AgentCommandListPayload,
   type AgentCommandRef,
   type AgentCommandUpdatePayload,
+  type AgentRoutineCreatePayload,
+  type AgentRoutineDeletePayload,
+  type AgentRoutineGetPayload,
+  type AgentRoutineListPayload,
+  type AgentRoutineRef,
+  type AgentRoutineUpdatePayload,
+  type RoutineDeleteResult,
+  type RoutineGetResult,
+  type RoutineListResult,
+  type RoutineWriteResult,
   type CommandGetResult,
   type CommandListResult,
   type CommandWriteResult,
@@ -153,6 +163,10 @@ import {
   mayCreateOfficeCommands,
   mayEditOfficeCommand,
   mayManageRoutine,
+  isTimeZone,
+  parseRoutineWhen,
+  routineWhenPhrase,
+  type RoutineSchedule,
   normaliseOfficeCommandName,
   officeCommandAuthorLabel,
   officeCommandUsage,
@@ -219,6 +233,11 @@ import {
   createOfficeCommand,
   updateOfficeCommand,
   claimRoutineRun,
+  createRoutine,
+  deleteRoutine,
+  listRoutineRuns,
+  listRoutinesForWorkspace,
+  RoutineError,
   getRoutine,
   listDueRoutines,
   markRoutineRan,
@@ -445,6 +464,8 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #boardPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /** Command writes, paced like board writes and counted apart from them. */
   readonly #commandPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
+  /** Routine writes by agents, at the board's pace: a model in a loop must not fill an agent's twenty. */
+  readonly #routinePace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -757,6 +778,21 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(AgentMessage.CommandUpdate, (client, payload: AgentCommandUpdatePayload) =>
       void this.#onAgentCommandUpdate(client, payload),
     );
+    this.onMessage(AgentMessage.RoutineList, (client, payload: AgentRoutineListPayload) =>
+      void this.#onAgentRoutineList(client, payload),
+    );
+    this.onMessage(AgentMessage.RoutineGet, (client, payload: AgentRoutineGetPayload) =>
+      void this.#onAgentRoutineGet(client, payload),
+    );
+    this.onMessage(AgentMessage.RoutineCreate, (client, payload: AgentRoutineCreatePayload) =>
+      void this.#onAgentRoutineCreate(client, payload),
+    );
+    this.onMessage(AgentMessage.RoutineUpdate, (client, payload: AgentRoutineUpdatePayload) =>
+      void this.#onAgentRoutineUpdate(client, payload),
+    );
+    this.onMessage(AgentMessage.RoutineDelete, (client, payload: AgentRoutineDeletePayload) =>
+      void this.#onAgentRoutineDelete(client, payload),
+    );
     this.onMessage(AgentMessage.MemoryGet, (client, payload: AgentMemoryGetPayload) =>
       void this.#onAgentMemoryGet(client, payload),
     );
@@ -1063,6 +1099,7 @@ export class OfficeRoom extends Room<OfficeState> {
       mcpVersion: 1,
       boardVersion: 1,
       commandsVersion: 1,
+      routinesVersion: 1,
       mcpServers: mcp?.servers ?? [],
       agentId: identity.id,
       sessionId: client.sessionId,
@@ -4454,6 +4491,331 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#reply(client, payload?.requestId, { command: this.#agentCommandRef(after, actor) } satisfies CommandWriteResult);
     } catch (error: unknown) {
       this.#agentCommandRefused(client, payload?.requestId, error);
+    }
+  }
+
+  // --- routines, for agents ------------------------------------------------
+
+  /**
+   * An agent's session, if the call is in its `routines` scope. Reads are
+   * under it too: a routine's words are what its owner asks in their DM.
+   */
+  #agentRoutineSession(client: Client, payload: AgentRequest | undefined): AgentSession | null {
+    const session = this.#agentSession(client);
+    if (!session) return null;
+    if (!hasScope(session.identity, 'routines')) {
+      const message = 'This agent has no "routines" scope.';
+      audit(session.identity.id, 'command.rejected', { code: 'missing_scope', message });
+      this.#replyError(client, payload?.requestId, { code: 'missing_scope', message });
+      return null;
+    }
+    return session;
+  }
+
+  /**
+   * The routines an agent sees: those on its owner's agents, its own among
+   * them. Not the office's others — a routine speaks in a DM, and its words
+   * are that owner's business — so `yours` on each is whether the owner is
+   * still a member who may keep it.
+   */
+  async #agentRoutines(session: AgentSession): Promise<RoutineSummary[]> {
+    const all = await listRoutinesForWorkspace(getDb(), this.#workspaceId);
+    return all.filter((routine) => routine.agentOwnerUserId === session.identity.ownerUserId);
+  }
+
+  #agentRoutineRef(routine: RoutineSummary, actor: ChannelActor): AgentRoutineRef {
+    return {
+      id: routine.id,
+      name: routine.name,
+      agent: routine.agentName,
+      schedule: routine.scheduleLabel,
+      when: routineWhenPhrase(routine.schedule),
+      tz: routine.schedule.tz,
+      paused: routine.paused,
+      nextDueAt: routine.nextDueAt,
+      lastRunAt: routine.lastRunAt,
+      instructions: routine.instructions,
+      command: routine.command ? { name: routine.command.name } : null,
+      args: routine.args,
+      by: officeCommandAuthorLabel({
+        createdBy: routine.createdBy,
+        createdByName: routine.createdByName,
+        writtenBy: routine.createdBy,
+        writtenByName: routine.createdByName,
+        writtenByAgentName: routine.createdByAgentName,
+      }),
+      yours: mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId }),
+      updatedAt: routine.updatedAt,
+    };
+  }
+
+  /**
+   * The agent a routine is on or goes on, as the caller names it: nothing
+   * or "me" for itself, else one of its owner's agents by name. Only the
+   * owner's: a routine speaks as the owner, so the owner's agents are the
+   * bound. Null after a refusal, which is already sent.
+   */
+  async #agentRoutineAgent(client: Client, session: AgentSession, wanted: unknown, requestId: unknown): Promise<BoardAgentRef | null> {
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const self = session.identity;
+    const needle = typeof wanted === 'string' ? wanted.trim().replace(/^@/, '').toLowerCase() : '';
+    const mine = this.#boardAgents.filter((agent) => agent.ownerUserId === self.ownerUserId);
+    if (needle.length === 0 || needle === 'me' || needle === self.name.toLowerCase()) {
+      const own = mine.find((agent) => agent.id === self.id);
+      if (own) return own;
+      this.#replyError(client, requestId, { code: 'not_found', message: 'You are not on this office\'s roster, so no routine can be kept on you.' });
+      return null;
+    }
+    const found = mine.filter((agent) => agent.name.toLowerCase() === needle);
+    if (found.length === 1) return found[0]!;
+    const named = String(wanted).trim();
+    this.#replyError(client, requestId, {
+      code: 'not_found',
+      message:
+        found.length === 0
+          ? `No agent of your owner's is called ${named}. A routine goes on one of your owner's agents: ${
+              mine.map((agent) => agent.name).join(', ') || 'only you'
+            }.`
+          : `More than one agent of your owner's is called ${named}; ask them to rename one.`,
+    });
+    return null;
+  }
+
+  /**
+   * The routine a name or an id says, among the owner's. A name two of the
+   * owner's agents share needs `agent` to pick. Null after a refusal, which
+   * is already sent.
+   */
+  async #agentRoutineNamed(
+    client: Client,
+    session: AgentSession,
+    payload: { routine?: unknown; agent?: unknown } | undefined,
+    requestId: unknown,
+  ): Promise<RoutineSummary | null> {
+    const wanted = String(payload?.routine ?? '').trim();
+    if (wanted.length === 0) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: 'Name the routine, as routine_list shows it.' });
+      return null;
+    }
+    const mine = await this.#agentRoutines(session);
+    const byId = mine.find((routine) => routine.id === wanted);
+    if (byId) return byId;
+    let candidates = mine.filter((routine) => routine.name.toLowerCase() === wanted.toLowerCase());
+    if (typeof payload?.agent === 'string' && payload.agent.trim().length > 0) {
+      const agent = await this.#agentRoutineAgent(client, session, payload.agent, requestId);
+      if (!agent) return null;
+      candidates = candidates.filter((routine) => routine.agentId === agent.id);
+    }
+    if (candidates.length === 1) return candidates[0]!;
+    this.#replyError(client, requestId, {
+      code: candidates.length === 0 ? 'not_found' : 'invalid_payload',
+      message:
+        candidates.length === 0
+          ? `No routine called "${wanted}" on your owner's agents. routine_list names them.`
+          : `${candidates.map((routine) => routine.agentName).join(' and ')} each have a routine called "${wanted}"; say which with agent.`,
+    });
+    return null;
+  }
+
+  /**
+   * A schedule as an agent sends it: the phrase, read in the zone the
+   * harness named — its machine's — or UTC when an older harness names
+   * none. Null after a refusal, which is already sent and says what is taken.
+   */
+  #agentRoutineSchedule(client: Client, when: unknown, tz: unknown, requestId: unknown): RoutineSchedule | null {
+    const zone = typeof tz === 'string' && tz.trim().length > 0 ? tz.trim() : 'UTC';
+    if (!isTimeZone(zone)) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: `"${zone}" is not a time zone this office knows; name one like Europe/Lisbon.` });
+      return null;
+    }
+    const parsed = parseRoutineWhen(when, { now: Date.now(), tz: zone });
+    if (!parsed.ok) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: parsed.error });
+      return null;
+    }
+    return parsed.schedule;
+  }
+
+  /**
+   * The command a routine runs, as the agent names it: null for none, the
+   * id for one of the office's, undefined after a refusal already sent.
+   */
+  async #agentRoutineCommand(client: Client, wanted: unknown, requestId: unknown): Promise<string | null | undefined> {
+    if (wanted === null || wanted === undefined || (typeof wanted === 'string' && wanted.trim().length === 0)) return null;
+    const command = await this.#agentCommandNamed(client, wanted, requestId);
+    return command ? command.id : undefined;
+  }
+
+  /** One write's worth of the agent's routine pace, or a refusal with how long to wait. */
+  #agentRoutinePaced(client: Client, session: AgentSession, requestId: unknown): boolean {
+    const now = Date.now();
+    if (this.#routinePace.tryConsume(session.identity.id, now)) return true;
+    const retryAfterMs = this.#routinePace.retryAfterSeconds(session.identity.id, now) * 1000;
+    const message = `Agents may write routines ${AGENT_BOARD_WRITES_PER_WINDOW} times every ${AGENT_BOARD_WRITE_WINDOW_MS / 1000}s.`;
+    audit(session.identity.id, 'command.rejected', { code: 'rate_limited', message });
+    this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs });
+    return false;
+  }
+
+  #agentRoutineRefused(client: Client, requestId: unknown, error: unknown): void {
+    if (error instanceof RoutineError) {
+      this.#replyError(client, requestId, {
+        code:
+          error.reason === 'not_found' || error.reason === 'agent' || error.reason === 'command'
+            ? 'not_found'
+            : error.reason === 'full'
+              ? 'too_large'
+              : 'invalid_payload',
+        message: error.message,
+      });
+      return;
+    }
+    logger.error('[office] routine write by an agent failed', error);
+    this.#replyError(client, requestId, { code: 'unavailable', message: 'The routine could not be written.' });
+  }
+
+  async #onAgentRoutineList(client: Client, payload: AgentRoutineListPayload): Promise<void> {
+    const session = this.#agentRoutineSession(client, payload);
+    if (!session) return;
+    const agentName = typeof payload?.agent === 'string' ? payload.agent.trim() : '';
+    audit(session.identity.id, 'command.routine_list', { agent: agentName });
+    markSeen(session.identity.id);
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    let routines = await this.#agentRoutines(session);
+    if (agentName.length > 0) {
+      const agent = await this.#agentRoutineAgent(client, session, agentName, payload?.requestId);
+      if (!agent) return;
+      routines = routines.filter((routine) => routine.agentId === agent.id);
+    }
+    this.#reply(client, payload?.requestId, {
+      routines: routines.map((routine) => this.#agentRoutineRef(routine, actor)),
+    } satisfies RoutineListResult);
+  }
+
+  async #onAgentRoutineGet(client: Client, payload: AgentRoutineGetPayload): Promise<void> {
+    const session = this.#agentRoutineSession(client, payload);
+    if (!session) return;
+    audit(session.identity.id, 'command.routine_get', { routine: String(payload?.routine ?? '') });
+    markSeen(session.identity.id);
+    const routine = await this.#agentRoutineNamed(client, session, payload, payload?.requestId);
+    if (!routine) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    const runs = await listRoutineRuns(getDb(), routine.id, 20);
+    this.#reply(client, payload?.requestId, {
+      routine: this.#agentRoutineRef(routine, actor),
+      runs: runs.map((run) => ({ dueAt: run.dueAt, outcome: run.outcome, note: run.note, firedAt: run.firedAt })),
+    } satisfies RoutineGetResult);
+  }
+
+  /**
+   * An agent makes a routine as its owner, on itself or one of its owner's
+   * agents: it may where its owner may, and the row records both. The
+   * schedule is read here from the agent's phrase, so the words that come
+   * back say how the office understood it.
+   */
+  async #onAgentRoutineCreate(client: Client, payload: AgentRoutineCreatePayload): Promise<void> {
+    const session = this.#agentRoutineSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentRoutinePaced(client, session, payload?.requestId)) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    const agent = await this.#agentRoutineAgent(client, session, payload?.agent, payload?.requestId);
+    if (!agent) return;
+    if (!mayManageRoutine(actor, { ownerUserId: agent.ownerUserId })) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you cannot keep routines for it.',
+      });
+      return;
+    }
+    const schedule = this.#agentRoutineSchedule(client, payload?.when, payload?.tz, payload?.requestId);
+    if (!schedule) return;
+    const commandId = await this.#agentRoutineCommand(client, payload?.command, payload?.requestId);
+    if (commandId === undefined) return;
+    try {
+      const made = await createRoutine(getDb(), {
+        workspaceId: this.#workspaceId,
+        agentId: agent.id,
+        name: String(payload?.name ?? ''),
+        schedule,
+        instructions: typeof payload?.instructions === 'string' ? payload.instructions : '',
+        commandId,
+        args: typeof payload?.args === 'string' ? payload.args : '',
+        createdBy: session.identity.ownerUserId,
+        createdByAgentId: session.identity.id,
+        now: Date.now(),
+      });
+      audit(session.identity.id, 'command.routine_create', { name: made.name, agent: made.agentName, schedule: made.scheduleLabel });
+      this.#reply(client, payload?.requestId, { routine: this.#agentRoutineRef(made, actor) } satisfies RoutineWriteResult);
+    } catch (error: unknown) {
+      this.#agentRoutineRefused(client, payload?.requestId, error);
+    }
+  }
+
+  /** Change a routine of the owner's. A new schedule, or a resume, counts from now. */
+  async #onAgentRoutineUpdate(client: Client, payload: AgentRoutineUpdatePayload): Promise<void> {
+    const session = this.#agentRoutineSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentRoutinePaced(client, session, payload?.requestId)) return;
+    const routine = await this.#agentRoutineNamed(client, session, payload, payload?.requestId);
+    if (!routine) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    if (!mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you cannot change its routines.',
+      });
+      return;
+    }
+    const schedule =
+      typeof payload?.when === 'string' ? this.#agentRoutineSchedule(client, payload.when, payload.tz, payload.requestId) : undefined;
+    if (schedule === null) return;
+    const commandId = payload && 'command' in payload ? await this.#agentRoutineCommand(client, payload.command, payload.requestId) : undefined;
+    if (payload && 'command' in payload && commandId === undefined) return;
+    const patch = {
+      ...(typeof payload?.newName === 'string' ? { name: payload.newName } : {}),
+      ...(schedule ? { schedule } : {}),
+      ...(typeof payload?.instructions === 'string' ? { instructions: payload.instructions } : {}),
+      ...(commandId !== undefined ? { commandId } : {}),
+      ...(typeof payload?.args === 'string' ? { args: payload.args } : {}),
+      ...(typeof payload?.paused === 'boolean' ? { paused: payload.paused } : {}),
+    };
+    if (Object.keys(patch).length === 0) {
+      this.#replyError(client, payload?.requestId, { code: 'invalid_payload', message: `routine_update "${routine.name}": say what changes.` });
+      return;
+    }
+    try {
+      await updateRoutine(getDb(), { workspaceId: this.#workspaceId, routineId: routine.id, ...patch, now: Date.now() });
+      audit(session.identity.id, 'command.routine_update', { name: routine.name, agent: routine.agentName, fields: Object.keys(patch) });
+      const after = (await getRoutine(getDb(), this.#workspaceId, routine.id)) ?? routine;
+      this.#reply(client, payload?.requestId, { routine: this.#agentRoutineRef(after, actor) } satisfies RoutineWriteResult);
+    } catch (error: unknown) {
+      this.#agentRoutineRefused(client, payload?.requestId, error);
+    }
+  }
+
+  async #onAgentRoutineDelete(client: Client, payload: AgentRoutineDeletePayload): Promise<void> {
+    const session = this.#agentRoutineSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    if (!this.#agentRoutinePaced(client, session, payload?.requestId)) return;
+    const routine = await this.#agentRoutineNamed(client, session, payload, payload?.requestId);
+    if (!routine) return;
+    const actor = await this.#actorForUser(session.identity.ownerUserId);
+    if (!mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })) {
+      this.#replyError(client, payload?.requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you cannot delete its routines.',
+      });
+      return;
+    }
+    try {
+      await deleteRoutine(getDb(), this.#workspaceId, routine.id);
+      audit(session.identity.id, 'command.routine_delete', { name: routine.name, agent: routine.agentName });
+      this.#reply(client, payload?.requestId, { deleted: true, name: routine.name } satisfies RoutineDeleteResult);
+    } catch (error: unknown) {
+      this.#agentRoutineRefused(client, payload?.requestId, error);
     }
   }
 

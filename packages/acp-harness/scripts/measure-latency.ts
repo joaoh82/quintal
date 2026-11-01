@@ -87,6 +87,11 @@ function fixture() {
     commandGet: async () => { throw new Error('Read-only latency fixture'); },
     commandCreate: async () => { throw new Error('Read-only latency fixture'); },
     commandUpdate: async () => { throw new Error('Read-only latency fixture'); },
+    routineList: async () => ({ routines: [] }),
+    routineGet: async () => { throw new Error('Read-only latency fixture'); },
+    routineCreate: async () => { throw new Error('Read-only latency fixture'); },
+    routineUpdate: async () => { throw new Error('Read-only latency fixture'); },
+    routineDelete: async () => { throw new Error('Read-only latency fixture'); },
     occupants: () => [], channels: () => [lobby, ...dms],
   };
   const runner = new AgentRunner({ ...config, name: 'LatencyAgent' }, undefined, gateway);

@@ -178,6 +178,58 @@ function needCommandsScope(gateway: Gateway, tool: string): void {
   );
 }
 
+/** The routines are one scope, reads included, as the commands are. */
+function needRoutinesScope(gateway: Gateway, tool: string): void {
+  if (gateway.ready?.scopes?.includes('routines')) return;
+  throw new Error(
+    `${tool}: this agent has no "routines" scope. Its owner grants it under Settings → Agents. ` +
+      'Until then, say what the routine would be and leave making it to them, under Settings → Routines.',
+  );
+}
+
+/** A routine's name or id, as `routine_list` shows it. */
+export function routineName(value: unknown): string {
+  const name = String(value ?? '').trim();
+  if (name.length === 0) throw new Error('name the routine, as routine_list shows it');
+  return name;
+}
+
+/** The schedule as the model wrote it; the office reads the phrase. */
+function whenArg(value: unknown): string {
+  const when = String(value ?? '').trim();
+  if (when.length === 0) throw new Error('say when: "every hour", "weekdays at 9", "in 45 minutes", or a cron line of five fields');
+  return when;
+}
+
+/** `"@Marvin"`, `"Marvin"`, `"me"`: the agent a routine is on, as the model names it; absent for the caller. */
+function agentField(args: Record<string, unknown>): { agent?: string } {
+  if (typeof args.agent !== 'string') return {};
+  const agent = args.agent.trim().replace(/^@/, '');
+  return agent.length > 0 ? { agent } : {};
+}
+
+/**
+ * The zone a schedule is read in: this machine's, since an agent usually
+ * runs on its owner's computer and "9" means nine where they sit. UTC when
+ * the runtime cannot say.
+ */
+export function localZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+/** The fields a routine create and update share, only those given. `command: null` is "its own words only". */
+function routineFields(args: Record<string, unknown>): { instructions?: string; command?: string | null; args?: string } {
+  return {
+    ...(typeof args.instructions === 'string' ? { instructions: args.instructions } : {}),
+    ...(args.command === null ? { command: null } : typeof args.command === 'string' ? { command: commandName(args.command) } : {}),
+    ...(typeof args.args === 'string' ? { args: args.args } : {}),
+  };
+}
+
 /** `"review"`, `"!review"` or `" Review "`: a command's name as people write it. */
 export function commandName(value: unknown): string {
   const name = String(value ?? '').trim().replace(/^!/, '').toLowerCase();
@@ -431,6 +483,45 @@ async function dispatch(
       };
       if (Object.keys(patch).length === 0) throw new Error(`command_update !${name}: say what changes`);
       return gateway.commandUpdate({ name, ...patch });
+    }
+
+    case 'routine_list': {
+      needRoutinesScope(gateway, call.tool);
+      return gateway.routineList(agentField(call.args));
+    }
+
+    case 'routine_get': {
+      needRoutinesScope(gateway, call.tool);
+      return gateway.routineGet({ routine: routineName(call.args.routine), ...agentField(call.args) });
+    }
+
+    case 'routine_create': {
+      needRoutinesScope(gateway, call.tool);
+      return gateway.routineCreate({
+        name: routineName(call.args.name),
+        when: whenArg(call.args.when),
+        tz: localZone(),
+        ...agentField(call.args),
+        ...routineFields(call.args),
+      });
+    }
+
+    case 'routine_update': {
+      needRoutinesScope(gateway, call.tool);
+      const routine = routineName(call.args.routine);
+      const patch = {
+        ...(typeof call.args.new_name === 'string' ? { newName: routineName(call.args.new_name) } : {}),
+        ...(typeof call.args.when === 'string' ? { when: whenArg(call.args.when), tz: localZone() } : {}),
+        ...routineFields(call.args),
+        ...(typeof call.args.paused === 'boolean' ? { paused: call.args.paused } : {}),
+      };
+      if (Object.keys(patch).length === 0) throw new Error(`routine_update "${routine}": say what changes`);
+      return gateway.routineUpdate({ routine, ...agentField(call.args), ...patch });
+    }
+
+    case 'routine_delete': {
+      needRoutinesScope(gateway, call.tool);
+      return gateway.routineDelete({ routine: routineName(call.args.routine), ...agentField(call.args) });
     }
 
     case 'workspace_info': {

@@ -17,6 +17,15 @@ import {
   type AgentBoardUpdatePayload,
   type AgentCommandCreatePayload,
   type AgentCommandUpdatePayload,
+  type AgentRoutineCreatePayload,
+  type AgentRoutineDeletePayload,
+  type AgentRoutineGetPayload,
+  type AgentRoutineListPayload,
+  type AgentRoutineUpdatePayload,
+  type RoutineDeleteResult,
+  type RoutineGetResult,
+  type RoutineListResult,
+  type RoutineWriteResult,
   type CommandGetResult,
   type CommandListResult,
   type CommandWriteResult,
@@ -497,6 +506,34 @@ export class GatewayClient {
     return this.#request<T>(type, payload);
   }
 
+  /** Routines on the agent and its owner's others. Refused, as the commands are, against an office that predates them. */
+  routineList(input: Omit<AgentRoutineListPayload, 'requestId'> = {}): Promise<RoutineListResult> {
+    return this.#routineRequest<RoutineListResult>(AgentMessage.RoutineList, { ...input });
+  }
+
+  routineGet(input: Omit<AgentRoutineGetPayload, 'requestId'>): Promise<RoutineGetResult> {
+    return this.#routineRequest<RoutineGetResult>(AgentMessage.RoutineGet, { ...input });
+  }
+
+  routineCreate(input: Omit<AgentRoutineCreatePayload, 'requestId'>): Promise<RoutineWriteResult> {
+    return this.#routineRequest<RoutineWriteResult>(AgentMessage.RoutineCreate, { ...input });
+  }
+
+  routineUpdate(input: Omit<AgentRoutineUpdatePayload, 'requestId'>): Promise<RoutineWriteResult> {
+    return this.#routineRequest<RoutineWriteResult>(AgentMessage.RoutineUpdate, { ...input });
+  }
+
+  routineDelete(input: Omit<AgentRoutineDeletePayload, 'requestId'>): Promise<RoutineDeleteResult> {
+    return this.#routineRequest<RoutineDeleteResult>(AgentMessage.RoutineDelete, { ...input });
+  }
+
+  #routineRequest<T>(type: string, payload: Record<string, unknown>): Promise<T> {
+    if (this.#ready && this.#ready.routinesVersion !== 1) {
+      return Promise.reject(new Error('this office keeps no routines: it predates the routine tools'));
+    }
+    return this.#request<T>(type, payload);
+  }
+
   memoryGet(slug: string): Promise<MemoryGetResult> {
     return this.#request<MemoryGetResult>(AgentMessage.MemoryGet, { slug });
   }
@@ -587,6 +624,11 @@ export type Gateway = Pick<
   | 'commandGet'
   | 'commandCreate'
   | 'commandUpdate'
+  | 'routineList'
+  | 'routineGet'
+  | 'routineCreate'
+  | 'routineUpdate'
+  | 'routineDelete'
   | 'memoryGet'
   | 'memorySet'
   | 'occupants'

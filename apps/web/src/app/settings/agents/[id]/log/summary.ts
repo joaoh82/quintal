@@ -52,6 +52,16 @@ export function describe(kind: string, payload: unknown): string {
       return `!${String(data.name ?? '?')}${typeof data.defaultTarget === 'string' ? ` · for ${data.defaultTarget}` : ''}`;
     case 'command.command_update':
       return `!${String(data.name ?? '?')} · ${asList(data.fields).join(', ') || 'no change'}`;
+    case 'command.routine_list':
+      return typeof data.agent === 'string' && data.agent.length > 0 ? `routines on ${data.agent}` : 'every routine';
+    case 'command.routine_get':
+      return `“${String(data.routine ?? '?')}”`;
+    case 'command.routine_create':
+      return `“${String(data.name ?? '?')}” on ${String(data.agent ?? '?')} · ${String(data.schedule ?? '')}`;
+    case 'command.routine_update':
+      return `“${String(data.name ?? '?')}” · ${asList(data.fields).join(', ') || 'no change'}`;
+    case 'command.routine_delete':
+      return `“${String(data.name ?? '?')}” on ${String(data.agent ?? '?')}`;
     case 'routine.fired':
     case 'routine.made_up':
     case 'routine.missed':
