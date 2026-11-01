@@ -6923,53 +6923,53 @@
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
     0,
     0,
     0,
-    17,
-    17,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     0,
     0,
     0,
@@ -10625,21 +10625,21 @@
     {
      "height": 0,
      "id": 145,
-     "name": "office/desk-south",
+     "name": "office-base/chair-north",
      "point": true,
      "properties": [
       {
        "name": "sprite",
        "type": "string",
-       "value": "office/desk-south"
+       "value": "office-base/chair-north"
       }
      ],
      "rotation": 0,
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 320,
-     "y": 992
+     "x": 144,
+     "y": 1024
     },
     {
      "height": 0,
@@ -10657,27 +10657,27 @@
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 480,
+     "x": 320,
      "y": 992
     },
     {
      "height": 0,
      "id": 147,
-     "name": "office/desk-south",
+     "name": "office-base/chair-north",
      "point": true,
      "properties": [
       {
        "name": "sprite",
        "type": "string",
-       "value": "office/desk-south"
+       "value": "office-base/chair-north"
       }
      ],
      "rotation": 0,
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 640,
-     "y": 992
+     "x": 304,
+     "y": 1024
     },
     {
      "height": 0,
@@ -10695,27 +10695,27 @@
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 800,
+     "x": 480,
      "y": 992
     },
     {
      "height": 0,
      "id": 149,
-     "name": "office/desk-south",
+     "name": "office-base/chair-north",
      "point": true,
      "properties": [
       {
        "name": "sprite",
        "type": "string",
-       "value": "office/desk-south"
+       "value": "office-base/chair-north"
       }
      ],
      "rotation": 0,
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 960,
-     "y": 992
+     "x": 464,
+     "y": 1024
     },
     {
      "height": 0,
@@ -10733,27 +10733,27 @@
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 1120,
+     "x": 640,
      "y": 992
     },
     {
      "height": 0,
      "id": 151,
-     "name": "office/desk-south",
+     "name": "office-base/chair-north",
      "point": true,
      "properties": [
       {
        "name": "sprite",
        "type": "string",
-       "value": "office/desk-south"
+       "value": "office-base/chair-north"
       }
      ],
      "rotation": 0,
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 1280,
-     "y": 992
+     "x": 624,
+     "y": 1024
     },
     {
      "height": 0,
@@ -10771,12 +10771,183 @@
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 1440,
+     "x": 800,
      "y": 992
     },
     {
      "height": 0,
      "id": 153,
+     "name": "office-base/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office-base/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 784,
+     "y": 1024
+    },
+    {
+     "height": 0,
+     "id": 154,
+     "name": "office/desk-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office/desk-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 960,
+     "y": 992
+    },
+    {
+     "height": 0,
+     "id": 155,
+     "name": "office-base/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office-base/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 944,
+     "y": 1024
+    },
+    {
+     "height": 0,
+     "id": 156,
+     "name": "office/desk-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office/desk-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1120,
+     "y": 992
+    },
+    {
+     "height": 0,
+     "id": 157,
+     "name": "office-base/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office-base/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1104,
+     "y": 1024
+    },
+    {
+     "height": 0,
+     "id": 158,
+     "name": "office/desk-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office/desk-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1280,
+     "y": 992
+    },
+    {
+     "height": 0,
+     "id": 159,
+     "name": "office-base/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office-base/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1264,
+     "y": 1024
+    },
+    {
+     "height": 0,
+     "id": 160,
+     "name": "office/desk-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office/desk-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1440,
+     "y": 992
+    },
+    {
+     "height": 0,
+     "id": 161,
+     "name": "office-base/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "office-base/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1424,
+     "y": 1024
+    },
+    {
+     "height": 0,
+     "id": 162,
      "name": "office/desk-south",
      "point": true,
      "properties": [
@@ -10795,177 +10966,6 @@
     },
     {
      "height": 0,
-     "id": 154,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 160,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 155,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 320,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 156,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 480,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 157,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 640,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 158,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 800,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 159,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 960,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 160,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1120,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 161,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1280,
-     "y": 1024
-    },
-    {
-     "height": 0,
-     "id": 162,
-     "name": "office-base/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office-base/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1440,
-     "y": 1024
-    },
-    {
-     "height": 0,
      "id": 163,
      "name": "office-base/chair-north",
      "point": true,
@@ -10980,202 +10980,12 @@
      "type": "prop",
      "visible": true,
      "width": 0,
-     "x": 1600,
+     "x": 1584,
      "y": 1024
     },
     {
      "height": 0,
      "id": 164,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 160,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 165,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 320,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 166,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 480,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 167,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 640,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 168,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 800,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 169,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 960,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 170,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1120,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 171,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1280,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 172,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1440,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 173,
-     "name": "office/laptop",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "office/laptop"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1600,
-     "y": 958
-    },
-    {
-     "height": 0,
-     "id": 174,
      "name": "office/server-cabinet",
      "point": true,
      "properties": [
@@ -11194,7 +11004,7 @@
     },
     {
      "height": 0,
-     "id": 175,
+     "id": 165,
      "name": "office/server-cabinet",
      "point": true,
      "properties": [
@@ -11213,7 +11023,7 @@
     },
     {
      "height": 0,
-     "id": 176,
+     "id": 166,
      "name": "office/server-cabinet",
      "point": true,
      "properties": [
@@ -11232,7 +11042,7 @@
     },
     {
      "height": 0,
-     "id": 177,
+     "id": 167,
      "name": "office/server-cabinet",
      "point": true,
      "properties": [
@@ -11251,7 +11061,7 @@
     },
     {
      "height": 0,
-     "id": 178,
+     "id": 168,
      "name": "office/storage-cabinet",
      "point": true,
      "properties": [
@@ -11270,7 +11080,7 @@
     },
     {
      "height": 0,
-     "id": 179,
+     "id": 169,
      "name": "office-base/whiteboard",
      "point": true,
      "properties": [
@@ -11289,7 +11099,7 @@
     },
     {
      "height": 0,
-     "id": 180,
+     "id": 170,
      "name": "office-base/whiteboard",
      "point": true,
      "properties": [
@@ -11308,7 +11118,7 @@
     },
     {
      "height": 0,
-     "id": 181,
+     "id": 171,
      "name": "office-base/plant-tall",
      "point": true,
      "properties": [
@@ -11327,7 +11137,7 @@
     },
     {
      "height": 0,
-     "id": 182,
+     "id": 172,
      "name": "office-base/plant-tall",
      "point": true,
      "properties": [
@@ -11346,7 +11156,7 @@
     },
     {
      "height": 0,
-     "id": 183,
+     "id": 173,
      "name": "office-base/water-cooler",
      "point": true,
      "properties": [
@@ -11365,7 +11175,7 @@
     },
     {
      "height": 0,
-     "id": 184,
+     "id": 174,
      "name": "cafeteria/serving-counter",
      "point": true,
      "properties": [
@@ -11384,7 +11194,7 @@
     },
     {
      "height": 0,
-     "id": 185,
+     "id": 175,
      "name": "cafeteria/coffee-counter",
      "point": true,
      "properties": [
@@ -11403,7 +11213,7 @@
     },
     {
      "height": 0,
-     "id": 186,
+     "id": 176,
      "name": "cafeteria/sink-counter",
      "point": true,
      "properties": [
@@ -11422,7 +11232,7 @@
     },
     {
      "height": 0,
-     "id": 187,
+     "id": 177,
      "name": "cafeteria/drinks-fridge",
      "point": true,
      "properties": [
@@ -11441,7 +11251,7 @@
     },
     {
      "height": 0,
-     "id": 188,
+     "id": 178,
      "name": "cafeteria/microwave-cabinet",
      "point": true,
      "properties": [
@@ -11460,7 +11270,7 @@
     },
     {
      "height": 0,
-     "id": 189,
+     "id": 179,
      "name": "cafeteria/vending-machine",
      "point": true,
      "properties": [
@@ -11479,7 +11289,7 @@
     },
     {
      "height": 0,
-     "id": 190,
+     "id": 180,
      "name": "cafeteria/dining-table",
      "point": true,
      "properties": [
@@ -11495,6 +11305,196 @@
      "width": 0,
      "x": 1376,
      "y": 768
+    },
+    {
+     "height": 0,
+     "id": 181,
+     "name": "cafeteria/dining-table",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/dining-table"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1568,
+     "y": 768
+    },
+    {
+     "height": 0,
+     "id": 182,
+     "name": "cafeteria/chair-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1344,
+     "y": 736
+    },
+    {
+     "height": 0,
+     "id": 183,
+     "name": "cafeteria/chair-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1408,
+     "y": 736
+    },
+    {
+     "height": 0,
+     "id": 184,
+     "name": "cafeteria/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1344,
+     "y": 800
+    },
+    {
+     "height": 0,
+     "id": 185,
+     "name": "cafeteria/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1408,
+     "y": 800
+    },
+    {
+     "height": 0,
+     "id": 186,
+     "name": "cafeteria/chair-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1536,
+     "y": 736
+    },
+    {
+     "height": 0,
+     "id": 187,
+     "name": "cafeteria/chair-south",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-south"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1600,
+     "y": 736
+    },
+    {
+     "height": 0,
+     "id": 188,
+     "name": "cafeteria/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1536,
+     "y": 800
+    },
+    {
+     "height": 0,
+     "id": 189,
+     "name": "cafeteria/chair-north",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/chair-north"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1600,
+     "y": 800
+    },
+    {
+     "height": 0,
+     "id": 190,
+     "name": "cafeteria/dining-table",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "cafeteria/dining-table"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1376,
+     "y": 864
     },
     {
      "height": 0,
@@ -11513,7 +11513,7 @@
      "visible": true,
      "width": 0,
      "x": 1568,
-     "y": 768
+     "y": 864
     },
     {
      "height": 0,
@@ -11532,7 +11532,7 @@
      "visible": true,
      "width": 0,
      "x": 1344,
-     "y": 736
+     "y": 832
     },
     {
      "height": 0,
@@ -11551,7 +11551,7 @@
      "visible": true,
      "width": 0,
      "x": 1408,
-     "y": 736
+     "y": 832
     },
     {
      "height": 0,
@@ -11570,7 +11570,7 @@
      "visible": true,
      "width": 0,
      "x": 1344,
-     "y": 800
+     "y": 896
     },
     {
      "height": 0,
@@ -11589,7 +11589,7 @@
      "visible": true,
      "width": 0,
      "x": 1408,
-     "y": 800
+     "y": 896
     },
     {
      "height": 0,
@@ -11608,7 +11608,7 @@
      "visible": true,
      "width": 0,
      "x": 1536,
-     "y": 736
+     "y": 832
     },
     {
      "height": 0,
@@ -11627,7 +11627,7 @@
      "visible": true,
      "width": 0,
      "x": 1600,
-     "y": 736
+     "y": 832
     },
     {
      "height": 0,
@@ -11646,7 +11646,7 @@
      "visible": true,
      "width": 0,
      "x": 1536,
-     "y": 800
+     "y": 896
     },
     {
      "height": 0,
@@ -11665,201 +11665,11 @@
      "visible": true,
      "width": 0,
      "x": 1600,
-     "y": 800
+     "y": 896
     },
     {
      "height": 0,
      "id": 200,
-     "name": "cafeteria/dining-table",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/dining-table"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1376,
-     "y": 864
-    },
-    {
-     "height": 0,
-     "id": 201,
-     "name": "cafeteria/dining-table",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/dining-table"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1568,
-     "y": 864
-    },
-    {
-     "height": 0,
-     "id": 202,
-     "name": "cafeteria/chair-south",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-south"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1344,
-     "y": 832
-    },
-    {
-     "height": 0,
-     "id": 203,
-     "name": "cafeteria/chair-south",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-south"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1408,
-     "y": 832
-    },
-    {
-     "height": 0,
-     "id": 204,
-     "name": "cafeteria/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1344,
-     "y": 896
-    },
-    {
-     "height": 0,
-     "id": 205,
-     "name": "cafeteria/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1408,
-     "y": 896
-    },
-    {
-     "height": 0,
-     "id": 206,
-     "name": "cafeteria/chair-south",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-south"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1536,
-     "y": 832
-    },
-    {
-     "height": 0,
-     "id": 207,
-     "name": "cafeteria/chair-south",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-south"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1600,
-     "y": 832
-    },
-    {
-     "height": 0,
-     "id": 208,
-     "name": "cafeteria/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1536,
-     "y": 896
-    },
-    {
-     "height": 0,
-     "id": 209,
-     "name": "cafeteria/chair-north",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "cafeteria/chair-north"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1600,
-     "y": 896
-    },
-    {
-     "height": 0,
-     "id": 210,
      "name": "cafeteria/meal-tray",
      "point": true,
      "properties": [
@@ -11878,7 +11688,7 @@
     },
     {
      "height": 0,
-     "id": 211,
+     "id": 201,
      "name": "cafeteria/fruit-bowl",
      "point": true,
      "properties": [
@@ -11897,7 +11707,7 @@
     },
     {
      "height": 0,
-     "id": 212,
+     "id": 202,
      "name": "cafeteria/square-table",
      "point": true,
      "properties": [
@@ -11916,7 +11726,7 @@
     },
     {
      "height": 0,
-     "id": 213,
+     "id": 203,
      "name": "cafeteria/chair-west",
      "point": true,
      "properties": [
@@ -11935,7 +11745,7 @@
     },
     {
      "height": 0,
-     "id": 214,
+     "id": 204,
      "name": "cafeteria/dish-trolley",
      "point": true,
      "properties": [
@@ -11954,7 +11764,7 @@
     },
     {
      "height": 0,
-     "id": 215,
+     "id": 205,
      "name": "cafeteria/recycling-station",
      "point": true,
      "properties": [
@@ -11973,7 +11783,7 @@
     },
     {
      "height": 0,
-     "id": 216,
+     "id": 206,
      "name": "office-base/plant-tall",
      "point": true,
      "properties": [
@@ -11992,7 +11802,7 @@
     },
     {
      "height": 0,
-     "id": 217,
+     "id": 207,
      "name": "hallway/glass-doors-open",
      "point": true,
      "properties": [
@@ -12016,7 +11826,7 @@
     },
     {
      "height": 0,
-     "id": 218,
+     "id": 208,
      "name": "garden/fountain",
      "point": true,
      "properties": [
@@ -12035,7 +11845,7 @@
     },
     {
      "height": 0,
-     "id": 219,
+     "id": 209,
      "name": "garden/bench-north",
      "point": true,
      "properties": [
@@ -12054,7 +11864,7 @@
     },
     {
      "height": 0,
-     "id": 220,
+     "id": 210,
      "name": "garden/bench-north",
      "point": true,
      "properties": [
@@ -12073,7 +11883,7 @@
     },
     {
      "height": 0,
-     "id": 221,
+     "id": 211,
      "name": "garden/bench-south",
      "point": true,
      "properties": [
@@ -12092,7 +11902,7 @@
     },
     {
      "height": 0,
-     "id": 222,
+     "id": 212,
      "name": "garden/bench-south",
      "point": true,
      "properties": [
@@ -12111,7 +11921,7 @@
     },
     {
      "height": 0,
-     "id": 223,
+     "id": 213,
      "name": "garden/bench-east",
      "point": true,
      "properties": [
@@ -12130,7 +11940,7 @@
     },
     {
      "height": 0,
-     "id": 224,
+     "id": 214,
      "name": "garden/bench-west",
      "point": true,
      "properties": [
@@ -12149,7 +11959,7 @@
     },
     {
      "height": 0,
-     "id": 225,
+     "id": 215,
      "name": "garden/lamppost",
      "point": true,
      "properties": [
@@ -12168,7 +11978,7 @@
     },
     {
      "height": 0,
-     "id": 226,
+     "id": 216,
      "name": "garden/lamppost",
      "point": true,
      "properties": [
@@ -12187,7 +11997,7 @@
     },
     {
      "height": 0,
-     "id": 227,
+     "id": 217,
      "name": "garden/lamppost",
      "point": true,
      "properties": [
@@ -12206,7 +12016,7 @@
     },
     {
      "height": 0,
-     "id": 228,
+     "id": 218,
      "name": "garden/lamppost",
      "point": true,
      "properties": [
@@ -12225,7 +12035,7 @@
     },
     {
      "height": 0,
-     "id": 229,
+     "id": 219,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12244,7 +12054,7 @@
     },
     {
      "height": 0,
-     "id": 230,
+     "id": 220,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12263,7 +12073,7 @@
     },
     {
      "height": 0,
-     "id": 231,
+     "id": 221,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12282,7 +12092,7 @@
     },
     {
      "height": 0,
-     "id": 232,
+     "id": 222,
      "name": "garden/flowering-tree",
      "point": true,
      "properties": [
@@ -12301,7 +12111,7 @@
     },
     {
      "height": 0,
-     "id": 233,
+     "id": 223,
      "name": "garden/flowering-tree",
      "point": true,
      "properties": [
@@ -12320,7 +12130,7 @@
     },
     {
      "height": 0,
-     "id": 234,
+     "id": 224,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12339,7 +12149,7 @@
     },
     {
      "height": 0,
-     "id": 235,
+     "id": 225,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12358,7 +12168,7 @@
     },
     {
      "height": 0,
-     "id": 236,
+     "id": 226,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12377,7 +12187,7 @@
     },
     {
      "height": 0,
-     "id": 237,
+     "id": 227,
      "name": "garden/tree",
      "point": true,
      "properties": [
@@ -12396,7 +12206,7 @@
     },
     {
      "height": 0,
-     "id": 238,
+     "id": 228,
      "name": "garden/flowering-tree",
      "point": true,
      "properties": [
@@ -12415,7 +12225,7 @@
     },
     {
      "height": 0,
-     "id": 239,
+     "id": 229,
      "name": "garden/flowering-tree",
      "point": true,
      "properties": [
@@ -12434,7 +12244,7 @@
     },
     {
      "height": 0,
-     "id": 240,
+     "id": 230,
      "name": "garden/flowering-tree",
      "point": true,
      "properties": [
@@ -12453,7 +12263,7 @@
     },
     {
      "height": 0,
-     "id": 241,
+     "id": 231,
      "name": "garden/shrub",
      "point": true,
      "properties": [
@@ -12472,7 +12282,7 @@
     },
     {
      "height": 0,
-     "id": 242,
+     "id": 232,
      "name": "garden/shrub",
      "point": true,
      "properties": [
@@ -12491,7 +12301,7 @@
     },
     {
      "height": 0,
-     "id": 243,
+     "id": 233,
      "name": "garden/shrub",
      "point": true,
      "properties": [
@@ -12510,7 +12320,7 @@
     },
     {
      "height": 0,
-     "id": 244,
+     "id": 234,
      "name": "garden/rocks",
      "point": true,
      "properties": [
@@ -12529,7 +12339,7 @@
     },
     {
      "height": 0,
-     "id": 245,
+     "id": 235,
      "name": "garden/rocks",
      "point": true,
      "properties": [
@@ -12548,7 +12358,7 @@
     },
     {
      "height": 0,
-     "id": 246,
+     "id": 236,
      "name": "garden/flowerbed",
      "point": true,
      "properties": [
@@ -12567,7 +12377,7 @@
     },
     {
      "height": 0,
-     "id": 247,
+     "id": 237,
      "name": "garden/flowerbed",
      "point": true,
      "properties": [
@@ -12586,7 +12396,7 @@
     },
     {
      "height": 0,
-     "id": 248,
+     "id": 238,
      "name": "garden/flowerbed",
      "point": true,
      "properties": [
@@ -12605,7 +12415,7 @@
     },
     {
      "height": 0,
-     "id": 249,
+     "id": 239,
      "name": "garden/flowerbed",
      "point": true,
      "properties": [
@@ -12624,7 +12434,7 @@
     },
     {
      "height": 0,
-     "id": 250,
+     "id": 240,
      "name": "garden/fern-planter",
      "point": true,
      "properties": [
@@ -12643,7 +12453,7 @@
     },
     {
      "height": 0,
-     "id": 251,
+     "id": 241,
      "name": "garden/fern-planter",
      "point": true,
      "properties": [
@@ -12662,7 +12472,7 @@
     },
     {
      "height": 0,
-     "id": 252,
+     "id": 242,
      "name": "garden/garden-table",
      "point": true,
      "properties": [
@@ -12681,7 +12491,7 @@
     },
     {
      "height": 0,
-     "id": 253,
+     "id": 243,
      "name": "garden/garden-table",
      "point": true,
      "properties": [
@@ -12700,7 +12510,7 @@
     },
     {
      "height": 0,
-     "id": 254,
+     "id": 244,
      "name": "garden/outdoor-bin",
      "point": true,
      "properties": [
@@ -12719,7 +12529,7 @@
     },
     {
      "height": 0,
-     "id": 255,
+     "id": 245,
      "name": "garden/outdoor-bin",
      "point": true,
      "properties": [
@@ -12738,7 +12548,7 @@
     },
     {
      "height": 0,
-     "id": 256,
+     "id": 246,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12757,7 +12567,7 @@
     },
     {
      "height": 0,
-     "id": 257,
+     "id": 247,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12776,7 +12586,7 @@
     },
     {
      "height": 0,
-     "id": 258,
+     "id": 248,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12795,7 +12605,7 @@
     },
     {
      "height": 0,
-     "id": 259,
+     "id": 249,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12814,7 +12624,7 @@
     },
     {
      "height": 0,
-     "id": 260,
+     "id": 250,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12833,7 +12643,7 @@
     },
     {
      "height": 0,
-     "id": 261,
+     "id": 251,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12852,7 +12662,7 @@
     },
     {
      "height": 0,
-     "id": 262,
+     "id": 252,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12871,7 +12681,7 @@
     },
     {
      "height": 0,
-     "id": 263,
+     "id": 253,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12890,7 +12700,7 @@
     },
     {
      "height": 0,
-     "id": 264,
+     "id": 254,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12909,7 +12719,7 @@
     },
     {
      "height": 0,
-     "id": 265,
+     "id": 255,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12928,7 +12738,7 @@
     },
     {
      "height": 0,
-     "id": 266,
+     "id": 256,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12947,7 +12757,7 @@
     },
     {
      "height": 0,
-     "id": 267,
+     "id": 257,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12966,7 +12776,7 @@
     },
     {
      "height": 0,
-     "id": 268,
+     "id": 258,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -12985,7 +12795,7 @@
     },
     {
      "height": 0,
-     "id": 269,
+     "id": 259,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13004,7 +12814,7 @@
     },
     {
      "height": 0,
-     "id": 270,
+     "id": 260,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13023,7 +12833,7 @@
     },
     {
      "height": 0,
-     "id": 271,
+     "id": 261,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13042,7 +12852,7 @@
     },
     {
      "height": 0,
-     "id": 272,
+     "id": 262,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13061,7 +12871,7 @@
     },
     {
      "height": 0,
-     "id": 273,
+     "id": 263,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13080,7 +12890,7 @@
     },
     {
      "height": 0,
-     "id": 274,
+     "id": 264,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13099,7 +12909,7 @@
     },
     {
      "height": 0,
-     "id": 275,
+     "id": 265,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13118,7 +12928,7 @@
     },
     {
      "height": 0,
-     "id": 276,
+     "id": 266,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13137,7 +12947,7 @@
     },
     {
      "height": 0,
-     "id": 277,
+     "id": 267,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13156,7 +12966,7 @@
     },
     {
      "height": 0,
-     "id": 278,
+     "id": 268,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13175,7 +12985,7 @@
     },
     {
      "height": 0,
-     "id": 279,
+     "id": 269,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13194,7 +13004,7 @@
     },
     {
      "height": 0,
-     "id": 280,
+     "id": 270,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13213,7 +13023,7 @@
     },
     {
      "height": 0,
-     "id": 281,
+     "id": 271,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13232,7 +13042,7 @@
     },
     {
      "height": 0,
-     "id": 282,
+     "id": 272,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13251,7 +13061,7 @@
     },
     {
      "height": 0,
-     "id": 283,
+     "id": 273,
      "name": "garden/fence-horizontal",
      "point": true,
      "properties": [
@@ -13270,7 +13080,7 @@
     },
     {
      "height": 0,
-     "id": 284,
+     "id": 274,
      "name": "garden/fence-vertical",
      "point": true,
      "properties": [
@@ -13286,6 +13096,196 @@
      "width": 0,
      "x": 16,
      "y": 1152
+    },
+    {
+     "height": 0,
+     "id": 275,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1776,
+     "y": 1152
+    },
+    {
+     "height": 0,
+     "id": 276,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 1184
+    },
+    {
+     "height": 0,
+     "id": 277,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1776,
+     "y": 1184
+    },
+    {
+     "height": 0,
+     "id": 278,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 1216
+    },
+    {
+     "height": 0,
+     "id": 279,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1776,
+     "y": 1216
+    },
+    {
+     "height": 0,
+     "id": 280,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 1248
+    },
+    {
+     "height": 0,
+     "id": 281,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1776,
+     "y": 1248
+    },
+    {
+     "height": 0,
+     "id": 282,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 1280
+    },
+    {
+     "height": 0,
+     "id": 283,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 1776,
+     "y": 1280
+    },
+    {
+     "height": 0,
+     "id": 284,
+     "name": "garden/fence-vertical",
+     "point": true,
+     "properties": [
+      {
+       "name": "sprite",
+       "type": "string",
+       "value": "garden/fence-vertical"
+      }
+     ],
+     "rotation": 0,
+     "type": "prop",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 1312
     },
     {
      "height": 0,
@@ -13304,7 +13304,7 @@
      "visible": true,
      "width": 0,
      "x": 1776,
-     "y": 1152
+     "y": 1312
     },
     {
      "height": 0,
@@ -13323,7 +13323,7 @@
      "visible": true,
      "width": 0,
      "x": 16,
-     "y": 1184
+     "y": 1344
     },
     {
      "height": 0,
@@ -13342,7 +13342,7 @@
      "visible": true,
      "width": 0,
      "x": 1776,
-     "y": 1184
+     "y": 1344
     },
     {
      "height": 0,
@@ -13361,7 +13361,7 @@
      "visible": true,
      "width": 0,
      "x": 16,
-     "y": 1216
+     "y": 1376
     },
     {
      "height": 0,
@@ -13380,7 +13380,7 @@
      "visible": true,
      "width": 0,
      "x": 1776,
-     "y": 1216
+     "y": 1376
     },
     {
      "height": 0,
@@ -13399,7 +13399,7 @@
      "visible": true,
      "width": 0,
      "x": 16,
-     "y": 1248
+     "y": 1408
     },
     {
      "height": 0,
@@ -13418,7 +13418,7 @@
      "visible": true,
      "width": 0,
      "x": 1776,
-     "y": 1248
+     "y": 1408
     },
     {
      "height": 0,
@@ -13437,7 +13437,7 @@
      "visible": true,
      "width": 0,
      "x": 16,
-     "y": 1280
+     "y": 1440
     },
     {
      "height": 0,
@@ -13456,7 +13456,7 @@
      "visible": true,
      "width": 0,
      "x": 1776,
-     "y": 1280
+     "y": 1440
     },
     {
      "height": 0,
@@ -13475,201 +13475,11 @@
      "visible": true,
      "width": 0,
      "x": 16,
-     "y": 1312
-    },
-    {
-     "height": 0,
-     "id": 295,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1776,
-     "y": 1312
-    },
-    {
-     "height": 0,
-     "id": 296,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 16,
-     "y": 1344
-    },
-    {
-     "height": 0,
-     "id": 297,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1776,
-     "y": 1344
-    },
-    {
-     "height": 0,
-     "id": 298,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 16,
-     "y": 1376
-    },
-    {
-     "height": 0,
-     "id": 299,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1776,
-     "y": 1376
-    },
-    {
-     "height": 0,
-     "id": 300,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 16,
-     "y": 1408
-    },
-    {
-     "height": 0,
-     "id": 301,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1776,
-     "y": 1408
-    },
-    {
-     "height": 0,
-     "id": 302,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 16,
-     "y": 1440
-    },
-    {
-     "height": 0,
-     "id": 303,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 1776,
-     "y": 1440
-    },
-    {
-     "height": 0,
-     "id": 304,
-     "name": "garden/fence-vertical",
-     "point": true,
-     "properties": [
-      {
-       "name": "sprite",
-       "type": "string",
-       "value": "garden/fence-vertical"
-      }
-     ],
-     "rotation": 0,
-     "type": "prop",
-     "visible": true,
-     "width": 0,
-     "x": 16,
      "y": 1472
     },
     {
      "height": 0,
-     "id": 305,
+     "id": 295,
      "name": "garden/fence-vertical",
      "point": true,
      "properties": [
@@ -13700,7 +13510,7 @@
    "objects": [
     {
      "height": 0,
-     "id": 306,
+     "id": 296,
      "name": "human-1",
      "point": true,
      "properties": [
@@ -13719,7 +13529,7 @@
     },
     {
      "height": 0,
-     "id": 307,
+     "id": 297,
      "name": "human-2",
      "point": true,
      "properties": [
@@ -13738,7 +13548,7 @@
     },
     {
      "height": 0,
-     "id": 308,
+     "id": 298,
      "name": "human-3",
      "point": true,
      "properties": [
@@ -13757,7 +13567,7 @@
     },
     {
      "height": 0,
-     "id": 309,
+     "id": 299,
      "name": "human-4",
      "point": true,
      "properties": [
@@ -13776,7 +13586,7 @@
     },
     {
      "height": 0,
-     "id": 310,
+     "id": 300,
      "name": "agent-1",
      "point": true,
      "properties": [
@@ -13795,7 +13605,7 @@
     },
     {
      "height": 0,
-     "id": 311,
+     "id": 301,
      "name": "agent-2",
      "point": true,
      "properties": [
@@ -13814,7 +13624,7 @@
     },
     {
      "height": 0,
-     "id": 312,
+     "id": 302,
      "name": "agent-3",
      "point": true,
      "properties": [
@@ -13833,7 +13643,7 @@
     },
     {
      "height": 0,
-     "id": 313,
+     "id": 303,
      "name": "agent-4",
      "point": true,
      "properties": [
@@ -13852,7 +13662,7 @@
     },
     {
      "height": 0,
-     "id": 314,
+     "id": 304,
      "name": "agent-5",
      "point": true,
      "properties": [
@@ -13871,7 +13681,7 @@
     },
     {
      "height": 0,
-     "id": 315,
+     "id": 305,
      "name": "agent-6",
      "point": true,
      "properties": [
@@ -13890,7 +13700,7 @@
     },
     {
      "height": 0,
-     "id": 316,
+     "id": 306,
      "name": "agent-7",
      "point": true,
      "properties": [
@@ -13921,7 +13731,7 @@
    "objects": [
     {
      "height": 320,
-     "id": 317,
+     "id": 307,
      "name": "Huddle Room",
      "properties": [
       {
@@ -13949,7 +13759,7 @@
     },
     {
      "height": 320,
-     "id": 318,
+     "id": 308,
      "name": "Focus Room",
      "properties": [
       {
@@ -13977,7 +13787,7 @@
     },
     {
      "height": 320,
-     "id": 319,
+     "id": 309,
      "name": "Deep Work",
      "properties": [
       {
@@ -14005,7 +13815,7 @@
     },
     {
      "height": 160,
-     "id": 320,
+     "id": 310,
      "name": "Lobby",
      "properties": [
       {
@@ -14033,7 +13843,7 @@
     },
     {
      "height": 192,
-     "id": 321,
+     "id": 311,
      "name": "Agent Bay",
      "properties": [
       {
@@ -14061,7 +13871,7 @@
     },
     {
      "height": 320,
-     "id": 322,
+     "id": 312,
      "name": "Cafeteria",
      "properties": [
       {
@@ -14089,7 +13899,7 @@
     },
     {
      "height": 352,
-     "id": 323,
+     "id": 313,
      "name": "Garden",
      "properties": [
       {
@@ -14129,7 +13939,7 @@
    "objects": [
     {
      "height": 32,
-     "id": 324,
+     "id": 314,
      "name": "the board",
      "properties": [
       {
@@ -14186,9 +13996,461 @@
    "visible": true,
    "x": 0,
    "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 8,
+   "name": "seats",
+   "objects": [
+    {
+     "height": 0,
+     "id": 315,
+     "name": "bay-1",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-1"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 145
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 144,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 316,
+     "name": "bay-2",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-2"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 305
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 304,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 317,
+     "name": "bay-3",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-3"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 465
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 464,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 318,
+     "name": "bay-4",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-4"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 625
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 624,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 319,
+     "name": "bay-5",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-5"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 785
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 784,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 320,
+     "name": "bay-6",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-6"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 945
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 944,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 321,
+     "name": "bay-7",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-7"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 1105
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 1104,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 322,
+     "name": "bay-8",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-8"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 1265
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 1264,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 323,
+     "name": "bay-9",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-9"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 1425
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 1424,
+     "y": 1008
+    },
+    {
+     "height": 0,
+     "id": 324,
+     "name": "bay-10",
+     "point": true,
+     "properties": [
+      {
+       "name": "seatId",
+       "type": "string",
+       "value": "bay-10"
+      },
+      {
+       "name": "facing",
+       "type": "string",
+       "value": "up"
+      },
+      {
+       "name": "screenX",
+       "type": "int",
+       "value": 1585
+      },
+      {
+       "name": "screenY",
+       "type": "int",
+       "value": 950
+      },
+      {
+       "name": "screenWidth",
+       "type": "int",
+       "value": 30
+      },
+      {
+       "name": "screenHeight",
+       "type": "int",
+       "value": 19
+      }
+     ],
+     "rotation": 0,
+     "type": "seat",
+     "visible": true,
+     "width": 0,
+     "x": 1584,
+     "y": 1008
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
   }
  ],
- "nextlayerid": 8,
+ "nextlayerid": 9,
  "nextobjectid": 325,
  "orientation": "orthogonal",
  "properties": [

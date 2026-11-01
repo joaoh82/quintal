@@ -4,11 +4,13 @@ import {
   isInteractableKind,
   isZoneKind,
   type MapInteractable,
+  type MapSeat,
   type MapZone,
   type OfficeMap,
+  type PixelRect,
   type SpawnPoint,
 } from '../map.js';
-import type { PlayerKind } from '../player.js';
+import { DIRECTIONS, isDirection, type PlayerKind } from '../player.js';
 
 /**
  * Just enough of the Tiled JSON format to read our own maps. Deliberately not a
@@ -73,6 +75,8 @@ export const LAYERS = {
   zones: 'zones',
   /** Rectangles you stand in to use something: the floor in front of the noticeboard. */
   interactables: 'interactables',
+  /** One tile each: the chairs an agent may be given. Blocked for everyone else. */
+  seats: 'seats',
 } as const;
 
 /**
@@ -189,9 +193,40 @@ function parseInteractables(map: TiledMap): MapInteractable[] {
   return interactables;
 }
 
+function parseSeats(map: TiledMap): MapSeat[] {
+  const layer = objectLayer(map, LAYERS.seats);
+  if (!layer) return [];
+
+  const seats: MapSeat[] = [];
+  for (const object of layer.objects) {
+    const properties = propertyMap(object.properties);
+    const facing = properties.facing;
+    // Fail loud, as zones and interactables do: a seat facing "nort" would
+    // have an agent sitting with its back to its own desk.
+    if (facing === undefined || !isDirection(facing)) {
+      throw new Error(
+        `Seat "${object.name}" (id ${object.id}) faces "${facing ?? '<missing>'}" — expected ${DIRECTIONS.join(' | ')}`,
+      );
+    }
+    seats.push({
+      id: properties.seatId ?? `seat-${object.id}`,
+      // A point sits at the centre of its tile; a rectangle starts at its corner.
+      tile: { x: Math.floor(object.x / map.tilewidth), y: Math.floor(object.y / map.tileheight) },
+      facing,
+      screen: rectOf(properties, ['screenX', 'screenY', 'screenWidth', 'screenHeight']),
+    });
+  }
+  return seats;
+}
+
 /** The four `halo*` ints, or null if any is missing or not a number. */
 function haloOf(properties: Record<string, string>): MapInteractable['halo'] {
-  const values = ['haloX', 'haloY', 'haloWidth', 'haloHeight'].map((name) => {
+  return rectOf(properties, ['haloX', 'haloY', 'haloWidth', 'haloHeight']);
+}
+
+/** Four int properties as a rectangle, or null if any is missing or not a number. */
+function rectOf(properties: Record<string, string>, names: readonly string[]): PixelRect | null {
+  const values = names.map((name) => {
     const raw = properties[name];
     return raw === undefined ? Number.NaN : Number(raw);
   });
@@ -236,6 +271,15 @@ export function parseTiledMap(raw: TiledMap): OfficeMap {
     throw new Error(`Non-square tiles (${raw.tilewidth}x${raw.tileheight}) are not supported`);
   }
 
+  const seats = parseSeats(raw);
+  const walkable = buildWalkableGrid(raw);
+  // A chair is nobody's to stand on until the office gives it to somebody:
+  // `withSeatOpen` is how one is opened, for one agent, for one route.
+  for (const seat of seats) {
+    const { x, y } = seat.tile;
+    if (x >= 0 && y >= 0 && x < raw.width && y < raw.height) walkable[y * raw.width + x] = false;
+  }
+
   return {
     name: propertyMap(raw.properties).name ?? 'Office',
     width: raw.width,
@@ -243,7 +287,8 @@ export function parseTiledMap(raw: TiledMap): OfficeMap {
     tileSize: raw.tilewidth,
     zones: parseZones(raw),
     interactables: parseInteractables(raw),
+    seats,
     spawns: parseSpawns(raw),
-    walkable: buildWalkableGrid(raw),
+    walkable,
   };
 }

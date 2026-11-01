@@ -9,6 +9,7 @@ import {
   type Direction,
   type OfficePlayer,
   type PlayerKind,
+  type Pose,
 } from '@quintal/shared';
 import * as Phaser from 'phaser';
 
@@ -20,6 +21,7 @@ import {
   bodyAnimation,
   bodyFrames,
   bodyTexture,
+  type BodyState,
 } from './constants';
 
 /**
@@ -44,6 +46,13 @@ interface Snapshot {
   y: number;
   dir: Direction;
   moving: boolean;
+  pose: Pose;
+}
+
+/** The frames a body plays: walking over anything, else as it is held. */
+function bodyState(moving: boolean, pose: Pose): BodyState {
+  if (moving) return 'walk';
+  return pose === 'stand' ? 'idle' : pose;
 }
 
 const LABEL_STYLE = {
@@ -154,7 +163,7 @@ export class Avatar {
 
   readonly #snapshots: Snapshot[] = [];
   #facing: Direction = 'down';
-  #moving = false;
+  #state: BodyState = 'idle';
   #name: string;
   #status = '';
   readonly #owner: string;
@@ -226,6 +235,7 @@ export class Avatar {
       y: player.y,
       dir: player.dir,
       moving: player.moving,
+      pose: player.pose,
     });
   }
 
@@ -245,6 +255,7 @@ export class Avatar {
       y: player.y,
       dir: player.dir,
       moving: player.moving,
+      pose: player.pose,
     });
 
     // Two snapshots older than the interpolation window is all we ever need:
@@ -322,7 +333,7 @@ export class Avatar {
     const progress = span <= 0 ? 1 : Math.min(1, Math.max(0, (renderAt - from.at) / span));
 
     this.setPosition(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress);
-    this.setFacing(to.dir, to.moving);
+    this.setFacing(to.dir, to.moving, to.pose);
   }
 
   /**
@@ -357,18 +368,21 @@ export class Avatar {
   }
 
   /**
-   * Face a direction, walking or standing.
+   * Face a direction, walking, standing or seated.
    *
    * Standing still plays an idle loop rather than freezing on a frame: the old
    * sheet had nothing else to offer, and a room of people holding one pose
-   * reads as a screenshot. Both states are animations, so this is one call
-   * either way.
+   * reads as a screenshot. Seated is the office's word (`pose`), drawn as the
+   * sit or work frames; walking is drawn over either, since a body on the
+   * move is on its feet whatever it was told to be. All are animations, so
+   * this is one call either way.
    */
-  setFacing(dir: Direction, moving: boolean): void {
-    if (dir === this.#facing && moving === this.#moving) return;
+  setFacing(dir: Direction, moving: boolean, pose: Pose = 'stand'): void {
+    const state = bodyState(moving, pose);
+    if (dir === this.#facing && state === this.#state) return;
     this.#facing = dir;
-    this.#moving = moving;
-    this.#sprite.anims.play(bodyAnimation(this.body, moving ? 'walk' : 'idle', dir), true);
+    this.#state = state;
+    this.#sprite.anims.play(bodyAnimation(this.body, state, dir), true);
   }
 
   /** Show what this occupant just said, for a few seconds. */

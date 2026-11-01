@@ -96,19 +96,25 @@ empty chair says "give me something".
 
 ### Seats on the map
 
-A new interactable kind, `desk`, generated for the ten Agent Bay desks and
-later the open office:
+A `seats` object layer, generated for the ten Agent Bay desks and later the
+open office, one point per chair:
 
 ```
-{ id: "bay-3", kind: "desk", seat: {x, y}, facing: "north",
-  screen: {x, y, w, h}, bounds: [doorstep tiles] }
+{ seatId: "bay-3", facing: "up", screenX, screenY, screenWidth, screenHeight }
 ```
 
-The `seat` is the chair's tile, taken out of the collision layer and
-reserved by the server instead: nobody paths through a chair, and only the
-seat's holder stands on it. The `screen` is the laptop's pixel rectangle,
-for the hit area and the glow. The `bounds` are the tiles a person stands
-on to use the desk, as the board has.
+The point is the chair's tile. The map builder leaves it out of the
+collision layer and the parser blocks it in the walkable grid instead, so
+nobody paths through a chair and a click on one walks you up beside it;
+the office opens that one tile for the one agent it has given the desk to
+(`withSeatOpen`) when it routes it there. The chair sits on a whole tile,
+not the desk's centre line, so the sitter is square on it. `screen` is the
+desk's monitor in map pixels, measured off the desk sprite by the builder,
+for the glow and the click to come; the laptops that used to peek out from
+behind the Agent Bay desks are gone, since the desks have screens of their
+own. The doorstep a *person* stands on to
+use a desk is a `desk` interactable, which arrives with the panel in phase
+3; a seat is where the agent is, not where you stand to look.
 
 The server owns seating. A desk has a holder or none, kept in room state
 beside the board, and the rules are pure (`seats.ts`, pinned in tests):
@@ -134,14 +140,28 @@ beside idle life:
 
 Two fields appended to `OfficePlayer`: `seat` (the desk id, or empty) and
 `pose` (`stand`, `sit`, `work`). The client creates the two missing
-animations and `setFacing` takes the pose; the sheets were drawn for this
-(see `world-assets.md`, "Seating integration"). Depth: the avatar draws
-above the chair and below the desk top, so the desk hides the legs.
+animations and `setFacing` takes the pose, drawing walk over any of them;
+the sheets were drawn for this (see `world-assets.md`, "Seating
+integration"). Depth needs nothing special: the chair's anchor is a row
+below the sitter's feet, so the chair back draws over the legs, and the
+desk's is a row above, so it draws behind.
 
-Walking to the desk is `walkTo` with the seat as target and an arrival
-handler that sets the pose, the same path idle wandering uses. A busy agent
-that is addressed by a walk-up stays seated and turns; it does not get up
-for a question.
+The pose follows the state, never the clock: the office compares what the
+state calls for with what it last called for, once a second, and acts on the
+change. A change to `work` or `sit` sends the agent to its desk, giving it
+one from the book if it has none, and seats it on arrival facing the chair's
+way; a change to `stand` gets it up and a step off the chair, and idle life
+takes it from there. Between changes nothing moves, so an agent its model
+walked across the room mid-turn stays where it was sent, standing, rather
+than being dragged back; a seated agent that is moved by anything stands,
+because a body cannot sit on a tile it is not on. A busy agent addressed by
+a walk-up is not moved by it, so it stays in its chair. The rules are pure
+(`seating.ts`) and pinned: the pose a state calls for, and a book of desks
+that never seats two agents on one chair.
+
+The book is sticky by the agent's id, not its session: a reconnect keeps
+the chair, and an agent that leaves keeps its desk until a present agent
+needs one and none is free, when the longest-absent holder's goes first.
 
 ### Act-outs, by tool class
 

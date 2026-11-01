@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { interactableAt } from '../map.js';
+import { interactableAt, seatAt, withSeatOpen } from '../map.js';
 import { buildWalkableGrid, parseTiledMap, type TiledMap, type TiledObject } from './tiled.js';
 
 /**
@@ -215,5 +215,68 @@ describe('parseTiledMap', () => {
     assert.deepEqual(zone?.bounds, { x: 2, y: 1, width: 3, height: 2 });
     assert.equal(zone?.id, 'bay');
     assert.equal(zone?.label, 'Agent Bay');
+  });
+});
+
+describe('seats', () => {
+  const floorOnly = [
+    {
+      type: 'tilelayer' as const,
+      name: 'floor',
+      width: 2,
+      height: 2,
+      data: [1, 1, 1, 1],
+      visible: true,
+    },
+  ];
+  const seatLayer = (properties: Array<{ name: string; type: string; value: string | number }>) => ({
+    type: 'objectgroup' as const,
+    name: 'seats',
+    objects: [object({ name: 'bay-1', x: 48, y: 48, width: 0, height: 0, point: true, properties })],
+  });
+
+  it('reads a seat: its tile from the point, the way it faces, and its screen', () => {
+    const parsed = parseTiledMap(
+      base([
+        ...floorOnly,
+        seatLayer([
+          { name: 'seatId', type: 'string', value: 'bay-1' },
+          { name: 'facing', type: 'string', value: 'up' },
+          { name: 'screenX', type: 'int', value: 40 },
+          { name: 'screenY', type: 'int', value: 10 },
+          { name: 'screenWidth', type: 'int', value: 19 },
+          { name: 'screenHeight', type: 'int', value: 16 },
+        ]),
+      ]),
+    );
+    assert.deepEqual(parsed.seats, [
+      { id: 'bay-1', tile: { x: 1, y: 1 }, facing: 'up', screen: { x: 40, y: 10, width: 19, height: 16 } },
+    ]);
+  });
+
+  it('blocks a seat for everyone, and opens it for one', () => {
+    const parsed = parseTiledMap(
+      base([...floorOnly, seatLayer([{ name: 'facing', type: 'string', value: 'up' }])]),
+    );
+    assert.equal(parsed.seats[0]?.id, 'seat-1', 'named after its object when the map gives no id');
+    assert.equal(parsed.seats[0]?.screen, null);
+    assert.deepEqual(parsed.walkable, [true, true, true, false], 'the chair is nobody\'s to stand on');
+    const seat = parsed.seats[0]!;
+    assert.deepEqual(withSeatOpen(parsed, seat).walkable, [true, true, true, true]);
+    assert.deepEqual(parsed.walkable, [true, true, true, false], 'and the shared map is untouched');
+    assert.equal(seatAt(parsed, 1, 1)?.id, 'seat-1');
+    assert.equal(seatAt(parsed, 0, 0), null);
+  });
+
+  it('rejects a seat facing nowhere the office knows', () => {
+    assert.throws(
+      () => parseTiledMap(base([...floorOnly, seatLayer([{ name: 'facing', type: 'string', value: 'nort' }])])),
+      /nort/,
+    );
+    assert.throws(() => parseTiledMap(base([...floorOnly, seatLayer([])])), /<missing>/);
+  });
+
+  it('parses a map with no seats at all', () => {
+    assert.deepEqual(parseTiledMap(base([...floorOnly])).seats, []);
   });
 });

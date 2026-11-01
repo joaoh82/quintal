@@ -1,6 +1,6 @@
 import { MapSchema, Schema, defineTypes } from '@colyseus/schema';
 
-import type { Direction, PlayerKind } from '../player.js';
+import type { Direction, PlayerKind, Pose } from '../player.js';
 
 /**
  * Colyseus room state, shared verbatim by the server (which owns it) and the
@@ -151,6 +151,20 @@ export class OfficePlayer extends Schema {
   taskPrUrl = '';
   taskPrState = '';
   taskItem = 0;
+  /**
+   * For agents: the desk the office has given it, by the map's seat id, or
+   * empty. Given on first need and kept while the agent is in the office
+   * (and after, until a present agent needs it more), so the same agent sits
+   * at the same desk tomorrow. Where it sits, not whether: that is `pose`.
+   */
+  seat = '';
+  /**
+   * How the body is held: `stand`, `sit` or `work`. Office-owned, decided
+   * from the status line and the task: a turn running is `work`, a task held
+   * with nothing running is `sit`, nothing at all is `stand`. Walking is
+   * `moving`, which the client draws over any pose.
+   */
+  pose: Pose = 'stand';
 }
 
 defineTypes(OfficePlayer, {
@@ -193,6 +207,9 @@ defineTypes(OfficePlayer, {
   taskPrUrl: 'string',
   taskPrState: 'string',
   taskItem: 'number',
+  // Appended for the same reason as `runtimeId` above.
+  seat: 'string',
+  pose: 'string',
 });
 
 /** The entry in `workingIn` that means spatial work, in the zone the agent stands in. */

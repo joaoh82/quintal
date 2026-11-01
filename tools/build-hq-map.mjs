@@ -173,7 +173,38 @@ function prop(sprite, tx, ty, options = {}) {
   const ax = Math.round(tx * TILE + TILE / 2);
   const ay = Math.round(ty * TILE + TILE) + (options.lift ?? 0);
   props.push({ sprite, x: ax, y: ay, ...(options.z === undefined ? {} : { z: options.z }) });
-  blockFor(sprite, ax, ay);
+  // A seat is a chair somebody is meant to reach: the parser blocks its tile
+  // for everyone but the one the office gives it to, so the collision layer
+  // must leave it open or nobody could ever sit down.
+  if (!options.seat) blockFor(sprite, ax, ay);
+}
+
+/**
+ * Where the screen is on a desk that has one drawn into it, relative to the
+ * desk's anchor: the monitor's glass, measured off the sprite. A seat records
+ * it so the renderer can light the screen up without knowing the art.
+ */
+const DESK_SCREENS = {
+  'office/desk-south': { x: -15, y: -42, width: 30, height: 19 },
+};
+
+/** A desk's screen in map pixels, for a desk placed at `tx`, `ty`. */
+function screenOf(desk, tx, ty) {
+  const offset = DESK_SCREENS[desk];
+  if (!offset) throw new Error(`No screen recorded for "${desk}"`);
+  const ax = Math.round(tx * TILE + TILE / 2);
+  const ay = Math.round(ty * TILE + TILE);
+  return { x: ax + offset.x, y: ay + offset.y, width: offset.width, height: offset.height };
+}
+
+/**
+ * A desk an agent may be given: its chair, on a whole tile so the sitter is
+ * centred on it, recorded as a seat with the desk's screen (see `SEATS`).
+ */
+const seats = [];
+function seat(id, chair, tx, ty, facing, screen = null) {
+  prop(chair, tx, ty, { seat: true });
+  seats.push({ id, tile: { x: tx, y: ty }, facing, screen });
 }
 
 /**
@@ -421,9 +452,15 @@ function openOffice() {
 }
 
 function agentBay() {
-  row('office/desk-south', 4.5, 30, 10, 5);
-  row('office-base/chair-north', 4.5, 31, 10, 5);
-  row('office/laptop', 4.5, 30, 10, 5, { lift: -34 });
+  // Ten desks, ten seats. A desk straddles two tiles; its chair is on the
+  // left one, so an agent sits square on its chair, a little left of the
+  // desk's own monitor, which is the seat's screen. Seat ids are the desk's
+  // number along the bay, west to east.
+  for (let i = 0; i < 10; i += 1) {
+    const dx = 4.5 + i * 5;
+    prop('office/desk-south', dx, 30);
+    seat(`bay-${i + 1}`, 'office-base/chair-north', 4 + i * 5, 31, 'up', screenOf('office/desk-south', dx, 30));
+  }
   prop('office/server-cabinet', 2, 33);
   prop('office/server-cabinet', 4, 33);
   prop('office/server-cabinet', 52, 33);
@@ -850,8 +887,43 @@ const map = {
       x: 0,
       y: 0,
     },
+    {
+      draworder: 'topdown',
+      id: 8,
+      name: 'seats',
+      objects: seats.map((seat) => ({
+        height: 0,
+        id: (nextObjectId += 1),
+        name: seat.id,
+        point: true,
+        properties: [
+          stringProperty('seatId', seat.id),
+          stringProperty('facing', seat.facing),
+          ...(seat.screen
+            ? [
+                { name: 'screenX', type: 'int', value: seat.screen.x },
+                { name: 'screenY', type: 'int', value: seat.screen.y },
+                { name: 'screenWidth', type: 'int', value: seat.screen.width },
+                { name: 'screenHeight', type: 'int', value: seat.screen.height },
+              ]
+            : []),
+        ],
+        rotation: 0,
+        type: 'seat',
+        visible: true,
+        width: 0,
+        // A point at the centre of the chair's tile.
+        x: seat.tile.x * TILE + TILE / 2,
+        y: seat.tile.y * TILE + TILE / 2,
+      })),
+      opacity: 1,
+      type: 'objectgroup',
+      visible: true,
+      x: 0,
+      y: 0,
+    },
   ],
-  nextlayerid: 8,
+  nextlayerid: 9,
   nextobjectid: nextObjectId + 1,
   orientation: 'orthogonal',
   properties: [stringProperty('name', 'Quintal HQ')],
@@ -897,6 +969,6 @@ writeFileSync(OUT, `${JSON.stringify(map, null, 1)}\n`);
 let walkableTiles = 0;
 for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) if (walkable(x, y)) walkableTiles += 1;
 console.log(
-  `[build-hq-map] ${W}x${H} tiles, ${props.length} props, ${ZONES.length} zones, ${INTERACTABLES.length} interactables, ` +
+  `[build-hq-map] ${W}x${H} tiles, ${props.length} props, ${ZONES.length} zones, ${INTERACTABLES.length} interactables, ${seats.length} seats, ` +
     `${walkableTiles} walkable (${Math.round((walkableTiles / (W * H)) * 100)}%) -> packages/shared/maps/hq.json`,
 );

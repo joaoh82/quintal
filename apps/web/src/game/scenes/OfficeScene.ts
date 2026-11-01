@@ -912,9 +912,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Idle and walk, for every body in every direction.
+   * Idle, walk, sit and work, for every body in every direction.
    *
-   * Ninety-six animations sounds like a lot and costs nothing: they are frame
+   * Two hundred animations sounds like a lot and costs nothing: they are frame
    * indices into sheets already in memory, and defining them all up front means
    * a body is never asked to play an animation that has not been created yet.
    *
@@ -924,7 +924,7 @@ export class OfficeScene extends Phaser.Scene {
    * short frame sets the base and the long one carries the difference.
    */
   #createAnimations(): void {
-    const states: BodyState[] = ['idle', 'walk'];
+    const states: BodyState[] = ['idle', 'walk', 'sit', 'work'];
     for (const body of BODY_IDS) {
       for (const state of states) {
         const [longMs, shortMs] = BODY_TIMING[state];
