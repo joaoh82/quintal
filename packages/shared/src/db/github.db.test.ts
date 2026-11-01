@@ -158,14 +158,14 @@ describe('the office’s GitHub token at rest', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    assert.deepEqual(await sealOfficeGithubTokens(db, {}), { sealed: 0, unreadable: 1 }, 'nothing to seal with: left alone');
+    assert.deepEqual(await sealOfficeGithubTokens(db, {}), { sealed: 0, unreadable: 1, scrubbed: true }, 'nothing to seal with: left alone');
     assert.equal(await storedToken(db), 'ghp_legacy');
     assert.equal((await getOfficeGithub(db, owner.workspaceId, {}))?.token, null, 'and not used in plain text either');
 
-    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 1, unreadable: 0 });
+    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 1, unreadable: 0, scrubbed: true });
     assert.match((await storedToken(db)) ?? '', /^sealed1\./);
     assert.equal((await getOfficeGithub(db, owner.workspaceId))?.token, 'ghp_legacy');
-    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 0, unreadable: 0 }, 'once');
+    assert.deepEqual(await sealOfficeGithubTokens(db), { sealed: 0, unreadable: 0, scrubbed: true }, 'once');
   });
 
   it('saved in plain text and read before the boot pass, is encrypted by the read', async () => {

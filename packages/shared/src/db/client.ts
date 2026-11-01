@@ -7,7 +7,8 @@ import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
 import * as schema from './schema.js';
 import { resolveDatabaseUrl } from './url.js';
 
-export type Database = LibSQLDatabase<typeof schema>;
+/** With the libSQL client it runs on, which `drizzle()` always attaches: some writes need its pragmas. */
+export type Database = LibSQLDatabase<typeof schema> & { $client: Client };
 
 interface Connection {
   client: Client;

@@ -80,6 +80,9 @@ logger.info(`[auth] sign-in is bound to ${config.origin}; the office must be ope
 // now. One that cannot be opened stays as it is and shows in Settings.
 const githubTokens = await sealOfficeGithubTokens(getDb());
 if (githubTokens.sealed > 0) logger.info(`[github] encrypted ${githubTokens.sealed} office GitHub token(s) saved in plain text`);
+if (!githubTokens.scrubbed) {
+  logger.warn('[github] the database checkpoint was busy, so the old plain-text token(s) may stay in the database file until the next one');
+}
 if (githubTokens.unreadable > 0) {
   logger.warn(`[github] ${githubTokens.unreadable} office GitHub token(s) cannot be decrypted with this server's BETTER_AUTH_SECRET; an owner or admin pastes them again in Settings`);
 }

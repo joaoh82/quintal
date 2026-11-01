@@ -54,6 +54,37 @@ export function unreadableTokenMessage(reason: OpenFailure): string {
 type TokenRead = { token: string; unreadable: null } | { token: null; unreadable: string };
 
 /**
+ * Replace plain-text tokens so that they are gone from the file, not only from
+ * the row. SQLite leaves a rewritten cell's old bytes in the page's free space,
+ * and in WAL mode the new page sits in the -wal file while the database file
+ * keeps the old one until a checkpoint. So: `secure_delete` for the rewrite,
+ * which zeroes what it frees, then a TRUNCATE checkpoint, which writes the
+ * pages home and empties the WAL — old frames included. Remote libSQL keeps
+ * its own files; there is nothing here to scrub.
+ *
+ * True when the checkpoint completed. False means a reader held it off and
+ * the old bytes may linger until the next one.
+ */
+async function rewritingPlaintext(db: Database, rewrite: () => Promise<void>): Promise<boolean> {
+  const client = db.$client;
+  if (client.protocol !== 'file') {
+    await rewrite();
+    return true;
+  }
+  const was = Number((await client.execute('PRAGMA secure_delete')).rows[0]?.[0] ?? 0);
+  await client.execute('PRAGMA secure_delete = ON');
+  try {
+    await rewrite();
+  } finally {
+    await client.execute(`PRAGMA secure_delete = ${was ? 'ON' : 'OFF'}`);
+  }
+  // Rows of (busy, frames in the WAL, frames checkpointed). Not in WAL mode
+  // (an in-memory test database), there is nothing to checkpoint.
+  const busy = (await client.execute('PRAGMA wal_checkpoint(TRUNCATE)')).rows[0]?.[0] ?? 0;
+  return Number(busy) === 0;
+}
+
+/**
  * Open the stored token. One saved before tokens were sealed is sealed now,
  * when there is a key to do it with — the boot pass does the same for every
  * office (`sealOfficeGithubTokens`), this covers a row that slipped past it.
@@ -61,10 +92,12 @@ type TokenRead = { token: string; unreadable: null } | { token: null; unreadable
 async function readToken(db: Database, workspaceId: string, stored: string, key: SealingKey | null): Promise<TokenRead> {
   if (!isSealed(stored)) {
     if (!key) return { token: null, unreadable: unreadableTokenMessage('no_key') };
-    await db
-      .update(officeGithub)
-      .set({ token: sealSecret(stored, workspaceId, key) })
-      .where(and(eq(officeGithub.workspaceId, workspaceId), eq(officeGithub.token, stored)));
+    await rewritingPlaintext(db, async () => {
+      await db
+        .update(officeGithub)
+        .set({ token: sealSecret(stored, workspaceId, key) })
+        .where(and(eq(officeGithub.workspaceId, workspaceId), eq(officeGithub.token, stored)));
+    });
     return { token: stored, unreadable: null };
   }
   const opened = openSecret(stored, workspaceId, key);
@@ -129,34 +162,39 @@ function unreadableReason(stored: string, workspaceId: string, key: SealingKey |
 }
 
 /**
- * Seal every token saved before tokens were sealed. Run on boot; does
- * nothing without a key, and leaves alone what it cannot open — those wait
- * for an owner or admin to paste the token again.
+ * Seal every token saved before tokens were sealed, and scrub the plain text
+ * from the database file (`rewritingPlaintext`). Run on boot; does nothing
+ * without a key, and leaves alone what it cannot open — those wait for an
+ * owner or admin to paste the token again. `scrubbed` is false when the
+ * checkpoint could not finish, so the old bytes may still be on disk.
  */
 export async function sealOfficeGithubTokens(
   db: Database,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<{ sealed: number; unreadable: number }> {
+): Promise<{ sealed: number; unreadable: number; scrubbed: boolean }> {
   const key = sealingKey(env);
   const rows = await db.select({ workspaceId: officeGithub.workspaceId, token: officeGithub.token }).from(officeGithub);
-  let sealed = 0;
   let unreadable = 0;
+  const plain: { workspaceId: string; token: string }[] = [];
   for (const row of rows) {
     if (isSealed(row.token)) {
       if (!openSecret(row.token, row.workspaceId, key).ok) unreadable += 1;
-      continue;
-    }
-    if (!key) {
+    } else if (!key) {
       unreadable += 1;
-      continue;
+    } else {
+      plain.push(row);
     }
-    await db
-      .update(officeGithub)
-      .set({ token: sealSecret(row.token, row.workspaceId, key) })
-      .where(and(eq(officeGithub.workspaceId, row.workspaceId), eq(officeGithub.token, row.token)));
-    sealed += 1;
   }
-  return { sealed, unreadable };
+  if (!key || plain.length === 0) return { sealed: 0, unreadable, scrubbed: true };
+  const scrubbed = await rewritingPlaintext(db, async () => {
+    for (const row of plain) {
+      await db
+        .update(officeGithub)
+        .set({ token: sealSecret(row.token, row.workspaceId, key) })
+        .where(and(eq(officeGithub.workspaceId, row.workspaceId), eq(officeGithub.token, row.token)));
+    }
+  });
+  return { sealed: plain.length, unreadable, scrubbed };
 }
 
 /** For the board payload: what the panel acts on. */
