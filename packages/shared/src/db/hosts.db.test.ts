@@ -38,6 +38,22 @@ describe('what a machine says it has checked out', () => {
   });
 });
 
+describe('whose machine a report is', () => {
+  it("is the reporter's own row, never a teammate's of the same name", async () => {
+    const { db, josh, sam } = await setup();
+    await recordHost(db, { workspaceId: josh.workspaceId, ownerUserId: josh.id, report: { ...report('laptop'), checkouts: ['mine'] } });
+    await recordHost(db, { workspaceId: sam.workspaceId, ownerUserId: sam.id, report: { ...report('laptop'), checkouts: ['theirs'] } });
+    const rows = await listHostsForWorkspace(db, josh.workspaceId);
+    assert.deepEqual(
+      rows.map((row) => [row.ownerUserId, row.label, row.checkouts]).sort(),
+      [[josh.id, 'laptop', ['mine']], [sam.id, 'laptop', ['theirs']]].sort(),
+      'two laptops, one each',
+    );
+    await recordHost(db, { workspaceId: josh.workspaceId, ownerUserId: josh.id, report: { ...report('laptop'), checkouts: ['mine', 'more'] } });
+    assert.equal((await listHostsForWorkspace(db, josh.workspaceId)).length, 2, 'a second report of mine is still my one row');
+  });
+});
+
 describe('forgetting a machine report', () => {
   it('removes the one asked for', async () => {
     const { db, josh } = await setup();

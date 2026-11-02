@@ -13,7 +13,11 @@ import { Button } from '@/components/ui/button';
 import { forgetHostReportAction } from './actions';
 
 export interface Host {
+  /** The row: a machine of one person's. Two people's laptops may share a label. */
+  id: string;
   label: string;
+  ownerUserId: string;
+  ownerName: string;
   reposDir: string;
   runtimes: RuntimeStatus[];
   /** What is cloned under `reposDir`, as the harness last listed it. */
@@ -33,7 +37,7 @@ export interface Host {
  * and a runtime you can see marked unsupported beats one that silently isn't
  * there.
  */
-export function RuntimeList({ hosts }: { hosts: Host[] }) {
+export function RuntimeList({ hosts, currentUserId }: { hosts: Host[]; currentUserId: string }) {
   if (hosts.length === 0) {
     return (
       <section className="rounded-lg border p-4">
@@ -50,9 +54,13 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
   return (
     <div className="flex flex-col gap-4">
       {hosts.map((host) => (
-        <section key={host.label} className="rounded-lg border p-4">
+        <section key={host.id} className="rounded-lg border p-4">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <h2 className="text-sm font-semibold">{host.label}</h2>
+            {/* Two people's laptops can share a name; whose this one is tells them apart. */}
+            {host.ownerUserId !== currentUserId ? (
+              <span className="text-muted-foreground text-xs">{host.ownerName ? `${host.ownerName}'s` : "somebody else's"}</span>
+            ) : null}
             <span className="text-muted-foreground text-xs">
               seen <RelativeTime at={host.lastSeenAt.getTime()} />
             </span>
@@ -65,13 +73,18 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
 
             {/* A machine that has gone — renamed, retired — otherwise stays here
                 forever. Forgetting is not revoking: one that still exists comes
-                straight back the next time its harness connects. */}
-            <form action={forgetHostReportAction} className="ml-2">
-              <input type="hidden" name="label" value={host.label} />
-              <Button type="submit" variant="ghost" size="sm">
-                Forget
-              </Button>
-            </form>
+                straight back the next time its harness connects. Only yours:
+                a report is its owner's to withdraw, and the action forgets
+                by label under the person asking, so a Forget on a colleague's
+                row of the same name would have taken yours. */}
+            {host.ownerUserId === currentUserId ? (
+              <form action={forgetHostReportAction} className="ml-2">
+                <input type="hidden" name="label" value={host.label} />
+                <Button type="submit" variant="ghost" size="sm">
+                  Forget
+                </Button>
+              </form>
+            ) : null}
           </div>
 
           <RuntimeRows runtimes={host.runtimes} />

@@ -166,7 +166,10 @@ travel one way: the office cannot see your PATH, and a hosted Quintal never
 will. So which agent runtimes exist is something a harness tells the office,
 not something the office discovers.
 
-Send it once after joining. `runtimes` is optional and its absence is
+Send it once after joining. The report is stored as *your owner's* machine
+of that name — one row per owner per label, so two people whose laptops are
+both called `laptop` never overwrite each other — and the label is kept on
+the agent as where it last reported from. `runtimes` is optional and its absence is
 meaningful — a fleet of eight agents on one laptop should send the scan from
 *one* of them, and an omitted list leaves the stored one alone rather than
 blanking it. An empty array is different: that means "I looked and found

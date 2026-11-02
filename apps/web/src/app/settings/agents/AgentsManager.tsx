@@ -47,9 +47,14 @@ import {
 
 const INITIAL: CreateAgentState = { ok: false };
 
-/** What a machine reported it can run, keyed by the label a form picks. */
+/**
+ * What a machine reported it can run, keyed by the label a form picks —
+ * under its owner, because two people's laptops may share a label and a
+ * model is offered by one machine, not by a name.
+ */
 export interface ReportedHost {
   label: string;
+  ownerUserId: string;
   runtimes: RuntimeStatus[];
 }
 
@@ -376,7 +381,7 @@ export function AgentsManager({
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium">Model</span>
                 <ModelSelect
-                  hosts={hosts}
+                  hosts={hosts.filter((host) => host.ownerUserId === currentUserId)}
                   hostLabel={newHost}
                   runtimeId={newRuntime}
                   value={newModel}
@@ -590,7 +595,7 @@ function AgentRow({
             ))}
           </select>
           <ModelSelect
-            hosts={hosts}
+            hosts={hosts.filter((reported) => reported.ownerUserId === agent.ownerUserId)}
             hostLabel={host}
             runtimeId={runtime}
             value={model}
