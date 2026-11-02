@@ -228,7 +228,8 @@ exist:
 1. The agent's card (`AgentCard`): name, owner, status, task, scopes,
    runtime, model, the audit log.
 2. **The screen**: the agent's running turn, or its most recent, rendered
-   by `TurnActivity` at your detail level, live. The panel reads it from
+   by `TurnActivity` at your detail level, live — captioned with the
+   routine it is, when the turn says so (`routineCaption`). The panel reads it from
    the transcripts this client already holds, and from a copy held for
    the panel from the moment it opens (`useScreenTurn`), because a
    transcript keeps its newest 500 lines and a turn that has run while a

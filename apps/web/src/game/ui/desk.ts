@@ -58,6 +58,19 @@ function newer(candidate: PublicActivity, held: PublicActivity): boolean {
   return candidate.updatedAt > held.updatedAt;
 }
 
+/**
+ * What the screen says above a turn a routine started: its name, and
+ * whether it is still that routine's turn. A turn that names no routine
+ * is somebody's question, and gets no caption. The name comes from the
+ * turn itself (`AgentActivity.routine`), which the harness set from the
+ * brief the routine's line carried.
+ */
+export function routineCaption(activity: PublicActivity): string | null {
+  const name = activity.routine?.name;
+  if (!name) return null;
+  return activityTerminal(activity.state) ? `Was on its routine ${name}` : `On its routine ${name}`;
+}
+
 /** The conversation a turn is in, as this client names it. */
 export function keyOf(activity: PublicActivity): ConversationKey {
   if (activity.channelId) return channelKey(activity.channelId);
