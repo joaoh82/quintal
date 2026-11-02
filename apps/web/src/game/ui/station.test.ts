@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardAgentRef, BoardItemRef, MapInteractable, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardItemRef, BoardRoutineRef, BoardRoutineRunRef, MapInteractable, RosterEntry } from '@quintal/shared';
 
-import { candidates, checkoutsOf, holderOf, offeredNotes, promptFor } from './station';
+import { ROUTINE_WAKE_WINDOW_MS, candidates, checkoutsOf, holderOf, offeredNotes, promptFor, routineOn } from './station';
 
 function entry(over: Partial<RosterEntry>): RosterEntry {
   return {
@@ -97,6 +97,31 @@ describe('who the station offers', () => {
       note({ id: 'n5', number: 5, status: 'done' }),
     ];
     assert.deepEqual(offeredNotes(items, new Set(['a1'])).map((item) => item.number), [4, 1]);
+  });
+
+  it('names the routine an agent is on, from the run spoken just before its turn began', () => {
+    const routine = (id: string, agentId: string, name: string): BoardRoutineRef => ({
+      id, agentId, agentName: 'Arthur', ownerUserId: 'u1', name, schedule: { kind: 'cron', cron: '0 9 * * *', tz: 'UTC' },
+      scheduleLabel: 'daily at 09:00', command: null, paused: false, nextDueAt: null, awaitingMakeUp: false,
+      lastRunAt: null, createdByName: 'Josh', createdByAgentName: '', updatedAt: 0,
+    });
+    const run = (routineId: string, firedAt: number | null): BoardRoutineRunRef => ({
+      id: `${routineId}:${firedAt}`, routineId, dueAt: firedAt ?? 0, outcome: firedAt === null ? 'missed' : 'fired', note: '', firedAt,
+    });
+    const scheduled = {
+      routines: [routine('r1', 'a1', 'Morning standup'), routine('r2', 'a1', 'Inbox sweep'), routine('r9', 'a9', 'Theirs')],
+      runs: [run('r1', 1_000_000), run('r2', 1_000_000 + 60_000), run('r9', 1_000_000 + 60_000), run('r1', null)],
+    };
+    const at = (workingSince: number) => ({ identityId: 'a1', workingSince });
+    assert.equal(routineOn(at(1_000_000 + 65_000), scheduled)?.name, 'Inbox sweep', 'the newest line spoken before the turn');
+    assert.equal(routineOn(at(1_000_000 + 30_000), scheduled)?.name, 'Morning standup', 'not one spoken after it');
+    assert.equal(routineOn(at(1_000_000 + 60_000 + ROUTINE_WAKE_WINDOW_MS + 1), scheduled), null, 'a turn minutes later is somebody\'s question');
+    assert.equal(routineOn(at(0), scheduled), null, 'no turn, no routine');
+    assert.equal(routineOn({ identityId: 'a2', workingSince: 1_000_000 + 65_000 }, scheduled), null, 'another agent\'s routines are not this one\'s');
+
+    const roster = [entry({ identityId: 'a1', name: 'Arthur', status: 'reading inbox.md', workingSince: 1_000_000 + 65_000 })];
+    assert.deepEqual(candidates(roster, 'u1', scheduled).map((c) => c.busy), ['on its routine Inbox sweep']);
+    assert.deepEqual(candidates(roster, 'u1').map((c) => c.busy), ['reading inbox.md'], 'without the board, the tool it is on');
   });
 
   it('offers the checkouts the agent\'s machine listed, or none', () => {

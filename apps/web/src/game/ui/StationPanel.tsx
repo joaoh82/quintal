@@ -4,6 +4,8 @@ import {
   BOARD_TITLE_MAX_LENGTH,
   type BoardAgentRef,
   type BoardItemRef,
+  type BoardRoutineRef,
+  type BoardRoutineRunRef,
   type DeskBeginPayload,
   type RosterEntry,
 } from '@quintal/shared';
@@ -17,6 +19,9 @@ interface StationPanelProps {
   items: BoardItemRef[];
   /** The board's agents, for what each one's machine has checked out. */
   agents: BoardAgentRef[];
+  /** The board's routines and their runs, for naming the one an agent is on. */
+  routines: BoardRoutineRef[];
+  routineRuns: BoardRoutineRunRef[];
   /** Your `users.id`: whose agents are offered. */
   you: string;
   /** True from Begin until the office has answered, one way or the other. */
@@ -38,7 +43,18 @@ const fieldClass =
  * DM with the agent, and gives the agent this desk, so the turn that line
  * starts walks it here. Nothing is sent until Begin.
  */
-export function StationPanel({ seatId, roster, items, agents, you, pending, onClose, onBegin }: StationPanelProps) {
+export function StationPanel({
+  seatId,
+  roster,
+  items,
+  agents,
+  routines,
+  routineRuns,
+  you,
+  pending,
+  onClose,
+  onBegin,
+}: StationPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -47,7 +63,10 @@ export function StationPanel({ seatId, roster, items, agents, you, pending, onCl
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const yours = useMemo(() => candidates(roster, you), [roster, you]);
+  const yours = useMemo(
+    () => candidates(roster, you, { routines, runs: routineRuns }),
+    [roster, you, routines, routineRuns],
+  );
   const notes = useMemo(
     () => offeredNotes(items, new Set(yours.map((candidate) => candidate.entry.identityId))),
     [items, yours],
