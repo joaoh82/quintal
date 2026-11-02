@@ -114,6 +114,11 @@ describe('what the screen says of a routine', () => {
       'Was on its routine Inbox sweep',
     );
     assert.equal(routineCaption(activity({})), null, "a turn that names none is somebody's question");
+    assert.equal(
+      routineCaption(activity({ routine: { name: 'Inbox sweep' } }), 'disconnected'),
+      'Was on its routine Inbox sweep',
+      'a row that has given a turn up as stale does not claim it is still on it',
+    );
   });
 });
 

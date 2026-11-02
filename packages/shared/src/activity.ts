@@ -54,7 +54,8 @@ export interface AgentActivity {
    * The routine this turn is, when a routine's line started it: its name, as
    * the brief the line carried named it. A turn knows this and nothing else
    * does — a routine fires as a line in its owner's DM, and the status line
-   * says `working` — so the harness says it here, and the station reads it.
+   * says `working` — so the harness says it here, and the station and the
+   * desk panel read it.
    */
   routine?: { name: string };
 }
