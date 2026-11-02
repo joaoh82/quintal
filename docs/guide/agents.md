@@ -262,6 +262,62 @@ Only the owner is obeyed. Type `!` to pick one: `!cancel`, `!rotate`,
 Add `@name` to aim at one agent. See
 [Keys and commands](./keys-and-commands.md).
 
+## At the desk
+
+![The Agent Bay: Marvin waiting for Josh under a question balloon, with a column of light over its desk; Josh behind an empty desk whose screen is lit, offered "E · begin a task at this desk"; and Arthur at the far desk, working, under a lightbulb](../../screenshots/desks-agent-bay.png)
+
+Every agent has a desk in the Agent Bay, the same one tomorrow. What it does
+there is decided by the office from its status line and its task, so no
+agent can look busy while idle or idle while busy:
+
+| The agent | At its desk |
+| --- | --- |
+| Working — its status line says so | Sits and types; the screen is lit |
+| Holding a task with nothing running | Sits back; the screen idles |
+| Neither | On its feet, wandering with the others |
+
+The screens tell the room's state from the door. A lit screen flickers as
+each tool step lands; fetching from the web puts a small globe over the
+laptop; running tests is sitting back while they run; and a desk whose agent
+is waiting for someone — an approval, a question — gets a column of light
+over it, so the one that needs you is visible across the room.
+
+### Click to look
+
+Click an agent, or the screen of its desk, and its card opens with **On the
+screen**: the turn it is on, live — the steps as they land, with outcomes
+and durations — and a button to the conversation the turn is in. If the
+turn is one of its routines, the screen says which.
+
+![Arthur's desk panel: the card with its owner, status, the task it is on with its branch, scopes, runtime and model; below it, On the screen with the running turn — what Arthur found, two steps completed, the edit running — and a Go to Arthur button into the DM](../../screenshots/desk-panel.png)
+
+You only see what you could read anyway. A turn in a channel you are not a
+member of, or in somebody else's DM, shows as a count of steps, not what
+they were, and the button goes only where you may go. Standing behind a
+held desk, `E` opens the same card.
+
+### Begin a task from an empty desk
+
+Stand behind an empty chair — the screen lights to say the desk is yours
+to use — and press `E`, or click the screen and you walk there. The
+station panel asks what, and whose:
+
+![The station panel at an empty desk: note #1 Fix the login redirect picked from the board, its title and details filled in; Arthur offered and Marvin greyed with "on Minimap markers for guests"; the repository quintal chosen from what Arthur's machine has checked out; and Begin](../../screenshots/desk-station.png)
+
+- **What**: a note from the board — the open ones that are nobody's or one
+  of your agents' already — or a title and details typed here, which become
+  a note.
+- **Who**: your agents that are in the office, free ones first. An agent on
+  something is listed greyed with what — *on Fix the chair*, *reading
+  auth.ts*, *on its routine Inbox sweep* — so you can see why it is not
+  offered.
+- **Repository**, when the agent's machine has reported its checkouts: the
+  one to work in, or the agent's choice.
+
+**Begin** hands the note over the way the board does — a line in your DM
+with the agent, with the brief attached — and gives the agent this desk, so
+the turn that line starts walks it here. Nothing is sent until Begin.
+
 ## The profile card and the audit log
 
 Click an agent in the roster:

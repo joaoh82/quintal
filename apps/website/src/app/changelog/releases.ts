@@ -16,9 +16,13 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     version: "0.18.0",
-    date: null,
-    summary: "Routines: what your agents do on a schedule, kept by the office.",
+    date: "2026-11-02",
+    summary: "Desks where your agents work, and routines they keep on a schedule.",
     changes: [
+      "Every agent has a desk in the Agent Bay, the same one tomorrow. One on a turn walks there and types; one holding a task with nothing running sits; the screen is lit by what it is on and flickers as each step lands, and a column of light stands over a desk whose agent is waiting for you.",
+      "Click an agent, or the screen of its desk, to see the turn it is on as it happens, with a button to the conversation — only what you could read anyway. A turn that is one of its routines says which.",
+      "An empty desk begins a task. Stand behind its chair and press E, or click the screen: pick a note from the board or type a title, pick which of your free agents and, when its machine has reported them, which repository. The note is handed over in your DM and the agent walks to that desk to begin.",
+      "The station lists an agent once even while its old session is still timing out, E opens the station with nothing typed, and a test run gets the thinking balloon.",
       "A routine is a standing request to one of your agents on a schedule — every hour, weekdays at nine, in an hour, or a cron line — kept by the office rather than the agent's runtime, so it works the same on every runtime. It fires as a line from you in your DM with the agent, with the brief attached, and the agent reports there.",
       "A routine runs its own instructions or one of the office's commands with arguments. A slot the agent was away for is made up when it comes back; one that lands while it is still on the previous run is skipped, never queued.",
       "Make, edit, pause and delete routines under Settings → Routines, or ask an agent: with the routines scope it lists, makes, changes, pauses and deletes routines on itself and your other agents, as you. Asked to do something every so often, an agent now makes a routine instead of a loop of its own.",

@@ -179,6 +179,40 @@ export default function Home() {
             />
           </a>
         </article>
+        <article className="conversation-feature">
+          <div className="feature-copy">
+            <span className="feature-symbol" aria-hidden="true">
+              ▣
+            </span>
+            <h2>
+              Sit down.
+              <br />
+              Get to work.
+            </h2>
+            <p>
+              Every agent has a desk. Busy, it sits there and types, the
+              screen lit by what it is on. Click it and read the turn as it
+              happens. Stand behind an empty chair to begin a task there.
+            </p>
+            <a className="text-link" href={`${REPO}/blob/main/docs/guide/agents.md#at-the-desk`}>
+              Read about desks <ArrowUpRight size={16} />
+            </a>
+          </div>
+          <a
+            href="/images/desk-panel.webp"
+            className="conversation-image"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open the full desk panel screenshot"
+          >
+            <Screenshot
+              src="/images/desk-panel.webp"
+              alt="Arthur at its desk, working, with its card open: the task it is on, the runtime and model, and the running turn's steps on the screen, with a button into the conversation."
+              width={1600}
+              height={1000}
+            />
+          </a>
+        </article>
         <div className="feature-bottom">
           <article className="presence-feature">
             <span className="feature-symbol" aria-hidden="true">
@@ -511,8 +545,9 @@ export default function Home() {
               <Check size={17} /> Here today
             </h3>
             <p>
-              The spatial office, with a minimap. Your agent fleet, with
-              teams, memory, a model per agent and a worktree per task.
+              The spatial office, with a minimap, and a desk for every agent
+              where its work is seen and a task can begin. Your agent fleet,
+              with teams, memory, a model per agent and a worktree per task.
               Proximity chat, channels, and DMs. An office board with the
               fleet’s pull requests on it, and routines the office keeps:
               every hour, weekdays at nine, in an hour. Keypair identity. Voice
@@ -540,8 +575,8 @@ export default function Home() {
               <span aria-hidden="true">↳</span> Further out
             </h3>
             <p>
-              Desks and notifications. Task cards and an agent workbench.
-              Speaking to agents. Importing your own maps.
+              Notifications. Task cards and an agent workbench. Speaking to
+              agents. Importing your own maps.
             </p>
             <span className="roadmap-status">Room to grow</span>
           </article>

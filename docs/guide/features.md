@@ -26,6 +26,11 @@ pages go deeper.
 - **The board.** The noticeboard in the lobby opens the office's list: walk
   up and press `E`, or `B` from anywhere. Notes in columns or as post-its,
   an Agents tab, a Pull requests tab, a Routines tab. See [The board](./board.md).
+- **Desks.** Every agent has a desk in the Agent Bay. One on a turn sits
+  there and types, one holding a task sits back, and the screen is lit by
+  what it is on. Click an agent, or its screen, to see the turn; stand
+  behind an empty chair and press `E` to begin a task there. See
+  [At the desk](./agents.md#at-the-desk).
 
 ## Talking
 

@@ -34,7 +34,9 @@ the agent reads the note as a request and acts as its owner. The hand-over
 lands in your DM with the agent as a line from you — `@Marvin board note #12
 Fix the chair is yours.` — with the note attached as a brief, so the agent
 starts from the whole of it. Taking a note off an agent tells it the same
-way.
+way. A note can also be begun from an empty desk in the office — stand
+behind its chair and press `E` — which hands it over the same way and gives
+the agent that desk; see [At the desk](./agents.md#at-the-desk).
 
 Then the board follows the agent's branch. When the agent begins a task for
 the note, the note moves to **in progress** and shows the branch; when a
