@@ -163,9 +163,12 @@ import {
   noteForTask,
   parseBoardCreate,
   parseBoardUpdate,
+  parseDeskBegin,
   type AgentTask,
   type BoardAgentRef,
   type BoardDeletePayload,
+  type DeskBeginPayload,
+  type DeskBegunPayload,
   type BoardGithubRef,
   type BoardPullActionPayload,
   type BoardPullRefreshPayload,
@@ -250,6 +253,7 @@ import {
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
 import {
+  BOARD_DEFAULT_COLOR,
   EarshotTracker,
   parseMcpStatus,
   tileBeside,
@@ -670,6 +674,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.ActivityFollow, (client, payload: ActivityFollowPayload) =>
       this.#onActivityFollow(client, payload),
+    );
+    this.onMessage(ClientMessage.DeskBegin, (client, payload: DeskBeginPayload) =>
+      void this.#onDeskBegin(client, payload),
     );
     this.onMessage(ClientMessage.ChannelJoin, (client, payload: ChannelJoinPayload) =>
       void this.#onChannelJoin(client, payload),
@@ -2351,14 +2358,16 @@ export class OfficeRoom extends Room<OfficeState> {
    * Each line goes only where the person could have said it themselves:
    * `#dmWith` answers to `mayOpenDm`, so a note taken off a colleague's
    * agent, or handed to one that lives only in public, is on the board and
-   * nowhere else.
+   * nowhere else. Returns the DM the hand-over was said in, or null when it
+   * could not be said anywhere.
    */
   async #announceAssignment(
     sessionId: string,
     assigner: OfficePlayer,
     before: BoardItemRef,
     after: BoardItemRef,
-  ): Promise<void> {
+  ): Promise<string | null> {
+    let saidIn: string | null = null;
     try {
       const actor = await this.#actorFor(assigner);
       if (after.assignee) {
@@ -2372,6 +2381,7 @@ export class OfficeRoom extends Room<OfficeState> {
             undefined,
             assignmentBrief(after),
           );
+          saidIn = channel.id;
         }
       }
       if (before.assignee) {
@@ -2388,6 +2398,119 @@ export class OfficeRoom extends Room<OfficeState> {
     } catch (error: unknown) {
       logger.error('[office] could not say who a board note went to', error);
     }
+    return saidIn;
+  }
+
+  /**
+   * A task begun at an empty desk, from the station panel: the inverse of
+   * walking up to a busy one. Nothing new reaches the agent. The note — one
+   * picked from the board, or one written now from the title typed, in "in
+   * progress" and assigned — is handed over exactly as from the board: a
+   * line in the person's DM with the agent, the brief attached, which wakes
+   * it. What is new is the desk: it is the agent's from this moment, so the
+   * turn the hand-over starts walks it there and not to whatever desk it
+   * had. The board stays the record; nothing is tracked only by a chair.
+   *
+   * Only for an agent of the asker's that is free — here, idle, on no task —
+   * because a desk given to a busy agent would move it mid-turn, and because
+   * handing a note over is the owner's to do (`#mayHandTo`). Only for a desk
+   * nobody present holds: a chair is one agent's at a time.
+   */
+  async #onDeskBegin(client: Client, payload: DeskBeginPayload): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const asked = parseDeskBegin(payload);
+    if (!asked) {
+      this.#sendError(client, 'invalid_payload', 'Name the desk, the agent, and a note or a title.');
+      return;
+    }
+    if (!this.#seatNamed(asked.seatId)) {
+      this.#sendError(client, 'not_found', 'No such desk.');
+      return;
+    }
+    if (!(await this.#mayHandTo(client, writer, asked.agentId, 'begins tasks for them'))) return;
+    const agentSessionId = this.#sessionOfAgent(asked.agentId);
+    const agent = agentSessionId ? this.state.players.get(agentSessionId) : undefined;
+    if (!agentSessionId || !agent) {
+      this.#sendError(client, 'not_found', 'That agent is not in the office.');
+      return;
+    }
+    if (!idleCapable(agent.status) || agent.taskBranch.length > 0) {
+      this.#sendError(client, 'invalid_payload', `${agent.name} is on something already.`);
+      return;
+    }
+    const holder = this.#seats.holderOf(asked.seatId);
+    if (holder !== undefined && holder !== asked.agentId && this.#hasAgentSession(holder)) {
+      this.#sendError(client, 'invalid_payload', 'That desk is taken.');
+      return;
+    }
+
+    let before: BoardItemRef;
+    let after: BoardItemRef;
+    try {
+      const db = getDb();
+      if (asked.what.kind === 'note') {
+        const found = await getBoardItem(db, this.#workspaceId, asked.what.itemId);
+        if (!found) {
+          this.#sendError(client, 'not_found', 'That note is no longer on the board.');
+          return;
+        }
+        before = found;
+        after = await updateBoardItem(db, {
+          workspaceId: this.#workspaceId,
+          itemId: before.id,
+          assigneeAgentId: asked.agentId,
+        });
+        this.#boardEvent({
+          kind: 'item.updated',
+          actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+          itemId: after.id,
+          payload: { number: after.number, changed: ['assigneeAgentId'] },
+        });
+      } else {
+        after = await createBoardItem(db, {
+          workspaceId: this.#workspaceId,
+          title: asked.what.title,
+          body: asked.what.body,
+          status: 'in_progress',
+          color: BOARD_DEFAULT_COLOR,
+          labels: [],
+          assigneeAgentId: asked.agentId,
+          createdBy: { userId: writer.player.userId },
+        });
+        before = { ...after, assignee: null };
+        this.#boardEvent({
+          kind: 'item.created',
+          actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+          itemId: after.id,
+          payload: { number: after.number, title: after.title, assignee: after.assignee?.name ?? null },
+        });
+      }
+    } catch (error: unknown) {
+      this.#boardRefused(client, error);
+      return;
+    }
+
+    // The desk, before the hand-over: the line wakes the agent, and the
+    // sweep that follows sends it to the desk it holds *now*.
+    if (this.#seats.reserve(asked.agentId, asked.seatId, Date.now())) {
+      if (agent.seat !== asked.seatId) agent.seat = asked.seatId;
+    }
+    await this.#refreshBoard();
+    const channelId = await this.#announceAssignment(client.sessionId, writer.player, before, after);
+    client.send(ServerMessage.DeskBegun, {
+      seatId: asked.seatId,
+      agentId: asked.agentId,
+      itemId: after.id,
+      number: after.number,
+      channelId,
+    } satisfies DeskBegunPayload);
+  }
+
+  /** The session an agent is connected on, if it is here. The first, when it is here twice. */
+  #sessionOfAgent(agentId: string): string | null {
+    for (const [sessionId, identity] of this.#agents) if (identity.id === agentId) return sessionId;
+    return null;
   }
 
   /**
@@ -4841,6 +4964,8 @@ export class OfficeRoom extends Room<OfficeState> {
           if (chair && this.walkTo(sessionId, chair.tile.x, chair.tile.y)) {
             sim.arranged = plan.pose;
             sim.seatWalk = true;
+            // Given now, not on arrival: the room shows whose the desk is while it walks.
+            if (player.seat !== chair.id) player.seat = chair.id;
           }
           break;
         }

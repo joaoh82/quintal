@@ -276,6 +276,31 @@ describe('seats', () => {
     assert.throws(() => parseTiledMap(base([...floorOnly, seatLayer([])])), /<missing>/);
   });
 
+  it('makes every seat a desk to use: its doorstep behind the chair, its halo the screen', () => {
+    const parsed = parseTiledMap(
+      base([
+        ...floorOnly,
+        seatLayer([
+          { name: 'seatId', type: 'string', value: 'bay-1' },
+          { name: 'facing', type: 'string', value: 'up' },
+          { name: 'screenX', type: 'int', value: 40 },
+          { name: 'screenY', type: 'int', value: 8 },
+          { name: 'screenWidth', type: 'int', value: 12 },
+          { name: 'screenHeight', type: 'int', value: 10 },
+        ]),
+      ]),
+    );
+    const desk = parsed.interactables.find((interactable) => interactable.kind === 'desk');
+    assert.ok(desk, 'a seat is a desk');
+    assert.equal(desk.id, 'bay-1', 'named for its seat');
+    const chair = parsed.seats[0]!.tile;
+    assert.deepEqual(desk.bounds, { x: chair.x, y: chair.y + 1, width: 1, height: 1 }, 'stand behind the chair');
+    assert.deepEqual(desk.halo, { x: 40, y: 8, width: 12, height: 10 });
+    assert.equal(desk.prop, null);
+    assert.equal(interactableAt(parsed, chair.x, chair.y + 1)?.id, 'bay-1');
+    assert.equal(interactableAt(parsed, chair.x, chair.y), null, 'the chair itself is nobody\'s doorstep');
+  });
+
   it('parses a map with no seats at all', () => {
     assert.deepEqual(parseTiledMap(base([...floorOnly])).seats, []);
   });

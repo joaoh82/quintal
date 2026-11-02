@@ -99,6 +99,16 @@ export const AGENT_EMOTE_INTERVAL_MS = 500;
  * status. Mapping here rather than at each call site means one table to read
  * and one table to test. Empty means no balloon.
  */
+/**
+ * Whether a status line leaves the agent free: nothing running, or a
+ * standing refusal ("no model … here"), which is not work. Anything else the
+ * harness writes is a turn under way. The office uses this to decide who may
+ * wander, and who may be sent to a desk.
+ */
+export function idleCapable(status: string): boolean {
+  return status.length === 0 || emoteForStatus(status) === 'cross';
+}
+
 export function emoteForStatus(status: string): EmoteId | '' {
   const line = status.trim();
   if (line.length === 0 || line === 'idle') return '';

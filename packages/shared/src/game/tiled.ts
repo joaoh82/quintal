@@ -1,6 +1,7 @@
 import {
   INTERACTABLE_KINDS,
   ZONE_KINDS,
+  deskOf,
   isInteractableKind,
   isZoneKind,
   type MapInteractable,
@@ -286,7 +287,8 @@ export function parseTiledMap(raw: TiledMap): OfficeMap {
     height: raw.height,
     tileSize: raw.tilewidth,
     zones: parseZones(raw),
-    interactables: parseInteractables(raw),
+    // Every desk is something to use, after whatever the map lays out itself.
+    interactables: [...parseInteractables(raw), ...seats.map(deskOf)],
     seats,
     spawns: parseSpawns(raw),
     walkable,

@@ -198,9 +198,10 @@ Both are public. They carry no words.
 Avatars and desk screens are interactive, with one bridge event,
 `inspect`, carrying the clicked session. A click on a body is a click on
 that person or agent; a click on a desk's screen (the seat's `screen`
-rectangle, from the map) is a click on whoever holds the desk, and the
-pointer is a hand over it only while somebody does. It opens the **desk
-panel**, at the left of the room, built from parts that exist:
+rectangle, from the map) is a click on whoever holds the desk — or, when
+nobody does, on the desk itself, which is where a task begins (below). It
+opens the **desk panel**, at the left of the room, built from parts that
+exist:
 
 1. The agent's card (`AgentCard`): name, owner, status, task, scopes,
    runtime, model, the audit log.
@@ -229,43 +230,67 @@ may not read is a count in the reply and nothing else, and the panel says
 "working in a conversation you are not in", not where. There is nothing to
 unfollow: later steps reach the panel by the same rule, or do not.
 
-Clicking a human opens their card; it is the same event. Not yet: a
-keyboard path, `E` on a desk's doorstep, which wants the desk interactable
-of phase 3.
+Clicking a human opens their card; it is the same event. The keyboard
+path is the desk interactable: every seat makes one (`deskOf`), named for
+its seat, with the tile behind the chair as its doorstep and the screen as
+its halo. Stand there and the screen lights up as the noticeboard does, and
+the offer under `E` reads "see what Arthur is on" — or, when nobody holds
+the desk, "begin a task at this desk", which is the next section.
 
 ### Click an empty desk: begin a task from the station
 
 The inverse flow, and the one agent-office gets most right: an empty chair
-is an invitation. Standing on the doorstep of a desk nobody holds, or
-clicking it, opens the **begin-task panel**:
+is an invitation. Standing behind the chair of a desk nobody holds, or
+clicking its screen, opens the **station panel** (`StationPanel`), in the
+desk panel's place at the left of the room:
 
-- **What**: a title and a description, typed; or **a note from the board**,
-  picked from the open ones, which fills both and carries the number.
-- **Who**: one of your agents that is free, meaning in the office, idle and
-  on no task. An agent on a task is listed greyed with its task's title, so
-  you can see why it is not offered. A team can be offered too: the team
-  sorts out who takes it, as `@team` does today.
-- **Begin**.
+- **What**: a note from the board, picked from the open ones that are
+  nobody's or one of your agents' already, which fills the title and the
+  details and carries the number; or a title and details typed here.
+- **Who**: your agents that are in the office, free ones first. Free means
+  idle and on no task (`idleCapable`, shared now, and `task === null`). An
+  agent on something is listed greyed with what — "on Fix the chair",
+  "reading auth.ts" — so you can see why it is not offered; one that is not
+  here is not listed, because nothing can be begun for it from a chair it
+  cannot walk to. The rules are `candidates` and `offeredNotes` in
+  `station.ts`, pinned without a panel.
+- **Begin**, which sends one message, `desk_begin { seatId, agentId,
+  itemId | title, body }`.
 
 What happens is what happens already when a note is handed over, so nothing
-new reaches the agent: the office writes the line in your DM with the agent,
-with the brief attached (`assignmentBrief`, or a sibling for a typed task
-that has no note). The agent is woken by being addressed, reads the brief,
-and begins with `task_begin`. The desk is reserved for it on Begin, so it
-walks there as the turn starts rather than to its home desk, and that desk
-becomes its home desk if it had none. If the agent declines ("I cannot take
-it"), the seat frees and the panel's thread is the DM, where you read why.
+new reaches the agent. The office checks that the asker may hand this agent
+work (`#mayHandTo`: its owner, and nobody else), that the agent is here and
+free, and that nobody present holds the desk. A picked note is assigned; a
+typed one is written to the board first, in "in progress" and assigned, so
+the Agents tab and the columns agree with the room. Then the desk is
+reserved — `SeatBook.reserve`: the agent's from this moment, whatever it
+held before, and that one is free again — and the note is handed over
+exactly as from the board: a line in your DM with the agent, the brief
+attached (`assignmentBrief`; a typed task has become a note, so the same
+brief serves). The line wakes the agent; the seating sweep that follows
+sends it to the desk it holds *now*, which is this one. The reply,
+`desk_begun`, names the note and the DM the line landed in, and the client
+opens that DM: the agent's answer — picked up, or why it cannot take it —
+lands there.
+
+The desk is the agent's the way any desk it is given is: held while it is in
+the office, and after, until a present agent needs it more. An agent that
+declines keeps the desk until it leaves, as it would have kept the desk it
+walked to for any other turn; nothing frees a chair on the strength of a
+sentence.
+
+A team is not offered. A board note is one agent's, the hand-over is one DM,
+and the desk is one chair; "the team sorts out who takes it" is a mention in
+a channel, which is a different thing from a chair and already works as one.
 
 The repository is the agent's to choose, as it is for a board note today:
 the brief says what the work is, the agent knows what is under `REPOS/`.
 Offering a repository picker in the panel needs the harness to report its
 checkouts' names to the office at boot, the way it reports runtimes, which
-is a small addition and worth doing second: then the panel can say
-"api, web" and the brief can name one.
+is a small addition and worth doing next: then the panel can say "api, web"
+and the brief can name one.
 
-The board stays the record. A typed task that was not a note becomes one,
-in "in progress", assigned, so the Agents and the columns agree with the
-room. Nothing is tracked only by a chair.
+The board stays the record. Nothing is tracked only by a chair.
 
 ## Phases
 
@@ -277,9 +302,11 @@ room. Nothing is tracked only by a chair.
    parts, `activity_follow` with the privacy rule, and the conversation
    jump. Tests: a follower who is not a member never receives a step, the
    turn the screen shows, and where the buttons go.
-3. **Begin from the station.** The begin-task panel over the existing
-   hand-over, free-agent listing, seat reservation on Begin, a typed task
-   becoming a note. Then the harness reporting checkouts.
+3. **Begin from the station.** The `desk` interactable from every seat, the
+   station panel over the existing hand-over, free-agent listing, seat
+   reservation on Begin, a typed task becoming a note. Tests: what a desk
+   is told to begin, who the station offers, and the reserved desk being
+   the one the agent walks to. Not yet: the harness reporting checkouts.
 4. **The glass.** Monitor colour and flicker, the waiting beacon, act-outs by
    tool class.
 

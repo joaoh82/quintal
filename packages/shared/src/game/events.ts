@@ -6,6 +6,7 @@ import type { VoiceUiState } from '../voice.js';
 import type {
   ActivityFollowedPayload,
   ChannelChatPayload,
+  DeskBegunPayload,
   ChannelsPayload,
   ChatBroadcastPayload,
   DmOpenedPayload,
@@ -56,6 +57,8 @@ export interface RosterEntry {
   workingIn: string;
   /** Agents: when that work began, ms since epoch on the office's clock; 0 when idle. */
   workingSince: number;
+  /** Agents: the desk the office has given it, by seat id, or empty. Its, not necessarily under it: see `OfficePlayer.seat`. */
+  seat: string;
   /** Humans: walked in through a guest link. Always false for agents. */
   isGuest: boolean;
   /** Humans: the profile line they wrote. Empty when unset. */
@@ -133,6 +136,8 @@ export type GameEvents = {
   inspect: { sessionId: string };
   /** The office answered `activity_follow`. */
   activityFollowed: ActivityFollowedPayload;
+  /** The office answered `desk_begin`: the task is begun and the hand-over said. */
+  deskBegun: DeskBegunPayload;
   /** Local player position, in tiles. Fires only when the tile changes. */
   tile: { x: number; y: number; direction: Direction; kind: PlayerKind };
   /** Debug overlay toggled with Z. */

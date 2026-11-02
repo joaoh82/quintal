@@ -1,0 +1,106 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import type { BoardItemRef, MapInteractable, RosterEntry } from '@quintal/shared';
+
+import { candidates, holderOf, offeredNotes, promptFor } from './station';
+
+function entry(over: Partial<RosterEntry>): RosterEntry {
+  return {
+    sessionId: 's',
+    name: 'Bob',
+    kind: 'agent',
+    status: '',
+    isSelf: false,
+    ownerName: 'Josh',
+    ownerUserId: 'u1',
+    scopes: [],
+    runtimeId: '',
+    modelId: '',
+    identityId: 'a1',
+    lastActionAt: 0,
+    avatar: '',
+    isGuest: false,
+    description: '',
+    pubkey: '',
+    zoneId: 'agent-bay',
+    emote: '',
+    workingIn: '',
+    workingSince: 0,
+    seat: '',
+    task: null,
+    ...over,
+  };
+}
+
+function note(over: Partial<BoardItemRef>): BoardItemRef {
+  return {
+    id: 'n1',
+    number: 1,
+    title: 'Fix the chair',
+    body: '',
+    status: 'open',
+    color: 'yellow',
+    labels: [],
+    assignee: null,
+    createdBy: null,
+    createdAt: 0,
+    updatedAt: 0,
+    task: null,
+    ...over,
+  };
+}
+
+const desk: MapInteractable = {
+  id: 'bay-2',
+  kind: 'desk',
+  label: 'the desk',
+  bounds: { x: 9, y: 32, width: 1, height: 1 },
+  prop: null,
+  halo: null,
+};
+
+describe('who the station offers', () => {
+  it('lists your agents here, free ones first, the rest with why not', () => {
+    const roster = [
+      entry({ sessionId: 's1', identityId: 'a1', name: 'Zed', status: 'reading auth.ts' }),
+      entry({ sessionId: 's2', identityId: 'a2', name: 'Arthur' }),
+      entry({ sessionId: 's3', identityId: 'a3', name: 'Marvin', task: { title: 'Fix the chair', repo: 'api', branch: 'chair' } }),
+      entry({ sessionId: 's4', identityId: 'a4', name: 'Deep', ownerUserId: 'u2' }),
+      entry({ sessionId: 's5', identityId: 'u1', name: 'Josh', kind: 'human', isSelf: true }),
+      entry({ sessionId: 's6', identityId: 'a6', name: 'Quiet', status: 'no model for claude here' }),
+    ];
+    assert.deepEqual(
+      candidates(roster, 'u1').map((c) => [c.entry.name, c.busy]),
+      [
+        ['Arthur', ''],
+        ['Quiet', ''],
+        ['Marvin', 'on Fix the chair'],
+        ['Zed', 'reading auth.ts'],
+      ],
+      'a standing refusal is not work; a colleague\'s agent is not yours to send',
+    );
+  });
+
+  it('offers open notes that are nobody\'s or one of yours, newest first', () => {
+    const items = [
+      note({ id: 'n1', number: 1 }),
+      note({ id: 'n2', number: 2, status: 'in_progress' }),
+      note({ id: 'n3', number: 3, assignee: { id: 'a9', name: 'Theirs' } }),
+      note({ id: 'n4', number: 4, assignee: { id: 'a1', name: 'Mine' } }),
+      note({ id: 'n5', number: 5, status: 'done' }),
+    ];
+    assert.deepEqual(offeredNotes(items, new Set(['a1'])).map((item) => item.number), [4, 1]);
+  });
+
+  it('says what E does where you stand', () => {
+    const board: MapInteractable = { ...desk, id: 'board', kind: 'board', label: 'the board' };
+    const roster = [entry({ sessionId: 's1', name: 'Arthur', seat: 'bay-2' })];
+    assert.equal(promptFor(null, roster), null);
+    assert.equal(promptFor(board, roster), 'open the board');
+    assert.equal(promptFor(desk, roster), 'see what Arthur is on');
+    assert.equal(promptFor(desk, []), 'begin a task at this desk');
+    assert.equal(holderOf(roster, 'bay-2')?.name, 'Arthur');
+    assert.equal(holderOf(roster, 'bay-3'), null);
+  });
+});

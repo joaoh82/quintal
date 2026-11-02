@@ -44,6 +44,14 @@ export const ClientMessage = {
    * Nothing to unfollow: updates reach me by the same rule, or do not.
    */
   ActivityFollow: 'activity_follow',
+  /**
+   * Begin a task at an empty desk, for one of my agents: a note from the
+   * board, or a title typed here that becomes one. The office hands the note
+   * over as it does from the board — a line in my DM with the agent, with
+   * the brief attached — and gives the agent that desk, so it walks there as
+   * the turn starts. Answered with `desk_begun`, or an `error`.
+   */
+  DeskBegin: 'desk_begin',
   /** Join a channel by its slug. Answered with `channels`. */
   ChannelJoin: 'channel_join',
   /** Leave a channel. Answered with `channels`. */
@@ -134,6 +142,8 @@ export const ServerMessage = {
   Board: 'board',
   /** In reply to `activity_follow`: what was sent, and what was not. */
   ActivityFollowed: 'activity_followed',
+  /** In reply to `desk_begin`: the note the task is on, and where the hand-over was said. */
+  DeskBegun: 'desk_begun',
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -326,6 +336,27 @@ export interface NoticePayload {
    */
   code: 'team_members_absent' | 'command_unheard' | 'pull_request';
   message: string;
+}
+
+/**
+ * `desk_begin`: which desk, which agent, and what — a note by id, or a
+ * title and body for a note the office writes. See `parseDeskBegin`.
+ */
+export interface DeskBeginPayload {
+  seatId: string;
+  agentId: string;
+  itemId?: string;
+  title?: string;
+  body?: string;
+}
+
+/** `desk_begun`: the desk, the agent, the note, and the DM the hand-over landed in, if the office could say it there. */
+export interface DeskBegunPayload {
+  seatId: string;
+  agentId: string;
+  itemId: string;
+  number: number;
+  channelId: string | null;
 }
 
 /** `board_create`: the note, as `parseBoardCreate` reads it. */

@@ -135,6 +135,27 @@ export class SeatBook {
     return seat;
   }
 
+  /**
+   * Give this agent this desk, now: a task begun from the station. Whatever
+   * desk it held before is free again, and the agent walks to this one the
+   * next time it wants a desk, which is the moment the hand-over wakes it.
+   * Refused — false, nothing changed — when the seat is not a seat, or is
+   * held by somebody present; a desk held by somebody gone is as free as
+   * the room shows it, and goes the way `claim` would have taken it.
+   */
+  reserve(agentId: string, seatId: string, now: number): boolean {
+    if (!this.#seats.includes(seatId)) return false;
+    const holder = this.holderOf(seatId);
+    if (holder !== undefined && holder !== agentId) {
+      if (!this.#leftAt.has(holder) || this.#leftAt.get(holder)! > now) return false;
+      this.#held.delete(holder);
+      this.#leftAt.delete(holder);
+    }
+    this.#held.set(agentId, seatId);
+    this.#leftAt.delete(agentId);
+    return true;
+  }
+
   /** The agent is here: its desk, if it has one, is not up for taking. */
   arrived(agentId: string): void {
     this.#leftAt.delete(agentId);

@@ -145,6 +145,31 @@ describe('what the office does about an agent each sweep', () => {
     assert.equal(book.seatOf('arthur'), undefined);
   });
 
+  it('sends an agent to the desk a task was begun at, whatever it held before', () => {
+    const book = new SeatBook(['bay-1', 'bay-2', 'bay-3']);
+    book.claim('arthur', now);
+    assert.equal(book.reserve('arthur', 'bay-3', now), true);
+    assert.equal(book.seatOf('arthur'), 'bay-3');
+    assert.equal(book.holderOf('bay-1'), undefined, 'the old desk is free again');
+    // Woken by the hand-over: it wants a desk, and the desk is the one reserved.
+    assert.deepEqual(book.plan(asks({ agentId: 'arthur' }), now + 1), { kind: 'walk', seat: 'bay-3', pose: 'work' });
+  });
+
+  it('will not reserve a desk somebody here holds, and takes one from somebody gone', () => {
+    const book = new SeatBook(['bay-1']);
+    book.claim('arthur', now);
+    assert.equal(book.reserve('marvin', 'bay-1', now + 1), false, 'arthur is here');
+    assert.equal(book.seatOf('arthur'), 'bay-1');
+    assert.equal(book.seatOf('marvin'), undefined);
+    assert.equal(book.reserve('marvin', 'bay-9', now + 1), false, 'no such desk');
+
+    book.left('arthur', now + 2);
+    assert.equal(book.reserve('marvin', 'bay-1', now + 3), true, 'a desk whose holder has gone is free');
+    assert.equal(book.seatOf('arthur'), undefined);
+    assert.equal(book.seatOf('marvin'), 'bay-1');
+    assert.equal(book.reserve('marvin', 'bay-1', now + 4), true, 'its own desk, again, is nothing to refuse');
+  });
+
   it('sends a returning agent back to the same desk', () => {
     const book = new SeatBook(['bay-1', 'bay-2']);
     book.claim('arthur', now);

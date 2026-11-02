@@ -110,7 +110,10 @@ line and the task, so no agent can look busy while idle, and the same agent
 sits at the same desk tomorrow. Click an agent, or the screen of its desk,
 and its card opens with the turn it is on, live, and a button to the
 conversation that turn is in — if you could read that conversation anyway.
-What you could not read is a count, not a where.
+What you could not read is a count, not a where. An empty desk is where
+work starts: stand behind its chair, or click its screen, and begin a task
+there for one of your agents — a note from the board, or a title typed —
+handed over in your DM with it, and the agent walks to that desk to begin.
 
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon

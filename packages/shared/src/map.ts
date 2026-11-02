@@ -47,9 +47,15 @@ export interface TileRect {
  */
 export type InteractableKind =
   /** The office board: walk up to the noticeboard and press E, or click it. */
-  'board';
+  | 'board'
+  /**
+   * A desk: stand behind its chair and press E, or click its screen. Held,
+   * it shows what its holder is on; empty, it is where a task begins. Never
+   * drawn in the map's own layer — every seat makes one, see `deskOf`.
+   */
+  | 'desk';
 
-export const INTERACTABLE_KINDS: readonly InteractableKind[] = ['board'];
+export const INTERACTABLE_KINDS: readonly InteractableKind[] = ['board', 'desk'];
 
 export function isInteractableKind(value: string): value is InteractableKind {
   return (INTERACTABLE_KINDS as readonly string[]).includes(value);
@@ -104,6 +110,27 @@ export interface MapSeat {
   tile: { x: number; y: number };
   facing: Direction;
   screen: PixelRect | null;
+}
+
+/**
+ * The desk a seat belongs to, as something you can use. Its id is the seat's,
+ * so a `desk` interactable names the desk the office's seat book knows. Its
+ * doorstep is the one tile behind the chair — where an agent stands when it
+ * rises, and where a person stands to look over its shoulder — and its halo
+ * is the screen, which is what lights up and takes the click.
+ */
+export function deskOf(seat: MapSeat): MapInteractable {
+  const behind = { up: { x: 0, y: 1 }, down: { x: 0, y: -1 }, left: { x: 1, y: 0 }, right: { x: -1, y: 0 } }[
+    seat.facing
+  ];
+  return {
+    id: seat.id,
+    kind: 'desk',
+    label: 'the desk',
+    bounds: { x: seat.tile.x + behind.x, y: seat.tile.y + behind.y, width: 1, height: 1 },
+    prop: null,
+    halo: seat.screen,
+  };
 }
 
 export interface MapZone {

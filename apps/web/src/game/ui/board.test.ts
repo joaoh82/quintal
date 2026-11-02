@@ -164,6 +164,7 @@ function here(identityId: string, extra: Partial<RosterEntry> = {}): RosterEntry
     emote: '',
     workingIn: '',
     workingSince: 0,
+    seat: '',
     isGuest: false,
     description: '',
     pubkey: '',
