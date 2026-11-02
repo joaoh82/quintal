@@ -5,9 +5,13 @@ import { normaliseBoardBody, normaliseBoardTitle } from './board.js';
  * the agent, and what the task is — a note already on the board, or the
  * title and details of one the office writes now.
  */
-export type DeskBeginInput =
-  | { seatId: string; agentId: string; what: { kind: 'note'; itemId: string } }
-  | { seatId: string; agentId: string; what: { kind: 'typed'; title: string; body: string } };
+export type DeskBeginInput = {
+  seatId: string;
+  agentId: string;
+  /** A checkout on the agent's machine for the brief to name, or null for the agent's choice. */
+  repo: string | null;
+  what: { kind: 'note'; itemId: string } | { kind: 'typed'; title: string; body: string };
+};
 
 function id(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : null;
@@ -28,8 +32,9 @@ export function parseDeskBegin(value: unknown): DeskBeginInput | null {
   if (!seatId || !agentId) return null;
   const itemId = v.itemId === undefined || v.itemId === null ? null : id(v.itemId);
   if (v.itemId !== undefined && v.itemId !== null && !itemId) return null;
-  if (itemId) return { seatId, agentId, what: { kind: 'note', itemId } };
+  const repo = typeof v.repo === 'string' && v.repo.trim().length > 0 ? v.repo.trim().slice(0, 200) : null;
+  if (itemId) return { seatId, agentId, repo, what: { kind: 'note', itemId } };
   const title = normaliseBoardTitle(v.title);
   if (!title) return null;
-  return { seatId, agentId, what: { kind: 'typed', title, body: normaliseBoardBody(v.body) } };
+  return { seatId, agentId, repo, what: { kind: 'typed', title, body: normaliseBoardBody(v.body) } };
 }

@@ -144,7 +144,7 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
   }
   return {
     items: [...view.items],
-    agents: view.agents.map((agent) => ({ ...agent, hostLabel: null, runtimeId: null, modelId: null })),
+    agents: view.agents.map((agent) => ({ ...agent, hostLabel: null, runtimeId: null, modelId: null, checkouts: [] })),
     tasks: [],
     github: { ...NO_GITHUB },
     pulls: { ...NO_REPO_PULLS },

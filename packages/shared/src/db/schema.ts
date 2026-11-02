@@ -526,6 +526,8 @@ export const agentHosts = sqliteTable(
       .$type<{ id: string; installed: boolean; path: string | null }[]>()
       .notNull()
       .default([]),
+    /** JSON array of checkout names under `reposDir`, as the harness listed them. */
+    checkouts: text('checkouts', { mode: 'json' }).$type<string[]>().notNull().default([]),
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },
   (table) => [uniqueIndex('agent_hosts_workspace_label').on(table.workspaceId, table.label)],

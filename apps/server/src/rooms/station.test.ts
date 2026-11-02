@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import { handedFrom, whyNotBegin, whyNotNote, type StationAgent } from './station.js';
+import { handedFrom, whyNotBegin, whyNotNote, whyNotRepo, type StationAgent } from './station.js';
 
 function agent(over: Partial<StationAgent> = {}): StationAgent {
   return { name: 'Arthur', here: true, status: '', onTask: false, scopes: ['dm', 'move', 'chat'], ...over };
@@ -24,6 +24,13 @@ describe('who a task may be begun for', () => {
       'Arthur is on something already.',
       'idle life may wander it, but it would never answer',
     );
+  });
+
+  it('names only a checkout its machine listed', () => {
+    assert.equal(whyNotRepo(null, [], 'Arthur'), null, 'the agent\'s choice');
+    assert.equal(whyNotRepo('api', ['api', 'group/web'], 'Arthur'), null);
+    assert.equal(whyNotRepo('web', ['api', 'group/web'], 'Arthur'), "Arthur's machine has no checkout named web.");
+    assert.equal(whyNotRepo('api', [], 'Arthur'), "Arthur's machine has no checkout named api.");
   });
 
   it('refuses one the hand-over could not reach, or the desk could not take', () => {

@@ -20,6 +20,7 @@ const marvin: BoardAgentRef = {
   runtimeId: 'claude-code',
   modelId: 'claude-opus-5-5',
   hostLabel: "Josh's laptop",
+  checkouts: ['api'],
 };
 
 const task: BoardTaskRef = {

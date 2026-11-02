@@ -1,0 +1,1 @@
+ALTER TABLE `agent_hosts` ADD `checkouts` text DEFAULT '[]' NOT NULL;

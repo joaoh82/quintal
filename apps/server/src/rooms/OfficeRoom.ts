@@ -326,7 +326,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
-import { handedFrom, whyNotBegin, whyNotNote } from './station.js';
+import { handedFrom, whyNotBegin, whyNotNote, whyNotRepo } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
 /** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
@@ -2466,6 +2466,8 @@ export class OfficeRoom extends Room<OfficeState> {
     assigner: OfficePlayer,
     before: BoardItemRef,
     after: BoardItemRef,
+    /** A checkout the person chose at the station, for the brief to name. */
+    repo: string | null = null,
   ): Promise<string | null> {
     let saidIn: string | null = null;
     try {
@@ -2479,7 +2481,7 @@ export class OfficeRoom extends Room<OfficeState> {
             channel,
             assignmentLine(after, after.assignee.name),
             undefined,
-            assignmentBrief(after),
+            assignmentBrief(after, repo),
           );
           saidIn = channel.id;
         }
@@ -2569,6 +2571,14 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendError(client, refused && agent ? 'invalid_payload' : 'not_found', refused ?? 'That agent is not in the office.');
       return;
     }
+    // A checkout, if chosen, as the agent's machine last listed it.
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const listed = this.#boardAgents.find((known) => known.id === asked.agentId)?.checkouts ?? [];
+    const noRepo = whyNotRepo(asked.repo, listed, agent.name);
+    if (noRepo) {
+      this.#sendError(client, 'invalid_payload', noRepo);
+      return;
+    }
     const holder = this.#seats.holderOf(asked.seatId);
     const previous = this.#seats.seatOf(asked.agentId);
     if (
@@ -2638,6 +2648,7 @@ export class OfficeRoom extends Room<OfficeState> {
       writer.player,
       handedFrom(before, asked.agentId),
       after,
+      asked.repo,
     );
     client.send(ServerMessage.DeskBegun, {
       seatId: asked.seatId,

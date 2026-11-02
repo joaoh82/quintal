@@ -196,6 +196,18 @@ export function workspaceReport(input: WorkspaceReportInput): WorkspaceReport {
 }
 
 /**
+ * The checkouts this agent can reach, by name, for the machine's report to
+ * the office: the same listing `workspace_info` gives, kept to the entries
+ * with a `.git`. A plain folder is not something a task can be begun in.
+ * Empty when there is no repositories directory, or nothing cloned in it.
+ */
+export function checkoutNames(cwd: string, reposDir?: string): string[] {
+  return (repositories(cwd, reposDir, MAX_CHECKOUTS).checkouts ?? [])
+    .filter((checkout) => checkout.git)
+    .map((checkout) => checkout.name);
+}
+
+/**
  * Where the repositories are, and what is in them.
  *
  * The order is the order of authority: `REPOS/` in the working directory is

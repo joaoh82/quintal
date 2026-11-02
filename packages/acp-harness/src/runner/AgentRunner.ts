@@ -55,7 +55,7 @@ import {
   type Task,
 } from './tasks.js';
 import { hostLabel } from '../runtimes.js';
-import { workspaceReport, type WorkspaceReport } from './workspace.js';
+import { workspaceReport, type WorkspaceReport, checkoutNames } from './workspace.js';
 import { GatewayClient, type Gateway } from '../gateway/client.js';
 import { credentialFor } from '../credential.js';
 import { basePrompt } from './base-prompt.js';
@@ -794,8 +794,18 @@ export class AgentRunner {
    */
   reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[] }): void {
     this.#host = { label: host.label, reposDir: host.reposDir };
+    // What is checked out here, so the office can offer a repository when a
+    // task is begun from a desk. Every agent says it — one readdir — and the
+    // same machine gives the same answer, so the last to report is right.
+    let checkouts: string[] | undefined;
+    try {
+      checkouts = checkoutNames(this.config.cwd, host.reposDir || undefined);
+    } catch {
+      checkouts = undefined;
+    }
     this.#gateway.hostReport({
       ...host,
+      ...(checkouts ? { checkouts } : {}),
       workspacePath: this.config.cwd,
     });
   }

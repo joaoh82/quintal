@@ -2,18 +2,21 @@
 
 import {
   BOARD_TITLE_MAX_LENGTH,
+  type BoardAgentRef,
   type BoardItemRef,
   type DeskBeginPayload,
   type RosterEntry,
 } from '@quintal/shared';
 import { useEffect, useMemo, useState } from 'react';
 
-import { candidates, offeredNotes } from './station';
+import { candidates, checkoutsOf, offeredNotes } from './station';
 
 interface StationPanelProps {
   seatId: string;
   roster: RosterEntry[];
   items: BoardItemRef[];
+  /** The board's agents, for what each one's machine has checked out. */
+  agents: BoardAgentRef[];
   /** Your `users.id`: whose agents are offered. */
   you: string;
   /** True from Begin until the office has answered, one way or the other. */
@@ -35,7 +38,7 @@ const fieldClass =
  * DM with the agent, and gives the agent this desk, so the turn that line
  * starts walks it here. Nothing is sent until Begin.
  */
-export function StationPanel({ seatId, roster, items, you, pending, onClose, onBegin }: StationPanelProps) {
+export function StationPanel({ seatId, roster, items, agents, you, pending, onClose, onBegin }: StationPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -54,6 +57,7 @@ export function StationPanel({ seatId, roster, items, you, pending, onClose, onB
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [agentId, setAgentId] = useState('');
+  const [repo, setRepo] = useState('');
 
   const note = notes.find((item) => item.id === noteId) ?? null;
   // A note picked and then taken by somebody else is not to be begun twice.
@@ -61,14 +65,18 @@ export function StationPanel({ seatId, roster, items, you, pending, onClose, onB
     if (noteId && !note) setNoteId('');
   }, [noteId, note]);
   const chosen = yours.find((candidate) => candidate.entry.identityId === agentId && candidate.busy === '') ?? null;
+  const checkouts = chosen ? checkoutsOf(agents, chosen.entry.identityId) : [];
+  // A repository is this machine's: a different agent may be on a different one.
+  const where = checkouts.includes(repo) ? repo : '';
   const ready = chosen !== null && (note !== null || title.trim().length > 0) && !pending;
 
   const begin = (): void => {
     if (!ready || !chosen) return;
+    const place = where ? { repo: where } : {};
     onBegin(
       note
-        ? { seatId, agentId: chosen.entry.identityId, itemId: note.id }
-        : { seatId, agentId: chosen.entry.identityId, title: title.trim(), body },
+        ? { seatId, agentId: chosen.entry.identityId, itemId: note.id, ...place }
+        : { seatId, agentId: chosen.entry.identityId, title: title.trim(), body, ...place },
     );
   };
 
@@ -175,6 +183,22 @@ export function StationPanel({ seatId, roster, items, you, pending, onClose, onB
           )}
         </section>
 
+        {checkouts.length > 0 ? (
+          <label className="flex flex-col gap-1 text-[10px] text-white/50">
+            Repository
+            <select value={where} onChange={(event) => setRepo(event.target.value)} className={fieldClass}>
+              <option value="" className="bg-[#10131a]">
+                the agent&apos;s choice
+              </option>
+              {checkouts.map((name) => (
+                <option key={name} value={name} className="bg-[#10131a]">
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <button
           type="submit"
           disabled={!ready}
@@ -183,7 +207,8 @@ export function StationPanel({ seatId, roster, items, you, pending, onClose, onB
           {pending ? 'Beginning…' : 'Begin'}
         </button>
         <p className="text-[10px] leading-relaxed text-white/40">
-          The note is handed over in your DM with the agent, which walks here to begin. The repository is the agent&apos;s to choose.
+          The note is handed over in your DM with the agent, which walks here to begin.
+          {checkouts.length > 0 ? ' The repositories are what its machine has checked out.' : ' The repository is the agent\u2019s to choose.'}
         </p>
       </form>
     </aside>

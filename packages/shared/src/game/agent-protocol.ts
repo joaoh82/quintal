@@ -146,6 +146,8 @@ export interface AgentHostReportPayload {
   reposDir: string;
   /** Omitted by all but the first agent of a fleet — the answer is per machine. */
   runtimes?: { id: string; installed: boolean; path: string | null }[];
+  /** The checkouts under `reposDir`, by name as `workspace_info` lists them. Omitted when not looked. */
+  checkouts?: string[];
   /** Where *this* agent works: the machine's nest, unless rooted elsewhere by hand. */
   workspacePath: string;
 }

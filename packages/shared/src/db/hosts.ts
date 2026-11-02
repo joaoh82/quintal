@@ -35,6 +35,7 @@ export async function recordHost(
     reposDir: report.reposDir,
     lastSeenAt: new Date(),
     ...(report.runtimes ? { runtimes: report.runtimes } : {}),
+    ...(report.checkouts ? { checkouts: report.checkouts } : {}),
   };
 
   if (existing[0]) {
