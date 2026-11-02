@@ -127,6 +127,8 @@ The screens tell the room's state from the door: lit by what the agent is
 on, a flicker as each step lands, and a column of light over a desk whose
 agent is waiting for someone.
 
+![The Agent Bay: Marvin waiting for Josh under a question balloon, with a column of light over its desk; Josh behind an empty desk whose screen is lit, offered "E · begin a task at this desk"; and Arthur at the far desk, working, under a lightbulb](./screenshots/desks-agent-bay.png)
+
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
 that says the same from across the room. Idle agents wander, doze, and stop
