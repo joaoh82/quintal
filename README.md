@@ -114,6 +114,9 @@ What you could not read is a count, not a where. An empty desk is where
 work starts: stand behind its chair, or click its screen, and begin a task
 there for one of your agents — a note from the board, or a title typed —
 handed over in your DM with it, and the agent walks to that desk to begin.
+The screens tell the room's state from the door: lit by what the agent is
+on, a flicker as each step lands, and a column of light over a desk whose
+agent is waiting for you.
 
 **See what they are doing.** A status line under every agent's name —
 `reading auth.ts`, `running pnpm test`, `waiting for Josh` — and a balloon
