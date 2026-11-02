@@ -162,14 +162,28 @@ describe('what the board is sent, and when', () => {
   });
 
   it('carries a routine without its words, and a run without its conversation', () => {
-    const [routine] = boardRoutinesOf([ROUTINE]);
+    const [routine] = boardRoutinesOf([ROUTINE], [RUN]);
     assert.equal(routine?.name, 'hourly PR check');
     assert.equal(routine?.ownerUserId, 'u1');
     assert.equal(routine?.nextDueAt, ROUTINE.nextDueAt);
+    assert.equal(routine?.awaitingMakeUp, false, 'its newest slot was spoken');
     assert.ok(!('instructions' in (routine as object)), 'the brief stays in Settings and the DM');
     assert.ok(!JSON.stringify(routine).includes('Review the open'), 'nothing sent quotes it');
     const [run] = boardRoutineRunsOf([RUN]);
     assert.deepEqual(run, { id: 'run1', routineId: 'r1', dueAt: MINUTE, outcome: 'fired', note: '', firedAt: MINUTE + 2_000 });
+  });
+
+  it('says a routine whose newest slot is missed waits for its agent, so a once routine is not shown done', () => {
+    const once: RoutineSummary = { ...ROUTINE, id: 'r2', schedule: { kind: 'once', at: MINUTE, tz: 'UTC' }, nextDueAt: null, lastRunAt: null };
+    const missed: RoutineRunRef = { ...RUN, id: 'run2', routineId: 'r2', outcome: 'missed', note: 'away', firedAt: null };
+    const [hourly, waiting] = boardRoutinesOf([ROUTINE, once], [missed, RUN]);
+    assert.equal(waiting?.awaitingMakeUp, true);
+    assert.equal(waiting?.paused, false, 'and it is not paused: nobody paused it');
+    assert.equal(hourly?.awaitingMakeUp, false);
+    const madeUp: RoutineRunRef = { ...missed, id: 'run3', dueAt: missed.dueAt, outcome: 'made_up', firedAt: MINUTE + 60_000 };
+    assert.equal(boardRoutinesOf([once], [madeUp])[0]?.awaitingMakeUp, false, 'spoken on return, it is done');
+    const later: RoutineRunRef = { ...RUN, id: 'run4', dueAt: MINUTE + 3_600_000, outcome: 'skipped', note: 'busy' };
+    assert.equal(boardRoutinesOf([ROUTINE], [missed, { ...later, routineId: 'r1' }, { ...missed, routineId: 'r1', id: 'run5' }])[0]?.awaitingMakeUp, false, 'only the newest slot counts, whatever order the runs come in');
   });
 
   it('counts a slot landing, and a routine paused, as the board changing', () => {

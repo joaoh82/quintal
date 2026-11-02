@@ -107,7 +107,10 @@ routines per agent.
   due, last run and its outcome, the run history on expand (each routine's
   newest ten), pause and resume for yours. A guest is sent none: a routine
   is between a member and their agent. The board carries a routine without
-  its words — the brief is read in Settings and heard in the DM.
+  its words — the brief is read in Settings and heard in the DM — and
+  whether its newest slot is missed and waiting for the agent, so a once
+  routine the agent was away for reads "when the agent is back", not
+  "done"; "paused" is only ever the owner's doing.
 - **The agent's card** in the roster: one row, "routines: 2 · next hourly PR
   check in 23m".
 - **Board → Agents tab.** A "Routines · n" toggle beside History, listing

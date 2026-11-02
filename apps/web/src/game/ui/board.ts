@@ -244,15 +244,33 @@ export interface RoutineRow {
 }
 
 /**
- * Running routines before paused ones; within each, the soonest due first,
- * then by name, so the top of the tab is what fires next. A once routine
- * that has had its moment has no due and sorts with the paused.
+ * Where a routine stands: `due` at its next slot; `waiting` for its agent
+ * to come back and make up a missed slot, with no later slot scheduled;
+ * `done`, a once routine that has had its moment; or `paused` by its owner.
+ * "Paused" is only ever the owner's doing — a routine the office could not
+ * speak is paused by the room and says so the same way.
  */
-export function sortRoutines<T extends Pick<BoardRoutineRef, 'name' | 'paused' | 'nextDueAt'>>(routines: readonly T[]): T[] {
+export type RoutineStanding = 'due' | 'waiting' | 'done' | 'paused';
+
+export function routineStanding(routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>): RoutineStanding {
+  if (routine.paused) return 'paused';
+  if (routine.nextDueAt !== null) return 'due';
+  if (routine.awaitingMakeUp) return 'waiting';
+  return 'done';
+}
+
+const STANDING_ORDER: Record<RoutineStanding, number> = { due: 0, waiting: 1, done: 2, paused: 3 };
+
+/**
+ * What fires next at the top: due routines by their slot, then those
+ * waiting for their agent, then the spent, then the paused; by name within
+ * each, so the list reads the same every time.
+ */
+export function sortRoutines<T extends Pick<BoardRoutineRef, 'name' | 'paused' | 'nextDueAt' | 'awaitingMakeUp'>>(routines: readonly T[]): T[] {
   return [...routines].sort(
     (a, b) =>
-      Number(a.paused) - Number(b.paused) ||
-      (a.nextDueAt ?? Number.POSITIVE_INFINITY) - (b.nextDueAt ?? Number.POSITIVE_INFINITY) ||
+      STANDING_ORDER[routineStanding(a)] - STANDING_ORDER[routineStanding(b)] ||
+      (a.nextDueAt ?? 0) - (b.nextDueAt ?? 0) ||
       a.name.localeCompare(b.name),
   );
 }
@@ -290,25 +308,40 @@ export function routineMatches(row: RoutineRow, query: string): boolean {
 }
 
 /**
- * When a routine is next due, in a few words: `in 23m`, `paused`, or `done`
- * for a once routine that has had its moment.
+ * When a routine is next due, in a few words: `in 23m`; `when the agent is
+ * back` for a missed slot waiting to be made up; `done` for a once routine
+ * that has had its moment; `paused`.
  */
-export function dueLabel(routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt'>, now: number): string {
-  if (routine.paused) return 'paused';
-  if (routine.nextDueAt === null) return 'done';
-  return untilLabel(routine.nextDueAt, now);
+export function dueLabel(routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>, now: number): string {
+  switch (routineStanding(routine)) {
+    case 'paused':
+      return 'paused';
+    case 'waiting':
+      return 'when the agent is back';
+    case 'done':
+      return 'done';
+    case 'due':
+      return untilLabel(routine.nextDueAt!, now);
+  }
 }
 
 /**
  * The agent card's one line about its routines: how many, and the next to
- * fire — `2 · next hourly PR check in 23m`. With every one paused, says so.
- * Null for an agent with none: the row is left off the card.
+ * fire — `2 · next hourly PR check in 23m`; or the one waiting for the agent
+ * to come back — `1 · check the deploy when it is back`. With nothing to
+ * fire, why: `2, all paused`, `1, done`, `3, nothing scheduled` when the
+ * reasons are mixed. Null for an agent with none: the row is left off.
  */
 export function routinesLine(routines: readonly BoardRoutineRef[], now: number): string | null {
   if (routines.length === 0) return null;
-  const next = sortRoutines(routines).find((routine) => !routine.paused && routine.nextDueAt !== null);
-  if (!next) return routines.length === 1 ? '1, paused' : `${routines.length}, all paused`;
-  return `${routines.length} · next ${next.name} ${untilLabel(next.nextDueAt!, now)}`;
+  const sorted = sortRoutines(routines);
+  const next = sorted[0]!;
+  const standing = routineStanding(next);
+  if (standing === 'due') return `${routines.length} · next ${next.name} ${untilLabel(next.nextDueAt!, now)}`;
+  if (standing === 'waiting') return `${routines.length} · ${next.name} when it is back`;
+  const same = sorted.every((routine) => routineStanding(routine) === standing);
+  if (routines.length === 1) return `1, ${standing}`;
+  return same ? `${routines.length}, all ${standing}` : `${routines.length}, nothing scheduled`;
 }
 
 // --- the Pull requests tab -----------------------------------------------------

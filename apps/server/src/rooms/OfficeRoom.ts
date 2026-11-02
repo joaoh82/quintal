@@ -1968,7 +1968,7 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#pullStatuses = statuses;
       this.#boardGithub = boardGithubOf(github);
       this.#boardReviews = reviews;
-      this.#boardRoutines = boardRoutinesOf(routines);
+      this.#boardRoutines = boardRoutinesOf(routines, routineRuns);
       this.#boardRoutineRuns = boardRoutineRunsOf(routineRuns);
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);

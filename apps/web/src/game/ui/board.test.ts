@@ -161,14 +161,16 @@ describe('the Routines tab', () => {
   const daily = routine('daily', { name: 'daily board look', agentId: 'zaphod', agentName: 'zaphod', ownerUserId: 'u2', scheduleLabel: 'daily at 09:00', nextDueAt: now + 5 * 3_600_000 });
   const paused = routine('paused', { name: 'weekly digest', paused: true, nextDueAt: null, command: { id: 'c1', name: 'digest' } });
   const once = routine('once', { name: 'check the deploy', nextDueAt: null, scheduleLabel: 'once, on 2 Nov 2026 at 09:00' });
+  /** A once routine whose agent was away: its slot is claimed, missed, and waits for the agent. */
+  const waiting = routine('waiting', { name: 'check the deploy', nextDueAt: null, awaitingMakeUp: true, scheduleLabel: 'once, on 2 Nov 2026 at 09:00' });
   const runs = [
     run('r1', { routineId: 'hourly', dueAt: now - 97 * 60_000, outcome: 'missed', note: 'away' }),
     run('r2', { routineId: 'hourly', dueAt: now - 37 * 60_000, firedAt: now - 37 * 60_000 + 3_000 }),
     run('r3', { routineId: 'daily', dueAt: now - 19 * 3_600_000, outcome: 'skipped', note: 'busy' }),
   ];
 
-  it('puts what fires next at the top, the paused and the spent at the bottom', () => {
-    assert.deepEqual(sortRoutines([paused, daily, once, hourly]).map((r) => r.id), ['hourly', 'daily', 'once', 'paused']);
+  it('puts what fires next at the top, then what waits for its agent, then the spent, then the paused', () => {
+    assert.deepEqual(sortRoutines([paused, once, daily, waiting, hourly]).map((r) => r.id), ['hourly', 'daily', 'waiting', 'once', 'paused']);
   });
 
   it('joins each routine to its runs, newest first, and says whose it is to pause', () => {
@@ -198,17 +200,22 @@ describe('the Routines tab', () => {
     assert.equal(routineMatches(running!, 'paused'), false, '"paused" finds only paused ones');
   });
 
-  it('says when a routine is next due in a few words', () => {
+  it('says when a routine is next due in a few words, and keeps "paused" for the owner’s doing', () => {
     assert.equal(dueLabel(hourly, now), 'in 23m');
     assert.equal(dueLabel(paused, now), 'paused');
-    assert.equal(dueLabel(once, now), 'done');
+    assert.equal(dueLabel(once, now), 'done', 'a once routine that was spoken');
+    assert.equal(dueLabel(waiting, now), 'when the agent is back', 'a once routine the agent was away for still fires');
+    assert.equal(dueLabel({ ...hourly, awaitingMakeUp: true }, now), 'in 23m', 'a missed slot on a repeating routine does not hide its next');
   });
 
   it("gives the agent's card one line: how many, and the next to fire", () => {
     assert.equal(routinesLine([], now), null, 'no row for an agent with none');
     assert.equal(routinesLine([paused, hourly], now), '2 · next hourly PR check in 23m');
+    assert.equal(routinesLine([paused, waiting], now), '2 · check the deploy when it is back', 'a slot waiting for the agent is the next to fire');
     assert.equal(routinesLine([paused], now), '1, paused');
-    assert.equal(routinesLine([paused, once], now), '2, all paused', 'a spent once routine fires nothing either');
+    assert.equal(routinesLine([once], now), '1, done');
+    assert.equal(routinesLine([paused, paused], now), '2, all paused');
+    assert.equal(routinesLine([paused, once], now), '2, nothing scheduled', 'a spent once routine is not paused');
   });
 
   it('hangs each agent’s routines on its row, soonest first, and the filter finds an agent by one', () => {
@@ -273,6 +280,7 @@ function routine(id: string, extra: Partial<BoardRoutineRef> = {}): BoardRoutine
     command: null,
     paused: false,
     nextDueAt: 0,
+    awaitingMakeUp: false,
     lastRunAt: null,
     createdByName: 'Josh',
     createdByAgentName: '',

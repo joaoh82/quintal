@@ -62,8 +62,16 @@ export function boardAgentsOf(agents: readonly BoardAgentRef[], grainMs = BOARD_
 /**
  * Routines as the board carries them: the row without its words. The
  * instructions and arguments stay in Settings and the DM (`BoardRoutineRef`).
+ * `awaitingMakeUp` is read off the runs: a routine whose newest slot is
+ * still `missed` fires when its agent is back, whatever its `nextDueAt`
+ * says — the rule the room applies (`missedRoutineRun`, `shouldMakeUp`).
  */
-export function boardRoutinesOf(routines: readonly RoutineSummary[]): BoardRoutineRef[] {
+export function boardRoutinesOf(routines: readonly RoutineSummary[], runs: readonly RoutineRunRef[] = []): BoardRoutineRef[] {
+  const newest = new Map<string, RoutineRunRef>();
+  for (const run of runs) {
+    const known = newest.get(run.routineId);
+    if (!known || run.dueAt > known.dueAt) newest.set(run.routineId, run);
+  }
   return routines.map((routine) => ({
     id: routine.id,
     agentId: routine.agentId,
@@ -75,6 +83,7 @@ export function boardRoutinesOf(routines: readonly RoutineSummary[]): BoardRouti
     command: routine.command,
     paused: routine.paused,
     nextDueAt: routine.nextDueAt,
+    awaitingMakeUp: newest.get(routine.id)?.outcome === 'missed',
     lastRunAt: routine.lastRunAt,
     createdByName: routine.createdByName,
     createdByAgentName: routine.createdByAgentName,

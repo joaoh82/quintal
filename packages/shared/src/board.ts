@@ -247,6 +247,12 @@ export interface BoardRoutineRef {
   paused: boolean;
   /** When it next fires; null when paused, or a once routine that has had its moment. */
   nextDueAt: number | null;
+  /**
+   * Whether its newest slot was missed and waits to be made up when the
+   * agent returns (`shouldMakeUp`). A once routine the agent was away for
+   * has no `nextDueAt` and is not done: this is what says so.
+   */
+  awaitingMakeUp: boolean;
   lastRunAt: number | null;
   /** Who set it up: the owner, and the agent that did it for them when one did. */
   createdByName: string;

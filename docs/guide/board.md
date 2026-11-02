@@ -58,7 +58,9 @@ came of its last run — with **Pause** and **Resume** on your own agent's.
 Every routine in the office, on whichever agent: a standing request on a
 schedule, kept by the office — "every hour, review the open pull requests".
 Each row says which agent it is on and whether that agent is here to hear
-it, how often it runs, when it is next due, and what came of its last slot:
+it, how often it runs, when it is next due — or that it fires when the
+agent is back, for a slot missed while it was away — and what came of its
+last slot:
 fired, made up when the agent came back, missed while it was away, or
 skipped because it was still on the previous run. **Runs** opens the
 newest ten. The routine's owner may **Pause** and **Resume** from here;

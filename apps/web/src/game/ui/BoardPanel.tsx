@@ -55,6 +55,7 @@ import {
   reviewLabel,
   routineMatches,
   routineRowsOf,
+  routineStanding,
   taskBadgeOf,
   wallOf,
   type AgentRow,
@@ -652,16 +653,27 @@ function AgentRoutines({
   );
 }
 
-/** `next in 23m`, `paused`, or `done`, in the tone of each. */
-function RoutineDue({ routine, now }: { routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt'>; now: number }) {
+/** `next in 23m`, `next when the agent is back`, `done` or `paused`, in the tone of each. */
+function RoutineDue({ routine, now }: { routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>; now: number }) {
   const label = dueLabel(routine, now);
-  if (routine.paused) return <span className="text-amber-200/80">paused</span>;
-  if (routine.nextDueAt === null) return <span>done</span>;
-  return (
-    <span title={new Date(routine.nextDueAt).toLocaleString()}>
-      next <span className="text-white/70">{label}</span>
-    </span>
-  );
+  switch (routineStanding(routine)) {
+    case 'paused':
+      return <span className="text-amber-200/80">paused</span>;
+    case 'done':
+      return <span>done</span>;
+    case 'waiting':
+      return (
+        <span title="Its slot was missed while the agent was away; it fires when the agent is back">
+          next <span className="text-amber-200/80">{label}</span>
+        </span>
+      );
+    case 'due':
+      return (
+        <span title={new Date(routine.nextDueAt!).toLocaleString()}>
+          next <span className="text-white/70">{label}</span>
+        </span>
+      );
+  }
 }
 
 /** What came of a slot, in the colour of the outcome: spoken, missed, or skipped. */
