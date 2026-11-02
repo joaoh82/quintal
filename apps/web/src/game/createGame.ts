@@ -52,6 +52,8 @@ export interface OfficeSession {
   decideApproval(requestId: string, optionId: ApprovalOptionId): void;
   /** Read a zone live wherever you stand, or stop. Lines arrive as `zoneChat`. */
   followZone(zoneId: string | null): void;
+  /** Ask for an agent's running turns, by `agents.id`. Answered over the bridge as `activityFollowed`. */
+  followActivity(agentId: string): void;
   /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
   joinChannel(slug: string): void;
   leaveChannel(channelId: string): void;
@@ -335,6 +337,9 @@ export async function createGame(
     },
     followZone(zoneId) {
       scene()?.followZone(zoneId);
+    },
+    followActivity(agentId) {
+      scene()?.followActivity(agentId);
     },
     joinChannel(slug) {
       scene()?.joinChannel(slug);

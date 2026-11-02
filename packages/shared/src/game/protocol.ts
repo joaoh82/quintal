@@ -36,6 +36,14 @@ export const ClientMessage = {
    * transcript you have open, not a wiretap on the office.
    */
   FollowZone: 'follow_zone',
+  /**
+   * Show me what this agent has open: its running turns, as `activity`
+   * messages, each only if I could already read the conversation it is in —
+   * a member of that channel or DM, within earshot, or following that zone.
+   * Answered with `activity_followed`, which says how many were withheld.
+   * Nothing to unfollow: updates reach me by the same rule, or do not.
+   */
+  ActivityFollow: 'activity_follow',
   /** Join a channel by its slug. Answered with `channels`. */
   ChannelJoin: 'channel_join',
   /** Leave a channel. Answered with `channels`. */
@@ -124,6 +132,8 @@ export const ServerMessage = {
   Notice: 'notice',
   /** The office board. In reply to `board_get`, and to everybody whenever it changes. */
   Board: 'board',
+  /** In reply to `activity_follow`: what was sent, and what was not. */
+  ActivityFollowed: 'activity_followed',
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -236,6 +246,23 @@ export interface DmOpenPayload {
 
 export interface FollowZonePayload {
   zoneId: string | null;
+}
+
+export interface ActivityFollowPayload {
+  /** `agents.id`: a roster entry's `identityId`. */
+  agentId: string;
+}
+
+export interface ActivityFollowedPayload {
+  agentId: string;
+  /** Turns of this agent still running that were sent, as `activity`. */
+  open: number;
+  /**
+   * Turns still running that were not, because they are in a conversation
+   * the asker is not in. The asker is told the count and nothing else: not
+   * where, not what.
+   */
+  withheld: number;
 }
 
 export interface ChannelJoinPayload {

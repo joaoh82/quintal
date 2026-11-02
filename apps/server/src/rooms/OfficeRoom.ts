@@ -122,6 +122,8 @@ import {
   type ChannelsPayload,
   type DmOpenPayload,
   type DmOpenedPayload,
+  type ActivityFollowPayload,
+  type ActivityFollowedPayload,
   type FollowZonePayload,
   type MembershipRole,
   type ZoneChatPayload,
@@ -333,6 +335,7 @@ import {
   type IdleRecord,
 } from './idle-life.js';
 import { SeatBook, seated, wantedPose } from './seating.js';
+import { canSeeTurn } from './audience.js';
 
 interface OfficeRoomOptions {
   mapId?: unknown;
@@ -664,6 +667,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.FollowZone, (client, payload: FollowZonePayload) =>
       this.#onFollowZone(client, payload),
+    );
+    this.onMessage(ClientMessage.ActivityFollow, (client, payload: ActivityFollowPayload) =>
+      this.#onActivityFollow(client, payload),
     );
     this.onMessage(ClientMessage.ChannelJoin, (client, payload: ChannelJoinPayload) =>
       void this.#onChannelJoin(client, payload),
@@ -3350,14 +3356,69 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #publishActivity(entry: { value: PublicActivity; x: number; y: number }): void {
     for (const client of this.clients) {
-      const player = this.state.players.get(client.sessionId);
-      if (!player || player.kind === 'agent') continue; // no wakeups, mentions or unread events
-      const visible = entry.value.channelId ? !!this.#channelFor(player.userId, entry.value.channelId) :
-        this.#followed.get(client.sessionId) === entry.value.zoneId ||
-        Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize;
-      if (visible) client.send('activity', { ...entry.value, nearby: !entry.value.channelId &&
-        Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize });
+      if (this.#canReadTurn(client, entry)) this.#sendActivity(client, entry);
     }
+  }
+
+  /**
+   * Whether this client may read this turn: `canSeeTurn`, with what the room
+   * knows about where the client stands and what it is in. Never an agent:
+   * they read conversations with `messages_get`, and a step sent to one would
+   * be a wakeup, a mention and an unread event it never asked for.
+   */
+  #canReadTurn(client: Client, entry: { value: PublicActivity; x: number; y: number }): boolean {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.kind === 'agent') return false;
+    return canSeeTurn(
+      entry.value,
+      entry,
+      {
+        x: player.x,
+        y: player.y,
+        inChannel: !!(entry.value.channelId && this.#channelFor(player.userId, entry.value.channelId)),
+        followedZone: this.#followed.get(client.sessionId) ?? null,
+      },
+      this.#settings.chatRadiusTiles * this.#map.tileSize,
+    );
+  }
+
+  #sendActivity(client: Client, entry: { value: PublicActivity; x: number; y: number }): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    client.send('activity', { ...entry.value, nearby: !entry.value.channelId &&
+      Math.hypot(player.x - entry.x, player.y - entry.y) <= this.#settings.chatRadiusTiles * this.#map.tileSize });
+  }
+
+  /**
+   * Somebody clicked an agent's desk. They get the agent's running turns —
+   * each one only if they could already read the conversation it is in,
+   * which is the same rule every step is published by — and a count of the
+   * ones they could not. The count is all they learn about those: a panel
+   * that said "working in #payroll" to somebody not in #payroll would be
+   * telling them the one thing the channel's membership exists to keep.
+   *
+   * Nothing is remembered: later steps reach them by the same rule, or do
+   * not, so there is nothing to unfollow when the panel closes.
+   */
+  #onActivityFollow(client: Client, payload: ActivityFollowPayload): void {
+    if (this.#agents.has(client.sessionId)) return;
+    const agentId = payload?.agentId;
+    if (typeof agentId !== 'string' || agentId.length === 0) {
+      this.#sendError(client, 'invalid_message', 'Which agent?');
+      return;
+    }
+    let open = 0;
+    let withheld = 0;
+    for (const entry of this.#activity.values()) {
+      if (entry.value.agentId !== agentId || activityTerminal(entry.value.state)) continue;
+      if (this.#canReadTurn(client, entry)) {
+        this.#sendActivity(client, entry);
+        open += 1;
+      } else {
+        withheld += 1;
+      }
+    }
+    client.send(ServerMessage.ActivityFollowed, { agentId, open, withheld } satisfies ActivityFollowedPayload);
   }
 
   #closeActivity(entry: { value: PublicActivity; owner: string; conversationId: string; x: number; y: number }, state: 'disconnected' | 'interrupted'): void {
