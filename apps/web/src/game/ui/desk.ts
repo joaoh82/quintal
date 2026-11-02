@@ -9,6 +9,7 @@ import {
   type MapZone,
   type PublicActivity,
   type RosterEntry,
+  type ActivityState,
 } from '@quintal/shared';
 
 import { NEARBY, channelKey, parseKey, zoneKey, type ConversationKey } from '../conversationKey';
@@ -56,6 +57,21 @@ function newer(candidate: PublicActivity, held: PublicActivity): boolean {
   const heldOpen = !activityTerminal(held.state);
   if (candidateOpen !== heldOpen) return candidateOpen;
   return candidate.updatedAt > held.updatedAt;
+}
+
+/**
+ * What the screen says above a turn a routine started: its name, and
+ * whether it is still that routine's turn. A turn that names no routine
+ * is somebody's question, and gets no caption. The name comes from the
+ * turn itself (`AgentActivity.routine`), which the harness set from the
+ * brief the routine's line carried. `shown` is the state the row draws,
+ * which is the turn's own unless the row has judged it stale and shows
+ * `disconnected`: the caption must not claim work the row has given up on.
+ */
+export function routineCaption(activity: PublicActivity, shown: ActivityState = activity.state): string | null {
+  const name = activity.routine?.name;
+  if (!name) return null;
+  return activityTerminal(shown) ? `Was on its routine ${name}` : `On its routine ${name}`;
 }
 
 /** The conversation a turn is in, as this client names it. */

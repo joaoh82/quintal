@@ -95,7 +95,7 @@ export function DeskPanel({
       <section className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/65 p-3 text-white backdrop-blur-sm">
         <h3 className="text-[10px] uppercase tracking-wide text-white/40">On the screen</h3>
         {turn ? (
-          <TurnActivity activity={turn.activity} detailLevel={activityDetailLevel} />
+          <TurnActivity activity={turn.activity} detailLevel={activityDetailLevel} routine />
         ) : (
           <p className="text-xs text-white/60">
             {entry.status ? entry.status : 'Nothing running.'}
