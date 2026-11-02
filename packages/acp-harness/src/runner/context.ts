@@ -346,7 +346,7 @@ export function routineSection(command: AgentCommandCall, fromName: string): str
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update, command_list, command_get, command_create, command_update.',
+  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update, command_list, command_get, command_create, command_update, routine_list, routine_get, routine_create, routine_update, routine_delete.',
   'say posts a line now, into the conversation this turn is in — use it to say',
   'you have picked something up and to report when it lands or blocks, rather',
   'than holding everything for your final answer. Your final answer is posted',
@@ -364,6 +364,12 @@ export const TOOL_HINT = [
   'commands there are or what one does, read them with command_list and command_get',
   'rather than guessing; when asked to make or change one, use command_create or',
   'command_update — describing a command in conversation does not make it exist.',
+  'When asked to do something on a schedule or later — "every hour, check the PRs",',
+  '"tomorrow at 9, …" — make a routine with routine_create rather than any loop, timer,',
+  'cron or scheduler of your runtime\'s own: the office keeps it and fires it after this',
+  'session ends, as a line in your owner\'s direct message with the agent it is on — you,',
+  'unless you put it on another of your owner\'s agents. routine_list says what there',
+  'already is; to stop one, routine_update with paused, or routine_delete.',
 ].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */

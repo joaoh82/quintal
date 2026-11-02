@@ -377,6 +377,108 @@ const TOOLS = [
     },
   },
   {
+    name: 'routine_list',
+    description:
+      'The routines on you and on your owner\'s other agents. A routine is a standing request with ' +
+      'a schedule — "every hour, review the open pull requests" — that the office keeps and speaks ' +
+      'to the agent in its owner\'s direct message when it is due, session or no session. Each comes ' +
+      'with its schedule in words, when it next fires, when it last ran, whether it is paused, and ' +
+      'what it asks. Read this when asked what you do on a schedule, and before making one that ' +
+      'might already exist. Pass agent to see one agent\'s.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string', description: 'An agent by name, or "me". Omit for every agent of your owner\'s.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'routine_get',
+    description:
+      'One routine by name (or id), with its last twenty runs and what came of each: fired; missed ' +
+      '(the agent was away); made up (fired late, when it came back); skipped (it was still on the ' +
+      'previous run, or the routine had no door and was paused). Read a routine before changing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        routine: { type: 'string', description: 'Its name as routine_list shows it, or its id.' },
+        agent: { type: 'string', description: 'Needed only when two of your owner\'s agents have a routine of that name.' },
+      },
+      required: ['routine'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'routine_create',
+    description:
+      'Make a routine, as your owner, on yourself or on one of your owner\'s agents. Use this ' +
+      'whenever you are asked to do something on a schedule or later — "every hour, check the PRs", ' +
+      '"weekdays at 9, say what you could pick up", "in an hour, check the deploy went out" — rather ' +
+      'than any loop, timer, cron or scheduler of your runtime\'s own: the office keeps it, fires it ' +
+      'in your owner\'s direct message with the agent after this session is gone, shows it on the ' +
+      'agent\'s card and records every run. Say when as people say it ("every 15 minutes", "hourly", ' +
+      '"daily at 9", "weekdays at 17:30", "every monday at 9", "in 45 minutes", "tomorrow at 9") or as ' +
+      'a cron line of five fields; clock times are read in this machine\'s zone. Nothing tighter than ' +
+      'every ten minutes; up to twenty per agent. Give it instructions that say what to do and what to ' +
+      'report, or name one of the office\'s !commands to run each time (with args for it), or both. ' +
+      'Say back the schedule the office returns — that is how it read you. Never make one nobody asked for.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'A short label, one line: "hourly PR check".' },
+        when: { type: 'string', description: 'The schedule, as a phrase or a cron line of five fields.' },
+        agent: { type: 'string', description: '"me" (the default), or one of your owner\'s agents by name.' },
+        instructions: {
+          type: 'string',
+          description: 'What it asks each time, up to 16,000 characters. With a command, these come after the command\'s.',
+        },
+        command: { type: 'string', description: 'One of the office\'s !commands to run each time, by name.' },
+        args: { type: 'string', description: 'What to give the command, as a person would type after it.' },
+      },
+      required: ['name', 'when'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'routine_update',
+    description:
+      'Change a routine on you or on one of your owner\'s agents: its name, schedule, instructions, ' +
+      'command or args; pause or resume it with paused. Only what you pass changes; instructions ' +
+      'replace whole, so read it with routine_get first. A new schedule counts from now. When asked ' +
+      'to stop doing something on a schedule, pause it — agreeing in conversation changes nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        routine: { type: 'string', description: 'Its name as routine_list shows it, or its id.' },
+        agent: { type: 'string', description: 'Needed only when two of your owner\'s agents have a routine of that name.' },
+        new_name: { type: 'string' },
+        when: { type: 'string', description: 'A new schedule, as a phrase or a cron line.' },
+        instructions: { type: 'string', description: 'The whole new instructions.' },
+        command: { type: ['string', 'null'], description: 'A !command by name, or null to run its own instructions only.' },
+        args: { type: 'string' },
+        paused: { type: 'boolean', description: 'true pauses it, kept but not fired; false resumes it from now.' },
+      },
+      required: ['routine'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'routine_delete',
+    description:
+      'Delete a routine on you or on one of your owner\'s agents, with its run history. Only when ' +
+      'asked; when somebody may want it back, pause it instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        routine: { type: 'string', description: 'Its name as routine_list shows it, or its id.' },
+        agent: { type: 'string', description: 'Needed only when two of your owner\'s agents have a routine of that name.' },
+      },
+      required: ['routine'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'memory_get',
     description:
       'Read one of your memory slugs. "core" holds your identity, standing ' +
