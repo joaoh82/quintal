@@ -2,6 +2,7 @@ import {
   RECONNECTION_SECONDS,
   type ApprovalOptionId,
   type BoardCreatePayload,
+  type DeskBeginPayload,
   type BoardPullActionPayload,
   type BoardPullReviewPayload,
   type BoardRoutinePausePayload,
@@ -55,6 +56,8 @@ export interface OfficeSession {
   followZone(zoneId: string | null): void;
   /** Ask for an agent's running turns, by `agents.id`. Answered over the bridge as `activityFollowed`. */
   followActivity(agentId: string): void;
+  /** Begin a task at an empty desk for one of your agents. Answered over the bridge as `deskBegun`, or as a `notice`. */
+  beginAtDesk(payload: DeskBeginPayload): void;
   /** Join a channel by slug, or leave one by id. The office answers with `channels`. */
   joinChannel(slug: string): void;
   leaveChannel(channelId: string): void;
@@ -343,6 +346,9 @@ export async function createGame(
     },
     followActivity(agentId) {
       scene()?.followActivity(agentId);
+    },
+    beginAtDesk(payload) {
+      scene()?.beginAtDesk(payload);
     },
     joinChannel(slug) {
       scene()?.joinChannel(slug);

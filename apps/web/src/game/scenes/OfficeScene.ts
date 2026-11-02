@@ -33,6 +33,8 @@ import {
   type ChannelsPayload,
   type ActivityFollowPayload,
   type ActivityFollowedPayload,
+  type DeskBeginPayload,
+  type DeskBegunPayload,
   type FollowZonePayload,
   type ZoneChatPayload,
   type ChatBroadcastPayload,
@@ -144,8 +146,8 @@ export class OfficeScene extends Phaser.Scene {
   #currentTile: TilePoint = { x: -1, y: -1 };
   /** What we stand by, if anything. Published for the HUD's "E · open the board". */
   #interactable: MapInteractable | null = null;
-  /** The prop of each interactable, by interactable id: what lights up and what you click. */
-  readonly #interactableSprites = new Map<string, Phaser.GameObjects.Image>();
+  /** The handle of each interactable, by id: the prop you click, or a desk's screen. */
+  readonly #interactableSprites = new Map<string, Phaser.GameObjects.GameObject>();
   /** The halo behind each of those props, and the breathing it does while you stand by. */
   readonly #halos = new Map<string, { halo: Phaser.GameObjects.Rectangle; breath: Phaser.Tweens.Tween | null }>();
   /** The screen of each desk, by seat id: a click on it is a click on whoever holds the desk. */
@@ -360,6 +362,9 @@ export class OfficeScene extends Phaser.Scene {
     room.onMessage(ServerMessage.ActivityFollowed, (followed: ActivityFollowedPayload) => {
       this.#bridge.emit('activityFollowed', followed);
     });
+    room.onMessage(ServerMessage.DeskBegun, (begun: DeskBegunPayload) => {
+      this.#bridge.emit('deskBegun', begun);
+    });
     // Asked for here, after the handlers exist, and not pushed by the server on
     // join — a message sent before anybody is listening is sent to nobody.
     room.send(ClientMessage.HistoryGet, {});
@@ -518,8 +523,8 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     // A click on somebody, or on the screen of a desk somebody holds, opens
-    // their card; a click on the noticeboard uses it; a click anywhere else
-    // walks there.
+    // their card; a click on the noticeboard, or on an empty desk's screen,
+    // uses it; a click anywhere else walks there.
     this.input.on(
       'pointerdown',
       (pointer: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
@@ -687,16 +692,29 @@ export class OfficeScene extends Phaser.Scene {
 
   /**
    * One hit area per desk screen, from the map's seats. Nothing is drawn: the
-   * desk sprite already has its monitor. The pointer becomes a hand over it
-   * only while somebody holds the desk — see `#publishRoster` — because a
-   * hand over an empty desk promises something a click does not yet do.
+   * desk sprite already has its monitor. The screen is also the handle of
+   * the seat's `desk` interactable, so it lights up like the noticeboard —
+   * under the pointer, and while you stand behind the chair — and a click on
+   * it when nobody holds the desk uses the desk. The halo sits over the desk
+   * and under the chair, in the room's own depth order.
    */
   #createScreens(): void {
     for (const seat of this.#map.seats) {
       if (!seat.screen) continue;
       const { x, y, width, height } = seat.screen;
-      const zone = this.add.zone(x + width / 2, y + height / 2, width, height).setInteractive();
+      const zone = this.add
+        .zone(x + width / 2, y + height / 2, width, height)
+        .setInteractive({ useHandCursor: true });
       this.#screens.set(seat.id, zone);
+      const desk = this.#map.interactables.find((interactable) => interactable.kind === 'desk' && interactable.id === seat.id);
+      if (!desk) continue;
+      this.#interactableSprites.set(desk.id, zone);
+      const halo = this.add
+        .rectangle(zone.x, zone.y, width + HALO_PADDING * 2, height + HALO_PADDING * 2, HALO_COLOUR, 0)
+        .setDepth(zone.y + this.#map.tileSize);
+      this.#halos.set(desk.id, { halo, breath: null });
+      zone.on('pointerover', () => this.#light(desk.id));
+      zone.on('pointerout', () => this.#light(desk.id));
     }
   }
 
@@ -878,6 +896,11 @@ export class OfficeScene extends Phaser.Scene {
     this.#room.send(ClientMessage.ActivityFollow, { agentId } satisfies ActivityFollowPayload);
   }
 
+  /** Begin a task at an empty desk for one of your agents. Answered over the bridge as `deskBegun`, or as a `notice`. */
+  beginAtDesk(payload: DeskBeginPayload): void {
+    this.#room.send(ClientMessage.DeskBegin, payload);
+  }
+
   joinChannel(slug: string): void {
     this.#room.send(ClientMessage.ChannelJoin, { slug } satisfies ChannelJoinPayload);
   }
@@ -1029,9 +1052,7 @@ export class OfficeScene extends Phaser.Scene {
 
   #publishRoster(): void {
     const players: RosterEntry[] = [];
-    const held = new Set<string>();
     for (const [sessionId, player] of this.#room.state.players) {
-      if (player.seat) held.add(player.seat);
       players.push({
         sessionId,
         name: player.name,
@@ -1051,6 +1072,7 @@ export class OfficeScene extends Phaser.Scene {
         emote: player.emote,
         workingIn: player.workingIn,
         workingSince: player.workingSince,
+        seat: player.seat,
         isGuest: player.isGuest,
         description: player.description,
         pubkey: player.pubkey,
@@ -1059,16 +1081,13 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
-    for (const [seatId, screen] of this.#screens) {
-      if (screen.input) screen.input.cursor = held.has(seatId) ? 'pointer' : 'default';
-    }
 
     // Cheaper than it looks, and far cheaper than re-rendering a React list
     // twenty times a second because somebody took a step.
     const signature = players
       .map(
         (p) =>
-          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}:${p.task ? `${p.task.branch}#${p.task.pr?.number ?? ''}${p.task.pr?.state ?? ''}${p.task.pr?.url ?? ''}${p.task.title}` : ''}`,
+          `${p.sessionId}:${p.name}:${p.kind}:${p.status}:${p.ownerName}:${p.isSelf ? 1 : 0}:${p.isGuest ? 1 : 0}:${p.zoneId}:${p.emote}:${p.workingIn}:${p.workingSince}:${p.seat}:${p.task ? `${p.task.branch}#${p.task.pr?.number ?? ''}${p.task.pr?.state ?? ''}${p.task.pr?.url ?? ''}${p.task.title}` : ''}`,
       )
       .join('|');
     if (signature === this.#rosterSignature) return;

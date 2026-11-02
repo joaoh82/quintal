@@ -58,6 +58,7 @@ function entry(over: Partial<RosterEntry>): RosterEntry {
     emote: '',
     workingIn: '',
     workingSince: 0,
+    seat: '',
     isGuest: false,
     description: '',
     pubkey: '',

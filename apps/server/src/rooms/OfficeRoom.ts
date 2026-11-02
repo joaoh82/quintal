@@ -177,9 +177,12 @@ import {
   noteForTask,
   parseBoardCreate,
   parseBoardUpdate,
+  parseDeskBegin,
   type AgentTask,
   type BoardAgentRef,
   type BoardDeletePayload,
+  type DeskBeginPayload,
+  type DeskBegunPayload,
   type BoardGithubRef,
   type BoardPullActionPayload,
   type BoardPullRefreshPayload,
@@ -274,6 +277,7 @@ import {
 } from '@quintal/shared/db';
 import { loadOfficeMap } from '@quintal/shared/maps';
 import {
+  BOARD_DEFAULT_COLOR,
   EarshotTracker,
   parseMcpStatus,
   tileBeside,
@@ -322,6 +326,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
+import { handedFrom, whyNotBegin, whyNotNote } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
 /** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
@@ -699,6 +704,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.ActivityFollow, (client, payload: ActivityFollowPayload) =>
       this.#onActivityFollow(client, payload),
+    );
+    this.onMessage(ClientMessage.DeskBegin, (client, payload: DeskBeginPayload) =>
+      void this.#onDeskBegin(client, payload),
     );
     this.onMessage(ClientMessage.ChannelJoin, (client, payload: ChannelJoinPayload) =>
       void this.#onChannelJoin(client, payload),
@@ -1098,6 +1106,10 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#credentials.set(client.sessionId, credential);
     this.#idle.set(client.sessionId, newIdleRecord(Date.now()));
     this.#seats.arrived(identity.id);
+    // The desk it kept from last time, if any: whose it is shows from the door.
+    const kept = this.#seats.seatOf(identity.id);
+    const body = this.state.players.get(client.sessionId);
+    if (kept !== undefined && body && body.seat !== kept) body.seat = kept;
 
     audit(identity.id, 'session.connected', {
       sessionId: client.sessionId,
@@ -2446,14 +2458,16 @@ export class OfficeRoom extends Room<OfficeState> {
    * Each line goes only where the person could have said it themselves:
    * `#dmWith` answers to `mayOpenDm`, so a note taken off a colleague's
    * agent, or handed to one that lives only in public, is on the board and
-   * nowhere else.
+   * nowhere else. Returns the DM the hand-over was said in, or null when it
+   * could not be said anywhere.
    */
   async #announceAssignment(
     sessionId: string,
     assigner: OfficePlayer,
     before: BoardItemRef,
     after: BoardItemRef,
-  ): Promise<void> {
+  ): Promise<string | null> {
+    let saidIn: string | null = null;
     try {
       const actor = await this.#actorFor(assigner);
       if (after.assignee) {
@@ -2467,6 +2481,7 @@ export class OfficeRoom extends Room<OfficeState> {
             undefined,
             assignmentBrief(after),
           );
+          saidIn = channel.id;
         }
       }
       if (before.assignee) {
@@ -2483,6 +2498,160 @@ export class OfficeRoom extends Room<OfficeState> {
     } catch (error: unknown) {
       logger.error('[office] could not say who a board note went to', error);
     }
+    return saidIn;
+  }
+
+  /**
+   * A task begun at an empty desk, from the station panel: the inverse of
+   * walking up to a busy one. Nothing new reaches the agent. The note — one
+   * picked from the board, or one written now from the title typed, in "in
+   * progress" and assigned — is handed over exactly as from the board: a
+   * line in the person's DM with the agent, the brief attached, which wakes
+   * it. What is new is the desk: it is the agent's from this moment, so the
+   * turn the hand-over starts walks it there and not to whatever desk it
+   * had. The board stays the record; nothing is tracked only by a chair.
+   *
+   * Only for an agent of the asker's that can take it (`whyNotBegin`: here,
+   * idle, on no task, and able to be woken and to walk), because handing a
+   * note over is the owner's to do (`#mayHandTo`), and only for a desk
+   * nobody present holds: a chair is one agent's at a time. The desk is
+   * taken in the same tick as that check, before the board is written —
+   * the seating sweep runs between any two awaits and gives the first free
+   * desk to whoever wants one — and given back if the write fails.
+   */
+  async #onDeskBegin(client: Client, payload: DeskBeginPayload): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const asked = parseDeskBegin(payload);
+    if (!asked) {
+      this.#sendError(client, 'invalid_payload', 'Name the desk, the agent, and a note or a title.');
+      return;
+    }
+    if (!this.#seatNamed(asked.seatId)) {
+      this.#sendError(client, 'not_found', 'No such desk.');
+      return;
+    }
+    if (!(await this.#mayHandTo(client, writer, asked.agentId, 'begins tasks for them'))) return;
+
+    // The note, if picked, as the board has it now: open, or not to be begun.
+    let picked: BoardItemRef | null = null;
+    if (asked.what.kind === 'note') {
+      try {
+        picked = await getBoardItem(getDb(), this.#workspaceId, asked.what.itemId);
+      } catch (error: unknown) {
+        this.#boardRefused(client, error);
+        return;
+      }
+      if (!picked) {
+        this.#sendError(client, 'not_found', 'That note is no longer on the board.');
+        return;
+      }
+      const why = whyNotNote(picked);
+      if (why) {
+        this.#sendError(client, 'invalid_payload', why);
+        return;
+      }
+    }
+
+    // From here to the reservation nothing is awaited: the agent and the
+    // desk are judged and the desk taken in one tick.
+    const agentSessionId = this.#sessionOfAgent(asked.agentId);
+    const agent = agentSessionId ? this.state.players.get(agentSessionId) : undefined;
+    const identity = agentSessionId ? this.#agents.get(agentSessionId) : undefined;
+    const refused = whyNotBegin({
+      name: identity?.name ?? 'That agent',
+      here: agent !== undefined && identity !== undefined,
+      status: agent?.status ?? '',
+      onTask: (agent?.taskBranch.length ?? 0) > 0,
+      scopes: identity?.scopes ?? [],
+    });
+    if (refused || !agent) {
+      this.#sendError(client, refused && agent ? 'invalid_payload' : 'not_found', refused ?? 'That agent is not in the office.');
+      return;
+    }
+    const holder = this.#seats.holderOf(asked.seatId);
+    const previous = this.#seats.seatOf(asked.agentId);
+    if (
+      (holder !== undefined && holder !== asked.agentId && this.#hasAgentSession(holder)) ||
+      !this.#seats.reserve(asked.agentId, asked.seatId, Date.now())
+    ) {
+      this.#sendError(client, 'invalid_payload', 'That desk is taken.');
+      return;
+    }
+    const giveBack = (): void => {
+      if (previous === undefined || !this.#seats.reserve(asked.agentId, previous, Date.now())) {
+        this.#seats.release(asked.agentId);
+      }
+    };
+
+    let before: BoardItemRef;
+    let after: BoardItemRef;
+    try {
+      const db = getDb();
+      if (picked) {
+        before = picked;
+        after = await updateBoardItem(db, {
+          workspaceId: this.#workspaceId,
+          itemId: picked.id,
+          assigneeAgentId: asked.agentId,
+        });
+        this.#boardEvent({
+          kind: 'item.updated',
+          actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+          itemId: after.id,
+          payload: { number: after.number, changed: ['assigneeAgentId'] },
+        });
+      } else if (asked.what.kind === 'typed') {
+        after = await createBoardItem(db, {
+          workspaceId: this.#workspaceId,
+          title: asked.what.title,
+          body: asked.what.body,
+          status: 'in_progress',
+          color: BOARD_DEFAULT_COLOR,
+          labels: [],
+          assigneeAgentId: asked.agentId,
+          createdBy: { userId: writer.player.userId },
+        });
+        before = { ...after, assignee: null };
+        this.#boardEvent({
+          kind: 'item.created',
+          actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
+          itemId: after.id,
+          payload: { number: after.number, title: after.title, assignee: after.assignee?.name ?? null },
+        });
+      } else {
+        giveBack();
+        return;
+      }
+    } catch (error: unknown) {
+      giveBack();
+      this.#boardRefused(client, error);
+      return;
+    }
+
+    // The room shows whose the desk is before the line wakes the agent; the
+    // sweep that follows sends it to the desk it holds *now*.
+    if (agent.seat !== asked.seatId) agent.seat = asked.seatId;
+    await this.#refreshBoard();
+    const channelId = await this.#announceAssignment(
+      client.sessionId,
+      writer.player,
+      handedFrom(before, asked.agentId),
+      after,
+    );
+    client.send(ServerMessage.DeskBegun, {
+      seatId: asked.seatId,
+      agentId: asked.agentId,
+      itemId: after.id,
+      number: after.number,
+      channelId,
+    } satisfies DeskBegunPayload);
+  }
+
+  /** The session an agent is connected on, if it is here. The first, when it is here twice. */
+  #sessionOfAgent(agentId: string): string | null {
+    for (const [sessionId, identity] of this.#agents) if (identity.id === agentId) return sessionId;
+    return null;
   }
 
   /**
@@ -5281,9 +5450,13 @@ export class OfficeRoom extends Room<OfficeState> {
           break;
         case 'walk': {
           const chair = this.#seatNamed(plan.seat);
+          if (!chair) break;
+          // Given at the claim, not on arrival: the room shows whose the desk
+          // is while it walks, and after a route it could not take.
+          if (player.seat !== chair.id) player.seat = chair.id;
           // Arranged only once the walk is under way: a desk it cannot reach
           // from here is asked about again, not written off.
-          if (chair && this.walkTo(sessionId, chair.tile.x, chair.tile.y)) {
+          if (this.walkTo(sessionId, chair.tile.x, chair.tile.y)) {
             sim.arranged = plan.pose;
             sim.seatWalk = true;
           }

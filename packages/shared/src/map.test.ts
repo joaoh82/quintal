@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { nearestStandingTile, tileBeside, type MapInteractable, type OfficeMap } from './map.js';
+import { deskOf, nearestStandingTile, tileBeside, type MapInteractable, type MapSeat, type OfficeMap } from './map.js';
 
 /**
  * Where an agent stands when it has been asked to come to somebody.
@@ -97,6 +97,24 @@ describe('finding a tile beside somebody', () => {
       null,
       'null is a refusal the caller can report, not a tile in a wall',
     );
+  });
+});
+
+describe('the desk a seat makes', () => {
+  const open = { width: 3, height: 3, walkable: Array<boolean>(9).fill(true) };
+  const seat = (facing: MapSeat['facing']): MapSeat => ({ id: 'bay-1', tile: { x: 1, y: 1 }, facing, screen: null });
+
+  it('puts the doorstep behind the chair', () => {
+    assert.deepEqual(deskOf(seat('up'), open).bounds, { x: 1, y: 2, width: 1, height: 1 });
+    assert.deepEqual(deskOf(seat('left'), open).bounds, { x: 2, y: 1, width: 1, height: 1 });
+    assert.equal(deskOf(seat('up'), open).id, 'bay-1', 'named for its seat');
+  });
+
+  it('moves it to a side when behind the chair is not floor', () => {
+    const walled = { ...open, walkable: open.walkable.map((_, i) => i !== 7) };
+    assert.deepEqual(deskOf(seat('up'), walled).bounds, { x: 0, y: 1, width: 1, height: 1 });
+    const boxed = { ...open, walkable: open.walkable.map((_, i) => i !== 7 && i !== 3) };
+    assert.deepEqual(deskOf(seat('up'), boxed).bounds, { x: 2, y: 1, width: 1, height: 1 });
   });
 });
 

@@ -4,6 +4,7 @@ import {
   type ActivityDetailLevel,
   type ActivityFollowedPayload,
   type ConnectionStatus,
+  type DeskBeginPayload,
   type MapInteractable,
   type MapZone,
   type RosterEntry,
@@ -17,7 +18,7 @@ import { subscribeActivityDetailLevel } from '@/lib/activity-preference';
 
 import { nextWaiting } from './alerts';
 import { gameBridge } from './bridge';
-import type { ConversationKey } from './conversationKey';
+import { channelKey, type ConversationKey } from './conversationKey';
 import type { OfficeSession } from './createGame';
 import { BoardPanel } from './ui/BoardPanel';
 import { ChatPanel } from './ui/ChatPanel';
@@ -26,6 +27,8 @@ import { DeskPanel } from './ui/DeskPanel';
 import { HelpPanel } from './ui/HelpPanel';
 import { Minimap } from './ui/Minimap';
 import { RosterPanel, canMessage } from './ui/RosterPanel';
+import { StationPanel } from './ui/StationPanel';
+import { holderOf, promptFor } from './ui/station';
 import { VoiceBar } from './ui/VoiceBar';
 import { useAlerts } from './useAlerts';
 import { useBoard } from './useBoard';
@@ -38,7 +41,7 @@ interface Hud {
   zone: MapZone | null;
   debug: boolean;
   pathLength: number;
-  /** What you stand by, if anything: the noticeboard, for "E · open the board". */
+  /** What you stand by, if anything: the noticeboard or a desk, for the "E · …" offer. See `promptFor`. */
   near: MapInteractable | null;
 }
 
@@ -104,6 +107,10 @@ export default function OfficeGame({
   /** Counts clicks, so clicking the same agent again asks the office again. */
   const [inspectCount, setInspectCount] = useState(0);
   const [followed, setFollowed] = useState<ActivityFollowedPayload | null>(null);
+  /** The empty desk the station panel is open on, by seat id. */
+  const [station, setStation] = useState<string | null>(null);
+  /** Begin pressed; the office has not answered yet. */
+  const [stationPending, setStationPending] = useState(false);
   /** How tall the chat box is, so the desk panel ends above it rather than under it. */
   const [chatHeight, setChatHeight] = useState(0);
   const chatRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +133,23 @@ export default function OfficeGame({
     [select],
   );
   useAlerts(conversations, roster, overlayOpen, openConversation);
+
+  // A desk is two things. Held, it is a window on its holder: using it opens
+  // their card, as clicking them does. Empty, it is where a task begins.
+  // Decided when it is used, from the roster as it stands.
+  const rosterRef = useRef(roster);
+  rosterRef.current = roster;
+  const openDesk = useCallback((desk: MapInteractable) => {
+    const holder = holderOf(rosterRef.current, desk.id);
+    if (holder) {
+      setStation(null);
+      setInspected(holder.sessionId);
+      setInspectCount((count) => count + 1);
+    } else {
+      setInspected(null);
+      setStation(desk.id);
+    }
+  }, []);
 
   useEffect(() => {
     if (!hint) return;
@@ -185,9 +209,10 @@ export default function OfficeGame({
         !event.ctrlKey &&
         !event.altKey &&
         !typingElsewhere() &&
-        nearRef.current?.kind === 'board'
+        nearRef.current
       ) {
-        setBoardOpen(true);
+        if (nearRef.current.kind === 'board') setBoardOpen(true);
+        else openDesk(nearRef.current);
       } else if (
         (event.key === 'n' || event.key === 'N') &&
         !event.metaKey &&
@@ -203,7 +228,7 @@ export default function OfficeGame({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [overlayKey, openConversation]);
+  }, [overlayKey, openConversation, openDesk]);
 
   // Alt+B (Option+B) is the board from anywhere: with the chat box or a
   // panel's field holding the keyboard too, where a bare B is a letter.
@@ -294,12 +319,14 @@ export default function OfficeGame({
       gameBridge.on('debug', ({ enabled }) => setHud((prev) => ({ ...prev, debug: enabled }))),
       gameBridge.on('path', ({ length }) => setHud((prev) => ({ ...prev, pathLength: length }))),
       gameBridge.on('interactable', ({ interactable }) => setHud((prev) => ({ ...prev, near: interactable }))),
-      // Clicked the noticeboard and arrived, or pressed E by it: the board opens.
+      // Clicked the noticeboard or a desk and arrived, or pressed E by it.
       gameBridge.on('interact', ({ interactable }) => {
         if (interactable.kind === 'board') setBoardOpen(true);
+        else openDesk(interactable);
       }),
       gameBridge.on('roster', ({ players }) => setRoster(players)),
       gameBridge.on('inspect', ({ sessionId }) => {
+        setStation(null);
         setInspected(sessionId);
         setInspectCount((count) => count + 1);
       }),
@@ -315,7 +342,30 @@ export default function OfficeGame({
     return () => {
       for (const off of unsubscribe) off();
     };
-  }, []);
+  }, [openDesk]);
+
+  // The office answered Begin: the task is on, the hand-over said. The
+  // station closes and the DM it was said in opens, where the agent's
+  // reply — picked up, or why not — will land. A refusal comes as a notice
+  // and only lets go of the button.
+  useEffect(() => {
+    const unsubscribe = [
+      gameBridge.on('deskBegun', (begun) => {
+        setStationPending(false);
+        setStation(null);
+        if (begun.channelId) openConversation(channelKey(begun.channelId));
+        else setHint(`#${begun.number} is on the board, begun.`);
+      }),
+      gameBridge.on('notice', () => setStationPending(false)),
+    ];
+    return () => {
+      for (const off of unsubscribe) off();
+    };
+  }, [openConversation]);
+  // Somebody sat down at the desk while the panel was open: it is theirs now.
+  useEffect(() => {
+    if (station && holderOf(roster, station)) setStation(null);
+  }, [station, roster]);
 
   /**
    * Enter opens the chat box from anywhere on the page; Escape hands the
@@ -326,7 +376,7 @@ export default function OfficeGame({
    * stays out of the way.
    */
   useEffect(() => {
-    if (overlayOpen || boardOpen) return;
+    if (overlayOpen || boardOpen || station) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' && !chatFocused) {
         event.preventDefault();
@@ -357,12 +407,12 @@ export default function OfficeGame({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [chatFocused, overlayOpen, boardOpen]);
+  }, [chatFocused, overlayOpen, boardOpen, station]);
 
   // One place decides whether the office or a text box owns the keyboard.
   useEffect(() => {
-    sessionRef.current?.setInputCaptured(chatFocused || overlayOpen || boardOpen);
-  }, [chatFocused, overlayOpen, boardOpen]);
+    sessionRef.current?.setInputCaptured(chatFocused || overlayOpen || boardOpen || station !== null);
+  }, [chatFocused, overlayOpen, boardOpen, station]);
 
   const openDm = useCallback(
     (entry: RosterEntry) => conversations.openDm({ memberId: entry.identityId }),
@@ -407,6 +457,14 @@ export default function OfficeGame({
     return () => observer.disconnect();
   }, []);
   const closeDesk = useCallback(() => setInspected(null), []);
+  const closeStation = useCallback(() => {
+    setStation(null);
+    setStationPending(false);
+  }, []);
+  const beginAtDesk = useCallback((payload: DeskBeginPayload) => {
+    setStationPending(true);
+    sessionRef.current?.beginAtDesk(payload);
+  }, []);
   const viewer = roster.find((player) => player.isSelf);
   const messageInspected =
     inspectedEntry && canMessage(viewer, inspectedEntry)
@@ -450,11 +508,22 @@ export default function OfficeGame({
         />
       </div>
 
-      {inspectedEntry && !boardOpen && !overlayOpen ? (
+      {(station || inspectedEntry) && !boardOpen && !overlayOpen ? (
         <div
           className="pointer-events-none absolute left-3 top-3 flex items-start"
           style={{ bottom: `calc(2.5rem + ${chatHeight}px + 0.5rem)` }}
         >
+          {station ? (
+            <StationPanel
+              seatId={station}
+              roster={roster}
+              items={board.items}
+              you={userId}
+              pending={stationPending}
+              onClose={closeStation}
+              onBegin={beginAtDesk}
+            />
+          ) : inspectedEntry ? (
           <DeskPanel
             entry={inspectedEntry}
             transcripts={conversations.transcripts}
@@ -468,6 +537,7 @@ export default function OfficeGame({
             onOpenConversation={goFromDesk}
             routines={board.routines.filter((routine) => routine.agentId === inspectedEntry.identityId)}
           />
+          ) : null}
         </div>
       ) : null}
 
@@ -507,15 +577,15 @@ export default function OfficeGame({
         </div>
       ) : null}
 
-      {/* Standing by the noticeboard. The notice and the hint take the same
-          spot and have something to say; this is only an offer. */}
+      {/* Standing by the noticeboard or a desk. The notice and the hint take
+          the same spot and have something to say; this is only an offer. */}
       {hud.near && !boardOpen && !overlayOpen && !conversations.notice && !hint ? (
         <div
           role="status"
           className="pointer-events-none absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md bg-white/90 px-3 py-1.5 text-xs text-black shadow"
         >
           <kbd className="rounded border border-black/25 bg-white px-1 font-mono text-[11px]">E</kbd>
-          {` · open ${hud.near.label}`}
+          {` · ${promptFor(hud.near, roster)}`}
         </div>
       ) : null}
 

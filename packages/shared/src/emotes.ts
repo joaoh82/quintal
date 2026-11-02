@@ -111,3 +111,15 @@ export function emoteForStatus(status: string): EmoteId | '' {
   // "running tests…" — the lightbulb, for "working on it".
   return 'idea';
 }
+
+/**
+ * Whether the status line says nothing is running: empty, or "idle". Not
+ * the same question as whether the agent may wander (`idleCapable`, in the
+ * office): a standing refusal such as "no model … here" is not work, so
+ * idle life may walk it about, but it is not an agent that would answer
+ * either. A task begun for one would sit on the board with nobody coming.
+ */
+export function idleStatus(status: string): boolean {
+  const line = status.trim();
+  return line.length === 0 || line === 'idle';
+}

@@ -47,9 +47,15 @@ export interface TileRect {
  */
 export type InteractableKind =
   /** The office board: walk up to the noticeboard and press E, or click it. */
-  'board';
+  | 'board'
+  /**
+   * A desk: stand behind its chair and press E, or click its screen. Held,
+   * it shows what its holder is on; empty, it is where a task begins. Never
+   * drawn in the map's own layer — every seat makes one, see `deskOf`.
+   */
+  | 'desk';
 
-export const INTERACTABLE_KINDS: readonly InteractableKind[] = ['board'];
+export const INTERACTABLE_KINDS: readonly InteractableKind[] = ['board', 'desk'];
 
 export function isInteractableKind(value: string): value is InteractableKind {
   return (INTERACTABLE_KINDS as readonly string[]).includes(value);
@@ -104,6 +110,39 @@ export interface MapSeat {
   tile: { x: number; y: number };
   facing: Direction;
   screen: PixelRect | null;
+}
+
+/** The floor, as much of a map as a doorstep needs. */
+export type Floor = Pick<OfficeMap, 'width' | 'height' | 'walkable'>;
+
+/**
+ * The desk a seat belongs to, as something you can use. Its id is the seat's,
+ * so a `desk` interactable names the desk the office's seat book knows. Its
+ * doorstep is one tile beside the chair: behind it — where an agent stands
+ * when it rises, and where a person stands to look over its shoulder — or,
+ * when that is not floor (a chair against a wall, or at the room's edge),
+ * the first of its two sides that is. The chair in front of the desk is the
+ * desk, never the doorstep. Its halo is the screen, which is what lights up
+ * and takes the click.
+ */
+export function deskOf(seat: MapSeat, floor: Floor): MapInteractable {
+  const { x, y } = seat.tile;
+  const around: Record<Direction, Array<{ x: number; y: number }>> = {
+    up: [{ x, y: y + 1 }, { x: x - 1, y }, { x: x + 1, y }],
+    down: [{ x, y: y - 1 }, { x: x - 1, y }, { x: x + 1, y }],
+    left: [{ x: x + 1, y }, { x, y: y - 1 }, { x, y: y + 1 }],
+    right: [{ x: x - 1, y }, { x, y: y - 1 }, { x, y: y + 1 }],
+  };
+  const candidates = around[seat.facing];
+  const doorstep = candidates.find((tile) => isWalkable(floor, tile.x, tile.y)) ?? candidates[0]!;
+  return {
+    id: seat.id,
+    kind: 'desk',
+    label: 'the desk',
+    bounds: { ...doorstep, width: 1, height: 1 },
+    prop: null,
+    halo: seat.screen,
+  };
 }
 
 export interface MapZone {
@@ -221,7 +260,7 @@ export function nearestStandingTile(
   return best;
 }
 
-export function isWalkable(map: OfficeMap, x: number, y: number): boolean {
+export function isWalkable(map: Floor, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return false;
   return map.walkable[y * map.width + x] === true;
 }

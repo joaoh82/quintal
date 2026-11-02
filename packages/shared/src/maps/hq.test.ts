@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { findPath, nearestWalkable } from '../game/pathfinding.js';
-import { interactableAt, isWalkable, spawnFor, type OfficeMap } from '../map.js';
+import { interactableAt, isWalkable, nearestStandingTile, spawnFor, type OfficeMap } from '../map.js';
 import { loadOfficeMap } from './index.js';
 
 /**
@@ -156,5 +156,21 @@ describe('the shipped HQ map', () => {
       walkable > map.walkable.length * 0.5,
       `only ${walkable} of ${map.walkable.length} tiles are walkable`,
     );
+  });
+});
+
+describe('the desks', () => {
+  it('gives every seat a doorstep you can stand on, beside its chair, reachable from the door', () => {
+    const door = spawnFor(map, 'agent');
+    const reachable = reachableFrom({ x: door.x, y: door.y });
+    assert.ok(map.seats.length >= 10, 'the bay has its desks');
+    for (const seat of map.seats) {
+      const desk = map.interactables.find((interactable) => interactable.kind === 'desk' && interactable.id === seat.id);
+      assert.ok(desk, `${seat.id} is a desk`);
+      const stand = nearestStandingTile(map, desk, { x: door.x, y: door.y });
+      assert.ok(stand, `${seat.id}'s doorstep is floor`);
+      assert.ok(reachable.has(`${stand.x},${stand.y}`), `${seat.id}'s doorstep can be walked to`);
+      assert.equal(Math.abs(stand.x - seat.tile.x) + Math.abs(stand.y - seat.tile.y), 1, `${seat.id}'s doorstep is beside its chair`);
+    }
   });
 });
