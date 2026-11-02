@@ -606,6 +606,8 @@ export interface AgentListEntry {
   /** How a host should launch it, when the office defines that. Null otherwise. */
   runtimeId: string | null;
   hostLabel: string | null;
+  /** The machine it last reported from, by label under its owner. Null until it has. */
+  reportedHostLabel: string | null;
   /** The model its owner chose, by the runtime's own id. Null for the runtime's default. */
   modelId: string | null;
   /** How many conversations it may answer at once. Null for the office's default. */
@@ -642,6 +644,7 @@ export async function listAgentsForWorkspace(
       ownerPubkey: users.pubkey,
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
+      reportedHostLabel: agents.reportedHostLabel,
       modelId: agents.modelId,
       maxSessions: agents.maxSessions,
       enabled: agents.enabled,
@@ -687,6 +690,7 @@ export async function findAgentById(
       workspaceId: agents.workspaceId,
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
+      reportedHostLabel: agents.reportedHostLabel,
       modelId: agents.modelId,
       maxSessions: agents.maxSessions,
       enabled: agents.enabled,
@@ -812,6 +816,10 @@ export async function setAgentLaunch(
             runtimeId: launch.runtimeId,
             hostLabel: launch.hostLabel,
             modelId: launch.modelId ? launch.modelId.slice(0, 128) : null,
+            // Sent to a machine: where it last reported from is history
+            // until it reports from the new one, and must not keep lending
+            // the old machine's checkouts to a card that names the new.
+            reportedHostLabel: null,
           }
         : // Unassigning keeps the runtime so re-enabling is one field, but
           // not the model: it was chosen for a machine, and the next machine

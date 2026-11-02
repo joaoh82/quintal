@@ -158,31 +158,37 @@ export function hostReportOf(payload: AgentHostReportPayload | null | undefined)
   };
 }
 
-export function persistHostReport(input: {
+export interface HostReportInput {
   agentId: string;
   workspaceId: string;
   ownerUserId: string;
   report: unknown;
   workspacePath: string;
-}): void {
-  const db = getDb();
-  void recordHost(db, {
+}
+
+/**
+ * Keep a host report: the machine's row, then the agent's side of it. The
+ * machine it reported from is kept on the agent, by the label the row was
+ * stored under, so an agent nobody assigned to a machine still joins onto
+ * the one it actually runs on. A report that could not be stored names no
+ * machine, and the workspace path is written regardless.
+ */
+export async function keepHostReport(db: ReturnType<typeof getDb>, input: HostReportInput): Promise<void> {
+  const report = await recordHost(db, {
     workspaceId: input.workspaceId,
     ownerUserId: input.ownerUserId,
     report: input.report,
-  })
-    .catch((error: unknown): null => {
-      logger.error(`[agent] host report failed for ${input.agentId}`, error);
-      return null;
-    })
-    // The machine it reported from is kept on the agent, by the label the
-    // row was stored under, so an agent nobody assigned to a machine still
-    // joins onto the one it actually runs on. A report that could not be
-    // stored names no machine, and the workspace path is written regardless.
-    .then((report) => setAgentWorkspace(db, input.agentId, input.workspacePath, report ? report.label : undefined))
-    .catch((error: unknown) => {
-      logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
-    });
+  }).catch((error: unknown): null => {
+    logger.error(`[agent] host report failed for ${input.agentId}`, error);
+    return null;
+  });
+  await setAgentWorkspace(db, input.agentId, input.workspacePath, report ? report.label : undefined);
+}
+
+export function persistHostReport(input: HostReportInput): void {
+  void keepHostReport(getDb(), input).catch((error: unknown) => {
+    logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
+  });
 }
 
 /**

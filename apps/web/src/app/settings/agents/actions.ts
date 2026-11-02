@@ -86,6 +86,8 @@ async function requireSession() {
 async function modelFor(
   db: ReturnType<typeof getDb>,
   workspaceId: string,
+  /** Whose machine: a label names one row per owner, and a model is offered by one machine, not by a name. */
+  ownerUserId: string,
   hostLabel: string,
   runtimeId: string,
   raw: FormDataEntryValue | null,
@@ -100,7 +102,7 @@ async function modelFor(
   if (modelId === current) return { modelId };
 
   const host = (await listHostsForWorkspace(db, workspaceId)).find(
-    (row) => row.label === hostLabel,
+    (row) => row.ownerUserId === ownerUserId && row.label === hostLabel,
   );
   const status = host?.runtimes.find((entry) => entry.id === runtimeId);
   if (!modelChoice(status, modelId)) {
@@ -164,7 +166,7 @@ export async function createAgentAction(
 
     let modelId: string | null = null;
     if (wantsLaunch) {
-      const model = await modelFor(db, workspace.id, hostLabel, runtimeId, formData.get('modelId'));
+      const model = await modelFor(db, workspace.id, session.user.id, hostLabel, runtimeId, formData.get('modelId'));
       if ('error' in model) return { ok: false, error: model.error };
       modelId = model.modelId;
     }
@@ -549,6 +551,8 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
   const model = await modelFor(
     db,
     agent.workspaceId,
+    // The agent's owner's machine, not the assigner's: an admin may assign somebody else's agent.
+    agent.ownerUserId,
     hostLabel,
     runtimeId,
     formData.get('modelId'),

@@ -27,7 +27,7 @@ import { RuntimeList, RuntimeRows, type Host } from './RuntimeList';
  * saying it is the one you are sitting at, because "This computer" as a heading
  * threw away the only fact that let you match it to an agent's assignment.
  */
-export function RuntimePanels({ hosts }: { hosts: Host[] }) {
+export function RuntimePanels({ hosts, currentUserId }: { hosts: Host[]; currentUserId: string }) {
   const { host, ready } = useHost();
   const [local, setLocal] = useState<{
     label: string;
@@ -80,13 +80,14 @@ export function RuntimePanels({ hosts }: { hosts: Host[] }) {
 
   // Before the host has been looked for, render exactly what the server did.
   // Anything else is a hydration mismatch — see `useHost`.
-  if (!ready || !host) return <RuntimeList hosts={hosts} />;
+  if (!ready || !host) return <RuntimeList hosts={hosts} currentUserId={currentUserId} />;
 
   // Matched on the registered name, which is now what `hostStatus` reports.
   // Comparing against the live hostname is what let one computer show up twice
-  // the moment its network renamed it.
+  // the moment its network renamed it. And on the owner: this computer is
+  // mine, and a colleague's of the same name is not a duplicate of it.
   const elsewhere = local
-    ? hosts.filter((reported) => reported.label !== local.label)
+    ? hosts.filter((reported) => reported.label !== local.label || reported.ownerUserId !== currentUserId)
     : hosts;
 
   return (
@@ -120,7 +121,7 @@ export function RuntimePanels({ hosts }: { hosts: Host[] }) {
         </div>
       </section>
 
-      {elsewhere.length > 0 ? <RuntimeList hosts={elsewhere} /> : null}
+      {elsewhere.length > 0 ? <RuntimeList hosts={elsewhere} currentUserId={currentUserId} /> : null}
     </div>
   );
 }

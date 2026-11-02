@@ -91,6 +91,7 @@ export default async function AgentsSettingsPage() {
       {/* What a machine has cloned is its owner's to see; the rest of a report is the office's. */}
       <RuntimePanels
         hosts={hosts.map((host) => ({ ...host, checkouts: host.ownerUserId === session.user.id ? host.checkouts : [] }))}
+        currentUserId={session.user.id}
       />
 
       <Machines
@@ -112,7 +113,7 @@ export default async function AgentsSettingsPage() {
         memories={memories}
         mcp={mcp}
         machines={machines.filter((row) => row.revokedAt === null).map((row) => row.label)}
-        hosts={hosts.map((host) => ({ label: host.label, runtimes: host.runtimes }))}
+        hosts={hosts.map((host) => ({ label: host.label, ownerUserId: host.ownerUserId, runtimes: host.runtimes }))}
       />
 
       <p className="text-muted-foreground pt-2 text-xs">
