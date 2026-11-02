@@ -291,7 +291,12 @@ desk panel's place at the left of the room:
   not an agent that would answer either. An agent that is not offered is
   listed greyed with why — "on Fix the chair", "reading auth.ts", "cannot
   be messaged" — and one that is not here is not listed, because nothing
-  can be begun for it from a chair it cannot walk to. The rules are
+  can be begun for it from a chair it cannot walk to. An agent is listed
+  once: a harness restarted without a clean leave keeps its old session in
+  reconnection grace, `away`, beside the live one, and the live one is the
+  agent — on the panel and in the office, which judges Begin on the
+  connected session (`sessionOf` in the room's `station.ts`), not the
+  first it finds. The rules are
   `candidates` and `offeredNotes` in the client's `station.ts`, pinned
   without a panel; the office refuses the same ones (`whyNotBegin`,
   `whyNotNote` in the room's `station.ts`), before it writes anything.

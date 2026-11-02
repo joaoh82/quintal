@@ -211,6 +211,10 @@ export default function OfficeGame({
         !typingElsewhere() &&
         nearRef.current
       ) {
+        // The key is spent on opening. The station focuses its title field
+        // as it mounts, before this keystroke's character is inserted, and
+        // would otherwise open with an "e" already typed.
+        event.preventDefault();
         if (nearRef.current.kind === 'board') setBoardOpen(true);
         else openDesk(nearRef.current);
       } else if (

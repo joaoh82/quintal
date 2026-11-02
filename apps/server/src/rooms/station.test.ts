@@ -3,11 +3,27 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import { handedFrom, whyNotBegin, whyNotNote, whyNotRepo, type StationAgent } from './station.js';
+import { handedFrom, sessionOf, whyNotBegin, whyNotNote, whyNotRepo, type StationAgent } from './station.js';
 
 function agent(over: Partial<StationAgent> = {}): StationAgent {
   return { name: 'Arthur', here: true, status: '', onTask: false, scopes: ['dm', 'move', 'chat'], ...over };
 }
+
+describe('which session an agent is on', () => {
+  it('a connected one before one in its reconnection grace, whichever came first', () => {
+    const sessions = [
+      { sessionId: 's1', agentId: 'a1', away: true },
+      { sessionId: 's2', agentId: 'a1', away: false },
+      { sessionId: 's3', agentId: 'a2', away: false },
+      { sessionId: 's4', agentId: 'a2', away: true },
+      { sessionId: 's5', agentId: 'a3', away: true },
+    ];
+    assert.equal(sessionOf(sessions, 'a1'), 's2', 'the harness that restarted is on the new socket');
+    assert.equal(sessionOf(sessions, 'a2'), 's3');
+    assert.equal(sessionOf(sessions, 'a3'), 's5', 'in its grace it is still here, and the room says how');
+    assert.equal(sessionOf(sessions, 'a4'), null);
+  });
+});
 
 describe('who a task may be begun for', () => {
   it('a free agent of the office that can be woken and can walk', () => {

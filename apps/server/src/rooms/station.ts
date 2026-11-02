@@ -6,6 +6,32 @@ import { idleStatus, type AgentScope, type BoardItemRef } from '@quintal/shared'
  * without a room; the room gathers the facts and asks.
  */
 
+/** One session an agent is on, as the room has it. */
+export interface AgentSessionRef {
+  sessionId: string;
+  agentId: string;
+  /** In its reconnection grace: the socket is gone, the seat is kept a while. */
+  away: boolean;
+}
+
+/**
+ * The session an agent is on, by its id: a connected one before one in its
+ * reconnection grace, and null when it is on none. An agent is on one
+ * socket at a time but can be in the room on two — a harness restarted
+ * without a clean leave keeps its old session in grace beside the live one
+ * — and the first found was the oldest, so a begun task was judged on the
+ * stale session's status line and refused.
+ */
+export function sessionOf(sessions: Iterable<AgentSessionRef>, agentId: string): string | null {
+  let inGrace: string | null = null;
+  for (const session of sessions) {
+    if (session.agentId !== agentId) continue;
+    if (!session.away) return session.sessionId;
+    inGrace ??= session.sessionId;
+  }
+  return inGrace;
+}
+
 /** One agent, as the station needs to know it. */
 export interface StationAgent {
   name: string;

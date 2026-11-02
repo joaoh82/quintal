@@ -61,10 +61,26 @@ export function candidates(
   you: string,
   transcripts: Record<ConversationKey, Transcript> = {},
 ): Candidate[] {
-  return roster
-    .filter((entry) => entry.kind === 'agent' && entry.ownerUserId === you)
+  return [...oneSessionEach(roster.filter((entry) => entry.kind === 'agent' && entry.ownerUserId === you)).values()]
     .map((entry) => ({ entry, busy: whyBusy(entry, transcripts) }))
     .sort((a, b) => Number(a.busy.length > 0) - Number(b.busy.length > 0) || a.entry.name.localeCompare(b.entry.name));
+}
+
+/**
+ * One session per agent, by its id. An agent is on one socket at a time
+ * but can be in the roster on two: a harness restarted without a clean
+ * leave keeps its old session in reconnection grace, `away`, beside the
+ * live one, until the grace runs out. The live one is the agent. The away
+ * one is kept only when it is all there is, and then it says so, which is
+ * not free.
+ */
+function oneSessionEach(entries: readonly RosterEntry[]): Map<string, RosterEntry> {
+  const chosen = new Map<string, RosterEntry>();
+  for (const entry of entries) {
+    const held = chosen.get(entry.identityId);
+    if (!held || (held.status === 'away' && entry.status !== 'away')) chosen.set(entry.identityId, entry);
+  }
+  return chosen;
 }
 
 function whyBusy(entry: RosterEntry, transcripts: Record<ConversationKey, Transcript>): string {
