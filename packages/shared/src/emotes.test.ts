@@ -64,8 +64,19 @@ describe('the balloon a status implies', () => {
     ['running pnpm test', 'dots'],
     ['running cd apps/web && pnpm test', 'dots'],
     ['running vitest run', 'dots'],
+    ['running pnpm --filter @quintal/web test', 'dots'],
+    ['running pnpm -r test', 'dots'],
+    ['running npx vitest', 'dots'],
+    ['running cargo test -p api', 'dots'],
     ['running git add foo.test.ts', 'idea'],
     ['running git commit -m "add tests"', 'idea'],
+    ['running git commit -m "fix && jest"', 'idea'],
+    ['running pnpm add vitest', 'idea'],
+    // Only a shell command is a test run: a search or an edit is what it says it is.
+    ['searching && jest', 'idea'],
+    ['searching && pnpm test', 'idea'],
+    ['editing foo&&jest.ts', 'idea'],
+    ['fetching https://x.test/?q=%26%26 pytest', 'idea'],
   ];
 
   for (const [status, expected] of table) {

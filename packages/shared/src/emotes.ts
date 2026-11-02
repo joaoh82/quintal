@@ -116,18 +116,30 @@ export function emoteForStatus(status: string): EmoteId | '' {
 }
 
 /**
- * A shell command that runs a test suite, by the names people type: the
- * runner is the command, or the one after an `&&`. Not a word anywhere in
- * the line — `git add foo.test.ts` is not a test run — and not a runner
- * past the 32 characters `statusForTool` keeps of a command, which is a
- * miss, and a cheap one. One rule for the balloon and for the desk's
- * act-out, so the two never disagree.
+ * A command that runs a test suite, by the names people type: a package
+ * manager asked for `test` with whatever flags between (`pnpm test`,
+ * `pnpm --filter web test`, `npm run test`), `npx` with a runner, or the
+ * runner itself. Matched at the start of a command.
  */
-const TEST_RUN =
-  /(?:^running |&&\s*)(?:(?:pnpm|npm|yarn|bun|npx)\s+(?:run\s+)?test|vitest|jest|pytest|mocha|rspec|cargo\s+test|go\s+test|tsx\s+--test|node\s+--test)\b/;
+const TEST_COMMAND =
+  /^(?:(?:pnpm|npm|yarn|bun)\b[^\s]*(?:\s+\S+)*?\s+(?:run\s+)?test\b|(?:npx|bunx)\s+(?:vitest|jest|mocha|pytest)\b|(?:vitest|jest|pytest|mocha|rspec)\b|cargo\s+test\b|go\s+test\b|tsx\s+--test\b|node\s+--test\b)/;
 
+/**
+ * Whether a status line is a shell command running a test suite. Only a
+ * `running …` line — the verb `statusForTool` gives a shell tool — so a
+ * search for `&& jest` or an edit of `foo&&jest.ts` is not one; and in
+ * that line, only a command of the chain (the first, or one after `&&`,
+ * `;` or `|`) with what is in quotes taken out first, so `git commit -m
+ * "fix && jest"` is not one either. Not a runner past the 32 characters
+ * `statusForTool` keeps of a command, which is a miss, and a cheap one.
+ * One rule for the balloon and for the desk's act-out, so the two never
+ * disagree.
+ */
 export function testRunStatus(status: string): boolean {
-  return TEST_RUN.test(status.trim());
+  const line = status.trim();
+  if (!line.startsWith('running ')) return false;
+  const command = line.slice('running '.length).replace(/"[^"]*"?|'[^']*'?/g, ' ');
+  return command.split(/&&|\|\||[;|]/).some((part) => TEST_COMMAND.test(part.trim()));
 }
 
 /**
