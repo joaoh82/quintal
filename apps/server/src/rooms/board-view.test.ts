@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { NO_REPO_PULLS, type BoardAgentRef, type BoardTaskRef, type PullRequestStatusRef, type RepoPullsRef } from '@quintal/shared';
+import { NO_REPO_PULLS, type BoardAgentRef, type BoardRoutineRef, type BoardTaskRef, type PullRequestStatusRef, type RepoPullsRef } from '@quintal/shared';
+import type { RoutineRunRef, RoutineSummary } from '@quintal/shared/db';
 
-import { boardAgentsOf, boardForRole, boardSignatureOf } from './board-view.js';
+import { boardAgentsOf, boardForRole, boardRoutineRunsOf, boardRoutinesOf, boardSignatureOf } from './board-view.js';
 
 /** A whole minute, so what rounding does is plain. */
 const MINUTE = 1_700_000_040_000;
@@ -78,6 +79,40 @@ const checked: PullRequestStatusRef = {
   known: true,
 };
 
+const ROUTINE: RoutineSummary = {
+  id: 'r1',
+  workspaceId: 'w1',
+  agentId: 'a1',
+  agentName: 'Marvin',
+  agentOwnerUserId: 'u1',
+  name: 'hourly PR check',
+  schedule: { kind: 'cron', cron: '0 * * * *', tz: 'Europe/Lisbon' },
+  scheduleLabel: 'every hour',
+  instructions: 'Review the open pull requests and say what you found.',
+  command: null,
+  args: '',
+  paused: false,
+  nextDueAt: MINUTE + 3_600_000,
+  lastRunAt: MINUTE,
+  createdBy: 'u1',
+  createdByName: 'Josh',
+  createdByAgentId: null,
+  createdByAgentName: '',
+  createdAt: 0,
+  updatedAt: 0,
+};
+
+const RUN: RoutineRunRef = {
+  id: 'run1',
+  routineId: 'r1',
+  dueAt: MINUTE,
+  outcome: 'fired',
+  note: '',
+  firedAt: MINUTE + 2_000,
+  conversationId: 'dm-1',
+  createdAt: MINUTE,
+};
+
 const REVIEW = {
   url: 'https://github.com/acme/api/pull/7',
   repo: 'acme/api',
@@ -90,9 +125,9 @@ const REVIEW = {
 
 describe('what the board is sent, and when', () => {
   it('does not count an agent being heard from as the board changing', () => {
-    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] };
+    const before = { items: [], agents: boardAgentsOf([marvin]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [], routines: [], routineRuns: [] };
     const heard = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 40_000 };
-    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] };
+    const after = { items: [], agents: boardAgentsOf([heard]), tasks: [task], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [], routines: [], routineRuns: [] };
     assert.equal(boardSignatureOf(after), boardSignatureOf(before), 'the same minute is the same board');
 
     const later = { ...marvin, lastSeenAt: marvin.lastSeenAt! + 60_000 };
@@ -106,7 +141,7 @@ describe('what the board is sent, and when', () => {
   });
 
   it('does not count GitHub being asked again as the board changing, unless the answer differs', () => {
-    const view = (github: PullRequestStatusRef) => ({ items: [], agents: [], tasks: [{ ...task, github }], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [] });
+    const view = (github: PullRequestStatusRef) => ({ items: [], agents: [], tasks: [{ ...task, github }], github: GITHUB, pulls: NO_REPO_PULLS, reviews: [], routines: [], routineRuns: [] });
     const first = boardSignatureOf(view(checked));
     assert.equal(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 60_000 })), first, 'a minute later, the same facts');
     assert.notEqual(boardSignatureOf(view({ ...checked, fetchedAt: checked.fetchedAt + 5 * 60_000 })), first, 'five minutes later it is sent once, so "checked … ago" catches up');
@@ -115,20 +150,42 @@ describe('what the board is sent, and when', () => {
   });
 
   it("does not count listing the repositories again as the board changing, unless the list differs", () => {
-    const view = (pulls: RepoPullsRef) => ({ items: [], agents: [], tasks: [], github: GITHUB, pulls, reviews: [] });
+    const view = (pulls: RepoPullsRef) => ({ items: [], agents: [], tasks: [], github: GITHUB, pulls, reviews: [], routines: [], routineRuns: [] });
     const first = boardSignatureOf(view(PULLS));
     assert.equal(boardSignatureOf(view({ ...PULLS, fetchedAt: PULLS.fetchedAt! + 60_000 })), first);
     assert.notEqual(boardSignatureOf(view({ ...PULLS, pulls: [{ ...PULLS.pulls[0]!, state: 'merged' }] })), first);
   });
 
   it('counts somebody being asked to review as the board changing', () => {
-    const view = { items: [], agents: [], tasks: [], github: GITHUB, pulls: PULLS, reviews: [] };
-    assert.notEqual(boardSignatureOf({ ...view, reviews: [REVIEW] }), boardSignatureOf(view));
+    const view = { items: [], agents: [], tasks: [], github: GITHUB, pulls: PULLS, reviews: [], routines: [], routineRuns: [] };
+    assert.notEqual(boardSignatureOf({ ...view, reviews: [REVIEW], routines: [], routineRuns: [] }), boardSignatureOf(view));
+  });
+
+  it('carries a routine without its words, and a run without its conversation', () => {
+    const [routine] = boardRoutinesOf([ROUTINE]);
+    assert.equal(routine?.name, 'hourly PR check');
+    assert.equal(routine?.ownerUserId, 'u1');
+    assert.equal(routine?.nextDueAt, ROUTINE.nextDueAt);
+    assert.ok(!('instructions' in (routine as object)), 'the brief stays in Settings and the DM');
+    assert.ok(!JSON.stringify(routine).includes('Review the open'), 'nothing sent quotes it');
+    const [run] = boardRoutineRunsOf([RUN]);
+    assert.deepEqual(run, { id: 'run1', routineId: 'r1', dueAt: MINUTE, outcome: 'fired', note: '', firedAt: MINUTE + 2_000 });
+  });
+
+  it('counts a slot landing, and a routine paused, as the board changing', () => {
+    const view = { items: [], agents: [], tasks: [], github: GITHUB, pulls: PULLS, reviews: [], routines: boardRoutinesOf([ROUTINE]), routineRuns: [] };
+    const first = boardSignatureOf(view);
+    assert.notEqual(boardSignatureOf({ ...view, routineRuns: boardRoutineRunsOf([RUN]) }), first, 'a run is history the tab shows');
+    assert.notEqual(boardSignatureOf({ ...view, routines: boardRoutinesOf([{ ...ROUTINE, paused: true, nextDueAt: null }]) }), first);
   });
 
   it('sends a member everything the board has', () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW] }, 'member');
+    const routines: BoardRoutineRef[] = boardRoutinesOf([ROUTINE]);
+    const routineRuns = boardRoutineRunsOf([RUN]);
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW], routines, routineRuns }, 'member');
     assert.deepEqual(sent.reviews, [REVIEW]);
+    assert.deepEqual(sent.routines, routines);
+    assert.deepEqual(sent.routineRuns, routineRuns);
     assert.deepEqual(sent.agents, [marvin]);
     assert.deepEqual(sent.tasks, [task]);
     assert.deepEqual(sent.github, GITHUB);
@@ -136,9 +193,14 @@ describe('what the board is sent, and when', () => {
   });
 
   it("sends a guest the notes and who the agents are, not the ledger or the office's machines", () => {
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW] }, null);
+    const sent = boardForRole(
+      { items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW], routines: boardRoutinesOf([ROUTINE]), routineRuns: boardRoutineRunsOf([RUN]) },
+      null,
+    );
     assert.deepEqual(sent.tasks, []);
     assert.deepEqual(sent.reviews, [], 'nor who was asked to review what');
+    assert.deepEqual(sent.routines, [], 'nor the routines between members and their agents');
+    assert.deepEqual(sent.routineRuns, []);
     assert.deepEqual(sent.pulls.pulls, [], "nor the office's repositories' pull requests");
     assert.deepEqual(sent.github, { connected: false, login: null, repos: [] }, 'nor whether the office has a token');
     assert.equal(sent.agents.length, 1);

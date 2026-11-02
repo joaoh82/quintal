@@ -446,6 +446,7 @@ export default function OfficeGame({
           connection={connection}
           speaking={voice?.speaking ?? []}
           onMessage={openDm}
+          routines={board.routines}
         />
       </div>
 
@@ -465,6 +466,7 @@ export default function OfficeGame({
             onClose={closeDesk}
             onMessage={messageInspected}
             onOpenConversation={goFromDesk}
+            routines={board.routines.filter((routine) => routine.agentId === inspectedEntry.identityId)}
           />
         </div>
       ) : null}

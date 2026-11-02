@@ -11,6 +11,7 @@ import {
   deleteRoutine,
   getRoutine,
   listDueRoutines,
+  listRecentRoutineRunsForWorkspace,
   listRoutineRuns,
   listRoutinesForAgent,
   listRoutinesForWorkspace,
@@ -207,6 +208,32 @@ describe('slots and runs', () => {
       (await listRoutineRuns(db, made.id)).map((run) => [run.outcome, run.firedAt, run.conversationId]),
       [['fired', oneOClock + 5, null]],
     );
+  });
+
+  it('gives the board each routine’s newest runs, so a busy routine does not push a quiet one’s off', async () => {
+    const { db, owner, agent } = await office('Josh');
+    const marvin = await agent('Marvin');
+    const busy = await hourly(db, owner.workspaceId, marvin.id, owner.id, 'busy');
+    const quiet = await hourly(db, owner.workspaceId, marvin.id, owner.id, 'quiet');
+    const oneOClock = Date.UTC(2026, 10, 1, 13, 0);
+    for (let hour = 0; hour < 5; hour += 1) {
+      const run = await claimRoutineRun(db, { routine: busy, dueAt: oneOClock + hour * 3_600_000, outcome: 'missed' });
+      assert.ok(run);
+      await settleRoutineRun(db, run.id, { outcome: 'fired', firedAt: oneOClock + hour * 3_600_000 + 5, conversationId: null });
+    }
+    const early = await claimRoutineRun(db, { routine: quiet, dueAt: oneOClock - 86_400_000, outcome: 'skipped', note: 'busy' });
+    assert.ok(early);
+    const recent = await listRecentRoutineRunsForWorkspace(db, owner.workspaceId, 2);
+    assert.deepEqual(
+      recent.map((run) => [run.routineId, run.dueAt]),
+      [
+        [busy.id, oneOClock + 4 * 3_600_000],
+        [busy.id, oneOClock + 3 * 3_600_000],
+        [quiet.id, oneOClock - 86_400_000],
+      ],
+      'two of the busy one, newest first, and the quiet one’s only run however old',
+    );
+    assert.deepEqual(await listRecentRoutineRunsForWorkspace(db, owner.workspaceId, 0), []);
   });
 
   it('a claim is one transaction: a routine no longer at the slot is left where it is', async () => {

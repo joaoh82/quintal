@@ -13,9 +13,10 @@ import {
   normaliseRoutineName,
   validateRoutineSchedule,
   type RoutineSchedule,
+  type RoutineRunOutcome,
 } from '../routine.js';
 import type { Database } from './client.js';
-import { agents, officeCommands, routineRuns, routines, users, type ROUTINE_RUN_OUTCOMES } from './schema.js';
+import { agents, officeCommands, routineRuns, routines, users } from './schema.js';
 
 /**
  * Routines and their runs.
@@ -32,7 +33,7 @@ function newId(): string {
   return randomBytes(16).toString('hex');
 }
 
-export type RoutineRunOutcome = (typeof ROUTINE_RUN_OUTCOMES)[number];
+export type { RoutineRunOutcome } from '../routine.js';
 
 export class RoutineError extends Error {
   constructor(
@@ -470,6 +471,30 @@ export async function listRoutineRuns(db: Database, routineId: string, limit = 2
     .orderBy(desc(routineRuns.dueAt))
     .limit(limit);
   return rows.map(runRef);
+}
+
+/**
+ * Each routine's newest `perRoutine` runs, across an office, newest first:
+ * what the board carries, so a routine every ten minutes does not push a
+ * daily one's history off the tab.
+ */
+export async function listRecentRoutineRunsForWorkspace(db: Database, workspaceId: string, perRoutine: number): Promise<RoutineRunRef[]> {
+  if (perRoutine <= 0) return [];
+  const ranked = db
+    .select({
+      id: routineRuns.id,
+      rank: sql<number>`row_number() over (partition by ${routineRuns.routineId} order by ${routineRuns.dueAt} desc)`.as('rank'),
+    })
+    .from(routineRuns)
+    .where(eq(routineRuns.workspaceId, workspaceId))
+    .as('ranked');
+  const rows = await db
+    .select({ run: routineRuns })
+    .from(routineRuns)
+    .innerJoin(ranked, eq(ranked.id, routineRuns.id))
+    .where(lte(ranked.rank, perRoutine))
+    .orderBy(desc(routineRuns.dueAt));
+  return rows.map((row) => runRef(row.run));
 }
 
 /** An office's runs, newest first, across its routines. */

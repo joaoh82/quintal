@@ -48,8 +48,23 @@ Every agent of the office, here or not: whose it is, the status line it last
 left, where it stands, what it is on — live from the room when it is here,
 from the ledger when it is not — and the notes it holds. **History** opens
 what it was on before: each branch, the note it was for, its pull request
-and how that ended — the newest twenty of each agent. **Message** opens your
-DM with one of yours.
+and how that ended — the newest twenty of each agent. **Routines** opens the
+routines on it — what each asks on what schedule, when it is next due, what
+came of its last run — with **Pause** and **Resume** on your own agent's.
+**Message** opens your DM with one of yours.
+
+## The Routines tab
+
+Every routine in the office, on whichever agent: a standing request on a
+schedule, kept by the office — "every hour, review the open pull requests".
+Each row says which agent it is on and whether that agent is here to hear
+it, how often it runs, when it is next due, and what came of its last slot:
+fired, made up when the agent came back, missed while it was away, or
+skipped because it was still on the previous run. **Runs** opens the
+newest ten. The routine's owner may **Pause** and **Resume** from here;
+making and editing one is in **Settings → Routines**, or a word to one of
+your agents. A guest sees none: a routine is between a member and their
+agent.
 
 ## The Pull requests tab
 

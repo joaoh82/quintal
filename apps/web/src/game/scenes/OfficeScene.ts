@@ -21,6 +21,7 @@ import {
   type BoardMessagePayload,
   type BoardPullActionPayload,
   type BoardPullReviewPayload,
+  type BoardRoutinePausePayload,
   type BoardPullRefreshPayload,
   type BoardUpdatePayload,
   type MapInteractable,
@@ -911,6 +912,11 @@ export class OfficeScene extends Phaser.Scene {
   /** Ask one of your agents to review a pull request. A `notice` says it was asked. */
   requestPullReview(payload: BoardPullReviewPayload): void {
     this.#room.send(ClientMessage.BoardPullReview, payload);
+  }
+
+  /** Pause or resume one of your routines. Answered with `board`, and a `notice` for us. */
+  pauseRoutine(payload: BoardRoutinePausePayload): void {
+    this.#room.send(ClientMessage.BoardRoutinePause, payload);
   }
 
   /**

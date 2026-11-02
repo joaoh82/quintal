@@ -3,7 +3,17 @@ import { describe, it } from 'node:test';
 
 import type { BoardItemRef } from '@quintal/shared';
 
-import type { BoardAgentRef, BoardTaskRef, ChannelRef, MapZone, PullRequestStatusRef, RepoPullRequestRef, RosterEntry } from '@quintal/shared';
+import type {
+  BoardAgentRef,
+  BoardRoutineRef,
+  BoardRoutineRunRef,
+  BoardTaskRef,
+  ChannelRef,
+  MapZone,
+  PullRequestStatusRef,
+  RepoPullRequestRef,
+  RosterEntry,
+} from '@quintal/shared';
 
 import {
   ageLabel,
@@ -12,6 +22,7 @@ import {
   branchesWithoutPr,
   checksLabel,
   columnsOf,
+  dueLabel,
   mergeableLabel,
   matchesFilter,
   nextStatus,
@@ -26,7 +37,12 @@ import {
   DEFAULT_PULL_FILTERS,
   pullStateOf,
   repoOfPrUrl,
+  routineMatches,
+  routineRowsOf,
+  routinesLine,
+  sortRoutines,
   taskBadgeOf,
+  untilLabel,
   wallOf,
   whereLabel,
 } from './board.js';
@@ -128,6 +144,78 @@ describe('how old a note is', () => {
     assert.equal(ageLabel(now - 2 * 86_400_000, now), '2d ago');
     assert.equal(ageLabel(now + 60_000, now), 'just now', 'never in the future');
   });
+  it('reads how long until a routine is due the same way', () => {
+    const now = 1_000_000_000;
+    assert.equal(untilLabel(now + 10_000, now), 'now');
+    assert.equal(untilLabel(now - 60_000, now), 'now', 'a moment that has come and not yet been ticked');
+    assert.equal(untilLabel(now + 23 * 60_000, now), 'in 23m');
+    assert.equal(untilLabel(now + 90_000, now), 'in 2m', 'to the nearest minute, never "in 0m"');
+    assert.equal(untilLabel(now + 3 * 3_600_000, now), 'in 3h');
+    assert.equal(untilLabel(now + 2 * 86_400_000, now), 'in 2d');
+  });
+});
+
+describe('the Routines tab', () => {
+  const now = 1_000_000_000;
+  const hourly = routine('hourly', { name: 'hourly PR check', nextDueAt: now + 23 * 60_000, lastRunAt: now - 37 * 60_000 });
+  const daily = routine('daily', { name: 'daily board look', agentId: 'zaphod', agentName: 'zaphod', ownerUserId: 'u2', scheduleLabel: 'daily at 09:00', nextDueAt: now + 5 * 3_600_000 });
+  const paused = routine('paused', { name: 'weekly digest', paused: true, nextDueAt: null, command: { id: 'c1', name: 'digest' } });
+  const once = routine('once', { name: 'check the deploy', nextDueAt: null, scheduleLabel: 'once, on 2 Nov 2026 at 09:00' });
+  const runs = [
+    run('r1', { routineId: 'hourly', dueAt: now - 97 * 60_000, outcome: 'missed', note: 'away' }),
+    run('r2', { routineId: 'hourly', dueAt: now - 37 * 60_000, firedAt: now - 37 * 60_000 + 3_000 }),
+    run('r3', { routineId: 'daily', dueAt: now - 19 * 3_600_000, outcome: 'skipped', note: 'busy' }),
+  ];
+
+  it('puts what fires next at the top, the paused and the spent at the bottom', () => {
+    assert.deepEqual(sortRoutines([paused, daily, once, hourly]).map((r) => r.id), ['hourly', 'daily', 'once', 'paused']);
+  });
+
+  it('joins each routine to its runs, newest first, and says whose it is to pause', () => {
+    const rows = routineRowsOf([paused, daily, hourly], runs, [here('marvin')], 'u1');
+    assert.deepEqual(rows.map((row) => row.routine.id), ['hourly', 'daily', 'paused']);
+    const [first, second, third] = rows;
+    assert.deepEqual(first!.runs.map((r) => r.id), ['r2', 'r1']);
+    assert.equal(first!.lastRun?.id, 'r2');
+    assert.equal(first!.here, true, 'marvin is in the room');
+    assert.equal(first!.yours, true);
+    assert.equal(second!.here, false);
+    assert.equal(second!.yours, false, "another member's agent");
+    assert.equal(second!.lastRun?.note, 'busy');
+    assert.equal(third!.lastRun, null, 'no slot has come');
+  });
+
+  it('finds a routine by its name, its agent, its cadence, its command, or who set it up', () => {
+    const [row] = routineRowsOf([paused], [], [], 'u1');
+    assert.equal(routineMatches(row!, 'digest'), true, 'the name');
+    assert.equal(routineMatches(row!, '!digest'), true, 'the command');
+    assert.equal(routineMatches(row!, 'marvin'), true, 'the agent');
+    assert.equal(routineMatches(row!, 'every hour'), true, 'the cadence');
+    assert.equal(routineMatches(row!, 'josh'), true, 'who set it up');
+    assert.equal(routineMatches(row!, 'paused'), true);
+    assert.equal(routineMatches(row!, 'zaphod'), false);
+    const [running] = routineRowsOf([hourly], [], [], 'u1');
+    assert.equal(routineMatches(running!, 'paused'), false, '"paused" finds only paused ones');
+  });
+
+  it('says when a routine is next due in a few words', () => {
+    assert.equal(dueLabel(hourly, now), 'in 23m');
+    assert.equal(dueLabel(paused, now), 'paused');
+    assert.equal(dueLabel(once, now), 'done');
+  });
+
+  it("gives the agent's card one line: how many, and the next to fire", () => {
+    assert.equal(routinesLine([], now), null, 'no row for an agent with none');
+    assert.equal(routinesLine([paused, hourly], now), '2 · next hourly PR check in 23m');
+    assert.equal(routinesLine([paused], now), '1, paused');
+    assert.equal(routinesLine([paused, once], now), '2, all paused', 'a spent once routine fires nothing either');
+  });
+
+  it('hangs each agent’s routines on its row, soonest first, and the filter finds an agent by one', () => {
+    const [row] = agentRowsOf([agent('marvin')], [], [], [], zones, channels, now, [paused, daily, hourly]);
+    assert.deepEqual(row!.routines.map((r) => r.id), ['hourly', 'paused'], "marvin's only, running first");
+    assert.equal(agentMatches(row!, 'weekly digest'), true);
+  });
 });
 
 function agent(id: string, extra: Partial<BoardAgentRef> = {}): BoardAgentRef {
@@ -171,6 +259,30 @@ function here(identityId: string, extra: Partial<RosterEntry> = {}): RosterEntry
     task: null,
     ...extra,
   };
+}
+
+function routine(id: string, extra: Partial<BoardRoutineRef> = {}): BoardRoutineRef {
+  return {
+    id,
+    agentId: 'marvin',
+    agentName: 'marvin',
+    ownerUserId: 'u1',
+    name: id,
+    schedule: { kind: 'cron', cron: '0 * * * *', tz: 'UTC' },
+    scheduleLabel: 'every hour',
+    command: null,
+    paused: false,
+    nextDueAt: 0,
+    lastRunAt: null,
+    createdByName: 'Josh',
+    createdByAgentName: '',
+    updatedAt: 0,
+    ...extra,
+  };
+}
+
+function run(id: string, extra: Partial<BoardRoutineRunRef> = {}): BoardRoutineRunRef {
+  return { id, routineId: 'hourly', dueAt: 0, outcome: 'fired', note: '', firedAt: null, ...extra };
 }
 
 function ledger(id: string, extra: Partial<BoardTaskRef> = {}): BoardTaskRef {

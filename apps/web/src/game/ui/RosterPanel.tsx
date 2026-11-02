@@ -1,9 +1,10 @@
 'use client';
 
-import { npubEncode, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
+import { npubEncode, type BoardRoutineRef, type ConnectionStatus, type RosterEntry } from '@quintal/shared';
 
 import { AgentTaskRow, TaskGlyph } from './AgentTaskRow';
 import { runtimeLines } from './agentRuntime';
+import { routinesLine } from './board';
 import { Avatar } from '@/components/Avatar';
 import { askingCaveat } from '@/lib/runtime-asking';
 import { useState } from 'react';
@@ -43,6 +44,8 @@ interface RosterPanelProps {
   speaking?: string[];
   /** Open a direct message with this occupant. */
   onMessage: (entry: RosterEntry) => void;
+  /** The office's routines, from the board, for the line on an agent's card. */
+  routines?: readonly BoardRoutineRef[];
 }
 
 /**
@@ -65,7 +68,7 @@ export function canMessage(viewer: RosterEntry | undefined, entry: RosterEntry):
  * "what is my fleet doing" without reading past the humans, and every agent
  * line carries whose it is.
  */
-export function RosterPanel({ players, connection, speaking = [], onMessage }: RosterPanelProps) {
+export function RosterPanel({ players, connection, speaking = [], onMessage, routines = [] }: RosterPanelProps) {
   const [openCard, setOpenCard] = useState<string | null>(null);
 
   const humans = players.filter((player) => player.kind === 'human');
@@ -192,6 +195,7 @@ export function RosterPanel({ players, connection, speaking = [], onMessage }: R
         selected.kind === 'agent' ? (
           <AgentCard
             agent={selected}
+            routines={routines.filter((routine) => routine.agentId === selected.identityId)}
             onClose={() => setOpenCard(null)}
             onMessage={messageAction}
           />
@@ -213,15 +217,19 @@ export function RosterPanel({ players, connection, speaking = [], onMessage }: R
  */
 export function AgentCard({
   agent,
+  routines = [],
   onClose,
   onMessage,
 }: {
   agent: RosterEntry;
+  /** The routines on this agent, as the board carries them. Left off the card when there are none. */
+  routines?: readonly BoardRoutineRef[];
   onClose: () => void;
   onMessage: (() => void) | null;
 }) {
   const running = runtimeLines(agent);
   const caveat = askingCaveat(agent.runtimeId);
+  const routinesRow = routinesLine(routines, Date.now());
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-sky-400/25 bg-[#0b2942]/85 p-3 text-white backdrop-blur-sm">
@@ -264,6 +272,19 @@ export function AgentCard({
           idle in between. See `AgentTaskRow`.
         */}
         <AgentTaskRow task={agent.task} />
+        {/*
+          What it does on a schedule, beside what it is on: how many routines
+          the office keeps on it and the next to fire. The board's Routines
+          tab has the rest; an agent with none has no row.
+        */}
+        {routinesRow ? (
+          <div className="flex gap-2">
+            <dt className="w-14 shrink-0 text-white/40">routines</dt>
+            <dd className="min-w-0 truncate text-white/75" title={routines.map((routine) => `${routine.name} — ${routine.scheduleLabel}`).join('\n')}>
+              {routinesRow}
+            </dd>
+          </div>
+        ) : null}
         <div className="flex gap-2">
           <dt className="w-14 shrink-0 text-white/40">scopes</dt>
           <dd className="font-mono text-white/75">

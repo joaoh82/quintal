@@ -13,6 +13,8 @@ import {
   routineSlug,
   validateRoutineSchedule,
   wallClockToEpoch,
+  routineOutcomeLabel,
+  routineRunNoteLabel,
 } from './routine.js';
 
 /**
@@ -260,5 +262,23 @@ describe('who manages a routine, and what it is called', () => {
     assert.equal(routineSlug('Hourly PR check'), 'hourly-pr-check');
     assert.equal(routineSlug('  ---  '), 'routine');
     assert.equal(routineSlug('Revisão diária'), 'revisão-diária');
+  });
+});
+
+describe('what came of a slot, in words', () => {
+  it('names the outcome as a person reads it', () => {
+    assert.equal(routineOutcomeLabel('fired'), 'fired');
+    assert.equal(routineOutcomeLabel('made_up'), 'made up');
+    assert.equal(routineOutcomeLabel('missed'), 'missed');
+    assert.equal(routineOutcomeLabel('skipped'), 'skipped');
+  });
+  it('says why a slot was not spoken, and nothing for one that was', () => {
+    assert.equal(routineRunNoteLabel(''), '');
+    assert.equal(routineRunNoteLabel('away'), 'the agent was away');
+    assert.equal(routineRunNoteLabel('busy'), 'the agent was still on the previous run');
+    assert.equal(routineRunNoteLabel('owner_left'), 'its owner left the office');
+    assert.equal(routineRunNoteLabel('no_dm'), 'the agent takes no direct messages');
+    assert.equal(routineRunNoteLabel('agent_gone'), 'the agent is gone');
+    assert.equal(routineRunNoteLabel('something else'), 'something else', 'a reason it does not know is shown as written');
   });
 });

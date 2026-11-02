@@ -33,6 +33,8 @@ export interface Board extends BoardPayload {
   actOnPull: (payload: BoardPullActionPayload) => void;
   /** Ask one of your agents to review a pull request, by its URL. */
   requestReview: (agentId: string, url: string) => void;
+  /** Pause or resume one of your routines. */
+  pauseRoutine: (routineId: string, paused: boolean) => void;
 }
 
 const EMPTY: BoardPayload = {
@@ -42,6 +44,8 @@ const EMPTY: BoardPayload = {
   github: { connected: false, login: null, repos: [] },
   pulls: NO_REPO_PULLS,
   reviews: [],
+  routines: [],
+  routineRuns: [],
   githubHost: GITHUB_WEB_HOST_DEFAULT,
   you: { userId: '', role: null },
 };
@@ -85,5 +89,10 @@ export function useBoard(sessionRef: RefObject<OfficeSession | null>): Board {
     [sessionRef],
   );
 
-  return { ...board, loaded, create, update, remove, refreshPulls, actOnPull, requestReview };
+  const pauseRoutine = useCallback(
+    (routineId: string, paused: boolean) => sessionRef.current?.pauseRoutine({ routineId, paused }),
+    [sessionRef],
+  );
+
+  return { ...board, loaded, create, update, remove, refreshPulls, actOnPull, requestReview, pauseRoutine };
 }

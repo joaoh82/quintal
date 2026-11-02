@@ -4,6 +4,7 @@ import {
   type BoardCreatePayload,
   type BoardPullActionPayload,
   type BoardPullReviewPayload,
+  type BoardRoutinePausePayload,
   type BoardUpdatePayload,
   type OfficeState,
 } from '@quintal/shared';
@@ -72,6 +73,8 @@ export interface OfficeSession {
   actOnPullRequest(payload: BoardPullActionPayload): void;
   /** Ask one of your agents to review a pull request, in your DM with it. */
   requestPullReview(payload: BoardPullReviewPayload): void;
+  /** Pause or resume one of your routines, from the board. */
+  pauseRoutine(payload: BoardRoutinePausePayload): void;
   /** The microphone switch. Off by default; M in the office. */
   toggleMute(): void;
   /** Push-to-talk, held or released. Space in the office; a global key in the app later. */
@@ -367,6 +370,9 @@ export async function createGame(
     },
     requestPullReview(payload) {
       scene()?.requestPullReview(payload);
+    },
+    pauseRoutine(payload) {
+      scene()?.pauseRoutine(payload);
     },
     toggleMute() {
       voice?.toggleMute();

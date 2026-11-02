@@ -3,6 +3,7 @@ import type { PullRequestStatusRef, RepoPullsRef } from './github.js';
 import { normalisePromptProse } from './agent.js';
 import type { ChannelActor } from './conversation.js';
 import type { PlayerKind } from './player.js';
+import type { RoutineRunOutcome, RoutineSchedule } from './routine.js';
 import { tidyDisplayText, type MembershipRole } from './workspace.js';
 
 /**
@@ -56,6 +57,13 @@ export const BOARD_LEDGER_ENDED_MAX = 50;
  * while busier agents fill the office's fifty.
  */
 export const BOARD_LEDGER_ENDED_PER_AGENT_MAX = 20;
+
+/**
+ * How many of each routine's runs the board is sent, newest first. The
+ * office keeps every run; the tab shows a routine's recent history on
+ * expand, and a routine every ten minutes must not push a daily one's off.
+ */
+export const BOARD_ROUTINE_RUNS_PER_ROUTINE_MAX = 10;
 
 /**
  * The grain of an agent's `lastSeenAt` on the board, in ms. The office hears
@@ -217,6 +225,48 @@ export interface BoardPullReviewRef {
 }
 
 /**
+ * A routine of the office, as the board carries it: whose agent it is on,
+ * when it runs, when it is next due and when it last did. Not its words —
+ * those are read in Settings → Routines and heard in the owner's DM; the
+ * board is sent whole to everyone in the room on every change, and twenty
+ * briefs an agent would make it a book. See `docs/ROUTINES.md`.
+ */
+export interface BoardRoutineRef {
+  id: string;
+  /** `agents.id` and the agent's name as it is called now. */
+  agentId: string;
+  agentName: string;
+  /** The agent's owner: whose routine it is, and who may pause it from the board. */
+  ownerUserId: string;
+  name: string;
+  schedule: RoutineSchedule;
+  /** The schedule in words, zone included: "weekdays at 09:00 (Europe/Lisbon)". */
+  scheduleLabel: string;
+  /** The office command it runs, by name; null for its own instructions. */
+  command: { id: string; name: string } | null;
+  paused: boolean;
+  /** When it next fires; null when paused, or a once routine that has had its moment. */
+  nextDueAt: number | null;
+  lastRunAt: number | null;
+  /** Who set it up: the owner, and the agent that did it for them when one did. */
+  createdByName: string;
+  createdByAgentName: string;
+  updatedAt: number;
+}
+
+/** One slot of a routine, as the board carries it: when it was due and what came of it. */
+export interface BoardRoutineRunRef {
+  id: string;
+  routineId: string;
+  dueAt: number;
+  outcome: RoutineRunOutcome;
+  /** Why it was missed or skipped, as the room wrote it; read it with `routineRunNoteLabel`. Empty for a spoken slot. */
+  note: string;
+  /** When the line was spoken; null for a slot that was not. */
+  firedAt: number | null;
+}
+
+/**
  * The board, as the office sends it: every item, every agent it could be for,
  * and where the viewer stands — so the panel can hide what the office would
  * refuse rather than offer it and apologise.
@@ -232,6 +282,10 @@ export interface BoardPayload {
   pulls: RepoPullsRef;
   /** Who was asked from the board to review which pull request, newest first. Empty for a guest. */
   reviews: BoardPullReviewRef[];
+  /** Every routine in the office, on whichever agent. Empty for a guest. */
+  routines: BoardRoutineRef[];
+  /** Each routine's newest runs, newest first; see `BOARD_ROUTINE_RUNS_PER_ROUTINE_MAX`. Empty for a guest. */
+  routineRuns: BoardRoutineRunRef[];
   /** The host pull requests live on — github.com, or the enterprise server's — so the panel reads their URLs as the office does. */
   githubHost: string;
   you: { userId: string; role: MembershipRole | null };
