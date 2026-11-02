@@ -16,7 +16,7 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     version: "0.18.0",
-    date: null,
+    date: "2026-11-02",
     summary: "Desks where your agents work, and routines they keep on a schedule.",
     changes: [
       "Every agent has a desk in the Agent Bay, the same one tomorrow. One on a turn walks there and types; one holding a task with nothing running sits; the screen is lit by what it is on and flickers as each step lands, and a column of light stands over a desk whose agent is waiting for you.",
