@@ -1,12 +1,14 @@
 import {
+  activityTerminal,
   idleStatus,
   type BoardAgentRef,
   type BoardItemRef,
-  type BoardRoutineRef,
-  type BoardRoutineRunRef,
   type MapInteractable,
   type RosterEntry,
 } from '@quintal/shared';
+
+import type { ConversationKey, Transcript } from '../useConversations';
+import { currentTurn } from './desk';
 
 /**
  * The station: what an empty desk offers, and to whom.
@@ -28,38 +30,19 @@ export interface Candidate {
   busy: string;
 }
 
-/** The routines and their runs, as the board carries them, for telling a scheduled turn from any other. */
-export interface Scheduled {
-  routines: readonly BoardRoutineRef[];
-  runs: readonly BoardRoutineRunRef[];
-}
-
 /**
- * How long after a routine's line is spoken its agent's turn may begin and
- * still be that routine's: the harness wakes within seconds, and a turn
- * that began minutes later is somebody else's question.
+ * The routine an agent's running turn is, by name, or null: a turn a
+ * routine's line started says so itself (`AgentActivity.routine`, from the
+ * brief the line carried), and nothing else does — the line is spoken in
+ * the owner's DM, and the status line says `working`. Read from the turn
+ * this client holds for the agent, which it holds only if it may read the
+ * conversation the turn is in; for the owner, who the station is for,
+ * that is their own DM. A finished turn is nobody's routine any more.
  */
-export const ROUTINE_WAKE_WINDOW_MS = 3 * 60_000;
-
-/**
- * The routine an agent is on, if its turn is one: the newest of its
- * routines' runs whose line was spoken just before the turn began. A
- * routine fires as a line in its owner's DM, and nothing in the turn names
- * it, so this is read off the clocks — the office's on both sides. Null
- * for a turn that is somebody's question, or for an agent on no turn.
- */
-export function routineOn(entry: Pick<RosterEntry, 'identityId' | 'workingSince'>, scheduled: Scheduled): BoardRoutineRef | null {
-  if (entry.workingSince <= 0) return null;
-  const mine = new Map(scheduled.routines.filter((routine) => routine.agentId === entry.identityId).map((routine) => [routine.id, routine]));
-  if (mine.size === 0) return null;
-  let found: { routine: BoardRoutineRef; firedAt: number } | null = null;
-  for (const run of scheduled.runs) {
-    const routine = mine.get(run.routineId);
-    if (!routine || run.firedAt === null) continue;
-    if (run.firedAt > entry.workingSince || entry.workingSince - run.firedAt > ROUTINE_WAKE_WINDOW_MS) continue;
-    if (!found || run.firedAt > found.firedAt) found = { routine, firedAt: run.firedAt };
-  }
-  return found?.routine ?? null;
+export function routineOn(transcripts: Record<ConversationKey, Transcript>, agentId: string): string | null {
+  const turn = currentTurn(transcripts, agentId)?.activity;
+  if (!turn || activityTerminal(turn.state)) return null;
+  return turn.routine?.name ?? null;
 }
 
 /**
@@ -73,18 +56,22 @@ export function routineOn(entry: Pick<RosterEntry, 'identityId' | 'workingSince'
  * be begun for it from a chair it cannot walk to. The office refuses the
  * same ones (`whyNotBegin`), before it writes anything.
  */
-export function candidates(roster: readonly RosterEntry[], you: string, scheduled?: Scheduled): Candidate[] {
+export function candidates(
+  roster: readonly RosterEntry[],
+  you: string,
+  transcripts: Record<ConversationKey, Transcript> = {},
+): Candidate[] {
   return roster
     .filter((entry) => entry.kind === 'agent' && entry.ownerUserId === you)
-    .map((entry) => ({ entry, busy: whyBusy(entry, scheduled) }))
+    .map((entry) => ({ entry, busy: whyBusy(entry, transcripts) }))
     .sort((a, b) => Number(a.busy.length > 0) - Number(b.busy.length > 0) || a.entry.name.localeCompare(b.entry.name));
 }
 
-function whyBusy(entry: RosterEntry, scheduled?: Scheduled): string {
+function whyBusy(entry: RosterEntry, transcripts: Record<ConversationKey, Transcript>): string {
   if (entry.task) return `on ${entry.task.title}`;
-  // A scheduled turn is named for its routine, not for the tool it is on.
-  const routine = scheduled ? routineOn(entry, scheduled) : null;
-  if (routine) return `on its routine ${routine.name}`;
+  // A scheduled turn is named for its routine, not by its status line.
+  const routine = routineOn(transcripts, entry.identityId);
+  if (routine) return `on its routine ${routine}`;
   if (!idleStatus(entry.status)) return entry.status;
   if (!entry.scopes.includes('dm')) return 'cannot be messaged';
   if (!entry.scopes.includes('move')) return 'cannot walk';

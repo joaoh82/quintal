@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardAgentRef, BoardItemRef, BoardRoutineRef, BoardRoutineRunRef, MapInteractable, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardItemRef, MapInteractable, PublicActivity, RosterEntry } from '@quintal/shared';
 
-import { ROUTINE_WAKE_WINDOW_MS, candidates, checkoutsOf, holderOf, offeredNotes, promptFor, routineOn } from './station';
+import type { Transcript } from '../useConversations';
+import { candidates, checkoutsOf, holderOf, offeredNotes, promptFor, routineOn } from './station';
 
 function entry(over: Partial<RosterEntry>): RosterEntry {
   return {
@@ -99,29 +100,30 @@ describe('who the station offers', () => {
     assert.deepEqual(offeredNotes(items, new Set(['a1'])).map((item) => item.number), [4, 1]);
   });
 
-  it('names the routine an agent is on, from the run spoken just before its turn began', () => {
-    const routine = (id: string, agentId: string, name: string): BoardRoutineRef => ({
-      id, agentId, agentName: 'Arthur', ownerUserId: 'u1', name, schedule: { kind: 'cron', cron: '0 9 * * *', tz: 'UTC' },
-      scheduleLabel: 'daily at 09:00', command: null, paused: false, nextDueAt: null, awaitingMakeUp: false,
-      lastRunAt: null, createdByName: 'Josh', createdByAgentName: '', updatedAt: 0,
+  it('names the routine an agent is on, from the turn that says so', () => {
+    const turn = (over: Partial<PublicActivity>): PublicActivity => ({
+      version: 1, turnId: 't1', workerId: '1', sessionId: 's', requestId: 't1', sequence: 1, channelId: 'dm1',
+      state: 'running', startedAt: 1_000, updatedAt: 2_000, items: [], agentId: 'a1', agentName: 'Arthur', receivedAt: 2_000, ...over,
     });
-    const run = (routineId: string, firedAt: number | null): BoardRoutineRunRef => ({
-      id: `${routineId}:${firedAt}`, routineId, dueAt: firedAt ?? 0, outcome: firedAt === null ? 'missed' : 'fired', note: '', firedAt,
+    const holding = (...turns: PublicActivity[]): Record<string, Transcript> => ({
+      'channel:dm1': {
+        messages: turns.map((activity) => ({ from: activity.agentId, fromName: activity.agentName, fromKind: 'agent', text: '', sentAt: activity.startedAt, activity })),
+        hasMore: false, loaded: true, loading: false,
+      },
     });
-    const scheduled = {
-      routines: [routine('r1', 'a1', 'Morning standup'), routine('r2', 'a1', 'Inbox sweep'), routine('r9', 'a9', 'Theirs')],
-      runs: [run('r1', 1_000_000), run('r2', 1_000_000 + 60_000), run('r9', 1_000_000 + 60_000), run('r1', null)],
-    };
-    const at = (workingSince: number) => ({ identityId: 'a1', workingSince });
-    assert.equal(routineOn(at(1_000_000 + 65_000), scheduled)?.name, 'Inbox sweep', 'the newest line spoken before the turn');
-    assert.equal(routineOn(at(1_000_000 + 30_000), scheduled)?.name, 'Morning standup', 'not one spoken after it');
-    assert.equal(routineOn(at(1_000_000 + 60_000 + ROUTINE_WAKE_WINDOW_MS + 1), scheduled), null, 'a turn minutes later is somebody\'s question');
-    assert.equal(routineOn(at(0), scheduled), null, 'no turn, no routine');
-    assert.equal(routineOn({ identityId: 'a2', workingSince: 1_000_000 + 65_000 }, scheduled), null, 'another agent\'s routines are not this one\'s');
+    const sweep = turn({ routine: { name: 'Inbox sweep' } });
+    assert.equal(routineOn(holding(sweep), 'a1'), 'Inbox sweep');
+    assert.equal(routineOn(holding(turn({})), 'a1'), null, 'a turn that names no routine is somebody\'s question');
+    assert.equal(routineOn(holding(turn({ routine: { name: 'Inbox sweep' }, state: 'completed' })), 'a1'), null, 'a finished turn is nobody\'s routine any more');
+    assert.equal(routineOn(holding(sweep), 'a2'), null, 'another agent\'s turn is not this one\'s');
+    assert.equal(routineOn({}, 'a1'), null, 'nothing held, nothing known');
+    // A question that joined the routine's busy period is its own turn, and the running one wins.
+    const question = turn({ turnId: 't2', requestId: 't2', startedAt: 3_000, updatedAt: 4_000 });
+    assert.equal(routineOn(holding({ ...sweep, state: 'completed' }, question), 'a1'), null);
 
-    const roster = [entry({ identityId: 'a1', name: 'Arthur', status: 'reading inbox.md', workingSince: 1_000_000 + 65_000 })];
-    assert.deepEqual(candidates(roster, 'u1', scheduled).map((c) => c.busy), ['on its routine Inbox sweep']);
-    assert.deepEqual(candidates(roster, 'u1').map((c) => c.busy), ['reading inbox.md'], 'without the board, the tool it is on');
+    const roster = [entry({ identityId: 'a1', name: 'Arthur', status: 'working', workingSince: 1_000 })];
+    assert.deepEqual(candidates(roster, 'u1', holding(sweep)).map((c) => c.busy), ['on its routine Inbox sweep']);
+    assert.deepEqual(candidates(roster, 'u1').map((c) => c.busy), ['working'], 'without the turn, the status line');
   });
 
   it('offers the checkouts the agent\'s machine listed, or none', () => {

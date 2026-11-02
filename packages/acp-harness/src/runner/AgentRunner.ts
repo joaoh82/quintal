@@ -1604,6 +1604,8 @@ export class AgentRunner {
       this.#queuedActivity.set(scope, new PublicTurn(channelId ? { channelId } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID },
         value => this.#publishActivity(value), trigger.requestId));
     }
+    // A routine's line names the turn it starts, from the moment it is queued.
+    if (trigger.command?.routine) this.#queuedActivity.get(scope)?.routine(trigger.command.routine.name);
     const queue = this.#queues.get(scope) ?? [];
     queue.push(trigger);
     const activity = this.#queuedActivity.get(scope);
@@ -1695,6 +1697,7 @@ export class AgentRunner {
           const id = latencyRequestId(trigger.requestId);
           return id ? [id] : [];
         });
+        for (const trigger of triggers) if (trigger.command?.routine) activity.routine(trigger.command.routine.name);
       }
       turn.latency = triggers.flatMap(trigger => trigger.latency ? [trigger.latency] : []);
       for (const trace of turn.latency) {

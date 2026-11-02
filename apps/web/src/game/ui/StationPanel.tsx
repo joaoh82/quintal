@@ -4,13 +4,12 @@ import {
   BOARD_TITLE_MAX_LENGTH,
   type BoardAgentRef,
   type BoardItemRef,
-  type BoardRoutineRef,
-  type BoardRoutineRunRef,
   type DeskBeginPayload,
   type RosterEntry,
 } from '@quintal/shared';
 import { useEffect, useMemo, useState } from 'react';
 
+import type { ConversationKey, Transcript } from '../useConversations';
 import { candidates, checkoutsOf, offeredNotes } from './station';
 
 interface StationPanelProps {
@@ -19,9 +18,8 @@ interface StationPanelProps {
   items: BoardItemRef[];
   /** The board's agents, for what each one's machine has checked out. */
   agents: BoardAgentRef[];
-  /** The board's routines and their runs, for naming the one an agent is on. */
-  routines: BoardRoutineRef[];
-  routineRuns: BoardRoutineRunRef[];
+  /** What this client holds of every conversation, for the turn an agent is on and the routine it names. */
+  transcripts: Record<ConversationKey, Transcript>;
   /** Your `users.id`: whose agents are offered. */
   you: string;
   /** True from Begin until the office has answered, one way or the other. */
@@ -48,8 +46,7 @@ export function StationPanel({
   roster,
   items,
   agents,
-  routines,
-  routineRuns,
+  transcripts,
   you,
   pending,
   onClose,
@@ -63,10 +60,7 @@ export function StationPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const yours = useMemo(
-    () => candidates(roster, you, { routines, runs: routineRuns }),
-    [roster, you, routines, routineRuns],
-  );
+  const yours = useMemo(() => candidates(roster, you, transcripts), [roster, you, transcripts]);
   const notes = useMemo(
     () => offeredNotes(items, new Set(yours.map((candidate) => candidate.entry.identityId))),
     [items, yours],

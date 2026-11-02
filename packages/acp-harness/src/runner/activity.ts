@@ -100,6 +100,17 @@ export class PublicTurn {
     this.value.state = state;
     this.changed();
   }
+  /**
+   * This turn is a routine's: the line that started it carried the brief.
+   * Said once; a second routine joining a batched turn does not rename it,
+   * because the turn began as the first one's and the office reads one
+   * name.
+   */
+  routine(name: string): void {
+    if (this.#closed || this.value.routine) return;
+    this.value.routine = { name };
+    this.changed();
+  }
   text(text: string): void {
     if (this.#closed || !text) return;
     text = this.#noticePrefix + text;
