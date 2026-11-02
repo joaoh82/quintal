@@ -1,4 +1,4 @@
-import { emoteForStatus, idleStatus, type Pose } from '@quintal/shared';
+import { emoteForStatus, idleStatus, testRunStatus, type Pose } from '@quintal/shared';
 
 /**
  * The glass: what a desk's monitor shows from across the room, and how its
@@ -59,16 +59,6 @@ export interface Cue {
 const NORMAL: Cue = { pace: 'normal', frames: 'work', globe: false };
 
 /**
- * A shell command that runs a test suite, by the names people type: the
- * runner is the command, or the one after an `&&`. Not a word anywhere in
- * the line — `git add foo.test.ts` is not a test run — and not a runner
- * past the 32 characters `statusForTool` keeps of a command, which is a
- * miss, and a cheap one.
- */
-const TESTS =
-  /(?:^running |&&\s*)(?:(?:pnpm|npm|yarn|bun|npx)\s+(?:run\s+)?test|vitest|jest|pytest|mocha|rspec|cargo\s+test|go\s+test|tsx\s+--test|node\s+--test)\b/;
-
-/**
  * The act-out for a status line, by the verb `statusForTool` chose:
  * reading and searching are slow work, editing is fast, fetching is work
  * with a globe over the laptop, and running tests is sitting back while
@@ -87,7 +77,8 @@ export function cueFor(status: string): Cue {
     case 'fetching':
       return { ...NORMAL, globe: true };
     case 'running':
-      return TESTS.test(line) ? { ...NORMAL, frames: 'sit' } : NORMAL;
+      // The same rule that gives a test run the thinking balloon (`emoteForStatus`).
+      return testRunStatus(line) ? { ...NORMAL, frames: 'sit' } : NORMAL;
     default:
       return NORMAL;
   }
