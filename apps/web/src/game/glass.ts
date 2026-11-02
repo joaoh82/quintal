@@ -13,23 +13,24 @@ export type GlassState = 'off' | 'idle' | 'thinking' | 'working' | 'waiting' | '
 
 /**
  * The state of a desk, from its holder. Off when nobody holds it or the
- * holder is on its feet — a screen with nobody at it is dark. Dim while the
- * holder sits on a task with nothing running. Otherwise the status line
- * decides, by the same table that picks the balloon: thinking, waiting for
- * somebody, a refusal or a stop, or a tool at work.
+ * holder is on its feet — a screen with nobody at it is dark. Red for a
+ * refusal or a stop in whatever seated pose, because a refused agent is
+ * not busy and so sits rather than works, and the red is the point. Dim
+ * while the holder sits on a task with nothing running. Otherwise the
+ * status line decides, by the same table that picks the balloon:
+ * thinking, waiting for somebody, or a tool at work.
  */
 export function glassState(holder: { status: string; pose: Pose } | null): GlassState {
   if (!holder || holder.pose === 'stand') return 'off';
   const line = holder.status.trim();
+  const balloon = emoteForStatus(line);
+  if (balloon === 'alert' || balloon === 'cross') return 'error';
   if (holder.pose === 'sit' || idleStatus(line)) return 'idle';
-  switch (emoteForStatus(line)) {
+  switch (balloon) {
     case 'dots':
       return 'thinking';
     case 'question':
       return 'waiting';
-    case 'alert':
-    case 'cross':
-      return 'error';
     default:
       return 'working';
   }
@@ -57,8 +58,15 @@ export interface Cue {
 
 const NORMAL: Cue = { pace: 'normal', frames: 'work', globe: false };
 
-/** A shell command that runs a test suite, by the names people type. */
-const TESTS = /\b(tests?|vitest|jest|pytest|mocha|rspec|cargo test|go test|tsx --test|node --test)\b/;
+/**
+ * A shell command that runs a test suite, by the names people type: the
+ * runner is the command, or the one after an `&&`. Not a word anywhere in
+ * the line — `git add foo.test.ts` is not a test run — and not a runner
+ * past the 32 characters `statusForTool` keeps of a command, which is a
+ * miss, and a cheap one.
+ */
+const TESTS =
+  /(?:^running |&&\s*)(?:(?:pnpm|npm|yarn|bun|npx)\s+(?:run\s+)?test|vitest|jest|pytest|mocha|rspec|cargo\s+test|go\s+test|tsx\s+--test|node\s+--test)\b/;
 
 /**
  * The act-out for a status line, by the verb `statusForTool` chose:

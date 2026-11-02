@@ -123,6 +123,8 @@ interface Glass {
   lines: Phaser.GameObjects.Graphics;
   beacon: Phaser.GameObjects.Rectangle;
   beat: Phaser.Tweens.Tween | null;
+  /** The flicker fading, if one is. */
+  flash: Phaser.Tweens.Tween | null;
   globe: Phaser.GameObjects.Graphics;
   state: GlassState;
   globeOn: boolean;
@@ -766,15 +768,22 @@ export class OfficeScene extends Phaser.Scene {
     globe.strokeCircle(x + width / 2 - 2, y - height / 2 - 4, GLOBE_RADIUS);
     globe.strokeEllipse(x + width / 2 - 2, y - height / 2 - 4, GLOBE_RADIUS, GLOBE_RADIUS * 2);
     globe.lineBetween(x + width / 2 - 2 - GLOBE_RADIUS, y - height / 2 - 4, x + width / 2 - 2 + GLOBE_RADIUS, y - height / 2 - 4);
-    return { pane, lines, beacon, beat: null, globe, state: 'off', globeOn: false, x, y, width, height };
+    return { pane, lines, beacon, beat: null, flash: null, globe, state: 'off', globeOn: false, x, y, width, height };
   }
+
+  /** What the glass was last drawn from: every agent's seat, pose and status. */
+  #glassKey = '';
 
   /**
    * Every desk's glass, from whoever holds it: colour by state, the beacon
-   * while they wait, the globe while they fetch. Asked on every roster
-   * change, which is cheap, and changes nothing when nothing changed.
+   * while they wait, the globe while they fetch. Asked on every patch, but
+   * walked only when an agent's seat, pose or status has changed — not
+   * when somebody takes a step — so the cost follows the glass, not the
+   * room.
    */
-  #drawGlass(): void {
+  #drawGlass(key: string): void {
+    if (key === this.#glassKey) return;
+    this.#glassKey = key;
     for (const [seatId, glass] of this.#glass) {
       let holder: OfficePlayer | null = null;
       for (const player of this.#room.state.players.values()) {
@@ -823,6 +832,8 @@ export class OfficeScene extends Phaser.Scene {
     const glass = this.#glass.get(seatId);
     if (!glass || glass.state === 'off' || glass.state === 'idle') return;
     const { lines, x, y, width, height } = glass;
+    // A second step inside the first flicker's fade: the first must not wipe the second's lines.
+    glass.flash?.stop();
     lines.clear();
     lines.fillStyle(0xffffff, 0.9);
     const left = x - width / 2 + 2;
@@ -833,7 +844,15 @@ export class OfficeScene extends Phaser.Scene {
       lines.fillRect(left + Math.floor(Math.random() * Math.max(1, width - 4 - span)), row, span, 1);
     }
     lines.setAlpha(1);
-    this.tweens.add({ targets: lines, alpha: 0, duration: 260, onComplete: () => lines.clear() });
+    glass.flash = this.tweens.add({
+      targets: lines,
+      alpha: 0,
+      duration: 260,
+      onComplete: () => {
+        lines.clear();
+        glass.flash = null;
+      },
+    });
   }
 
   /** The interactable whose prop is under the pointer, if any. */
@@ -1174,7 +1193,9 @@ export class OfficeScene extends Phaser.Scene {
 
   #publishRoster(): void {
     const players: RosterEntry[] = [];
+    let glassKey = '';
     for (const [sessionId, player] of this.#room.state.players) {
+      if (player.kind === 'agent') glassKey += `${player.seat}:${player.pose}:${player.status}|`;
       players.push({
         sessionId,
         name: player.name,
@@ -1203,7 +1224,7 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
-    this.#drawGlass();
+    this.#drawGlass(glassKey);
 
     // Cheaper than it looks, and far cheaper than re-rendering a React list
     // twenty times a second because somebody took a step.

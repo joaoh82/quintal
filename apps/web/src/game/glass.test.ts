@@ -16,7 +16,14 @@ describe('what the monitor shows', () => {
     assert.equal(glassState({ status: 'editing auth.ts', pose: 'work' }), 'working');
     assert.equal(glassState({ status: 'waiting for Josh', pose: 'work' }), 'waiting');
     assert.equal(glassState({ status: "I've stopped: out of tokens", pose: 'work' }), 'error');
-    assert.equal(glassState({ status: 'no model for claude here', pose: 'work' }), 'error');
+  });
+
+  it('is red under a refused agent, which sits rather than works', () => {
+    // A refusal is not work, so the office seats it, or stands it: the red
+    // has to show in the chair, or it would show for a second and go.
+    assert.equal(glassState({ status: 'no model for claude here', pose: 'sit' }), 'error');
+    assert.equal(glassState({ status: 'offline', pose: 'sit' }), 'error');
+    assert.equal(glassState({ status: 'no model for claude here', pose: 'stand' }), 'off', 'nobody at the screen');
   });
 });
 
@@ -29,6 +36,15 @@ describe('how a holder is drawn at its desk', () => {
     assert.deepEqual(cueFor('running pnpm test'), { pace: 'normal', frames: 'sit', globe: false });
     assert.deepEqual(cueFor('running vitest run'), { pace: 'normal', frames: 'sit', globe: false });
     assert.deepEqual(cueFor('running git status'), { pace: 'normal', frames: 'work', globe: false });
+    assert.deepEqual(cueFor('running cd apps/web && pnpm test'), { pace: 'normal', frames: 'sit', globe: false });
+  });
+
+  it('does not sit back for a command that only mentions tests', () => {
+    const typing = { pace: 'normal', frames: 'work', globe: false };
+    assert.deepEqual(cueFor('running git add foo.test.ts'), typing);
+    assert.deepEqual(cueFor('running git commit -m "add tests"'), typing);
+    // The runner past the 32 characters a status keeps of a command is lost: a miss, and a cheap one.
+    assert.deepEqual(cueFor('running cd apps/web/src/game && pnpm'), typing);
   });
 
   it('draws anything else as the office does already', () => {

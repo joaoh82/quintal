@@ -186,6 +186,9 @@ export class Avatar {
     this.kind = player.kind;
     this.#name = player.name;
     this.#status = player.status;
+    // Drawn from the status it arrives with: a late joiner sees a test
+    // run as a test run, not as typing until the next status line.
+    this.#cue = cueFor(player.status);
     this.#owner = player.ownerName;
     this.body = bodyFor(sessionId, player);
 

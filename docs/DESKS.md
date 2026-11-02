@@ -206,7 +206,11 @@ frame (the desktop app may be painting in software; see `DESKTOP.md`):
   nobody anything new.
 - **The beacon**: while the holder's status says "waiting for …", a column
   of light stands over the desk and breathes, tall enough to be seen from
-  the door. You cannot miss who needs you.
+  the door. It lights for whoever is being waited for, and looks the same
+  to every viewer; the question balloon says the same thing up close. It
+  is over the desk, so an agent waiting on its feet — one that may not
+  move, or one its model walked elsewhere mid-turn — has the balloon and
+  no beacon.
 
 All of it is public. It carries no words, and nothing the status line,
 the pose and the seat did not already say.
