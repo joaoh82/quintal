@@ -14,6 +14,7 @@ describe('what the monitor shows', () => {
   it('takes its colour from the status line, by the balloon table', () => {
     assert.equal(glassState({ status: 'thinking', pose: 'work' }), 'thinking');
     assert.equal(glassState({ status: 'editing auth.ts', pose: 'work' }), 'working');
+    assert.equal(glassState({ status: 'running pnpm test', pose: 'work' }), 'thinking', 'a test run is a wait, like its balloon');
     assert.equal(glassState({ status: 'waiting for Josh', pose: 'work' }), 'waiting');
     assert.equal(glassState({ status: "I've stopped: out of tokens", pose: 'work' }), 'error');
   });
