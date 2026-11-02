@@ -317,8 +317,9 @@ a channel, which is a different thing from a chair and already works as one.
 The repository is the agent's to choose, as it is for a board note, unless
 you choose it: the harness reports the checkouts under `REPOS/` with its
 machine (`checkouts` on `agent:host_report`, once per fleet, kept on the
-host's row and joined onto the board's agent rows by label and owner, and
-sent only to that owner), and the station offers them for the
+host's row — one per owner per label — and joined onto the board's agent
+rows by the machine each agent last reported from, under the same owner,
+and sent only to that owner), and the station offers them for the
 chosen agent — "api, group/web" — with the agent's own choice first. A name
 picked rides in `desk_begin` as `repo`, the office refuses one the machine
 never listed (`whyNotRepo`), and the brief says "Work in the api checkout

@@ -170,12 +170,19 @@ export function persistHostReport(input: {
     workspaceId: input.workspaceId,
     ownerUserId: input.ownerUserId,
     report: input.report,
-  }).catch((error: unknown) => {
-    logger.error(`[agent] host report failed for ${input.agentId}`, error);
-  });
-  void setAgentWorkspace(db, input.agentId, input.workspacePath).catch((error: unknown) => {
-    logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
-  });
+  })
+    .catch((error: unknown): null => {
+      logger.error(`[agent] host report failed for ${input.agentId}`, error);
+      return null;
+    })
+    // The machine it reported from is kept on the agent, by the label the
+    // row was stored under, so an agent nobody assigned to a machine still
+    // joins onto the one it actually runs on. A report that could not be
+    // stored names no machine, and the workspace path is written regardless.
+    .then((report) => setAgentWorkspace(db, input.agentId, input.workspacePath, report ? report.label : undefined))
+    .catch((error: unknown) => {
+      logger.error(`[agent] workspace write failed for ${input.agentId}`, error);
+    });
 }
 
 /**

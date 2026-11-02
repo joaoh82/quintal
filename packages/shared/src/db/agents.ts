@@ -768,10 +768,15 @@ export async function setAgentWorkspace(
   db: Database,
   agentId: string,
   workspacePath: string,
+  /** The machine it reported from, by the label its report carried; omitted leaves what is kept. */
+  reportedHostLabel?: string | null,
 ): Promise<void> {
   await db
     .update(agents)
-    .set({ workspacePath: workspacePath.slice(0, 512) })
+    .set({
+      workspacePath: workspacePath.slice(0, 512),
+      ...(reportedHostLabel === undefined ? {} : { reportedHostLabel }),
+    })
     .where(eq(agents.id, agentId));
 }
 

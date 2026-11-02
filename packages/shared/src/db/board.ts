@@ -312,16 +312,17 @@ export async function listBoardAgentsForWorkspace(
     })
     .from(agents)
     .leftJoin(users, eq(users.id, agents.ownerUserId))
-    // The machine it is assigned to, by the label its owner gave it, for what
-    // is checked out there. The owner too: a label is only unique per office
-    // and defaults to a hostname, so two members' laptops can share one, and
-    // a collision must show nothing rather than somebody else's repositories.
+    // The machine it runs on, for what is checked out there: the one it last
+    // reported from, else the one its owner assigned it to — an agent
+    // launched by hand is assigned nowhere and still reports from somewhere.
+    // Under the same owner: a label defaults to a hostname, so two members'
+    // laptops can share one, and host rows are one per owner.
     .leftJoin(
       agentHosts,
       and(
         eq(agentHosts.workspaceId, agents.workspaceId),
         eq(agentHosts.ownerUserId, agents.ownerUserId),
-        eq(agentHosts.label, agents.hostLabel),
+        eq(agentHosts.label, sql`coalesce(${agents.reportedHostLabel}, ${agents.hostLabel})`),
       ),
     )
     .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt)))

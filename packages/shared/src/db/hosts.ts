@@ -9,9 +9,12 @@ import type { Database } from './client.js';
 /**
  * Record what a machine says it can run.
  *
- * Upsert by (workspace, label) rather than insert: a fleet of eight agents on
- * one laptop reports the same machine eight times, and eight rows saying the
- * same thing would be a worse answer than one.
+ * Upsert by (workspace, owner, label) rather than insert: a fleet of eight
+ * agents on one laptop reports the same machine eight times, and eight rows
+ * saying the same thing would be a worse answer than one. The owner is part
+ * of the key because a label defaults to a hostname and everybody calls
+ * their laptop "laptop": a report is one person's machine, and must never
+ * update a colleague's row of the same name.
  */
 export async function recordHost(
   db: Database,
@@ -24,7 +27,11 @@ export async function recordHost(
     .select({ id: agentHosts.id })
     .from(agentHosts)
     .where(
-      and(eq(agentHosts.workspaceId, input.workspaceId), eq(agentHosts.label, report.label)),
+      and(
+        eq(agentHosts.workspaceId, input.workspaceId),
+        eq(agentHosts.ownerUserId, input.ownerUserId),
+        eq(agentHosts.label, report.label),
+      ),
     )
     .limit(1);
 

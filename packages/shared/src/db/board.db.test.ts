@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createAgent, revokeAgent } from './agents.js';
+import { createAgent, revokeAgent, setAgentWorkspace } from './agents.js';
+import { recordHost } from './hosts.js';
 import {
   BoardItemError,
   createBoardItem,
@@ -120,6 +121,19 @@ describe('writing a note', () => {
     assert.equal((await listBoardItemsForWorkspace(db, owner.workspaceId)).length, 3, 'a done note makes room');
     await note('a done one', { openLimit: 2, status: 'done' });
     assert.equal((await listBoardItemsForWorkspace(db, owner.workspaceId)).length, 4, 'a note written as done does not count');
+  });
+
+  it("carries what is checked out on the machine an agent runs on, assigned or not", async () => {
+    const { db, owner, agent } = await office('Ana');
+    const marvin = await agent('Marvin');
+    const who = { workspaceId: owner.workspaceId, ownerUserId: owner.id };
+    await recordHost(db, { ...who, report: { label: 'laptop', reposDir: '/repos', checkouts: ['api'] } });
+    const listed = async () => (await listBoardAgentsForWorkspace(db, owner.workspaceId))[0]?.checkouts;
+    assert.deepEqual(await listed(), [], 'assigned nowhere, reported from nowhere yet');
+    await setAgentWorkspace(db, marvin.id, '/nest', 'laptop');
+    assert.deepEqual(await listed(), ['api'], 'the machine it reported from');
+    await setAgentWorkspace(db, marvin.id, '/nest');
+    assert.deepEqual(await listed(), ['api'], 'a later report that names no machine keeps it');
   });
 
   it('is for a live agent of this office, or for nobody', async () => {

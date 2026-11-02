@@ -49,8 +49,9 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {hosts.map((host) => (
-        <section key={host.label} className="rounded-lg border p-4">
+      {hosts.map((host, index) => (
+        // Two members' laptops can share a name; the row is one each.
+        <section key={`${host.label}#${index}`} className="rounded-lg border p-4">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <h2 className="text-sm font-semibold">{host.label}</h2>
             <span className="text-muted-foreground text-xs">
