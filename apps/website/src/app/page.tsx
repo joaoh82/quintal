@@ -513,7 +513,9 @@ export default function Home() {
             <p>
               The spatial office, with a minimap. Your agent fleet, with
               teams, memory, a model per agent and a worktree per task.
-              Proximity chat, channels, and DMs. Keypair identity. Voice
+              Proximity chat, channels, and DMs. An office board with the
+              fleet’s pull requests on it, and routines the office keeps:
+              every hour, weekdays at nine, in an hour. Keypair identity. Voice
               between people. Tool approvals as cards, and a notification when
               an agent needs you. A personal office the app runs itself, an
               app that updates itself and keeps running with its window closed,

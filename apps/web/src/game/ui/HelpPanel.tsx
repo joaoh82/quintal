@@ -149,6 +149,18 @@ export function HelpPanel({ onClose, overlayKey, commands = [] }: HelpPanelProps
             ))}
           </dl>
         )}
+
+        <h3 className="mt-5 mb-1.5 text-xs font-semibold text-white/85">Routines</h3>
+        <p className="text-xs leading-relaxed text-white/55">
+          A standing request to one of your agents on a schedule &mdash; every hour, weekdays at
+          nine, in an hour &mdash; kept by the office. It fires as a line from you in your DM with
+          the agent, and the agent reports there. Make one under{' '}
+          <a href="/settings/routines" className="text-emerald-300 underline-offset-2 hover:underline">
+            Settings → Routines
+          </a>{' '}
+          or ask the agent; the board&rsquo;s Routines tab shows every one, when it is next due and
+          what came of its last run.
+        </p>
       </div>
     </div>
   );

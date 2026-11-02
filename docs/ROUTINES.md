@@ -179,5 +179,5 @@ Five pull requests, each shippable on its own.
       `routines` scope, base-prompt guidance.
 - [x] **4. Visibility.** Routines in the board payload; the Routines tab;
       the Agents tab toggle; the roster card row.
-- [ ] **5. Docs.** `docs/guide/routines.md`, the help panel, the website
+- [x] **5. Docs.** `docs/guide/routines.md`, the help panel, the website
       changelog, the roadmap moved to "shipped".

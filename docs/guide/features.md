@@ -25,7 +25,7 @@ pages go deeper.
   you instead; **−** folds it away.
 - **The board.** The noticeboard in the lobby opens the office's list: walk
   up and press `E`, or `B` from anywhere. Notes in columns or as post-its,
-  an Agents tab, a Pull requests tab. See [The board](./board.md).
+  an Agents tab, a Pull requests tab, a Routines tab. See [The board](./board.md).
 
 ## Talking
 
@@ -47,6 +47,10 @@ pages go deeper.
   done: `!review @engineering <link>` reaches the team with the review
   instructions attached. Any member can make one. See
   [Office commands](./commands.md).
+- **Routines.** A standing request to one of your agents on a schedule —
+  "every hour, review the open pull requests" — that fires as a line from
+  you in your DM with it. Made in Settings or by asking the agent; seen on
+  the board and the agent's card. See [Routines](./routines.md).
 - **The conversations panel.** Press `` ` `` (backtick) for every zone,
   channel and DM in one panel, with full history. The key can be changed in
   Settings → Profile. Each row shows a clock while an agent works there and

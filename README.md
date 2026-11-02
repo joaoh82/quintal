@@ -95,6 +95,15 @@ agents to review.
 
 ![The board's Pull requests tab: three pull requests with their checks, review and mergeability from GitHub, and the actions row open on one — squash, merge, rebase, close](./screenshots/board-pull-requests.png)
 
+**Routines.** A standing request to one of your agents on a schedule —
+"every hour, review the open pull requests", "weekdays at nine, see what is
+on the board", "in an hour, check the deploy" — kept by the office, not the
+agent's runtime, so it works the same on every runtime. It fires as a line
+from you in your DM with the agent, with the brief attached, and the agent
+reports there. Make one in Settings or ask the agent; the board's Routines
+tab shows every one, when it is next due and what came of its last run, and
+the agent's card says what it does next.
+
 ![An agent addressed by name, thinking: a balloon over its head, "thinking" under its name, the question in a bubble over Josh, and the chat box showing the turn running](./screenshots/agent-thinking.png)
 
 **Live steps and replies.** Conversations retain grouped tool steps with outcomes,
@@ -268,7 +277,7 @@ different office — see [docs/DESKTOP.md](./docs/DESKTOP.md#the-personal-office
 
 | | |
 | --- | --- |
-| [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, the board, every key and command |
+| [User guide](./docs/guide/README.md) | Signing in, your identity, agents, channels, the board, commands and routines, every key and command |
 | [Self-hosting](./SELF_HOSTING.md) | Running your own instance: Docker, a VM with HTTPS, Render, Railway, reverse proxies |
 | [Releasing](./RELEASING.md) | One tag builds desktop installers for macOS, Linux and Windows |
 | [The desktop app](./docs/DESKTOP.md) | Why there is an app, macOS permissions, where agents run |

@@ -8,7 +8,8 @@ export const metadata: Metadata = {
   description: `What's new in Quintal, release by release. The current version is v${VERSION}.`,
 };
 
-function formatDate(date: string) {
+function formatDate(date: string | null) {
+  if (date === null) return null;
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
@@ -49,7 +50,11 @@ export default function Changelog() {
                 <a href={`#v${release.version}`}>v{release.version}</a>
               </h2>
               {release.version === VERSION ? <span className="changelog-current">Current</span> : null}
-              <time dateTime={release.date}>{formatDate(release.date)}</time>
+              {release.date === null ? (
+                <span className="changelog-unreleased">Unreleased</span>
+              ) : (
+                <time dateTime={release.date}>{formatDate(release.date)}</time>
+              )}
             </div>
             <div className="changelog-body">
               <h3>{release.summary}</h3>
@@ -58,9 +63,15 @@ export default function Changelog() {
                   <li key={change}>{change}</li>
                 ))}
               </ul>
-              <a className="changelog-notes" href={`${REPO}/releases/tag/v${release.version}`}>
-                Release notes and downloads ↗
-              </a>
+              {release.date === null ? (
+                <a className="changelog-notes" href={`${REPO}/commits/main`}>
+                  On main now; in the next release ↗
+                </a>
+              ) : (
+                <a className="changelog-notes" href={`${REPO}/releases/tag/v${release.version}`}>
+                  Release notes and downloads ↗
+                </a>
+              )}
             </div>
           </li>
         ))}
