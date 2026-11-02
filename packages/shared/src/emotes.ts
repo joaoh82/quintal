@@ -103,6 +103,9 @@ export function emoteForStatus(status: string): EmoteId | '' {
   const line = status.trim();
   if (line.length === 0 || line === 'idle') return '';
   if (line === 'thinking') return 'dots';
+  // A test run is a wait, not a doing: the agent sits back with the
+  // thinking balloon while the suite decides, as agent-office draws it.
+  if (testRunStatus(line)) return 'dots';
   if (line.startsWith('waiting for ')) return 'question';
   if (line.startsWith('no model ')) return 'cross';
   if (line === 'offline') return 'alert';
@@ -110,6 +113,21 @@ export function emoteForStatus(status: string): EmoteId | '' {
   // Anything else the harness writes is a tool at work: "reading foo.ts",
   // "running tests…" — the lightbulb, for "working on it".
   return 'idea';
+}
+
+/**
+ * A shell command that runs a test suite, by the names people type: the
+ * runner is the command, or the one after an `&&`. Not a word anywhere in
+ * the line — `git add foo.test.ts` is not a test run — and not a runner
+ * past the 32 characters `statusForTool` keeps of a command, which is a
+ * miss, and a cheap one. One rule for the balloon and for the desk's
+ * act-out, so the two never disagree.
+ */
+const TEST_RUN =
+  /(?:^running |&&\s*)(?:(?:pnpm|npm|yarn|bun|npx)\s+(?:run\s+)?test|vitest|jest|pytest|mocha|rspec|cargo\s+test|go\s+test|tsx\s+--test|node\s+--test)\b/;
+
+export function testRunStatus(status: string): boolean {
+  return TEST_RUN.test(status.trim());
 }
 
 /**

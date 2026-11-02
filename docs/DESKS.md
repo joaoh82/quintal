@@ -189,10 +189,13 @@ takes the cue when its status line changes (`setCue`) and redraws only
 what is at a desk: a body walking or standing is drawn as it was. Work has
 three paces, so it is three animations per direction.
 
-Not from this: the "thinking" balloon on a test run, which the harness
-sets from the same status line and would have to set itself; and
-head-in-hands after two failed runs, which needs the test's outcome, and
-that is a step in the activity stream, not something public.
+The "thinking" balloon on a test run comes from the same rule: the harness
+sets its balloon from the status line through the shared table
+(`emoteForStatus`), and a test run (`testRunStatus`) reads as a wait there
+too, so the agent sits back under the thinking dots and the screen shows
+the thinking colour. Not from this: head-in-hands after two failed runs,
+which needs the test's outcome, and that is a step in the activity stream,
+not something public.
 
 ### The monitor
 

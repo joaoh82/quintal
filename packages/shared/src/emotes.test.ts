@@ -59,7 +59,13 @@ describe('the balloon a status implies', () => {
     ['no model "opus" here', 'cross'],
     ['offline', 'alert'],
     ['reading src/index.ts', 'idea'],
-    ['running pnpm test', 'idea'],
+    ['running git status', 'idea'],
+    // A test run is a wait: the thinking balloon, as for "thinking".
+    ['running pnpm test', 'dots'],
+    ['running cd apps/web && pnpm test', 'dots'],
+    ['running vitest run', 'dots'],
+    ['running git add foo.test.ts', 'idea'],
+    ['running git commit -m "add tests"', 'idea'],
   ];
 
   for (const [status, expected] of table) {
