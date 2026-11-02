@@ -42,6 +42,9 @@ describe('how a holder is drawn at its desk', () => {
 
   it('does not sit back for a command that only mentions tests', () => {
     const typing = { pace: 'normal', frames: 'work', globe: false };
+    assert.deepEqual(cueFor('running git commit -m "fix && jest"'), typing);
+    assert.deepEqual(cueFor('searching && jest'), { pace: 'slow', frames: 'work', globe: false }, 'a search is a search');
+    assert.equal(glassState({ status: 'searching && jest', pose: 'work' }), 'working', 'and its screen says so');
     assert.deepEqual(cueFor('running git add foo.test.ts'), typing);
     assert.deepEqual(cueFor('running git commit -m "add tests"'), typing);
     // The runner past the 32 characters a status keeps of a command is lost: a miss, and a cheap one.
