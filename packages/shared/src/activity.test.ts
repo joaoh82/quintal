@@ -28,6 +28,10 @@ test('the public boundary removes unknown fields and rejects malformed or oversi
     snapshot(),
   );
   assert.equal(parseActivity({ ...snapshot(), sequence: -1 }), null);
+  assert.deepEqual(parseActivity({ ...snapshot(), routine: { name: '  Inbox   sweep ' } })?.routine, { name: 'Inbox sweep' }, 'a turn says which routine it is');
+  assert.equal(parseActivity({ ...snapshot(), routine: { name: '' } }), null, 'but not a nameless one');
+  assert.equal(parseActivity({ ...snapshot(), routine: 'Inbox sweep' }), null);
+  assert.equal(parseActivity(snapshot())?.routine, undefined);
   assert.equal(parseActivity({ ...snapshot(), zoneId: 'elsewhere' }), null);
   assert.equal(parseActivity({ ...snapshot(), items: Array(65).fill({}) }), null);
   assert.equal(parseActivity({ ...snapshot(), raw: 'x'.repeat(65_000) }), null);

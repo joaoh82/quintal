@@ -277,8 +277,14 @@ desk panel's place at the left of the room:
   not an agent that would answer either. An agent that is not offered is
   listed greyed with why — "on Fix the chair", "reading auth.ts", "cannot
   be messaged" — and one that is not here is not listed, because nothing
-  can be begun for it from a chair it cannot walk to. The rules are
-  `candidates` and `offeredNotes` in `station.ts`, pinned without a panel;
+  can be begun for it from a chair it cannot walk to. An agent on a
+  scheduled turn is "on its routine Inbox sweep", not "working": a routine
+  fires as a line in its owner's DM and the status line says only
+  `working`, so the turn says which routine it is (`AgentActivity.routine`,
+  set by the harness from the brief the line carried), and `routineOn`
+  reads it from the running turn this client holds for the agent — which,
+  for the owner, is their own DM. The rules are `candidates` and
+  `offeredNotes` in `station.ts`, pinned without a panel;
   the office refuses the same ones (`whyNotBegin`, `whyNotNote` in the
   room's `station.ts`), before it writes anything.
 - **Begin**, which sends one message, `desk_begin { seatId, agentId,

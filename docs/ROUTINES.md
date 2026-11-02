@@ -27,7 +27,10 @@ everything else an agent does.
   harness starts a turn on the line and renders the brief beside it
   (`apps/server/src/rooms/board-brief.ts`, `OfficeRoom#deliverChannelChat`,
   `packages/acp-harness/src/runner/context.ts`). A routine firing is
-  delivered the same way, so the agent reports where its owner reads, and
+  delivered the same way — and the turn it starts carries the routine's
+  name in its `agent:activity` snapshots, which is how the office knows
+  an agent is on a routine rather than a question — so the agent reports
+  where its owner reads, and
   the DM transcript is the run log.
 - **Office commands** are a word and a brief (`packages/shared/src/office-command.ts`,
   `packages/shared/src/db/commands.ts`). A routine may run one: "every

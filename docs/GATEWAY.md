@@ -589,6 +589,9 @@ correlation root approval requests carry as `activityRequestId`. ACP session IDs
 runtime-owned and scoped by worker; item IDs remain stable within their turn.
 Message items have `kind: "message"`; tools have `kind: "tool"`. Both carry
 `id`, `text`, `state`, `startedAt`, optional `endedAt` and optional `detail`.
+A turn a routine's line started carries `routine: { name }`, from the brief
+the line came with, so the office can say which routine an agent is on; a
+turn that names none is somebody's question.
 See `packages/shared/src/activity.ts` for the complete wire types.
 
 The server derives agent identity from the authenticated socket. Both `chat`

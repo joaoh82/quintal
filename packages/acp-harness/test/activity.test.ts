@@ -22,6 +22,17 @@ test('nonzero exit with no error is failed; absent results never imply success',
     'unknown',
   );
 });
+test('a turn a routine started says so, once, and the office reads it', () => {
+  const sent: AgentActivity[] = [];
+  const turn = new PublicTurn({ channelId: 'dm' }, (value) => sent.push(value));
+  assert.equal(sent[0]?.routine, undefined, 'a turn is nobody\'s routine until told');
+  turn.routine('Inbox sweep');
+  turn.routine('Morning standup');
+  turn.flush();
+  assert.deepEqual(sent.at(-1)?.routine, { name: 'Inbox sweep' }, 'the first name sticks: the turn began as that routine\'s');
+  assert.deepEqual(parseActivity(sent.at(-1))?.routine, { name: 'Inbox sweep' });
+});
+
 test('narration, three command results and replies retain order and identities', () => {
   const sent: AgentActivity[] = [];
   const turn = new PublicTurn({ channelId: 'a' }, (value) => sent.push(value));
