@@ -91,13 +91,14 @@ describe('what the machine tells the office it has checked out', () => {
     assert.deepEqual(checkoutNames(nest(repos)), ['api', 'group/web']);
   });
 
-  it('falls back to the reported repositories directory, and says nothing for a machine with none', () => {
+  it('tells "found nothing" from "did not look"', () => {
     const repos = temp('repos');
     checkout(repos, 'api');
     const rooted = checkout(temp('rooted'), 'one');
     assert.deepEqual(checkoutNames(rooted, repos), ['api'], 'an agent rooted in one checkout still knows the machine\'s');
-    assert.deepEqual(checkoutNames(rooted), [], 'no repositories directory: nothing to offer');
-    assert.deepEqual(checkoutNames(nest(temp('empty'))), [], 'nothing cloned yet');
+    assert.deepEqual(checkoutNames(nest(temp('empty'))), [], 'read, and nothing cloned yet: a real answer');
+    assert.equal(checkoutNames(rooted), undefined, 'no repositories directory: nothing was looked at');
+    assert.equal(checkoutNames(rooted, join(repos, 'gone')), undefined, 'a directory that is not there: the same');
   });
 });
 

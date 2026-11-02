@@ -1,4 +1,5 @@
 import { logger } from '@colyseus/core';
+import type { AgentHostReportPayload } from '@quintal/shared';
 import {
   AGENT_CHAT_INTERVAL_MS,
   AGENT_EMOTE_INTERVAL_MS,
@@ -135,6 +136,28 @@ export function persistStatus(agentId: string, status: string): void {
  * Fire-and-forget for the same reason as the audit write: this is bookkeeping
  * about somebody's laptop, and no agent command should wait on it.
  */
+/**
+ * A host report as it came off the wire, as `recordHost` is to read it: the
+ * fields it knows, passed through exactly as they arrived, absent ones
+ * absent. Only the first agent of a fleet scans PATH and lists checkouts,
+ * so `runtimes` and `checkouts` are left off rather than sent empty by the
+ * other seven: `[]` from them would erase the answer seconds after getting
+ * it, and an omitted field leaves the stored one alone.
+ */
+export function hostReportOf(payload: AgentHostReportPayload | null | undefined): {
+  label: unknown;
+  reposDir: unknown;
+  runtimes?: AgentHostReportPayload['runtimes'];
+  checkouts?: string[];
+} {
+  return {
+    label: payload?.label,
+    reposDir: payload?.reposDir,
+    ...(payload?.runtimes ? { runtimes: payload.runtimes } : {}),
+    ...(payload?.checkouts ? { checkouts: payload.checkouts } : {}),
+  };
+}
+
 export function persistHostReport(input: {
   agentId: string;
   workspaceId: string;

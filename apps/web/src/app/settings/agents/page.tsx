@@ -88,7 +88,10 @@ export default async function AgentsSettingsPage() {
 
       <FleetControl />
 
-      <RuntimePanels hosts={hosts} />
+      {/* What a machine has cloned is its owner's to see; the rest of a report is the office's. */}
+      <RuntimePanels
+        hosts={hosts.map((host) => ({ ...host, checkouts: host.ownerUserId === session.user.id ? host.checkouts : [] }))}
+      />
 
       <Machines
         machines={machines.map((row) => ({

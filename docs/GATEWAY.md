@@ -126,7 +126,7 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:memory_set` | `{ requestId, slug, content, expectedHash? }` | — | Write one. Over-size writes are **rejected, not truncated**. With `expectedHash` — the `hash` a read returned — the write lands only if the slug still reads as it did then; otherwise it is refused with `conflict`, and you read again and merge. Pass it whenever you may be one of several sessions of the same agent. |
 | `agent:task` | `{ title, repo, branch, pr?: { number, url, state }, item? }` or `null` | `status` | The task you are on, for your card in the office — `null` for none. Only to an office that says `taskVersion: 1`; see [Agent task](#agent-task-version-1). |
 | `agent:mcp_status` | `{ servers: [{ name, state, reason?, signInUrl?, at }] }` | — | How your owner's MCP servers stand on your machine: `ready`, `skipped` (with `reason`), or `sign_in` (with the URL the runtime wants opened). Replaces the last report. Shown on the owner's settings page only. Only to an office that says `mcpVersion: 1`; see [MCP servers](#mcp-servers-version-1). |
-| `agent:host_report` | `{ label, reposDir, runtimes?, checkouts?, workspacePath }` | — | Describe the machine you run on, and where you work. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. `checkouts` names what is cloned under `reposDir`, as `workspace_info` lists it, so a task begun from a desk can name one. Unscoped — it changes nothing anybody else can see. |
+| `agent:host_report` | `{ label, reposDir, runtimes?, checkouts?, workspacePath }` | — | Describe the machine you run on, and where you work. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. `checkouts` names what is cloned under `reposDir`, as `workspace_info` lists it, so a task begun from a desk can name one; it is shown to your owner only. Unscoped. |
 
 ### Three ways to authenticate
 
@@ -174,8 +174,12 @@ nothing", and it overwrites.
 
 `checkouts` works the same way: the names under `reposDir` that have a
 `.git`, relative (`api`, `group/api`), omitted when the harness did not look
-and `[]` when it looked and found nothing. The office shows them on the
-board's agent rows and offers them when a task is begun from a desk.
+and `[]` when it looked and found nothing. Send it from the same agent that
+sends `runtimes`. The office keeps it with the machine, shows it to the
+machine's owner on their settings page and on their own agents' rows of the
+board, and offers it when they begin a task from a desk. Other members see
+the machine's name, runtimes and repositories directory, as before, and not
+what is cloned on it.
 
 Everything here is treated as untrusted. Runtime ids outside the published
 catalogue are dropped, strings are truncated, and the whole report is

@@ -1,9 +1,10 @@
 import { acpCommandFor, isUsable, runtimeById, type RuntimeStatus } from '@quintal/shared';
 import { redactSecrets } from './secrets.js';
 
-import type { AgentConfig } from './config.js';
+import { nestRoot, type AgentConfig } from './config.js';
 import { probeRuntime } from './models.js';
 import { AgentRunner, type RunnerState } from './runner/AgentRunner.js';
+import { checkoutNames } from './runner/workspace.js';
 import { detectRuntimes, hostLabel } from './runtimes.js';
 
 /**
@@ -166,8 +167,16 @@ export class Supervisor {
         reposDir: this.options.reposDir ?? '',
       };
       const runtimes = await detectRuntimes();
+      // What is cloned here, for the office to offer when a task is begun
+      // from a desk. Once per fleet, like the PATH scan, from the machine's
+      // nest: it is a readdir and a `.git` check per checkout, up to a
+      // hundred of them, which is nothing once and something eight times.
+      // Omitted when there was nothing to look at, so what the office has
+      // is left alone.
+      const checkouts = checkoutNames(nestRoot(), host.reposDir || undefined);
+      const machine = { ...host, ...(checkouts ? { checkouts } : {}) };
       // Say what the machine has now; what each runtime offers takes longer.
-      live[0]?.reportHost({ ...host, runtimes });
+      live[0]?.reportHost({ ...machine, runtimes });
       for (const runner of live.slice(1)) runner.reportHost(host);
 
       // Then ask each usable runtime which models it offers, and report again.
@@ -200,7 +209,7 @@ export class Supervisor {
         }),
       );
       const stillLive = runners.find((runner) => runner.connected);
-      stillLive?.reportHost({ ...host, runtimes: withModels });
+      stillLive?.reportHost({ ...machine, runtimes: withModels });
     } catch {
       // Reporting is bookkeeping. Never let it take a working fleet down.
     }
