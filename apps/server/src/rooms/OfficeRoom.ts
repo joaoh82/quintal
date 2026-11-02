@@ -302,6 +302,7 @@ import {
   findRevoked,
   hasScope,
   markSeen,
+  hostReportOf,
   persistHostReport,
   persistStatus,
   type AgentSession,
@@ -326,7 +327,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
-import { handedFrom, whyNotBegin, whyNotNote } from './station.js';
+import { handedFrom, whyNotBegin, whyNotNote, whyNotRepo } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
 /** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
@@ -2304,7 +2305,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!client || !player || this.#agents.has(sessionId)) return;
     const role = await this.#roleFor(sessionId, player);
     client.send(ServerMessage.Board, {
-      ...boardForRole(this.#boardView(), role),
+      ...boardForRole(this.#boardView(), role, player.userId),
       githubHost: config.githubWebHost,
       you: { userId: player.userId, role },
     } satisfies BoardMessagePayload);
@@ -2466,6 +2467,8 @@ export class OfficeRoom extends Room<OfficeState> {
     assigner: OfficePlayer,
     before: BoardItemRef,
     after: BoardItemRef,
+    /** A checkout the person chose at the station, for the brief to name. */
+    repo: string | null = null,
   ): Promise<string | null> {
     let saidIn: string | null = null;
     try {
@@ -2479,7 +2482,7 @@ export class OfficeRoom extends Room<OfficeState> {
             channel,
             assignmentLine(after, after.assignee.name),
             undefined,
-            assignmentBrief(after),
+            assignmentBrief(after, repo),
           );
           saidIn = channel.id;
         }
@@ -2569,6 +2572,14 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#sendError(client, refused && agent ? 'invalid_payload' : 'not_found', refused ?? 'That agent is not in the office.');
       return;
     }
+    // A checkout, if chosen, as the agent's machine last listed it.
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const listed = this.#boardAgents.find((known) => known.id === asked.agentId)?.checkouts ?? [];
+    const noRepo = whyNotRepo(asked.repo, listed, agent.name);
+    if (noRepo) {
+      this.#sendError(client, 'invalid_payload', noRepo);
+      return;
+    }
     const holder = this.#seats.holderOf(asked.seatId);
     const previous = this.#seats.seatOf(asked.agentId);
     if (
@@ -2638,6 +2649,7 @@ export class OfficeRoom extends Room<OfficeState> {
       writer.player,
       handedFrom(before, asked.agentId),
       after,
+      asked.repo,
     );
     client.send(ServerMessage.DeskBegun, {
       seatId: asked.seatId,
@@ -3936,11 +3948,14 @@ export class OfficeRoom extends Room<OfficeState> {
   /**
    * A harness describing the machine it runs on.
    *
-   * Unscoped, because it changes nothing anybody else can see — it is the
-   * agent telling its owner where it lives. It is still *untrusted*: an agent
-   * key is a credential pasted into a config file, and everything here ends up
-   * rendered on the owner's settings page, so `recordHost` normalises it and
-   * drops runtime ids that aren't in the catalogue.
+   * Unscoped: it is the agent telling its owner where it lives. Members see
+   * the machine, its runtimes and where it keeps repositories; what is
+   * checked out there is shown to the agent's owner only (`boardForRole`,
+   * and the settings page), because the names of everything cloned can say
+   * whose work a machine holds. It is still *untrusted*: an agent key is a
+   * credential pasted into a config file, and everything here ends up
+   * rendered on a settings page, so `recordHost` normalises it and drops
+   * runtime ids that aren't in the catalogue.
    */
   #onAgentHostReport(client: Client, payload: AgentHostReportPayload): void {
     const session = this.#agentSession(client);
@@ -3959,14 +3974,8 @@ export class OfficeRoom extends Room<OfficeState> {
       agentId: session.identity.id,
       workspaceId: session.identity.workspaceId,
       ownerUserId: session.identity.ownerUserId,
-      // The runtime list is passed through exactly as it arrived, including
-      // absent: only the first agent of a fleet scans PATH, and `[]` from the
-      // other seven would erase the answer seconds after getting it.
-      report: {
-        label: payload?.label,
-        reposDir: payload?.reposDir,
-        ...(payload?.runtimes ? { runtimes: payload.runtimes } : {}),
-      },
+      // Whole, absent fields absent: see `hostReportOf`.
+      report: hostReportOf(payload),
       workspacePath,
     });
   }

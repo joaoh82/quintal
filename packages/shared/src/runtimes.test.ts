@@ -60,6 +60,18 @@ describe('a host report off the wire', () => {
     assert.deepEqual(normaliseHostReport(good), good);
   });
 
+  it('keeps the checkouts a machine names, within reason', () => {
+    const named = { ...good, checkouts: ['api', 'group/web', ' api ', 'api', '../etc', '/abs', 'a b', 42, ''] };
+    assert.deepEqual(normaliseHostReport(named)?.checkouts, ['api', 'group/web'], 'relative names, once each');
+    assert.equal(normaliseHostReport(good)?.checkouts, undefined, 'not looked is not "none"');
+    assert.deepEqual(normaliseHostReport({ ...good, checkouts: [] })?.checkouts, [], 'looked and found nothing');
+    assert.deepEqual(
+      normaliseHostReport({ label: 'x', reposDir: '', checkouts: ['api'] }),
+      { label: 'x', reposDir: '', checkouts: ['api'] },
+      'carried without a runtime list too',
+    );
+  });
+
   it('refuses a report with no machine to attribute it to', () => {
     assert.equal(normaliseHostReport({ ...good, label: '  ' }), null);
     assert.equal(normaliseHostReport(null), null);

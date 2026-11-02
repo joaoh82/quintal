@@ -518,6 +518,7 @@ export default function OfficeGame({
               seatId={station}
               roster={roster}
               items={board.items}
+              agents={board.agents}
               you={userId}
               pending={stationPending}
               onClose={closeStation}

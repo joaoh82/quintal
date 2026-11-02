@@ -17,7 +17,7 @@ import {
 import { displayName } from '../identity.js';
 import { taskLinksForBoard } from './agent-tasks.js';
 import type { Database } from './client.js';
-import { agentTasks, agents, boardItems, users, workspaces } from './schema.js';
+import { agentHosts, agentTasks, agents, boardItems, users, workspaces } from './schema.js';
 
 /**
  * The office board's rows.
@@ -308,9 +308,22 @@ export async function listBoardAgentsForWorkspace(
       runtimeId: agents.runtimeId,
       modelId: agents.modelId,
       hostLabel: agents.hostLabel,
+      checkouts: agentHosts.checkouts,
     })
     .from(agents)
     .leftJoin(users, eq(users.id, agents.ownerUserId))
+    // The machine it is assigned to, by the label its owner gave it, for what
+    // is checked out there. The owner too: a label is only unique per office
+    // and defaults to a hostname, so two members' laptops can share one, and
+    // a collision must show nothing rather than somebody else's repositories.
+    .leftJoin(
+      agentHosts,
+      and(
+        eq(agentHosts.workspaceId, agents.workspaceId),
+        eq(agentHosts.ownerUserId, agents.ownerUserId),
+        eq(agentHosts.label, agents.hostLabel),
+      ),
+    )
     .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt)))
     .orderBy(asc(agents.name));
   return rows.map((row) => ({
@@ -324,5 +337,6 @@ export async function listBoardAgentsForWorkspace(
     runtimeId: row.runtimeId,
     modelId: row.modelId,
     hostLabel: row.hostLabel,
+    checkouts: row.checkouts ?? [],
   }));
 }

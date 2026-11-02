@@ -42,6 +42,12 @@ describe('handing a note to an agent', () => {
     assert.doesNotMatch(bare.instructions, /Labels:/);
     assert.match(bare.instructions, /Water the plants\n\nIf this changes/);
   });
+
+  it('names the checkout when the person chose one, and leaves the choice to the agent otherwise', () => {
+    const placed = assignmentBrief(chair, 'group/api');
+    assert.match(placed.instructions, /desk\.\n\nWork in the group\/api checkout under REPOS\/: pass repo "group\/api" to task_begin\. If this changes/);
+    assert.doesNotMatch(assignmentBrief(chair).instructions, /REPOS\//);
+  });
 });
 
 describe('where a note goes when its task is heard', () => {

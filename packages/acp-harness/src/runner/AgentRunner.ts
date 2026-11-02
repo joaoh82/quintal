@@ -792,7 +792,7 @@ export class AgentRunner {
    * The runtime list is optional and its absence is meaningful — see
    * `Supervisor.#reportHost`.
    */
-  reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[] }): void {
+  reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[]; checkouts?: string[] }): void {
     this.#host = { label: host.label, reposDir: host.reposDir };
     this.#gateway.hostReport({
       ...host,

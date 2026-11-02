@@ -152,6 +152,12 @@ export interface BoardAgentRef {
   modelId: string | null;
   /** The machine it is assigned to, as its owner named it. Null to a guest, like `runtimeId` and `modelId`. */
   hostLabel: string | null;
+  /**
+   * The checkouts on that machine, by name as its harness last listed them
+   * (`api`, `group/web`): what the station can offer, and a brief can name.
+   * Empty when the machine has not said, or to a guest.
+   */
+  checkouts: string[];
 }
 
 /**

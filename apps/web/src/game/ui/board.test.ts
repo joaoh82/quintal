@@ -237,6 +237,7 @@ function agent(id: string, extra: Partial<BoardAgentRef> = {}): BoardAgentRef {
     runtimeId: null,
     modelId: null,
     hostLabel: null,
+    checkouts: [],
     ...extra,
   };
 }

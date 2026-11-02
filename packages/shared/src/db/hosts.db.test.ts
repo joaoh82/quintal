@@ -25,6 +25,19 @@ async function setup() {
 
 const report = (label: string) => ({ label, reposDir: '/repos', runtimes: [] });
 
+describe('what a machine says it has checked out', () => {
+  it('is kept with the machine, and left alone by a report that did not look', async () => {
+    const { db, josh } = await setup();
+    const who = { workspaceId: josh.workspaceId, ownerUserId: josh.id };
+    await recordHost(db, { ...who, report: { ...report('laptop'), checkouts: ['api', 'group/web'] } });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, ['api', 'group/web']);
+    await recordHost(db, { ...who, report: report('laptop') });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, ['api', 'group/web'], 'not looked is not "none"');
+    await recordHost(db, { ...who, report: { ...report('laptop'), checkouts: [] } });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, [], 'looked and found nothing');
+  });
+});
+
 describe('forgetting a machine report', () => {
   it('removes the one asked for', async () => {
     const { db, josh } = await setup();

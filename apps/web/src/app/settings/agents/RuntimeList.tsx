@@ -16,6 +16,8 @@ export interface Host {
   label: string;
   reposDir: string;
   runtimes: RuntimeStatus[];
+  /** What is cloned under `reposDir`, as the harness last listed it. */
+  checkouts: string[];
   lastSeenAt: Date;
 }
 
@@ -57,6 +59,7 @@ export function RuntimeList({ hosts }: { hosts: Host[] }) {
             {host.reposDir ? (
               <span className="text-muted-foreground ml-auto font-mono text-[11px]">
                 repos: {host.reposDir}
+                {host.checkouts.length > 0 ? ` · ${host.checkouts.join(', ')}` : ''}
               </span>
             ) : null}
 

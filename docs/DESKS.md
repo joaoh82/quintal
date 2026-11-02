@@ -314,12 +314,16 @@ A team is not offered. A board note is one agent's, the hand-over is one DM,
 and the desk is one chair; "the team sorts out who takes it" is a mention in
 a channel, which is a different thing from a chair and already works as one.
 
-The repository is the agent's to choose, as it is for a board note today:
-the brief says what the work is, the agent knows what is under `REPOS/`.
-Offering a repository picker in the panel needs the harness to report its
-checkouts' names to the office at boot, the way it reports runtimes, which
-is a small addition and worth doing next: then the panel can say "api, web"
-and the brief can name one.
+The repository is the agent's to choose, as it is for a board note, unless
+you choose it: the harness reports the checkouts under `REPOS/` with its
+machine (`checkouts` on `agent:host_report`, once per fleet, kept on the
+host's row and joined onto the board's agent rows by label and owner, and
+sent only to that owner), and the station offers them for the
+chosen agent — "api, group/web" — with the agent's own choice first. A name
+picked rides in `desk_begin` as `repo`, the office refuses one the machine
+never listed (`whyNotRepo`), and the brief says "Work in the api checkout
+under REPOS/: pass repo "api" to task_begin." Nothing else changes: the
+agent still begins with `task_begin`, which is what takes a repository.
 
 The board stays the record. Nothing is tracked only by a chair.
 
@@ -335,9 +339,10 @@ The board stays the record. Nothing is tracked only by a chair.
    turn the screen shows, and where the buttons go.
 3. **Begin from the station.** The `desk` interactable from every seat, the
    station panel over the existing hand-over, free-agent listing, seat
-   reservation on Begin, a typed task becoming a note. Tests: what a desk
-   is told to begin, who the station offers, and the reserved desk being
-   the one the agent walks to. Not yet: the harness reporting checkouts.
+   reservation on Begin, a typed task becoming a note. Then the harness
+   reporting its checkouts, and the station offering them. Tests: what a
+   desk is told to begin, who the station offers, the reserved desk being
+   the one the agent walks to, and the checkouts a machine names.
 4. **The glass.** Monitor colour and flicker, the waiting beacon, act-outs by
    tool class. Tests: the state a desk shows, and the cue a status line
    calls for.

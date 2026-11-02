@@ -37,6 +37,16 @@ export function whyNotBegin(agent: StationAgent): string | null {
   return null;
 }
 
+/**
+ * Why a chosen checkout cannot be named, or null: it has to be one the
+ * agent's machine listed, exactly, because the brief tells the agent to
+ * work there and a name the harness never reported is a path to nowhere.
+ */
+export function whyNotRepo(repo: string | null, checkouts: readonly string[], agentName: string): string | null {
+  if (repo === null || checkouts.includes(repo)) return null;
+  return `${agentName}'s machine has no checkout named ${repo}.`;
+}
+
 /** Why a picked note cannot be begun, or null: only an open note is there to pick. */
 export function whyNotNote(item: Pick<BoardItemRef, 'status' | 'number'>): string | null {
   return item.status === 'open' ? null : `Note #${item.number} is not open.`;

@@ -129,11 +129,18 @@ export function boardSignatureOf(view: BoardView, grainMs = BOARD_CHECKED_GRAIN_
 }
 
 /** The board as a person of this role is sent it. */
-export function boardForRole(view: BoardView, role: MembershipRole | null): Omit<BoardPayload, 'you' | 'githubHost'> {
+export function boardForRole(
+  view: BoardView,
+  role: MembershipRole | null,
+  /** Whose board it is: the one member who sees what their own agents' machines have checked out. */
+  viewerUserId: string,
+): Omit<BoardPayload, 'you' | 'githubHost'> {
   if (role !== null) {
     return {
       items: [...view.items],
-      agents: [...view.agents],
+      // A machine's name and its runtimes are the office's to see; what is
+      // cloned on it can say whose work it holds, so that stays with its owner.
+      agents: view.agents.map((agent) => (agent.ownerUserId === viewerUserId ? agent : { ...agent, checkouts: [] })),
       tasks: [...view.tasks],
       github: { ...view.github },
       pulls: { ...view.pulls, pulls: [...view.pulls.pulls] },
@@ -144,7 +151,7 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
   }
   return {
     items: [...view.items],
-    agents: view.agents.map((agent) => ({ ...agent, hostLabel: null, runtimeId: null, modelId: null })),
+    agents: view.agents.map((agent) => ({ ...agent, hostLabel: null, runtimeId: null, modelId: null, checkouts: [] })),
     tasks: [],
     github: { ...NO_GITHUB },
     pulls: { ...NO_REPO_PULLS },

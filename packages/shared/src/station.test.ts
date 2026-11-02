@@ -8,6 +8,7 @@ describe('what a desk is told to begin', () => {
     assert.deepEqual(parseDeskBegin({ seatId: 'bay-1', agentId: 'a1', itemId: 'n1', title: 'ignored' }), {
       seatId: 'bay-1',
       agentId: 'a1',
+      repo: null,
       what: { kind: 'note', itemId: 'n1' },
     });
   });
@@ -16,8 +17,11 @@ describe('what a desk is told to begin', () => {
     assert.deepEqual(parseDeskBegin({ seatId: 'bay-1', agentId: 'a1', title: '  Fix the chair  ', body: ' why \n' }), {
       seatId: 'bay-1',
       agentId: 'a1',
+      repo: null,
       what: { kind: 'typed', title: 'Fix the chair', body: 'why' },
     });
+    assert.equal(parseDeskBegin({ seatId: 'bay-1', agentId: 'a1', title: 'x', repo: ' api ' })?.repo, 'api');
+    assert.equal(parseDeskBegin({ seatId: 'bay-1', agentId: 'a1', title: 'x', repo: '' })?.repo, null, 'blank is the agent\'s choice');
   });
 
   it('refuses one that names no desk, no agent, or nothing to do', () => {

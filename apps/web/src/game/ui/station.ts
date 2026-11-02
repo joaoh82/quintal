@@ -1,4 +1,4 @@
-import { idleStatus, type BoardItemRef, type MapInteractable, type RosterEntry } from '@quintal/shared';
+import { idleStatus, type BoardAgentRef, type BoardItemRef, type MapInteractable, type RosterEntry } from '@quintal/shared';
 
 /**
  * The station: what an empty desk offers, and to whom.
@@ -55,6 +55,15 @@ export function offeredNotes(items: readonly BoardItemRef[], yourAgentIds: Reado
   return items
     .filter((item) => item.status === 'open' && (!item.assignee || yourAgentIds.has(item.assignee.id)))
     .sort((a, b) => b.number - a.number);
+}
+
+/**
+ * The checkouts on an agent's machine, as its harness last listed them: what
+ * the station can offer as a repository. Empty when the machine has not
+ * said, which is also what a guest sees.
+ */
+export function checkoutsOf(agents: readonly BoardAgentRef[], agentId: string): string[] {
+  return agents.find((agent) => agent.id === agentId)?.checkouts ?? [];
 }
 
 /**

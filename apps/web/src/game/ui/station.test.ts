@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardItemRef, MapInteractable, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardItemRef, MapInteractable, RosterEntry } from '@quintal/shared';
 
-import { candidates, holderOf, offeredNotes, promptFor } from './station';
+import { candidates, checkoutsOf, holderOf, offeredNotes, promptFor } from './station';
 
 function entry(over: Partial<RosterEntry>): RosterEntry {
   return {
@@ -97,6 +97,15 @@ describe('who the station offers', () => {
       note({ id: 'n5', number: 5, status: 'done' }),
     ];
     assert.deepEqual(offeredNotes(items, new Set(['a1'])).map((item) => item.number), [4, 1]);
+  });
+
+  it('offers the checkouts the agent\'s machine listed, or none', () => {
+    const agent: BoardAgentRef = {
+      id: 'a1', name: 'Arthur', ownerUserId: 'u1', ownerName: 'Josh', description: '', status: '',
+      lastSeenAt: null, runtimeId: null, modelId: null, hostLabel: 'laptop', checkouts: ['api', 'group/web'],
+    };
+    assert.deepEqual(checkoutsOf([agent], 'a1'), ['api', 'group/web']);
+    assert.deepEqual(checkoutsOf([agent], 'a2'), []);
   });
 
   it('says what E does where you stand', () => {

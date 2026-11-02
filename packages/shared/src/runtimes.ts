@@ -221,6 +221,15 @@ export interface HostReport {
    * found nothing", which is a real answer and must overwrite.
    */
   runtimes?: RuntimeStatus[];
+  /**
+   * The checkouts under this machine's repositories directory, by name as
+   * `workspace_info` lists them — `api`, or `group/api` for one a level
+   * inside a folder that groups repositories. Only the ones with a `.git`.
+   * Undefined and empty differ as for `runtimes`: a harness that did not
+   * look leaves the stored list alone; one that looked and found nothing
+   * says so.
+   */
+  checkouts?: string[];
 }
 
 /** Ready to use: installed *and* able to speak the protocol. */
@@ -235,6 +244,8 @@ export const HOST_REPORT_LIMITS = {
   reposDirMaxLength: 512,
   maxRuntimes: 32,
   pathMaxLength: 512,
+  maxCheckouts: 100,
+  checkoutMaxLength: 200,
   maxModels: 64,
   modelIdMaxLength: 128,
   modelLabelMaxLength: 128,
@@ -309,12 +320,14 @@ export function normaliseHostReport(raw: unknown): HostReport | null {
   const label = String(input.label ?? '').trim().slice(0, HOST_REPORT_LIMITS.labelMaxLength);
   if (label.length === 0) return null;
 
+  const checkouts = normaliseCheckouts(input.checkouts);
   if (!Array.isArray(input.runtimes)) {
     return {
       label,
       reposDir: String(input.reposDir ?? '')
         .trim()
         .slice(0, HOST_REPORT_LIMITS.reposDirMaxLength),
+      ...(checkouts ? { checkouts } : {}),
     };
   }
 
@@ -343,5 +356,25 @@ export function normaliseHostReport(raw: unknown): HostReport | null {
       .trim()
       .slice(0, HOST_REPORT_LIMITS.reposDirMaxLength),
     runtimes,
+    ...(checkouts ? { checkouts } : {}),
   };
+}
+
+/** A checkout's name as the station may show it and a brief may say it: a relative path, one line, no `..`. */
+const CHECKOUT_NAME = /^[^\s/\\][^\s\\]*$/;
+
+/** Bring a reported checkout list into bounds, or say there was none. */
+function normaliseCheckouts(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const entry of raw) {
+    if (names.length >= HOST_REPORT_LIMITS.maxCheckouts) break;
+    if (typeof entry !== 'string') continue;
+    const name = entry.trim().slice(0, HOST_REPORT_LIMITS.checkoutMaxLength);
+    if (!CHECKOUT_NAME.test(name) || name.split('/').includes('..') || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
 }
