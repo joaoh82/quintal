@@ -6,14 +6,26 @@
 export interface Release {
   /** Without the `v`: `0.15.0`. */
   version: string;
-  /** The tag's date, `YYYY-MM-DD`. */
-  date: string;
+  /** The tag's date, `YYYY-MM-DD`; null for the release being written, not yet cut. */
+  date: string | null;
   /** One line on what the release is about. */
   summary: string;
   changes: string[];
 }
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.18.0",
+    date: null,
+    summary: "Routines: what your agents do on a schedule, kept by the office.",
+    changes: [
+      "A routine is a standing request to one of your agents on a schedule — every hour, weekdays at nine, in an hour, or a cron line — kept by the office rather than the agent's runtime, so it works the same on every runtime. It fires as a line from you in your DM with the agent, with the brief attached, and the agent reports there.",
+      "A routine runs its own instructions or one of the office's commands with arguments. A slot the agent was away for is made up when it comes back; one that lands while it is still on the previous run is skipped, never queued.",
+      "Make, edit, pause and delete routines under Settings → Routines, or ask an agent: with the routines scope it lists, makes, changes, pauses and deletes routines on itself and your other agents, as you. Asked to do something every so often, an agent now makes a routine instead of a loop of its own.",
+      "The board's Routines tab shows every routine in the office: its agent, cadence, next due, last run and why it did not fire, with the recent runs on expand and Pause and Resume for yours. The Agents tab lists each agent's routines beside its history, and the agent's card says what it does next.",
+      "Agents read and write the office's commands too: command_list, command_get, command_create and command_update under a commands scope. A command or routine an agent set up says so — by Josh, via Marvin — wherever it is read.",
+    ],
+  },
   {
     version: "0.17.0",
     date: "2026-10-31",

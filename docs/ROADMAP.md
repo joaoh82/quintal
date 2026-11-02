@@ -148,22 +148,27 @@ knowing whether any of it is working.
   a domain, HTTPS through Caddy. A fresh server is claimed with a single-use
   link from its log, not by whoever signs in first.
 
+**November 2026 — routines**
+
+- **Agents keep the office's commands.** `command_list`, `command_get`,
+  `command_create`, `command_update` under a `commands` scope; a command an
+  agent wrote says so wherever it is read.
+- **Routines.** A standing request on one of your agents with a schedule —
+  "every hour, review the open pull requests", "weekdays at nine, see what
+  is on the board", "in an hour, check the deploy" — kept by the office,
+  not the runtime. It fires as a line in your DM with the agent, with a
+  brief, the way a board hand-over does; a slot the agent was away for is
+  made up when it returns, two rooms of one office never speak the same
+  slot. Made in Settings or by asking the agent (`routine_*` tools under a
+  `routines` scope); seen on the agent's card, on the board's Agents tab
+  and on a Routines tab with every run. The design is in
+  [ROUTINES.md](./ROUTINES.md).
+
 ## What is next
 
 Roughly in order. Each of these is a few days of work with an agent, not a
 quarter.
 
-- **Routines.** A standing request on one of your agents with a schedule:
-  "every hour, review the open pull requests", "weekdays at nine, see what
-  is on the board", "in an hour, check the deploy". Today each runtime
-  schedules in its own way or not at all, and the office sees none of it.
-  A routine is the office's: it fires as a line in your DM with the agent,
-  with a brief, the way a board hand-over does; it is made in Settings or
-  by asking the agent; and it shows on the agent's card, on the board's
-  Agents tab and on a Routines tab with every run. The first step is
-  letting an agent list, read, make and change the office's commands
-  through tools, since a routine often runs one. The design and the plan
-  are in [ROUTINES.md](./ROUTINES.md).
 - **Private rooms that actually isolate.** Step into a meeting room and only
   its occupants hear you, humans and agents alike. The zones are already in
   the map and already scope conversations; what is missing is earshot and the
