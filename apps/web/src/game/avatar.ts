@@ -22,7 +22,9 @@ import {
   bodyFrames,
   bodyTexture,
   type BodyState,
+  type WorkPace,
 } from './constants';
+import { cueFor, sameCue, type Cue } from './glass';
 
 /**
  * Which of the twelve bodies somebody walks around in.
@@ -164,6 +166,11 @@ export class Avatar {
   readonly #snapshots: Snapshot[] = [];
   #facing: Direction = 'down';
   #state: BodyState = 'idle';
+  #pace: WorkPace = 'normal';
+  #moving = false;
+  #pose: Pose = 'stand';
+  /** Agents: how the work is acted out at the desk, from the status line. */
+  #cue: Cue = cueFor('');
   #name: string;
   #status = '';
   readonly #owner: string;
@@ -179,6 +186,9 @@ export class Avatar {
     this.kind = player.kind;
     this.#name = player.name;
     this.#status = player.status;
+    // Drawn from the status it arrives with: a late joiner sees a test
+    // run as a test run, not as typing until the next status line.
+    this.#cue = cueFor(player.status);
     this.#owner = player.ownerName;
     this.body = bodyFor(sessionId, player);
 
@@ -272,6 +282,7 @@ export class Avatar {
       this.#status = player.status;
       this.#label.setText(this.#labelText());
       this.#statusLine?.setText(this.#status).setVisible(this.#status.length > 0);
+      this.setCue(cueFor(this.#status));
     }
     if (this.#emote !== player.emote || this.#emoteUntil !== player.emoteUntil) {
       this.setEmote(player.emote, player.emoteUntil);
@@ -381,11 +392,31 @@ export class Avatar {
    * this is one call either way.
    */
   setFacing(dir: Direction, moving: boolean, pose: Pose = 'stand'): void {
-    const state = bodyState(moving, pose);
-    if (dir === this.#facing && state === this.#state) return;
     this.#facing = dir;
+    this.#moving = moving;
+    this.#pose = pose;
+    this.#draw();
+  }
+
+  /**
+   * How the work is acted out: the pace of the typing, or sitting back
+   * while something runs. Only ever changes what is drawn at a desk; a body
+   * walking or standing is drawn as it was.
+   */
+  setCue(cue: Cue): void {
+    if (sameCue(cue, this.#cue)) return;
+    this.#cue = cue;
+    this.#draw();
+  }
+
+  #draw(): void {
+    let state = bodyState(this.#moving, this.#pose);
+    if (state === 'work' && this.#cue.frames === 'sit') state = 'sit';
+    const pace = state === 'work' ? this.#cue.pace : 'normal';
+    if (state === this.#state && pace === this.#pace && this.#sprite.anims.currentAnim?.key === bodyAnimation(this.body, state, this.#facing, pace)) return;
     this.#state = state;
-    this.#sprite.anims.play(bodyAnimation(this.body, state, dir), true);
+    this.#pace = pace;
+    this.#sprite.anims.play(bodyAnimation(this.body, state, this.#facing, pace), true);
   }
 
   /** Show what this occupant just said, for a few seconds. */

@@ -172,26 +172,48 @@ desk a leaver frees is its.
 
 ### Act-outs, by tool class
 
-Optional, after the above. `statusForTool` already names the tool; a small
-pure map from tool class to a cue, as agent-office's `actions.ts` does:
-read means slow work frames, edit means fast, a shell command that runs
-tests means sit frames with the "thinking" balloon, web means a small globe
-over the laptop. Two failed test runs in a row is worth a head-in-hands
-emote. All of it from the tool title the harness already sends.
+A small pure map from the status line to a cue (`cueFor` in `glass.ts`),
+as agent-office's `actions.ts` does, from the verb `statusForTool` already
+chose: reading and searching are slow work frames, editing is fast, a
+shell command that runs a test suite is sit frames — sitting back while
+they run — and fetching puts a small globe over the laptop. The avatar
+takes the cue when its status line changes (`setCue`) and redraws only
+what is at a desk: a body walking or standing is drawn as it was. Work has
+three paces, so it is three animations per direction.
+
+Not from this: the "thinking" balloon on a test run, which the harness
+sets from the same status line and would have to set itself; and
+head-in-hands after two failed runs, which needs the test's outcome, and
+that is a step in the activity stream, not something public.
 
 ### The monitor
 
 The laptop prop gets a glow and a surface, driven by events, never per
 frame (the desktop app may be painting in software; see `DESKTOP.md`):
 
-- **Colour by state**, visible from across the room: thinking, a tool
-  running, waiting for you, an error, idle. Agent Office 3D does this and it
-  reads at a glance.
-- **A flicker of lines** when a step lands, from a tiny RenderTexture
-  updated on `agent:activity`. Unreadable by design at 32 pixels; it says
-  "something is happening", like a real screen seen from the door.
+- **Colour by state**, visible from across the room (`glassState`): dark
+  with nobody at it or its holder on its feet; dim under one sitting on a
+  task with nothing running; then by the status line, through the same
+  table that picks the balloon — thinking, a tool at work, waiting for
+  somebody, a refusal or a stop. Agent Office 3D does this and it reads at
+  a glance.
+- **A flicker of lines** when a step lands: a few random short lines over
+  the screen, gone in a quarter of a second. Unreadable by design at 32
+  pixels; it says "something is happening", like a real screen seen from
+  the door. Fired by a change of the status line, which the nameplate
+  already shows everybody, rather than by `agent:activity`, which reaches
+  only those who may read the conversation: so it is public and tells
+  nobody anything new.
+- **The beacon**: while the holder's status says "waiting for …", a column
+  of light stands over the desk and breathes, tall enough to be seen from
+  the door. It lights for whoever is being waited for, and looks the same
+  to every viewer; the question balloon says the same thing up close. It
+  is over the desk, so an agent waiting on its feet — one that may not
+  move, or one its model walked elsewhere mid-turn — has the balloon and
+  no beacon.
 
-Both are public. They carry no words.
+All of it is public. It carries no words, and nothing the status line,
+the pose and the seat did not already say.
 
 ### Click the desk
 
@@ -317,7 +339,8 @@ The board stays the record. Nothing is tracked only by a chair.
    is told to begin, who the station offers, and the reserved desk being
    the one the agent walks to. Not yet: the harness reporting checkouts.
 4. **The glass.** Monitor colour and flicker, the waiting beacon, act-outs by
-   tool class.
+   tool class. Tests: the state a desk shows, and the cue a status line
+   calls for.
 
 Phase 1 alone is worth shipping. Phase 2 is the feature. Phase 3 turns the
 room into the place work starts, not only where it is watched. Phase 4 is
