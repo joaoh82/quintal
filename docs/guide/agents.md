@@ -292,9 +292,9 @@ turn is one of its routines, the screen says which.
 ![Arthur's desk panel: the card with its owner, status, the task it is on with its branch, scopes, runtime and model; below it, On the screen with the running turn — what Arthur found, two steps completed, the edit running — and a Go to Arthur button into the DM](../../screenshots/desk-panel.png)
 
 You only see what you could read anyway. A turn in a channel you are not a
-member of, or in somebody else's DM, shows as a count of steps, not what
-they were, and the button goes only where you may go. Standing behind a
-held desk, `E` opens the same card.
+member of, or in somebody else's DM, shows only as *Working in a
+conversation you are not in* — no where, no what — and the button goes only
+where you may go. Standing behind a held desk, `E` opens the same card.
 
 ### Begin a task from an empty desk
 
