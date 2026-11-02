@@ -6,10 +6,13 @@ import {
   type BoardItemRef,
   type BoardPayload,
   type BoardPullReviewRef,
+  type BoardRoutineRef,
+  type BoardRoutineRunRef,
   type BoardTaskRef,
   type MembershipRole,
   type RepoPullsRef,
 } from '@quintal/shared';
+import type { RoutineRunRef, RoutineSummary } from '@quintal/shared/db';
 
 /**
  * The board as the room holds it, and as it is sent. Pure, so the two rules
@@ -23,7 +26,8 @@ import {
  *    They do not get the office's history of work, nor the names of its
  *    machines: the ledger and `hostLabel`, `runtimeId`, `modelId` are a
  *    member's. Nor whether the office has a GitHub token, nor who was asked
- *    to review what.
+ *    to review what. Nor the office's routines and their runs: a routine
+ *    is a standing request between a member and their agent.
  * 3. GitHub being asked again is not the board changing either. A look at a
  *    pull request stamps `fetchedAt`; in the signature that stamp is kept
  *    to `BOARD_CHECKED_GRAIN_MS`, so a minute's poll that found the same
@@ -42,6 +46,8 @@ export interface BoardView {
   github: BoardGithubRef;
   pulls: RepoPullsRef;
   reviews: readonly BoardPullReviewRef[];
+  routines: readonly BoardRoutineRef[];
+  routineRuns: readonly BoardRoutineRunRef[];
 }
 
 const NO_GITHUB: BoardGithubRef = { connected: false, login: null, repos: [] };
@@ -51,6 +57,50 @@ export function boardAgentsOf(agents: readonly BoardAgentRef[], grainMs = BOARD_
   return agents.map((agent) =>
     agent.lastSeenAt === null ? agent : { ...agent, lastSeenAt: Math.floor(agent.lastSeenAt / grainMs) * grainMs },
   );
+}
+
+/**
+ * Routines as the board carries them: the row without its words. The
+ * instructions and arguments stay in Settings and the DM (`BoardRoutineRef`).
+ * `awaitingMakeUp` is read off the runs: a routine whose newest slot is
+ * still `missed` fires when its agent is back, whatever its `nextDueAt`
+ * says — the rule the room applies (`missedRoutineRun`, `shouldMakeUp`).
+ */
+export function boardRoutinesOf(routines: readonly RoutineSummary[], runs: readonly RoutineRunRef[] = []): BoardRoutineRef[] {
+  const newest = new Map<string, RoutineRunRef>();
+  for (const run of runs) {
+    const known = newest.get(run.routineId);
+    if (!known || run.dueAt > known.dueAt) newest.set(run.routineId, run);
+  }
+  return routines.map((routine) => ({
+    id: routine.id,
+    agentId: routine.agentId,
+    agentName: routine.agentName,
+    ownerUserId: routine.agentOwnerUserId,
+    name: routine.name,
+    schedule: routine.schedule,
+    scheduleLabel: routine.scheduleLabel,
+    command: routine.command,
+    paused: routine.paused,
+    nextDueAt: routine.nextDueAt,
+    awaitingMakeUp: newest.get(routine.id)?.outcome === 'missed',
+    lastRunAt: routine.lastRunAt,
+    createdByName: routine.createdByName,
+    createdByAgentName: routine.createdByAgentName,
+    updatedAt: routine.updatedAt,
+  }));
+}
+
+/** Runs as the board carries them: the slot and what came of it, not the conversation it was spoken in. */
+export function boardRoutineRunsOf(runs: readonly RoutineRunRef[]): BoardRoutineRunRef[] {
+  return runs.map((run) => ({
+    id: run.id,
+    routineId: run.routineId,
+    dueAt: run.dueAt,
+    outcome: run.outcome,
+    note: run.note,
+    firedAt: run.firedAt,
+  }));
 }
 
 /**
@@ -75,7 +125,7 @@ export function boardSignatureOf(view: BoardView, grainMs = BOARD_CHECKED_GRAIN_
   const tasks = view.tasks.map((task) =>
     task.github ? { ...task, github: { ...task.github, fetchedAt: Math.floor(task.github.fetchedAt / grainMs) * grainMs } } : task,
   );
-  return `${JSON.stringify([view.items, view.agents, tasks, view.github, view.reviews])}\n${pullsSignatureOf(view.pulls, grainMs)}`;
+  return `${JSON.stringify([view.items, view.agents, tasks, view.github, view.reviews, view.routines, view.routineRuns])}\n${pullsSignatureOf(view.pulls, grainMs)}`;
 }
 
 /** The board as a person of this role is sent it. */
@@ -88,6 +138,8 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
       github: { ...view.github },
       pulls: { ...view.pulls, pulls: [...view.pulls.pulls] },
       reviews: [...view.reviews],
+      routines: [...view.routines],
+      routineRuns: [...view.routineRuns],
     };
   }
   return {
@@ -97,5 +149,7 @@ export function boardForRole(view: BoardView, role: MembershipRole | null): Omit
     github: { ...NO_GITHUB },
     pulls: { ...NO_REPO_PULLS },
     reviews: [],
+    routines: [],
+    routineRuns: [],
   };
 }

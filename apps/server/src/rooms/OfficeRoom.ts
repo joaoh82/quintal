@@ -191,6 +191,10 @@ import {
   type BoardMessagePayload,
   type BoardTaskRef,
   type BoardPullReviewRef,
+  type BoardRoutinePausePayload,
+  type BoardRoutineRef,
+  type BoardRoutineRunRef,
+  BOARD_ROUTINE_RUNS_PER_ROUTINE_MAX,
 } from '@quintal/shared';
 import {
   BoardItemError,
@@ -237,6 +241,7 @@ import {
   claimRoutineRun,
   createRoutine,
   deleteRoutine,
+  listRecentRoutineRunsForWorkspace,
   listRoutineRuns,
   listRoutinesForWorkspace,
   RoutineError,
@@ -326,7 +331,7 @@ interface RoutineWhere {
   sessionId: string | null;
   agent: { present: boolean; busyHere: boolean };
 }
-import { boardAgentsOf, boardForRole, boardSignatureOf, type BoardView } from './board-view.js';
+import { boardAgentsOf, boardForRole, boardRoutineRunsOf, boardRoutinesOf, boardSignatureOf, type BoardView } from './board-view.js';
 import { PULL_POLL_MS, PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
 import { config } from '../config.js';
@@ -527,6 +532,9 @@ export class OfficeRoom extends Room<OfficeState> {
   #repoPulls: RepoPullsRef = NO_REPO_PULLS;
   /** Who was asked from the board to review which pull request, newest first. */
   #boardReviews: readonly BoardPullReviewRef[] = [];
+  /** The office's routines, and each one's newest runs, as the board carries them. */
+  #boardRoutines: readonly BoardRoutineRef[] = [];
+  #boardRoutineRuns: readonly BoardRoutineRunRef[] = [];
   /** The office's eye on GitHub. Made with the room; the token is read as needed. */
   #pulls!: PullRequestWatch;
   #pullTimer: NodeJS.Timeout | null = null;
@@ -722,6 +730,9 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage(ClientMessage.BoardPullReview, (client, payload: unknown) =>
       void this.#onBoardPullReview(client, payload),
+    );
+    this.onMessage(ClientMessage.BoardRoutinePause, (client, payload: unknown) =>
+      void this.#onBoardRoutinePause(client, payload),
     );
 
     // --- agent protocol (docs/GATEWAY.md) ---
@@ -1935,7 +1946,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const ticket = this.#boardReads.start();
     try {
       const db = getDb();
-      const [items, agents, tasks, statuses, github, reviews] = await Promise.all([
+      const [items, agents, tasks, statuses, github, reviews, routines, routineRuns] = await Promise.all([
         listBoardItemsForWorkspace(db, this.#workspaceId),
         listBoardAgentsForWorkspace(db, this.#workspaceId),
         listAgentTasksForWorkspace(db, this.#workspaceId, {
@@ -1945,6 +1956,8 @@ export class OfficeRoom extends Room<OfficeState> {
         pullRequestStatusesForWorkspace(db, this.#workspaceId),
         describeOfficeGithub(db, this.#workspaceId),
         listPullReviewRequests(db, this.#workspaceId),
+        listRoutinesForWorkspace(db, this.#workspaceId),
+        listRecentRoutineRunsForWorkspace(db, this.#workspaceId, BOARD_ROUTINE_RUNS_PER_ROUTINE_MAX),
       ]);
       if (!this.#boardReads.isLatest(ticket)) return;
       this.#boardItems = items;
@@ -1955,6 +1968,8 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#pullStatuses = statuses;
       this.#boardGithub = boardGithubOf(github);
       this.#boardReviews = reviews;
+      this.#boardRoutines = boardRoutinesOf(routines, routineRuns);
+      this.#boardRoutineRuns = boardRoutineRunsOf(routineRuns);
     } catch (error: unknown) {
       logger.error('[office] could not read the board', error);
       return;
@@ -1987,6 +2002,8 @@ export class OfficeRoom extends Room<OfficeState> {
       github: this.#boardGithub,
       pulls: this.#repoPulls,
       reviews: this.#boardReviews,
+      routines: this.#boardRoutines,
+      routineRuns: this.#boardRoutineRuns,
     };
   }
 
@@ -2220,6 +2237,47 @@ export class OfficeRoom extends Room<OfficeState> {
     } catch (error: unknown) {
       logger.error('[office] could not ask for a review', error);
       this.#sendError(client, 'invalid_payload', 'The review could not be asked for just now.');
+    }
+  }
+
+  /**
+   * A routine paused or resumed from the board. Its owner only, as in
+   * Settings: a routine speaks in the owner's DM as them, so nobody else
+   * stops or starts it — an admin reads it on the board and asks. A resume
+   * counts from now, like a new schedule.
+   */
+  async #onBoardRoutinePause(client: Client, payload: unknown): Promise<void> {
+    const writer = await this.#boardWriter(client);
+    if (!writer) return;
+    const asked = (payload ?? {}) as Partial<BoardRoutinePausePayload>;
+    if (typeof asked.routineId !== 'string' || typeof asked.paused !== 'boolean') {
+      this.#sendError(client, 'invalid_payload', 'Name the routine, and whether it is to pause or run.');
+      return;
+    }
+    try {
+      const db = getDb();
+      const routine = await getRoutine(db, this.#workspaceId, asked.routineId);
+      if (!routine) {
+        this.#sendError(client, 'not_found', 'That routine is gone.');
+        return;
+      }
+      const actor = await this.#actorFor(writer.player);
+      if (!mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })) {
+        this.#sendError(client, 'unauthorised', `Only ${routine.agentName}'s owner pauses or resumes its routines.`);
+        return;
+      }
+      if (routine.paused !== asked.paused) {
+        await updateRoutine(db, { workspaceId: this.#workspaceId, routineId: routine.id, paused: asked.paused, now: Date.now() });
+      }
+      await this.#refreshBoard();
+      this.#sendNotice(
+        client.sessionId,
+        'routine',
+        asked.paused ? `Paused “${routine.name}”. It will not fire until resumed.` : `Resumed “${routine.name}”; its next run counts from now.`,
+      );
+    } catch (error: unknown) {
+      logger.error('[office] could not pause a routine from the board', error);
+      this.#sendError(client, 'invalid_payload', 'The routine could not be changed just now.');
     }
   }
 
@@ -4219,6 +4277,7 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       const db = getDb();
       const now = Date.now();
+      let changed = false;
       for (const routine of await listDueRoutines(db, this.#workspaceId, now)) {
         const dueAt = routine.nextDueAt;
         if (dueAt === null) continue;
@@ -4231,6 +4290,7 @@ export class OfficeRoom extends Room<OfficeState> {
           note: decision.fire ? '' : decision.note,
         });
         if (!run) continue; // another room of this office has the slot
+        changed = true;
         if (decision.fire) {
           await this.#fireRoutine(routine, run, where, 'fired');
         } else {
@@ -4247,8 +4307,11 @@ export class OfficeRoom extends Room<OfficeState> {
         if (!routine || routine.paused) continue;
         const where = await this.#routineWhere(routine);
         if (!shouldMakeUp({ now, nextDueAt: routine.nextDueAt, agent: where.agent })) continue;
+        changed = true;
         await this.#fireRoutine(routine, run, where, 'made_up');
       }
+      // The tab's "next due" and "last run" follow the slot, not the ten-second refresh.
+      if (changed) void this.#refreshBoard();
     } catch (error: unknown) {
       logger.error('[office] could not tick routines', error);
     } finally {
@@ -4824,6 +4887,7 @@ export class OfficeRoom extends Room<OfficeState> {
         now: Date.now(),
       });
       audit(session.identity.id, 'command.routine_create', { name: made.name, agent: made.agentName, schedule: made.scheduleLabel });
+      void this.#refreshBoard();
       this.#reply(client, payload?.requestId, { routine: this.#agentRoutineRef(made, actor) } satisfies RoutineWriteResult);
     } catch (error: unknown) {
       this.#agentRoutineRefused(client, payload?.requestId, error);
@@ -4866,6 +4930,7 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       await updateRoutine(getDb(), { workspaceId: this.#workspaceId, routineId: routine.id, ...patch, now: Date.now() });
       audit(session.identity.id, 'command.routine_update', { name: routine.name, agent: routine.agentName, fields: Object.keys(patch) });
+      void this.#refreshBoard();
       const after = (await getRoutine(getDb(), this.#workspaceId, routine.id)) ?? routine;
       this.#reply(client, payload?.requestId, { routine: this.#agentRoutineRef(after, actor) } satisfies RoutineWriteResult);
     } catch (error: unknown) {
@@ -4891,6 +4956,7 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       await deleteRoutine(getDb(), this.#workspaceId, routine.id);
       audit(session.identity.id, 'command.routine_delete', { name: routine.name, agent: routine.agentName });
+      void this.#refreshBoard();
       this.#reply(client, payload?.requestId, { deleted: true, name: routine.name } satisfies RoutineDeleteResult);
     } catch (error: unknown) {
       this.#agentRoutineRefused(client, payload?.requestId, error);

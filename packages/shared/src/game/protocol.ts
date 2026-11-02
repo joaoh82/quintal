@@ -87,6 +87,12 @@ export const ClientMessage = {
    * GitHub list. Answered with a `notice`, or an `error` saying why not.
    */
   BoardPullReview: 'board_pull_review',
+  /**
+   * Pause or resume a routine from the board. The routine's owner only —
+   * the same hand that made it in Settings. Answered with `board` for
+   * everyone and a `notice` for you, or an `error` saying why not.
+   */
+  BoardRoutinePause: 'board_routine_pause',
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
@@ -323,8 +329,9 @@ export interface NoticePayload {
    * `team_members_absent`: a team you named has members outside this conversation.
    * `command_unheard`: an office command you sent reached no agent.
    * `pull_request`: what GitHub did for you — merged, closed, brought up to date — or that nothing changed on a refresh.
+   * `routine`: a routine was paused or resumed from the board.
    */
-  code: 'team_members_absent' | 'command_unheard' | 'pull_request';
+  code: 'team_members_absent' | 'command_unheard' | 'pull_request' | 'routine';
   message: string;
 }
 
@@ -358,6 +365,12 @@ export interface BoardPullActionPayload {
 export interface BoardPullReviewPayload {
   agentId: string;
   url: string;
+}
+
+/** `board_routine_pause`: which routine, and whether it is to be paused or running. */
+export interface BoardRoutinePausePayload {
+  routineId: string;
+  paused: boolean;
 }
 
 /** `board`: the whole board. See `BoardPayload`. */

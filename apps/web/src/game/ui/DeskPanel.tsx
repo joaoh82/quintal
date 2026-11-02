@@ -3,6 +3,7 @@
 import type {
   ActivityDetailLevel,
   ActivityFollowedPayload,
+  BoardRoutineRef,
   ChannelRef,
   MapZone,
   PublicActivity,
@@ -29,6 +30,8 @@ interface DeskPanelProps {
   /** Open a DM with them, when the office would allow it; null otherwise, and no button is drawn. */
   onMessage: (() => void) | null;
   onOpenConversation: (key: ConversationKey) => void;
+  /** The routines on this agent, from the board, for the card's row. */
+  routines?: readonly BoardRoutineRef[];
 }
 
 /**
@@ -52,6 +55,7 @@ export function DeskPanel({
   onClose,
   onMessage,
   onOpenConversation,
+  routines = [],
 }: DeskPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -86,7 +90,7 @@ export function DeskPanel({
       className="pointer-events-auto flex max-h-full w-80 flex-col gap-2 overflow-y-auto"
       data-testid="desk-panel"
     >
-      <AgentCard agent={entry} onClose={onClose} onMessage={onMessage} />
+      <AgentCard agent={entry} routines={routines} onClose={onClose} onMessage={onMessage} />
 
       <section className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/65 p-3 text-white backdrop-blur-sm">
         <h3 className="text-[10px] uppercase tracking-wide text-white/40">On the screen</h3>

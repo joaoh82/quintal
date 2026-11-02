@@ -104,12 +104,22 @@ routines per agent.
 
 - **Settings → Routines.** Make, edit, pause, delete; mirrors Commands.
 - **Board → Routines tab.** Every routine in the office: agent, cadence, next
-  due, last run and its outcome, the run history on expand, pause for yours.
+  due, last run and its outcome, the run history on expand (each routine's
+  newest ten), pause and resume for yours. A guest is sent none: a routine
+  is between a member and their agent. The board carries a routine without
+  its words — the brief is read in Settings and heard in the DM — and
+  whether its newest slot is missed and waiting for the agent, so a once
+  routine the agent was away for reads "when the agent is back", not
+  "done"; "paused" is only ever the owner's doing.
 - **The agent's card** in the roster: one row, "routines: 2 · next hourly PR
   check in 23m".
 - **Board → Agents tab.** A "Routines · n" toggle beside History, listing
   that agent's routines and last runs. A run in progress already shows as
   the agent's working line and status.
+
+The board is read again when a routine is made, changed or deleted by an
+agent's tool, when a slot is claimed or spoken, and every ten seconds with
+the rest of the office's settings, so a change in Settings reaches it too.
 
 ## Tools for agents
 
@@ -167,7 +177,7 @@ Five pull requests, each shippable on its own.
       Settings → Routines and its tab.
 - [x] **3. Routine tools.** The `routine_*` tools, phrase parsing, the
       `routines` scope, base-prompt guidance.
-- [ ] **4. Visibility.** Routines in the board payload; the Routines tab;
+- [x] **4. Visibility.** Routines in the board payload; the Routines tab;
       the Agents tab toggle; the roster card row.
 - [ ] **5. Docs.** `docs/guide/routines.md`, the help panel, the website
       changelog, the roadmap moved to "shipped".

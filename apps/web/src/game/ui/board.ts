@@ -6,6 +6,8 @@ import {
   type BoardAgentRef,
   type BoardItemRef,
   type BoardPullReviewRef,
+  type BoardRoutineRef,
+  type BoardRoutineRunRef,
   type BoardColor,
   type BoardStatus,
   type BoardTaskRef,
@@ -106,9 +108,18 @@ export function ageLabel(at: number, now: number = Date.now()): string {
   return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
+/** `in 23m`, for when a routine is next due; `now` once the moment has come and the room has not yet ticked. */
+export function untilLabel(at: number, now: number = Date.now()): string {
+  const seconds = Math.round((at - now) / 1000);
+  if (seconds < 30) return 'now';
+  if (seconds < 3600) return `in ${Math.max(1, Math.round(seconds / 60))}m`;
+  if (seconds < 86_400) return `in ${Math.floor(seconds / 3600)}h`;
+  return `in ${Math.floor(seconds / 86_400)}d`;
+}
+
 // --- the Agents tab ----------------------------------------------------------
 
-export type BoardTab = 'issues' | 'agents' | 'pulls';
+export type BoardTab = 'issues' | 'agents' | 'pulls' | 'routines';
 
 /**
  * An agent as the Agents tab draws it: the board's row joined to the
@@ -131,6 +142,8 @@ export interface AgentRow {
   notes: BoardItemRef[];
   /** Its other ledger lines — what it was on before, and any still open beside `task` — most recently heard first. */
   history: BoardTaskRef[];
+  /** The routines on it, running ones first and the soonest due at the top. */
+  routines: BoardRoutineRef[];
   /** When the office last heard from it: now while it is here. Null for never. */
   lastSeenAt: number | null;
 }
@@ -175,6 +188,7 @@ export function agentRowsOf(
   zones: readonly MapZone[],
   channels: readonly ChannelRef[],
   now: number,
+  routines: readonly BoardRoutineRef[] = [],
 ): AgentRow[] {
   const rows = agents.map((agent): AgentRow => {
     const here = roster.find((entry) => entry.kind === 'agent' && entry.identityId === agent.id) ?? null;
@@ -189,6 +203,7 @@ export function agentRowsOf(
       notes: items.filter((item) => item.assignee?.id === agent.id && item.status !== 'done'),
       // The ledger is upserted by (agent, branch), so the branch is what makes a line the current task.
       history: tasks.filter((line) => line.agentId === agent.id && line.branch !== task?.branch),
+      routines: sortRoutines(routines.filter((routine) => routine.agentId === agent.id)),
       lastSeenAt: here ? now : agent.lastSeenAt,
     };
   });
@@ -205,7 +220,128 @@ export function agentMatches(row: AgentRow, query: string): boolean {
   if (row.status.toLowerCase().includes(q)) return true;
   if (row.task && (row.task.branch.toLowerCase().includes(q) || row.task.title.toLowerCase().includes(q))) return true;
   if (row.history.some((line) => line.branch.toLowerCase().includes(q) || line.title.toLowerCase().includes(q))) return true;
+  if (row.routines.some((routine) => routine.name.toLowerCase().includes(q))) return true;
   return row.notes.some((note) => matchesFilter(note, q));
+}
+
+// --- the Routines tab --------------------------------------------------------
+
+/**
+ * A routine as the Routines tab draws it: the office's row, whether its
+ * agent is in the room to hear it, its newest runs, and whether the viewer
+ * may pause it — their own agent's, by the office's rule.
+ */
+export interface RoutineRow {
+  routine: BoardRoutineRef;
+  /** Whether the agent it is on is in the office now. */
+  here: boolean;
+  /** Its newest runs, newest first — as many as the board carries. */
+  runs: BoardRoutineRunRef[];
+  /** The newest slot that was decided: spoken, skipped, or missed and waiting. Null before the first. */
+  lastRun: BoardRoutineRunRef | null;
+  /** Whether this is the viewer's to pause: the agent is theirs. */
+  yours: boolean;
+}
+
+/**
+ * Where a routine stands: `due` at its next slot; `waiting` for its agent
+ * to come back and make up a missed slot, with no later slot scheduled;
+ * `done`, a once routine that has had its moment; or `paused` by its owner.
+ * "Paused" is only ever the owner's doing — a routine the office could not
+ * speak is paused by the room and says so the same way.
+ */
+export type RoutineStanding = 'due' | 'waiting' | 'done' | 'paused';
+
+export function routineStanding(routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>): RoutineStanding {
+  if (routine.paused) return 'paused';
+  if (routine.nextDueAt !== null) return 'due';
+  if (routine.awaitingMakeUp) return 'waiting';
+  return 'done';
+}
+
+const STANDING_ORDER: Record<RoutineStanding, number> = { due: 0, waiting: 1, done: 2, paused: 3 };
+
+/**
+ * What fires next at the top: due routines by their slot, then those
+ * waiting for their agent, then the spent, then the paused; by name within
+ * each, so the list reads the same every time.
+ */
+export function sortRoutines<T extends Pick<BoardRoutineRef, 'name' | 'paused' | 'nextDueAt' | 'awaitingMakeUp'>>(routines: readonly T[]): T[] {
+  return [...routines].sort(
+    (a, b) =>
+      STANDING_ORDER[routineStanding(a)] - STANDING_ORDER[routineStanding(b)] ||
+      (a.nextDueAt ?? 0) - (b.nextDueAt ?? 0) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+export function routineRowsOf(
+  routines: readonly BoardRoutineRef[],
+  runs: readonly BoardRoutineRunRef[],
+  roster: readonly RosterEntry[],
+  you: string,
+): RoutineRow[] {
+  const here = new Set(roster.filter((entry) => entry.kind === 'agent').map((entry) => entry.identityId));
+  return sortRoutines(routines).map((routine) => {
+    const own = runs.filter((run) => run.routineId === routine.id).sort((a, b) => b.dueAt - a.dueAt);
+    return {
+      routine,
+      here: here.has(routine.agentId),
+      runs: own,
+      lastRun: own[0] ?? null,
+      yours: routine.ownerUserId === you,
+    };
+  });
+}
+
+/** Does a routine match the filter box? Its name, its agent, its cadence, the command it runs, who set it up. */
+export function routineMatches(row: RoutineRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (q.length === 0) return true;
+  const { routine } = row;
+  if (routine.name.toLowerCase().includes(q)) return true;
+  if (routine.agentName.toLowerCase().includes(q)) return true;
+  if (routine.scheduleLabel.toLowerCase().includes(q)) return true;
+  if (routine.command && `!${routine.command.name}`.toLowerCase().includes(q)) return true;
+  if (q === 'paused') return routine.paused;
+  return routine.createdByName.toLowerCase().includes(q) || routine.createdByAgentName.toLowerCase().includes(q);
+}
+
+/**
+ * When a routine is next due, in a few words: `in 23m`; `when the agent is
+ * back` for a missed slot waiting to be made up; `done` for a once routine
+ * that has had its moment; `paused`.
+ */
+export function dueLabel(routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>, now: number): string {
+  switch (routineStanding(routine)) {
+    case 'paused':
+      return 'paused';
+    case 'waiting':
+      return 'when the agent is back';
+    case 'done':
+      return 'done';
+    case 'due':
+      return untilLabel(routine.nextDueAt!, now);
+  }
+}
+
+/**
+ * The agent card's one line about its routines: how many, and the next to
+ * fire — `2 · next hourly PR check in 23m`; or the one waiting for the agent
+ * to come back — `1 · check the deploy when it is back`. With nothing to
+ * fire, why: `2, all paused`, `1, done`, `3, nothing scheduled` when the
+ * reasons are mixed. Null for an agent with none: the row is left off.
+ */
+export function routinesLine(routines: readonly BoardRoutineRef[], now: number): string | null {
+  if (routines.length === 0) return null;
+  const sorted = sortRoutines(routines);
+  const next = sorted[0]!;
+  const standing = routineStanding(next);
+  if (standing === 'due') return `${routines.length} · next ${next.name} ${untilLabel(next.nextDueAt!, now)}`;
+  if (standing === 'waiting') return `${routines.length} · ${next.name} when it is back`;
+  const same = sorted.every((routine) => routineStanding(routine) === standing);
+  if (routines.length === 1) return `1, ${standing}`;
+  return same ? `${routines.length}, all ${standing}` : `${routines.length}, nothing scheduled`;
 }
 
 // --- the Pull requests tab -----------------------------------------------------

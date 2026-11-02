@@ -13,6 +13,7 @@ import { AGENT_TASK_PR_STATES, AGENT_TASK_STATUSES } from '../agent-task.js';
 import { ACTIVITY_DETAIL_LEVELS } from '../activity.js';
 import { BOARD_COLORS, BOARD_STATUSES } from '../board.js';
 import { PULL_REQUEST_REVIEW_DECISIONS, type PullRequestChecks } from '../github.js';
+import { ROUTINE_RUN_OUTCOMES } from '../routine.js';
 import { CONVERSATION_KINDS } from '../conversation.js';
 import { MEMBERSHIP_ROLES } from '../workspace.js';
 
@@ -996,7 +997,6 @@ export const agentTasks = sqliteTable(
 // ---------------------------------------------------------------------------
 
 export const ROUTINE_SCHEDULE_KINDS = ['cron', 'once'] as const;
-export const ROUTINE_RUN_OUTCOMES = ['fired', 'missed', 'made_up', 'skipped'] as const;
 
 /**
  * A standing request on one agent, with a schedule — see `docs/ROUTINES.md`.

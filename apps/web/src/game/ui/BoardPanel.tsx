@@ -8,10 +8,14 @@ import {
   mayDeleteBoardItem,
   mayAssignBoardItem,
   mayWriteBoard,
+  routineOutcomeLabel,
+  routineRunNoteLabel,
   type BoardAgentRef,
   type BoardColor,
   type BoardGithubRef,
   type BoardItemRef,
+  type BoardRoutineRef,
+  type BoardRoutineRunRef,
   type BoardStatus,
   type BoardTaskRef,
   type ChannelRef,
@@ -34,6 +38,7 @@ import {
   branchesWithoutPr,
   checksLabel,
   columnsOf,
+  dueLabel,
   matchesFilter,
   mergeableLabel,
   nextStatus,
@@ -48,6 +53,9 @@ import {
   pullProjectsOf,
   pullStateOf,
   reviewLabel,
+  routineMatches,
+  routineRowsOf,
+  routineStanding,
   taskBadgeOf,
   wallOf,
   type AgentRow,
@@ -56,6 +64,7 @@ import {
   type PullListRow,
   type PullStatusFilter,
   type BoardView,
+  type RoutineRow,
 } from './board';
 import { formatElapsed } from './elapsed';
 import { useNow } from './useNow';
@@ -108,8 +117,15 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
   );
   const selected = drawer?.kind === 'item' ? (board.items.find((item) => item.id === drawer.id) ?? null) : null;
   const agentRows = useMemo(
-    () => agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now).filter((row) => agentMatches(row, query)),
-    [board.agents, board.items, board.tasks, roster, zones, channels, now, query],
+    () =>
+      agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now, board.routines).filter((row) =>
+        agentMatches(row, query),
+      ),
+    [board.agents, board.items, board.tasks, board.routines, roster, zones, channels, now, query],
+  );
+  const routineRows = useMemo(
+    () => routineRowsOf(board.routines, board.routineRuns, roster, board.you.userId).filter((row) => routineMatches(row, query)),
+    [board.routines, board.routineRuns, roster, board.you.userId, query],
   );
   const [pullFilters, setPullFilters] = useState<PullFilters>(DEFAULT_PULL_FILTERS);
   const allPulls = useMemo(
@@ -182,6 +198,9 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
             <Tab selected={tab === 'pulls'} onClick={() => setTab('pulls')}>
               Pull requests
             </Tab>
+            <Tab selected={tab === 'routines'} onClick={() => setTab('routines')}>
+              Routines
+            </Tab>
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {tab === 'pulls' && canWrite ? (
@@ -219,7 +238,9 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
                   ? 'Filter: #12, a word, a label, an agent'
                   : tab === 'agents'
                     ? 'Filter: a name, a status, a branch'
-                    : 'Filter: #12, a title, a branch, a person'
+                    : tab === 'routines'
+                      ? 'Filter: a routine, an agent, a cadence'
+                      : 'Filter: #12, a title, a branch, a person'
               }
               aria-label="Filter"
               className="w-60 rounded border border-white/15 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/30 focus:border-white/40 focus:outline-none"
@@ -255,7 +276,16 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
                 guest={board.you.role === null}
                 onOpenNote={(id) => setDrawer({ kind: 'item', id })}
                 onMessage={onMessageAgent}
+                onPauseRoutine={(routineId, paused) => board.pauseRoutine(routineId, paused)}
+                runs={board.routineRuns}
                 you={board.you.userId}
+              />
+            ) : tab === 'routines' ? (
+              <RoutinesTab
+                rows={routineRows}
+                now={now}
+                guest={board.you.role === null}
+                onPause={(routineId, paused) => board.pauseRoutine(routineId, paused)}
               />
             ) : tab === 'pulls' ? (
               <PullsTab
@@ -351,6 +381,8 @@ function AgentsTab({
   guest,
   onOpenNote,
   onMessage,
+  onPauseRoutine,
+  runs,
   you,
 }: {
   rows: AgentRow[];
@@ -359,17 +391,23 @@ function AgentsTab({
   guest: boolean;
   onOpenNote: (itemId: string) => void;
   onMessage: (agentId: string) => void;
+  onPauseRoutine: (routineId: string, paused: boolean) => void;
+  /** Every routine's newest runs, for the rows that open theirs. */
+  runs: readonly BoardRoutineRunRef[];
   you: string;
 }) {
-  /** Which agents have their history open. */
+  /** Which agents have their history open, and which their routines. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const toggle = (agentId: string) =>
-    setExpanded((current) => {
+  const [routinesOpen, setRoutinesOpen] = useState<ReadonlySet<string>>(new Set());
+  const flip = (set: (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => void, agentId: string) =>
+    set((current) => {
       const next = new Set(current);
       if (next.has(agentId)) next.delete(agentId);
       else next.add(agentId);
       return next;
     });
+  const toggle = (agentId: string) => flip(setExpanded, agentId);
+  const toggleRoutines = (agentId: string) => flip(setRoutinesOpen, agentId);
 
   if (rows.length === 0) {
     return <p className="p-6 text-xs text-white/40">No agents in this office yet, or none match the filter. Agents are made in Settings.</p>;
@@ -380,6 +418,7 @@ function AgentsTab({
         const running = row.here ? runtimeLines(row.here) : null;
         const away = row.here === null;
         const open = expanded.has(row.agent.id);
+        const routinesShown = routinesOpen.has(row.agent.id);
         return (
           <li key={row.agent.id} className={`px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
             <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4">
@@ -465,6 +504,19 @@ function AgentsTab({
                     {open ? 'Hide history' : `History · ${row.history.length}`}
                   </button>
                 )}
+                {guest ? null : (
+                  <button
+                    type="button"
+                    onClick={() => toggleRoutines(row.agent.id)}
+                    aria-expanded={routinesShown}
+                    aria-controls={`agent-routines-${row.agent.id}`}
+                    disabled={row.routines.length === 0}
+                    title={row.routines.length === 0 ? 'No routines on it' : undefined}
+                    className="text-[11px] text-white/60 underline-offset-2 enabled:hover:underline disabled:text-white/25"
+                  >
+                    {routinesShown ? 'Hide routines' : `Routines · ${row.routines.length}`}
+                  </button>
+                )}
                 {row.agent.ownerUserId === you ? (
                   <button
                     type="button"
@@ -478,6 +530,16 @@ function AgentsTab({
             </div>
             {open && row.history.length > 0 ? (
               <AgentHistory id={`agent-history-${row.agent.id}`} lines={row.history} now={now} onOpenNote={onOpenNote} />
+            ) : null}
+            {routinesShown && row.routines.length > 0 ? (
+              <AgentRoutines
+                id={`agent-routines-${row.agent.id}`}
+                routines={row.routines}
+                runs={runs}
+                now={now}
+                yours={row.agent.ownerUserId === you}
+                onPause={onPauseRoutine}
+              />
             ) : null}
           </li>
         );
@@ -539,6 +601,240 @@ function AgentHistory({
           </p>
         </li>
       ))}
+    </ol>
+  );
+}
+
+/**
+ * The routines on one agent, under its row on the Agents tab: each one's
+ * name and cadence, when it is next due, and its last run. The owner may
+ * pause or resume from here; the Routines tab has the run history.
+ */
+function AgentRoutines({
+  id,
+  routines,
+  runs,
+  now,
+  yours,
+  onPause,
+}: {
+  id: string;
+  routines: readonly BoardRoutineRef[];
+  runs: readonly BoardRoutineRunRef[];
+  now: number;
+  yours: boolean;
+  onPause: (routineId: string, paused: boolean) => void;
+}) {
+  return (
+    <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+      {routines.map((routine) => {
+        const last = runs.filter((run) => run.routineId === routine.id).sort((a, b) => b.dueAt - a.dueAt)[0] ?? null;
+        return (
+          <li key={routine.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.4fr)_auto] items-baseline gap-x-4">
+            <p className="min-w-0 truncate">
+              <span className={routine.paused ? 'text-white/55' : 'text-white/80'}>{routine.name}</span>
+              {routine.command ? <span className="ml-1.5 font-mono text-[10px] text-white/45">!{routine.command.name}</span> : null}
+            </p>
+            <p className="min-w-0 truncate font-mono text-[11px] text-white/50">{routine.scheduleLabel}</p>
+            <p className="min-w-0 truncate font-mono text-[10px] text-white/40">
+              <RoutineDue routine={routine} now={now} />
+              {last ? (
+                <>
+                  {' · '}
+                  <RunOutcome run={last} now={now} />
+                </>
+              ) : null}
+            </p>
+            {yours ? <PauseButton routine={routine} onPause={onPause} /> : <span />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** `next in 23m`, `next when the agent is back`, `done` or `paused`, in the tone of each. */
+function RoutineDue({ routine, now }: { routine: Pick<BoardRoutineRef, 'paused' | 'nextDueAt' | 'awaitingMakeUp'>; now: number }) {
+  const label = dueLabel(routine, now);
+  switch (routineStanding(routine)) {
+    case 'paused':
+      return <span className="text-amber-200/80">paused</span>;
+    case 'done':
+      return <span>done</span>;
+    case 'waiting':
+      return (
+        <span title="Its slot was missed while the agent was away; it fires when the agent is back">
+          next <span className="text-amber-200/80">{label}</span>
+        </span>
+      );
+    case 'due':
+      return (
+        <span title={new Date(routine.nextDueAt!).toLocaleString()}>
+          next <span className="text-white/70">{label}</span>
+        </span>
+      );
+  }
+}
+
+/** What came of a slot, in the colour of the outcome: spoken, missed, or skipped. */
+function RunOutcome({ run, now, long = false }: { run: BoardRoutineRunRef; now: number; long?: boolean }) {
+  const tone = run.outcome === 'fired' || run.outcome === 'made_up' ? 'text-emerald-200/90' : run.outcome === 'missed' ? 'text-amber-200/80' : 'text-white/45';
+  const why = routineRunNoteLabel(run.note);
+  return (
+    <span title={`due ${new Date(run.dueAt).toLocaleString()}${run.firedAt ? `, spoken ${new Date(run.firedAt).toLocaleString()}` : ''}${why ? ` — ${why}` : ''}`}>
+      <span className={tone}>{routineOutcomeLabel(run.outcome)}</span> {ageLabel(run.firedAt ?? run.dueAt, now)}
+      {long && why ? <span className="text-white/40"> · {why}</span> : null}
+    </span>
+  );
+}
+
+function PauseButton({ routine, onPause }: { routine: Pick<BoardRoutineRef, 'id' | 'name' | 'paused'>; onPause: (routineId: string, paused: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPause(routine.id, !routine.paused)}
+      title={routine.paused ? `Resume “${routine.name}”; its next run counts from now` : `Pause “${routine.name}”; it keeps its place and fires nothing`}
+      className="text-[11px] text-sky-300 underline-offset-2 hover:underline"
+    >
+      {routine.paused ? 'Resume' : 'Pause'}
+    </button>
+  );
+}
+
+/**
+ * Every routine in the office, on whichever agent: what it is, whose agent
+ * it is on and whether that agent is here to hear it, how often it runs,
+ * when it is next due, and what came of its last slot. Each row opens onto
+ * its recent runs. Pausing and resuming are the owner's, as in Settings;
+ * making one is in Settings → Routines, or a word to one of your agents.
+ */
+function RoutinesTab({
+  rows,
+  now,
+  guest,
+  onPause,
+}: {
+  rows: RoutineRow[];
+  now: number;
+  /** A guest is not sent the routines: they are between members and their agents. */
+  guest: boolean;
+  onPause: (routineId: string, paused: boolean) => void;
+}) {
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (routineId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(routineId)) next.delete(routineId);
+      else next.add(routineId);
+      return next;
+    });
+
+  if (guest) {
+    return <p className="p-6 text-xs text-white/40">Members see the office’s routines. You are passing through.</p>;
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+        <p className="text-sm text-white/70">No routines yet, or none match the filter.</p>
+        <p className="max-w-sm text-xs text-white/40">
+          A routine is a standing request to one of your agents, on a schedule: every hour, review the open pull requests. Make one in{' '}
+          <a href="/settings/routines" className="underline-offset-2 hover:underline">
+            Settings → Routines
+          </a>
+          , or ask one of your agents to keep it.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <ul className="min-h-0 flex-1 divide-y divide-white/8 overflow-y-auto">
+      {rows.map((row) => {
+        const { routine } = row;
+        const open = expanded.has(routine.id);
+        const by = routine.createdByAgentName ? `${routine.createdByName}, via ${routine.createdByAgentName}` : routine.createdByName;
+        return (
+          <li key={routine.id} className={`px-4 py-2.5 text-xs ${routine.paused ? 'text-white/55' : ''}`}>
+            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.3fr)_auto] gap-x-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5">
+                  <span className={`truncate ${routine.paused ? 'text-white/60' : 'text-white/90'}`}>{routine.name}</span>
+                  {routine.paused ? (
+                    <span className="rounded border border-amber-300/40 px-1 font-mono text-[9px] tracking-wide text-amber-200/90 uppercase">paused</span>
+                  ) : null}
+                </p>
+                <p className="mt-0.5 truncate text-[10px] text-white/40">
+                  {routine.command ? <span className="font-mono">runs !{routine.command.name}</span> : 'its own instructions'}
+                  {by ? ` · by ${by}` : ''}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5">
+                  <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${row.here ? 'bg-emerald-400' : 'bg-white/25'}`} aria-hidden />
+                  <span className={`truncate ${row.here ? 'text-sky-300' : 'text-sky-200/70'}`}>
+                    {AGENT_GLYPH} {routine.agentName}
+                  </span>
+                </p>
+                {!row.here ? <p className="mt-0.5 text-[10px] text-white/35">away: a slot waits for it</p> : null}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-mono text-[11px] text-white/70">{routine.scheduleLabel}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-white/40">
+                  <RoutineDue routine={routine} now={now} />
+                </p>
+              </div>
+              <div className="min-w-0">
+                {row.lastRun ? (
+                  <p className="truncate font-mono text-[10px] text-white/40">
+                    last <RunOutcome run={row.lastRun} now={now} long />
+                  </p>
+                ) : (
+                  <p className="text-white/30">never ran</p>
+                )}
+              </div>
+              <div className="flex items-start justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => toggle(routine.id)}
+                  aria-expanded={open}
+                  aria-controls={`routine-runs-${routine.id}`}
+                  disabled={row.runs.length === 0}
+                  title={row.runs.length === 0 ? 'No slot has come yet' : undefined}
+                  className="text-[11px] text-white/60 underline-offset-2 enabled:hover:underline disabled:text-white/25"
+                >
+                  {open ? 'Hide runs' : `Runs · ${row.runs.length}`}
+                </button>
+                {row.yours ? <PauseButton routine={routine} onPause={onPause} /> : null}
+              </div>
+            </div>
+            {open && row.runs.length > 0 ? <RoutineRuns id={`routine-runs-${routine.id}`} runs={row.runs} now={now} /> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** A routine's recent slots, newest first: when each was due, what came of it, and why when it did not fire. */
+function RoutineRuns({ id, runs, now }: { id: string; runs: readonly BoardRoutineRunRef[]; now: number }) {
+  return (
+    <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
+      {runs.map((run) => {
+        const why = routineRunNoteLabel(run.note);
+        return (
+          <li key={run.id} className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)_auto] items-baseline gap-x-4 font-mono text-[10px]">
+            <p className="min-w-0 truncate text-white/60" title={new Date(run.dueAt).toLocaleString()}>
+              due {new Date(run.dueAt).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+            </p>
+            <p className="min-w-0 truncate">
+              <RunOutcome run={run} now={now} />
+              {why ? <span className="text-white/40"> · {why}</span> : null}
+            </p>
+            <p className="text-right text-white/40">
+              {run.firedAt !== null && run.firedAt - run.dueAt >= 60_000 ? `${Math.round((run.firedAt - run.dueAt) / 60_000)}m late` : ''}
+            </p>
+          </li>
+        );
+      })}
     </ol>
   );
 }

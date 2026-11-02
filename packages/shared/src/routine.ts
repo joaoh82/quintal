@@ -41,6 +41,45 @@ export type RoutineSchedule =
   | { kind: 'cron'; cron: string; tz: string }
   | { kind: 'once'; at: number; tz: string };
 
+/**
+ * What came of a due slot. `fired` and `made_up` were spoken, on time or
+ * when the agent came back; `missed` is a slot the agent was away for,
+ * kept to be made up, and the state of a claimed slot not yet spoken;
+ * `skipped` is done with — the agent was busy, or there was no door.
+ */
+export const ROUTINE_RUN_OUTCOMES = ['fired', 'missed', 'made_up', 'skipped'] as const;
+export type RoutineRunOutcome = (typeof ROUTINE_RUN_OUTCOMES)[number];
+
+/** The outcome as a person reads it on a card: "fired", "made up", "missed", "skipped". */
+export function routineOutcomeLabel(outcome: RoutineRunOutcome): string {
+  return outcome === 'made_up' ? 'made up' : outcome;
+}
+
+/**
+ * Why a slot was missed or skipped, in words. The room writes a short
+ * reason on the run (`away`, `busy`, `owner_left`, `no_dm`, `agent_gone`);
+ * the board says what it meant. A reason it does not know is shown as it
+ * was written; a spoken slot has none.
+ */
+export function routineRunNoteLabel(note: string): string {
+  switch (note) {
+    case '':
+      return '';
+    case 'away':
+      return 'the agent was away';
+    case 'busy':
+      return 'the agent was still on the previous run';
+    case 'owner_left':
+      return 'its owner left the office';
+    case 'no_dm':
+      return 'the agent takes no direct messages';
+    case 'agent_gone':
+      return 'the agent is gone';
+    default:
+      return note;
+  }
+}
+
 /** Pure validation of a schedule as stored, from anywhere: a form, a tool, the database. */
 export type RoutineScheduleResult = { ok: true; schedule: RoutineSchedule } | { ok: false; error: string };
 
