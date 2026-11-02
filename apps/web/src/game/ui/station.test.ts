@@ -89,6 +89,25 @@ describe('who the station offers', () => {
     );
   });
 
+  it('lists an agent once when its old session is still in reconnection grace', () => {
+    const roster = [
+      entry({ sessionId: 's1', identityId: 'a1', name: 'Arthur', status: 'away' }),
+      entry({ sessionId: 's2', identityId: 'a1', name: 'Arthur' }),
+      entry({ sessionId: 's3', identityId: 'a2', name: 'Marvin' }),
+      entry({ sessionId: 's4', identityId: 'a2', name: 'Marvin', status: 'away' }),
+      entry({ sessionId: 's5', identityId: 'a3', name: 'Zed', status: 'away' }),
+    ];
+    assert.deepEqual(
+      candidates(roster, 'u1').map((c) => [c.entry.name, c.entry.sessionId, c.busy]),
+      [
+        ['Arthur', 's2', ''],
+        ['Marvin', 's3', ''],
+        ['Zed', 's5', 'away'],
+      ],
+      'the live session is the agent, whichever came first; one that is only away says so, and is not free',
+    );
+  });
+
   it('offers open notes that are nobody\'s or one of yours, newest first', () => {
     const items = [
       note({ id: 'n1', number: 1 }),

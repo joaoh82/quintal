@@ -327,7 +327,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
-import { handedFrom, whyNotBegin, whyNotNote, whyNotRepo } from './station.js';
+import { handedFrom, sessionOf, whyNotBegin, whyNotNote, whyNotRepo, type AgentSessionRef } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
 /** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
@@ -2561,9 +2561,11 @@ export class OfficeRoom extends Room<OfficeState> {
     const agentSessionId = this.#sessionOfAgent(asked.agentId);
     const agent = agentSessionId ? this.state.players.get(agentSessionId) : undefined;
     const identity = agentSessionId ? this.#agents.get(agentSessionId) : undefined;
+    // In its grace the socket is gone: nothing said in the DM would wake it.
+    const connected = agentSessionId !== null && this.#sims.get(agentSessionId)?.away === false;
     const refused = whyNotBegin({
       name: identity?.name ?? 'That agent',
-      here: agent !== undefined && identity !== undefined,
+      here: agent !== undefined && identity !== undefined && connected,
       status: agent?.status ?? '',
       onTask: (agent?.taskBranch.length ?? 0) > 0,
       scopes: identity?.scopes ?? [],
@@ -2660,10 +2662,19 @@ export class OfficeRoom extends Room<OfficeState> {
     } satisfies DeskBegunPayload);
   }
 
-  /** The session an agent is connected on, if it is here. The first, when it is here twice. */
+  /**
+   * The session an agent is on, if it is here: a connected one before one
+   * in its reconnection grace, which a harness restarted without a clean
+   * leave keeps beside its live one for a while.
+   */
   #sessionOfAgent(agentId: string): string | null {
-    for (const [sessionId, identity] of this.#agents) if (identity.id === agentId) return sessionId;
-    return null;
+    return sessionOf(this.#agentSessions(), agentId);
+  }
+
+  *#agentSessions(): Iterable<AgentSessionRef> {
+    for (const [sessionId, identity] of this.#agents) {
+      yield { sessionId, agentId: identity.id, away: this.#sims.get(sessionId)?.away ?? true };
+    }
   }
 
   /**
@@ -4424,14 +4435,6 @@ export class OfficeRoom extends Room<OfficeState> {
 
   // --- routines ------------------------------------------------------------
 
-  /** The session of an agent that is in the room, by its identity; null when it is away. */
-  #agentSessionIdOf(agentId: string): string | null {
-    for (const [sessionId, session] of this.#agents) {
-      if (session.id === agentId) return sessionId;
-    }
-    return null;
-  }
-
   /** Whether the agent at this session is on a turn in this conversation right now. */
   #agentBusyIn(sessionId: string, conversationId: string): boolean {
     for (const entry of this.#activity.values()) {
@@ -4508,7 +4511,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const channel = mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })
       ? await this.#dmWith(actor, routine.agentId)
       : null;
-    const sessionId = this.#agentSessionIdOf(routine.agentId);
+    const sessionId = this.#sessionOfAgent(routine.agentId);
     return {
       actor,
       channel,
