@@ -288,7 +288,10 @@ export function parseTiledMap(raw: TiledMap): OfficeMap {
     tileSize: raw.tilewidth,
     zones: parseZones(raw),
     // Every desk is something to use, after whatever the map lays out itself.
-    interactables: [...parseInteractables(raw), ...seats.map(deskOf)],
+    interactables: [
+      ...parseInteractables(raw),
+      ...seats.map((seat) => deskOf(seat, { width: raw.width, height: raw.height, walkable })),
+    ],
     seats,
     spawns: parseSpawns(raw),
     walkable,

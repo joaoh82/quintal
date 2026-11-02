@@ -1,8 +1,8 @@
 import {
   BANTER_DAILY_CAP,
   FLOOR_ZONE_ID,
+  emoteForStatus,
   findPath,
-  idleCapable,
   isWalkable,
   zoneAt,
   type MapZone,
@@ -114,11 +114,17 @@ export function newIdleRecord(now: number): IdleRecord {
 }
 
 /**
- * Is this agent free to idle, going by its status line? The rule is shared
- * (`idleCapable` in `@quintal/shared`), because the client asks it too, to
- * say which agents a desk may be begun for; re-exported here for the room.
+ * Is this agent free to idle, going by its status line?
+ *
+ * The harness narrates a turn on the nameplate — "thinking", "editing
+ * auth.ts", "waiting for Josh" — and clears it when the turn ends. A standing
+ * refusal ("no model … here") is not work, and an offline agent is not
+ * available; neither should wander, for different reasons, and only the
+ * refusal counts as idle.
  */
-export { idleCapable };
+export function idleCapable(status: string): boolean {
+  return status.length === 0 || emoteForStatus(status) === 'cross';
+}
 
 export type IdleAction =
   /** Nothing to do this second. */

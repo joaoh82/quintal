@@ -891,13 +891,13 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /** Ask for an agent's running turns. The office answers with what we may read, and a count of the rest. */
+  followActivity(agentId: string): void {
+    this.#room.send(ClientMessage.ActivityFollow, { agentId } satisfies ActivityFollowPayload);
+  }
+
   /** Begin a task at an empty desk for one of your agents. Answered over the bridge as `deskBegun`, or as a `notice`. */
   beginAtDesk(payload: DeskBeginPayload): void {
     this.#room.send(ClientMessage.DeskBegin, payload);
-  }
-
-  followActivity(agentId: string): void {
-    this.#room.send(ClientMessage.ActivityFollow, { agentId } satisfies ActivityFollowPayload);
   }
 
   joinChannel(slug: string): void {

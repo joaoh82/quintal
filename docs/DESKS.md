@@ -232,8 +232,8 @@ unfollow: later steps reach the panel by the same rule, or do not.
 
 Clicking a human opens their card; it is the same event. The keyboard
 path is the desk interactable: every seat makes one (`deskOf`), named for
-its seat, with the tile behind the chair as its doorstep and the screen as
-its halo. Stand there and the screen lights up as the noticeboard does, and
+its seat, with a tile beside the chair as its doorstep — behind it, or a
+side when behind it is not floor — and the screen as its halo. Stand there and the screen lights up as the noticeboard does, and
 the offer under `E` reads "see what Arthur is on" — or, when nobody holds
 the desk, "begin a task at this desk", which is the next section.
 
@@ -248,30 +248,39 @@ desk panel's place at the left of the room:
   nobody's or one of your agents' already, which fills the title and the
   details and carries the number; or a title and details typed here.
 - **Who**: your agents that are in the office, free ones first. Free means
-  idle and on no task (`idleCapable`, shared now, and `task === null`). An
-  agent on something is listed greyed with what — "on Fix the chair",
-  "reading auth.ts" — so you can see why it is not offered; one that is not
-  here is not listed, because nothing can be begun for it from a chair it
-  cannot walk to. The rules are `candidates` and `offeredNotes` in
-  `station.ts`, pinned without a panel.
+  idle — the status line empty (`idleStatus`) — and on no task, and one the
+  hand-over can wake and the desk can take: with the `dm` scope, or nothing
+  reaches it, and with `move`, or it never walks. A standing refusal such
+  as "no model … here" is not work, so idle life may wander it, but it is
+  not an agent that would answer either. An agent that is not offered is
+  listed greyed with why — "on Fix the chair", "reading auth.ts", "cannot
+  be messaged" — and one that is not here is not listed, because nothing
+  can be begun for it from a chair it cannot walk to. The rules are
+  `candidates` and `offeredNotes` in `station.ts`, pinned without a panel;
+  the office refuses the same ones (`whyNotBegin`, `whyNotNote` in the
+  room's `station.ts`), before it writes anything.
 - **Begin**, which sends one message, `desk_begin { seatId, agentId,
   itemId | title, body }`.
 
 What happens is what happens already when a note is handed over, so nothing
 new reaches the agent. The office checks that the asker may hand this agent
-work (`#mayHandTo`: its owner, and nobody else), that the agent is here and
-free, and that nobody present holds the desk. A picked note is assigned; a
-typed one is written to the board first, in "in progress" and assigned, so
-the Agents tab and the columns agree with the room. Then the desk is
-reserved — `SeatBook.reserve`: the agent's from this moment, whatever it
-held before, and that one is free again — and the note is handed over
-exactly as from the board: a line in your DM with the agent, the brief
-attached (`assignmentBrief`; a typed task has become a note, so the same
-brief serves). The line wakes the agent; the seating sweep that follows
-sends it to the desk it holds *now*, which is this one. The reply,
-`desk_begun`, names the note and the DM the line landed in, and the client
-opens that DM: the agent's answer — picked up, or why it cannot take it —
-lands there.
+work (`#mayHandTo`: its owner, and nobody else), that a picked note is still
+open, that the agent can take it, and that nobody present holds the desk —
+and takes the desk in the same tick as that last check, before the board
+is written, because the seating sweep runs between any two awaits and gives
+the first free desk to whoever wants one (`SeatBook.reserve`: the agent's
+from this moment, whatever it held before, and that one is free again; given
+back if the write fails). A picked note is assigned; a typed one is written
+to the board, in "in progress" and assigned, so the Agents tab and the
+columns agree with the room. Then the note is handed over exactly as from
+the board: a line in your DM with the agent, the brief attached
+(`assignmentBrief`; a typed task has become a note, so the same brief
+serves). A note already in that agent's hands is handed to it again, not
+from it: the brief goes, and no "has gone to" follows it. The line wakes
+the agent; the seating sweep that follows sends it to the desk it holds
+*now*, which is this one. The reply, `desk_begun`, names the note and the
+DM the line landed in, and the client opens that DM: the agent's answer —
+picked up, or why it cannot take it — lands there.
 
 The desk is the agent's the way any desk it is given is: held while it is in
 the office, and after, until a present agent needs it more. An agent that

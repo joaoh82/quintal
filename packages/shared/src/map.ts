@@ -112,22 +112,34 @@ export interface MapSeat {
   screen: PixelRect | null;
 }
 
+/** The floor, as much of a map as a doorstep needs. */
+export type Floor = Pick<OfficeMap, 'width' | 'height' | 'walkable'>;
+
 /**
  * The desk a seat belongs to, as something you can use. Its id is the seat's,
  * so a `desk` interactable names the desk the office's seat book knows. Its
- * doorstep is the one tile behind the chair — where an agent stands when it
- * rises, and where a person stands to look over its shoulder — and its halo
- * is the screen, which is what lights up and takes the click.
+ * doorstep is one tile beside the chair: behind it — where an agent stands
+ * when it rises, and where a person stands to look over its shoulder — or,
+ * when that is not floor (a chair against a wall, or at the room's edge),
+ * the first of its two sides that is. The chair in front of the desk is the
+ * desk, never the doorstep. Its halo is the screen, which is what lights up
+ * and takes the click.
  */
-export function deskOf(seat: MapSeat): MapInteractable {
-  const behind = { up: { x: 0, y: 1 }, down: { x: 0, y: -1 }, left: { x: 1, y: 0 }, right: { x: -1, y: 0 } }[
-    seat.facing
-  ];
+export function deskOf(seat: MapSeat, floor: Floor): MapInteractable {
+  const { x, y } = seat.tile;
+  const around: Record<Direction, Array<{ x: number; y: number }>> = {
+    up: [{ x, y: y + 1 }, { x: x - 1, y }, { x: x + 1, y }],
+    down: [{ x, y: y - 1 }, { x: x - 1, y }, { x: x + 1, y }],
+    left: [{ x: x + 1, y }, { x, y: y - 1 }, { x, y: y + 1 }],
+    right: [{ x: x - 1, y }, { x, y: y - 1 }, { x, y: y + 1 }],
+  };
+  const candidates = around[seat.facing];
+  const doorstep = candidates.find((tile) => isWalkable(floor, tile.x, tile.y)) ?? candidates[0]!;
   return {
     id: seat.id,
     kind: 'desk',
     label: 'the desk',
-    bounds: { x: seat.tile.x + behind.x, y: seat.tile.y + behind.y, width: 1, height: 1 },
+    bounds: { ...doorstep, width: 1, height: 1 },
     prop: null,
     halo: seat.screen,
   };
@@ -248,7 +260,7 @@ export function nearestStandingTile(
   return best;
 }
 
-export function isWalkable(map: OfficeMap, x: number, y: number): boolean {
+export function isWalkable(map: Floor, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return false;
   return map.walkable[y * map.width + x] === true;
 }

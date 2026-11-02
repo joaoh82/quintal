@@ -14,7 +14,7 @@ function entry(over: Partial<RosterEntry>): RosterEntry {
     isSelf: false,
     ownerName: 'Josh',
     ownerUserId: 'u1',
-    scopes: [],
+    scopes: ['dm', 'move'],
     runtimeId: '',
     modelId: '',
     identityId: 'a1',
@@ -69,16 +69,22 @@ describe('who the station offers', () => {
       entry({ sessionId: 's4', identityId: 'a4', name: 'Deep', ownerUserId: 'u2' }),
       entry({ sessionId: 's5', identityId: 'u1', name: 'Josh', kind: 'human', isSelf: true }),
       entry({ sessionId: 's6', identityId: 'a6', name: 'Quiet', status: 'no model for claude here' }),
+      entry({ sessionId: 's7', identityId: 'a7', name: 'Mute', scopes: ['move'] }),
+      entry({ sessionId: 's8', identityId: 'a8', name: 'Still', scopes: ['dm'] }),
+      entry({ sessionId: 's9', identityId: 'a9', name: 'Idle', status: 'idle' }),
     ];
     assert.deepEqual(
       candidates(roster, 'u1').map((c) => [c.entry.name, c.busy]),
       [
         ['Arthur', ''],
-        ['Quiet', ''],
+        ['Idle', ''],
         ['Marvin', 'on Fix the chair'],
+        ['Mute', 'cannot be messaged'],
+        ['Quiet', 'no model for claude here'],
+        ['Still', 'cannot walk'],
         ['Zed', 'reading auth.ts'],
       ],
-      'a standing refusal is not work; a colleague\'s agent is not yours to send',
+      'a refusal would never answer; one that cannot be woken or moved would never come; a colleague\'s agent is not yours to send',
     );
   });
 
