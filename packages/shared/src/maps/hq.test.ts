@@ -173,4 +173,12 @@ describe('the desks', () => {
       assert.equal(Math.abs(stand.x - seat.tile.x) + Math.abs(stand.y - seat.tile.y), 1, `${seat.id}'s doorstep is beside its chair`);
     }
   });
+
+  it('centres every desk on its chair, so the sitter faces the middle of the screen', () => {
+    for (const seat of map.seats) {
+      const chairX = seat.tile.x * map.tileSize + map.tileSize / 2;
+      assert.ok(seat.screen, `${seat.id} has a screen`);
+      assert.equal(seat.screen.x + seat.screen.width / 2, chairX, `${seat.id}'s screen is above its chair`);
+    }
+  });
 });
