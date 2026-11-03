@@ -92,6 +92,10 @@ function fixture() {
     routineCreate: async () => { throw new Error('Read-only latency fixture'); },
     routineUpdate: async () => { throw new Error('Read-only latency fixture'); },
     routineDelete: async () => { throw new Error('Read-only latency fixture'); },
+    agentList: async () => ({ agents: [], machines: [] }),
+    agentGet: async () => { throw new Error('Read-only latency fixture'); },
+    agentCreate: async () => { throw new Error('Read-only latency fixture'); },
+    agentUpdate: async () => { throw new Error('Read-only latency fixture'); },
     occupants: () => [], channels: () => [lobby, ...dms],
   };
   const runner = new AgentRunner({ ...config, name: 'LatencyAgent' }, undefined, gateway);

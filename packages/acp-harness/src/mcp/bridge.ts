@@ -187,6 +187,36 @@ function needRoutinesScope(gateway: Gateway, tool: string): void {
   );
 }
 
+/** The office's agents are one scope, reads included, as the routines are. */
+function needAgentsScope(gateway: Gateway, tool: string): void {
+  if (gateway.ready?.scopes?.includes('agents')) return;
+  throw new Error(
+    `${tool}: this agent has no "agents" scope. Its owner grants it under Settings → Agents. ` +
+      'Until then, say what the agent would be and leave making it to them, under Settings → Agents.',
+  );
+}
+
+/** The fields an agent create and update share, only those given. `null` means "the default", or for a machine "none". */
+function agentFields(args: Record<string, unknown>): {
+  description?: string;
+  instructions?: string;
+  scopes?: string[];
+  machine?: string | null;
+  runtime?: string;
+  model?: string | null;
+  maxSessions?: number | null;
+} {
+  return {
+    ...(typeof args.description === 'string' ? { description: args.description } : {}),
+    ...(typeof args.instructions === 'string' ? { instructions: args.instructions } : {}),
+    ...(Array.isArray(args.scopes) ? { scopes: args.scopes.map(String) } : {}),
+    ...(args.machine === null || typeof args.machine === 'string' ? { machine: args.machine } : {}),
+    ...(typeof args.runtime === 'string' ? { runtime: args.runtime } : {}),
+    ...(args.model === null || typeof args.model === 'string' ? { model: args.model } : {}),
+    ...(args.max_sessions === null || typeof args.max_sessions === 'number' ? { maxSessions: args.max_sessions } : {}),
+  };
+}
+
 /** A routine's name or id, as `routine_list` shows it. */
 export function routineName(value: unknown): string {
   const name = String(value ?? '').trim();
@@ -522,6 +552,38 @@ async function dispatch(
     case 'routine_delete': {
       needRoutinesScope(gateway, call.tool);
       return gateway.routineDelete({ routine: routineName(call.args.routine), ...agentField(call.args) });
+    }
+
+    case 'agent_list': {
+      needAgentsScope(gateway, call.tool);
+      return gateway.agentList(call.args.mine === true ? { mine: true } : {});
+    }
+
+    case 'agent_get': {
+      needAgentsScope(gateway, call.tool);
+      return gateway.agentGet(agentField(call.args));
+    }
+
+    case 'agent_create': {
+      needAgentsScope(gateway, call.tool);
+      const name = String(call.args.name ?? '').trim();
+      if (name.length === 0) throw new Error('agent_create: give the agent a name');
+      return gateway.agentCreate({ name, ...agentFields(call.args) });
+    }
+
+    case 'agent_update': {
+      needAgentsScope(gateway, call.tool);
+      // No default to the caller: an agent changing itself should have said so.
+      const { agent } = agentField(call.args);
+      if (!agent) throw new Error('agent_update: say which agent, by name, by id, or "me"');
+      const patch = {
+        ...(typeof call.args.new_name === 'string' ? { newName: call.args.new_name } : {}),
+        ...(typeof call.args.character === 'string' ? { character: call.args.character } : {}),
+        ...agentFields(call.args),
+        ...(typeof call.args.enabled === 'boolean' ? { enabled: call.args.enabled } : {}),
+      };
+      if (Object.keys(patch).length === 0) throw new Error(`agent_update "${agent}": say what changes`);
+      return gateway.agentUpdate({ agent, ...patch });
     }
 
     case 'workspace_info': {

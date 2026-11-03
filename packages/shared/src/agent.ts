@@ -27,16 +27,20 @@ import { tidyDisplayText } from './workspace.js';
  * every one it makes or changes records the agent beside the owner and is
  * headed that way wherever it reaches.
  *
+ * `agents` is whether it may read the office's agents and make or change its
+ * owner's, as its owner. It is the one scope that hands out the others, so
+ * what it may give is bounded by what it holds: see `scopesBeyondGrant`.
+ *
  * `run` is whether its harness may answer the runtime's own "may I run this
  * tool?" question on the owner's behalf. Without it, every command the
  * runtime is unsure about is put to the owner where the conversation is, and
  * silence denies. Enforced by the harness, not the office: the office never
  * sees the question, only the audit line that answers it.
  */
-export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'run'] as const;
+export const AGENT_SCOPES = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'agents', 'run'] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
-export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'run'];
+export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = ['chat', 'move', 'status', 'dm', 'board', 'commands', 'routines', 'agents', 'run'];
 
 export function isAgentScope(value: string): value is AgentScope {
   return (AGENT_SCOPES as readonly string[]).includes(value);
@@ -58,6 +62,7 @@ export const AGENT_SCOPE_NOTES: Readonly<Record<AgentScope, string>> = {
   board: 'Read the office board, write notes on it and hand them to your agents.',
   commands: 'List the office\u2019s commands, make new ones and change yours, as you.',
   routines: 'Keep routines on itself and your other agents: list, make, change, pause and delete them, as you.',
+  agents: 'See the office\u2019s agents, and make or change yours as you. It can give only scopes it holds, and never this one.',
   run: 'Answer the runtime\u2019s "may I run this?" questions automatically, for every turn, with nothing shown to you. Without it each one is put to you and silence denies.',
 };
 
@@ -84,6 +89,59 @@ export const RUN_SCOPE_WITHDRAWAL_NOTE =
  */
 export const RUN_SCOPE_WITHDRAWAL_NOTE_NEVER_ASKS =
   'Nothing observable changes. This agent\u2019s runtime has never been seen to ask Quintal for permission, so there was nothing for Quintal to stop answering — what the agent may do is decided inside the runtime, by the runtime\u2019s own settings.';
+
+/**
+ * The scopes an agent may give another: those it holds, and never `agents`.
+ *
+ * Holding is the bound because anything wider is a way up: an agent whose
+ * owner withdrew `run` must not get it back by making a colleague that has
+ * it. `agents` is left out so that handing out agents stays one level deep:
+ * an agent that could give it could make agents that make agents, each a
+ * runtime process on somebody's machine, faster than anybody could read the
+ * list. An owner gives it, in Settings.
+ */
+export function grantableScopes(holder: readonly AgentScope[]): AgentScope[] {
+  return holder.filter((scope) => scope !== 'agents');
+}
+
+/**
+ * What a change of scopes would add that the agent making it may not give.
+ * Empty means it may. Taking one away is always allowed, and so is leaving
+ * alone one it could not give itself, so only what arrives is counted.
+ */
+export function scopesBeyondGrant(
+  holder: readonly AgentScope[],
+  before: readonly AgentScope[],
+  after: readonly AgentScope[],
+): AgentScope[] {
+  const grantable = grantableScopes(holder);
+  return after.filter((scope) => !before.includes(scope) && !grantable.includes(scope));
+}
+
+/**
+ * The scopes of the target an agent lacks, which keep it from changing that
+ * target at all. Empty means it may. A rule on the grant is not enough: an
+ * agent without `run` could otherwise rewrite the instructions of one with
+ * it, and have it do what it could not.
+ */
+export function scopesOutOfReach(
+  holder: readonly AgentScope[],
+  target: readonly AgentScope[],
+): AgentScope[] {
+  return target.filter((scope) => !holder.includes(scope));
+}
+
+/**
+ * How many agents one owner's agents may make in a window, together. Counted
+ * by owner rather than by agent, since every one of them starts a runtime
+ * process on the owner's machine. Enough for "make me three reviewers"; not
+ * enough for a runtime in a loop to fill a laptop before anybody looks.
+ */
+export const AGENT_CREATES_PER_WINDOW = 3;
+export const AGENT_CREATE_WINDOW_MS = 60_000;
+
+/** Past this many live agents an owner's agents stop making more. Settings still can. */
+export const AGENT_CREATE_OWNED_MAX = 20;
 
 /** Parse the `scopes` JSON column, discarding anything unrecognised. */
 export function parseScopes(raw: unknown): AgentScope[] {
@@ -240,6 +298,12 @@ export const AGENT_EVENT_KINDS = [
   'agent.mcp_servers_changed',
   /** A keypair was registered for it (credentials v2), replacing any before. */
   'agent.credential_registered',
+  /** Another agent, or itself, changed it for its owner: which fields, and by whom. */
+  'agent.changed_by_agent',
+  /** It answers to another name now: what it was and what it is. */
+  'agent.renamed',
+  /** It walks around in another body now: which it was and which it is. */
+  'agent.character_changed',
   /** Its owner changed or cleared one of its memory slugs from the settings page. */
   'agent.memory_edited',
   'session.connected',
@@ -269,6 +333,11 @@ export const AGENT_EVENT_KINDS = [
   'command.routine_create',
   'command.routine_update',
   'command.routine_delete',
+  'command.agent_list',
+  'command.agent_get',
+  /** It made an agent, or changed one, as its owner. The target's own log has the matching line. */
+  'command.agent_create',
+  'command.agent_update',
   /** A routine of its fired: the line was spoken in its owner's DM. `made_up` when it was due while the agent was away. */
   'routine.fired',
   'routine.made_up',
@@ -323,20 +392,6 @@ export interface AgentEventView {
 }
 
 // --- presentation ----------------------------------------------------------
-
-/**
- * Sprite choices offered when creating an agent. Deliberately the *same* sheet
- * humans use: an agent is marked out by its nameplate and ring, never by being
- * given a robot costume. Costumes make them cute; badges make them legible.
- */
-export const AGENT_SPRITE_KEYS = ['slate', 'amber', 'violet'] as const;
-export type AgentSpriteKey = (typeof AGENT_SPRITE_KEYS)[number];
-
-export const DEFAULT_AGENT_SPRITE: AgentSpriteKey = 'slate';
-
-export function isAgentSpriteKey(value: string): value is AgentSpriteKey {
-  return (AGENT_SPRITE_KEYS as readonly string[]).includes(value);
-}
 
 /** One line about what an agent does, shown on its card. */
 export const AGENT_DESCRIPTION_MAX_LENGTH = 280;

@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 
 import { AGENT_SCOPES } from '../agent.js';
@@ -369,6 +370,11 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    /**
+     * Which body it walks around in, by `BODIES` id. Rows from before there
+     * was a choice hold a colour that was never drawn, and read as the body
+     * their id derives: see `bodyOfAgent`.
+     */
     spriteKey: text('sprite_key').notNull().default('slate'),
     /**
      * One line about what this agent does, written by its owner.
@@ -494,6 +500,14 @@ export const agents = sqliteTable(
       .notNull(),
     /** Set instead of deleting: an audit log with dangling agent ids is useless. */
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    /**
+     * The agent that made this one for its owner, or null for one a person
+     * made. Shown on its row in Settings: an owner should be able to tell
+     * what they asked for from what was made on their behalf.
+     */
+    createdByAgentId: text('created_by_agent_id').references((): AnySQLiteColumn => agents.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => [
     index('agents_workspace_id_idx').on(table.workspaceId),

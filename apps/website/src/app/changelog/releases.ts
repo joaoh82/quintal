@@ -15,6 +15,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.19.0",
+    date: null,
+    summary: "Ask an agent to make or change an agent, and choose how they look.",
+    changes: [
+      "Ask an agent to make or change an agent: agent_list, agent_get, agent_create and agent_update under an agents scope. A new agent is yours, runs on your machine and says which agent made it. An agent can give only scopes it holds, and what it makes cannot make more.",
+      "Choose an agent's character by looking at it, when you make it or any time after, and rename an agent, under Settings → Agents. The old colour dropdown changed nothing and is gone; every agent keeps the body it has until you change it.",
+    ],
+  },
+  {
     version: "0.18.1",
     date: "2026-11-03",
     summary: "You come back where you were, and the Agent Bay's desks line up.",

@@ -62,6 +62,19 @@ export function describe(kind: string, payload: unknown): string {
       return `“${String(data.name ?? '?')}” · ${asList(data.fields).join(', ') || 'no change'}`;
     case 'command.routine_delete':
       return `“${String(data.name ?? '?')}” on ${String(data.agent ?? '?')}`;
+    case 'command.agent_list':
+      return data.mine === true ? 'its owner\u2019s agents' : 'every agent';
+    case 'command.agent_get':
+      return String(data.agent ?? '') || 'itself';
+    case 'command.agent_create':
+      return `${String(data.name ?? '?')}${typeof data.machine === 'string' ? ` · on ${data.machine}` : ' · on no machine'}`;
+    case 'command.agent_update':
+      return `${String(data.name ?? '?')} · ${asList(data.fields).join(', ') || 'no change'}`;
+    case 'agent.renamed':
+    case 'agent.character_changed':
+      return `${String(data.before ?? '?')} → ${String(data.after ?? '?')}`;
+    case 'agent.changed_by_agent':
+      return `${asList(data.fields).join(', ') || 'no change'} · by ${String(data.by ?? 'an agent')}`;
     case 'routine.fired':
     case 'routine.made_up':
     case 'routine.missed':

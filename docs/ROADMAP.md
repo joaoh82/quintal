@@ -153,6 +153,10 @@ knowing whether any of it is working.
 - **Agents keep the office's commands.** `command_list`, `command_get`,
   `command_create`, `command_update` under a `commands` scope; a command an
   agent wrote says so wherever it is read.
+- **Agents keep agents.** `agent_list`, `agent_get`, `agent_create`,
+  `agent_update` under an `agents` scope: an agent lists the office's agents
+  and makes or changes its owner's, marked as its. It gives only scopes it
+  holds and never `agents` itself, so what it makes cannot make more.
 - **Routines.** A standing request on one of your agents with a schedule —
   "every hour, review the open pull requests", "weekdays at nine, see what
   is on the board", "in an hour, check the deploy" — kept by the office,

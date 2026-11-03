@@ -8,11 +8,15 @@ import { sha256 } from '@noble/hashes/sha2.js';
  * asset pack ships twelve distinct people, so the room can be read at a
  * glance instead.
  *
- * Nobody picks one yet. The body is derived from the identity, which means it
- * costs no storage, needs no migration, and is the same on every screen and
- * across reconnects — the same property the identicon relies on. A chooser can
- * be added later without moving this: it would supply the id that this
- * function currently guesses.
+ * A person's is derived from their identity, which means it costs no storage
+ * and is the same on every screen and across reconnects — the same property
+ * the identicon relies on. An agent's is chosen, and kept in `agents.sprite_key`
+ * (`bodyOfAgent`); one that predates the choice falls through to the same
+ * derivation, so nobody's face changed when choosing arrived.
+ *
+ * Deliberately the *same* sheets for people and agents: an agent is marked out
+ * by its nameplate and ring, never by being given a robot costume. Costumes
+ * make them cute; badges make them legible.
  */
 export const BODIES = [
   'aria',
@@ -48,4 +52,18 @@ export function bodyForSeed(seed: string): BodyId {
   const hash = sha256(new TextEncoder().encode(seed || 'anonymous'));
   const index = (((hash[0] ?? 0) << 8) | (hash[1] ?? 0)) % BODIES.length;
   return BODIES[index] as BodyId;
+}
+
+/**
+ * The body an agent walks around in: the one chosen for it, or for a row from
+ * before there was a choice (`slate`, `amber`, `violet`, which were never
+ * bodies) the one it has always had. The office draws by this same rule.
+ */
+export function bodyOfAgent(agent: { id: string; spriteKey: string }): BodyId {
+  return isBodyId(agent.spriteKey) ? agent.spriteKey : bodyForSeed(agent.id);
+}
+
+/** A body for an agent nobody chose one for. */
+export function randomBody(random: () => number = Math.random): BodyId {
+  return BODIES[Math.floor(random() * BODIES.length) % BODIES.length] as BodyId;
 }
