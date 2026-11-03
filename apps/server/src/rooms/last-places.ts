@@ -28,14 +28,8 @@ export class LastPlaces {
 
   constructor(private readonly max = MAX_PLACES) {}
 
-  /**
-   * A session has gone. `held` says it was a dropped seat running out its
-   * reconnection grace rather than somebody leaving: a page reload lands here
-   * twenty seconds late, after the new session may already have come and gone,
-   * so a spot already kept is newer than this one.
-   */
-  left(key: string, place: LastPlace, held: boolean): void {
-    if (held && this.#places.has(key)) return;
+  /** Somebody left: this is the newest word on where they are. */
+  left(key: string, place: LastPlace): void {
     // Deleted first so that a returning key counts as the newest.
     this.#places.delete(key);
     this.#places.set(key, place);
@@ -47,9 +41,26 @@ export class LastPlaces {
     }
   }
 
-  /** The spot for an arrival. Used once: the session it goes to now owns it. */
-  take(key: string): LastPlace | null {
-    const place = this.#places.get(key) ?? null;
+  /**
+   * A dropped seat ran out its reconnection grace with nobody resuming it. It
+   * counts only as a last resort, since a page reload lands here twenty seconds
+   * late: not while another session of theirs is in the room, which is where
+   * they are, and not over a spot already kept, which is newer than this.
+   */
+  seatExpired(key: string, place: LastPlace, stillHere: boolean): void {
+    if (stillHere || this.#places.has(key)) return;
+    this.left(key, place);
+  }
+
+  /**
+   * The spot for an arrival. Used once: the session it goes to now owns it.
+   *
+   * `heldSeat` is a dropped seat of theirs still in its grace, which is where
+   * a reload comes back to, having never left. A kept spot beats it: that was
+   * a real leave, and it can only have come after the drop.
+   */
+  take(key: string, heldSeat: LastPlace | null = null): LastPlace | null {
+    const place = this.#places.get(key) ?? heldSeat;
     this.#places.delete(key);
     return place;
   }

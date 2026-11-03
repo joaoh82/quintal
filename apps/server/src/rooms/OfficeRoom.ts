@@ -1037,18 +1037,19 @@ export class OfficeRoom extends Room<OfficeState> {
   /**
    * Where a person comes in: where they were, or else the door.
    *
-   * A seat still held for them comes first. A page that reloads, or a plain
-   * link out of it, drops the socket rather than leaving, and they are back
-   * before that seat has timed out and reached `lastPlaces`.
+   * A page that reloads, or a plain link out of it, drops the socket rather
+   * than leaving, and they are back before that seat has timed out and reached
+   * `lastPlaces`, so a seat still held for them is offered too.
    */
   #arrivalFor(userId: string): LastPlace {
-    let place = lastPlaces.take(this.#placeKey(userId));
+    let heldSeat: LastPlace | null = null;
     for (const [sessionId, player] of this.state.players) {
       if (player.userId === userId && this.#sims.get(sessionId)?.away) {
-        place = { x: player.x, y: player.y, dir: player.dir };
+        heldSeat = { x: player.x, y: player.y, dir: player.dir };
         break;
       }
     }
+    const place = lastPlaces.take(this.#placeKey(userId), heldSeat);
     if (place) {
       const tile = {
         x: toTile(place.x, this.#map.tileSize),
@@ -1099,10 +1100,10 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#sendChannels(sessionId);
   }
 
-  /** Is anybody still connected as this member? */
-  #hasSessionFor(memberId: string): boolean {
-    for (const player of this.state.players.values()) {
-      if (player.userId === memberId) return true;
+  /** Is anybody still connected as this member, `except` one session? */
+  #hasSessionFor(memberId: string, except?: string): boolean {
+    for (const [sessionId, player] of this.state.players) {
+      if (player.userId === memberId && sessionId !== except) return true;
     }
     return false;
   }
@@ -5885,11 +5886,13 @@ export class OfficeRoom extends Room<OfficeState> {
     const player = this.state.players.get(sessionId);
     const leaving = player?.userId;
     if (player?.kind === 'human') {
-      lastPlaces.left(
-        this.#placeKey(player.userId),
-        { x: player.x, y: player.y, dir: player.dir },
-        this.#sims.get(sessionId)?.away === true,
-      );
+      const key = this.#placeKey(player.userId);
+      const place = { x: player.x, y: player.y, dir: player.dir };
+      if (this.#sims.get(sessionId)?.away) {
+        lastPlaces.seatExpired(key, place, this.#hasSessionFor(player.userId, sessionId));
+      } else {
+        lastPlaces.left(key, place);
+      }
     }
     voiceRelay.sessionLeft(this.roomId, sessionId);
     const ended = this.#earshot.remove(sessionId);
