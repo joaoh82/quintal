@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
 import {
   TaskError,
   activeTask,
   agentSlug,
   baseRef,
+  SHELVES_DIR,
   WORKTREES_DIR,
   beginTask,
   taskShelf,
@@ -429,7 +432,7 @@ describe('the shelf an agent\'s tasks are filed under', () => {
     taskShelf(nest, 'a-1', 'Arthur');
 
     const newcomer = taskShelf(nest, 'a-2', 'Marvin');
-    assert.equal(newcomer, 'Marvin-2');
+    assert.equal(newcomer, 'marvin-2');
     assert.equal(activeTask(nest, newcomer), null);
   });
 
@@ -441,10 +444,48 @@ describe('the shelf an agent\'s tasks are filed under', () => {
     assert.equal(activeTask(nest, taskShelf(nest, 'a-1', 'Arthur'))?.slug, task.slug);
   });
 
+  it('loses no claim when harness processes claim at the same moment', async () => {
+    const { nest } = world();
+    const signals = mkdtempSync(join(tmpdir(), 'shelf-signals-'));
+    const go = join(signals, 'go');
+    const script = fileURLToPath(new URL('./fixtures/claim-shelf.ts', import.meta.url));
+    // Half of them after one name, so a shelf must also go to only one of them.
+    const ids = Array.from({ length: 8 }, (_, i) => `a-${i}`);
+    const claims = ids.map((id, i) => {
+      const ready = join(signals, id);
+      const child = spawn(process.execPath, ['--import', 'tsx', script, nest, id, i < 4 ? 'Marvin' : `Agent ${i}`, go, ready], {
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
+      const output = new Promise<string>((resolve, reject) => {
+        let out = '';
+        child.stdout.on('data', (chunk: Buffer) => (out += String(chunk)));
+        child.on('error', reject);
+        child.on('close', (code) => (code === 0 ? resolve(out) : reject(new Error(`${id} exited ${String(code)}`))));
+      });
+      return { id, ready, output };
+    });
+    while (!claims.every((claim) => existsSync(claim.ready))) await delay(10);
+    writeFileSync(go, '');
+    const shelves = await Promise.all(claims.map((claim) => claim.output));
+
+    assert.equal(new Set(shelves).size, shelves.length, `each has its own: ${shelves.join(', ')}`);
+    // Asked again under a new name, each must still be where it claimed: a
+    // record lost to another process would answer with the new name instead.
+    assert.deepEqual(ids.map((id) => taskShelf(nest, id, 'Renamed')), shelves);
+  });
+
+  it('finds a free shelf for a name too long to take a number', () => {
+    const { nest } = world();
+    const long = 'a'.repeat(200);
+    const first = taskShelf(nest, 'a-1', long, { claim: true });
+    const second = taskShelf(nest, 'a-2', long, { claim: true });
+    assert.notEqual(agentSlug(first), agentSlug(second));
+  });
+
   it('leaves no trace for an agent that has done nothing here', () => {
     const { nest } = world();
     assert.equal(taskShelf(nest, 'a-1', 'Marvin'), 'Marvin');
-    assert.equal(existsSync(join(nest, WORKTREES_DIR, 'shelves.json')), false);
+    assert.equal(existsSync(join(nest, WORKTREES_DIR, SHELVES_DIR)), false);
     assert.equal(taskShelf(nest, 'a-1', 'Arthur'), 'Arthur', 'and nothing to keep means nothing holds it to the old name');
   });
 });

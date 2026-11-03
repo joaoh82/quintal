@@ -264,6 +264,8 @@ import {
   OfficeCommandError,
   createOfficeCommand,
   updateOfficeCommand,
+  AgentRosterError,
+  agentNameTaken,
   createAgent,
   findAgentLooks,
   listHostsForWorkspace,
@@ -5346,13 +5348,13 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /**
    * A name for a new or renamed agent, or null after a refusal already sent.
-   * Settings lets two share a name, but a person is looking at that form; a
-   * model retrying a create that seemed to fail would make the same agent
-   * twice, and a name shared with anyone can be neither mentioned nor DMed.
+   * A look ahead of the write, so a name it cannot have costs no slot of the
+   * pace and comes back before anything else is checked; the write holds the
+   * rule itself (`createAgent`, `setAgentName`), and `#agentRosterFailed` says
+   * the same words when a request overlapping this one got there first.
    */
   async #agentRosterFreeName(
     client: Client,
-    all: readonly AgentListEntry[],
     wanted: unknown,
     selfId: string | null,
     requestId: unknown,
@@ -5362,12 +5364,7 @@ export class OfficeRoom extends Room<OfficeState> {
       this.#replyError(client, requestId, { code: 'invalid_payload', message: 'Give the agent a name.' });
       return null;
     }
-    const needle = name.toLowerCase();
-    const people = await listPeopleForWorkspace(getDb(), this.#workspaceId);
-    const taken =
-      all.some((agent) => agent.revokedAt === null && agent.id !== selfId && agent.name.toLowerCase() === needle) ||
-      people.some((person) => person.name.toLowerCase() === needle);
-    if (taken) {
+    if (await agentNameTaken(getDb(), this.#workspaceId, name, selfId ?? undefined)) {
       this.#replyError(client, requestId, { code: 'invalid_payload', message: `Somebody in this office is already called ${name}. If you made it a moment ago, it worked: agent_list shows it.` });
       return null;
     }
@@ -5442,16 +5439,7 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       const self = await this.#agentRosterWriter(client, session, requestId);
       if (!self) return;
-      const all = await listAgentsForWorkspace(getDb(), this.#workspaceId);
-      const owned = all.filter((agent) => agent.ownerUserId === self.ownerUserId && agent.revokedAt === null);
-      if (owned.length >= AGENT_CREATE_OWNED_MAX) {
-        this.#replyError(client, requestId, {
-          code: 'too_large',
-          message: `Your owner has ${owned.length} agents, and agents stop making more at ${AGENT_CREATE_OWNED_MAX}. They can make one under Settings → Agents.`,
-        });
-        return;
-      }
-      const name = await this.#agentRosterFreeName(client, all, payload?.name, null, requestId);
+      const name = await this.#agentRosterFreeName(client, payload?.name, null, requestId);
       if (name === null || !this.#agentRosterFits(client, payload, requestId)) return;
 
       let scopes: AgentScope[];
@@ -5502,6 +5490,7 @@ export class OfficeRoom extends Room<OfficeState> {
         scopes,
         maxSessions: normaliseParallelism(payload?.maxSessions),
         createdByAgentId: self.id,
+        rules: { ownedMax: AGENT_CREATE_OWNED_MAX },
         ...(launch.launch ? { launch: launch.launch } : {}),
       });
       audit(self.id, 'command.agent_create', { name: made.name, agentId: made.id, machine: launch.launch?.hostLabel ?? null, scopes });
@@ -5558,7 +5547,7 @@ export class OfficeRoom extends Room<OfficeState> {
       }
       if (!this.#agentRosterFits(client, payload, requestId)) return;
 
-      const name = typeof payload?.newName === 'string' ? await this.#agentRosterFreeName(client, all, payload.newName, target.id, requestId) : undefined;
+      const name = typeof payload?.newName === 'string' ? await this.#agentRosterFreeName(client, payload.newName, target.id, requestId) : undefined;
       if (name === null) return;
 
       const character = typeof payload?.character === 'string' ? payload.character.trim().toLowerCase() : undefined;
@@ -5640,6 +5629,21 @@ export class OfficeRoom extends Room<OfficeState> {
   }
 
   #agentRosterFailed(client: Client, requestId: unknown, error: unknown): void {
+    // A request overlapping this one got there first. A rename is the first
+    // thing `agent_update` writes, so this one has changed nothing.
+    if (error instanceof AgentRosterError) {
+      this.#replyError(
+        client,
+        requestId,
+        error.reason === 'full'
+          ? {
+              code: 'too_large',
+              message: `Your owner has reached ${AGENT_CREATE_OWNED_MAX} agents, where agents stop making more. They can make one under Settings → Agents.`,
+            }
+          : { code: 'invalid_payload', message: `${error.message} If you made it a moment ago, it worked: agent_list shows it.` },
+      );
+      return;
+    }
     logger.error('[office] an agent tool on the office\'s agents failed', error);
     this.#replyError(client, requestId, { code: 'unavailable', message: 'The office could not read or write its agents just now.' });
   }

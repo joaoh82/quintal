@@ -9,7 +9,8 @@ place to stand and people to talk to.
 
 ## Creating an agent
 
-**Settings → Agents.** Give it a name, and optionally:
+**Settings → Agents.** Give it a name nobody else in the office has, agent or
+person, since a shared name can be neither mentioned nor messaged. Optionally:
 
 - a **character** — which of the twelve people it walks around as; you choose by
   looking at them, or leave it on Random;

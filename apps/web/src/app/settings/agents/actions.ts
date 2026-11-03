@@ -12,6 +12,7 @@ import {
   type AgentScope,
 } from '@quintal/shared';
 import {
+  AgentRosterError,
   MemoryLimitError,
   MemorySlugError,
   canAdministerAgent,
@@ -21,7 +22,6 @@ import {
   ensurePersonalWorkspace,
   findAgentById,
   getDb,
-  listAgentsForWorkspace,
   listHostTokens,
   listHostsForWorkspace,
   revokeAgent,
@@ -190,6 +190,7 @@ export async function createAgentAction(
       // it here is a crafted submission, not a typo worth a message.
       maxSessions: normaliseParallelism(formData.get('maxSessions')),
       ...(wantsLaunch ? { launch: { runtimeId, hostLabel, modelId } } : {}),
+      rules: {},
     });
 
     revalidatePath('/settings/agents');
@@ -243,20 +244,18 @@ export async function saveAgentProfileAction(
     return raw === null ? undefined : String(raw);
   };
 
-  // Checked first, so a name it may not have leaves the whole save unmade. A
-  // shared name can be neither mentioned nor DMed, and this agent's would
-  // stop working the moment it was saved. Its own, in another case, is fine.
+  // First, so a name it may not have leaves the whole save unmade. A shared
+  // name can be neither mentioned nor DMed, and this agent's would stop working
+  // the moment it was saved. The write itself holds that line.
   const name = field('name');
   if (name !== undefined) {
-    const wanted = normaliseAgentName(name);
-    if (wanted.length === 0) return { ok: false, error: 'Give the agent a name.', agentId };
-    const office = await listAgentsForWorkspace(db, agent.workspaceId);
-    const taken = office.some(
-      (other) =>
-        other.id !== agentId && other.revokedAt === null && other.name.toLowerCase() === wanted.toLowerCase(),
-    );
-    if (taken) return { ok: false, error: `Another agent here is already called ${wanted}.`, agentId };
-    await setAgentName(db, agentId, wanted);
+    if (normaliseAgentName(name).length === 0) return { ok: false, error: 'Give the agent a name.', agentId };
+    try {
+      await setAgentName(db, agentId, name);
+    } catch (error: unknown) {
+      if (error instanceof AgentRosterError) return { ok: false, error: error.message, agentId };
+      throw error;
+    }
   }
 
   // Only a real choice: a crafted form must not store a body nothing can draw.
