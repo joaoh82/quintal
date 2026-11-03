@@ -16,7 +16,7 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     version: "0.19.0",
-    date: null,
+    date: "2026-11-03",
     summary: "Ask an agent to make or change an agent, and choose how they look.",
     changes: [
       "Ask an agent to make or change an agent: agent_list, agent_get, agent_create and agent_update under an agents scope. A new agent is yours, runs on your machine and says which agent made it. An agent can give only scopes it holds, and what it makes cannot make more.",
