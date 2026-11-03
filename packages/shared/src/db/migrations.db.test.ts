@@ -145,3 +145,36 @@ describe('0018 — letting existing agents be messaged', () => {
     assert.equal(rows.rows[0]?.['scopes'], 'not json');
   });
 });
+
+describe('0045 gives every agent so far the agents scope', () => {
+  /** The file's data half: the column it adds is already in the test database. */
+  async function backfill(db: Awaited<ReturnType<typeof createTestDb>>): Promise<void> {
+    const file = await readFile(path.join(MIGRATIONS_FOLDER, '0045_agents_scope.sql'), 'utf8');
+    await db.run(sql.raw(file.split('--> statement-breakpoint')[1]!));
+  }
+
+  async function agentWith(db: Awaited<ReturnType<typeof createTestDb>>, scopes: unknown): Promise<string> {
+    const owner = await insertUser(db, 'Josh');
+    const workspace = await ensurePersonalWorkspace(db, { userId: owner.id, name: 'Josh', pubkey: owner.pubkey });
+    const id = randomBytes(8).toString('hex');
+    await db.insert(agents).values({ id, workspaceId: workspace.id, ownerUserId: owner.id, name: 'Marvin', scopes } as typeof agents.$inferInsert);
+    return id;
+  }
+
+  async function scopesOf(db: Awaited<ReturnType<typeof createTestDb>>, id: string): Promise<unknown> {
+    const rows = await db.select({ scopes: agents.scopes }).from(agents).where(eq(agents.id, id));
+    return rows[0]?.scopes;
+  }
+
+  it('adds it once, and leaves the rest of the list as it was', async () => {
+    const db = await createTestDb();
+    const without = await agentWith(db, ['chat', 'routines']);
+    const withIt = await agentWith(db, ['agents', 'chat']);
+
+    await backfill(db);
+    await backfill(db);
+
+    assert.deepEqual(await scopesOf(db, without), ['chat', 'routines', 'agents']);
+    assert.deepEqual(await scopesOf(db, withIt), ['agents', 'chat']);
+  });
+});

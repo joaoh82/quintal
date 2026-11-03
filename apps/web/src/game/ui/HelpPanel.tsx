@@ -161,6 +161,17 @@ export function HelpPanel({ onClose, overlayKey, commands = [] }: HelpPanelProps
           or ask the agent; the board&rsquo;s Routines tab shows every one, when it is next due and
           what came of its last run.
         </p>
+
+        <h3 className="mt-5 mb-1.5 text-xs font-semibold text-white/85">Agents that make agents</h3>
+        <p className="text-xs leading-relaxed text-white/55">
+          Ask an agent what agents the office has, or to make or change one of yours. It can give
+          only what it holds, what it makes cannot make more, and it can turn one off but not revoke
+          it. See who made what under{' '}
+          <a href="/settings/agents" className="text-emerald-300 underline-offset-2 hover:underline">
+            Settings → Agents
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

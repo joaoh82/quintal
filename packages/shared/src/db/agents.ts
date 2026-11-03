@@ -19,6 +19,7 @@ import {
   type AgentScope,
 } from '../agent.js';
 import { verifyAttestation } from '../attestation.js';
+import { bodyOfAgent, isBodyId, randomBody, type BodyId } from '../bodies.js';
 import {
   mcpServersFingerprint,
   parseMcpStatus,
@@ -66,7 +67,8 @@ export interface CreateAgentInput {
   workspaceId: string;
   ownerUserId: string;
   name: string;
-  spriteKey: string;
+  /** Which of the bodies it walks around in. Absent means one at random. */
+  spriteKey?: string;
   /** One line about what it does, shown on its card. */
   description?: string;
   /** How it should behave, prepended to its system prompt. */
@@ -88,6 +90,8 @@ export interface CreateAgentInput {
    * the harness cannot use.
    */
   maxSessions?: number | null;
+  /** The agent making this one for its owner. Absent when a person is. */
+  createdByAgentId?: string;
 }
 
 export interface CreatedAgent {
@@ -109,12 +113,13 @@ export async function createAgent(
     workspaceId: input.workspaceId,
     ownerUserId: input.ownerUserId,
     name: normaliseAgentName(input.name),
-    spriteKey: input.spriteKey,
+    spriteKey: input.spriteKey ?? randomBody(),
     description: normaliseAgentDescription(input.description),
     instructions: normaliseAgentInstructions(input.instructions),
     apiKeyHash: hashAgentKey(key),
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
     maxSessions: normaliseParallelism(input.maxSessions),
+    createdByAgentId: input.createdByAgentId ?? null,
     ...(input.launch
       ? {
           runtimeId: input.launch.runtimeId,
@@ -129,6 +134,7 @@ export async function createAgent(
     name: normaliseAgentName(input.name),
     ownerUserId: input.ownerUserId,
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
+    ...(input.createdByAgentId ? { createdByAgentId: input.createdByAgentId } : {}),
   });
 
   return { id, name: normaliseAgentName(input.name), key };
@@ -177,6 +183,52 @@ export async function setAgentProfile(
   });
 
   return next;
+}
+
+/**
+ * Change what an agent is called.
+ *
+ * Normalised here for the reason `setAgentProfile` is. A fleet restarts it
+ * under the new name on its next poll: name is what a host runs agents by.
+ */
+export async function setAgentName(db: Database, agentId: string, name: string): Promise<string> {
+  const next = normaliseAgentName(name);
+  if (next.length === 0) throw new Error('An agent needs a name.');
+  const rows = await db.select({ name: agents.name }).from(agents).where(eq(agents.id, agentId)).limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+  if (current.name === next) return next;
+  await db.update(agents).set({ name: next }).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.renamed', { before: current.name, after: next });
+  return next;
+}
+
+/**
+ * Change which body an agent walks around in. Refuses anything that is not
+ * one of them: a row holding a name the office cannot draw would quietly show
+ * some other body. A connected agent changes on the room's next look
+ * (`findAgentLooks`), with no restart: a costume is no reason to drop a turn.
+ */
+export async function setAgentCharacter(db: Database, agentId: string, character: string): Promise<BodyId> {
+  if (!isBodyId(character)) throw new Error(`No character called ${character}.`);
+  const rows = await db.select({ spriteKey: agents.spriteKey }).from(agents).where(eq(agents.id, agentId)).limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+  const before = bodyOfAgent({ id: agentId, spriteKey: current.spriteKey });
+  if (before === character) return character;
+  await db.update(agents).set({ spriteKey: character }).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.character_changed', { before, after: character });
+  return character;
+}
+
+/** What these agents are drawn as now, for a room to notice one that changed. */
+export async function findAgentLooks(db: Database, ids: readonly string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: agents.id, spriteKey: agents.spriteKey })
+    .from(agents)
+    .where(sql`${agents.id} in ${ids}`);
+  return new Map(rows.map((row) => [row.id, row.spriteKey]));
 }
 
 /**
@@ -614,6 +666,9 @@ export interface AgentListEntry {
   maxSessions: number | null;
   /** Whether a host pulling its fleet should be running this. */
   enabled: boolean;
+  /** The agent that made this one for its owner. Null for one a person made. */
+  createdByAgentId: string | null;
+  createdByAgentName: string | null;
   /** Where its harness said it works. Empty until one connects. */
   workspacePath: string;
   /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
@@ -653,14 +708,18 @@ export async function listAgentsForWorkspace(
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
+      createdByAgentId: agents.createdByAgentId,
     })
     .from(agents)
     .innerJoin(users, eq(users.id, agents.ownerUserId))
     .where(eq(agents.workspaceId, workspaceId))
     .orderBy(desc(agents.createdAt));
 
+  // An agent's maker is in the same office, so it is already in these rows.
+  const names = new Map(rows.map((row) => [row.id, row.name]));
   return rows.map(({ ownerPubkey, ...row }) => ({
     ...row,
+    createdByAgentName: row.createdByAgentId ? (names.get(row.createdByAgentId) ?? null) : null,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),
@@ -699,6 +758,7 @@ export async function findAgentById(
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
+      createdByAgentId: agents.createdByAgentId,
     })
     .from(agents)
     .innerJoin(users, eq(users.id, agents.ownerUserId))
@@ -708,8 +768,12 @@ export async function findAgentById(
   const row = rows[0];
   if (!row) return null;
   const { ownerPubkey, ...rest } = row;
+  const maker = row.createdByAgentId
+    ? await db.select({ name: agents.name }).from(agents).where(eq(agents.id, row.createdByAgentId)).limit(1)
+    : [];
   return {
     ...rest,
+    createdByAgentName: maker[0]?.name ?? null,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),

@@ -316,6 +316,13 @@
       "when": 1793621470370,
       "tag": "0044_host_rows_by_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1793739927150,
+      "tag": "0045_agents_scope",
+      "breakpoints": true
     }
   ]
 }

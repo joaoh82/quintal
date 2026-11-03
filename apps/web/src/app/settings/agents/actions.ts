@@ -5,7 +5,7 @@ import {
   DEFAULT_AGENT_SCOPES,
   runtimeById,
   isAgentScope,
-  isAgentSpriteKey,
+  isBodyId,
   modelChoice,
   normaliseAgentName,
   normaliseParallelism,
@@ -21,14 +21,17 @@ import {
   ensurePersonalWorkspace,
   findAgentById,
   getDb,
+  listAgentsForWorkspace,
   listHostTokens,
   listHostsForWorkspace,
   revokeAgent,
   revokeHostToken,
   forgetHostReport,
+  setAgentCharacter,
   setAgentEnabled,
   setAgentLaunch,
   setAgentMaxSessions,
+  setAgentName,
   setAgentProfile,
   readAgentMcp,
   setAgentMcpServers,
@@ -132,8 +135,9 @@ export async function createAgentAction(
     const name = normaliseAgentName(String(formData.get('name') ?? ''));
     if (name.length === 0) return { ok: false, error: 'Give the agent a name.' };
 
-    const spriteRaw = String(formData.get('spriteKey') ?? 'slate');
-    const spriteKey = isAgentSpriteKey(spriteRaw) ? spriteRaw : 'slate';
+    // Nothing chosen, or a crafted value, is left to `createAgent`'s random draw.
+    const spriteRaw = String(formData.get('spriteKey') ?? '');
+    const spriteKey = isBodyId(spriteRaw) ? spriteRaw : undefined;
 
     const scopes = formData
       .getAll('scopes')
@@ -175,7 +179,7 @@ export async function createAgentAction(
       workspaceId: workspace.id,
       ownerUserId: session.user.id,
       name,
-      spriteKey,
+      ...(spriteKey ? { spriteKey } : {}),
       // Normalised again inside `createAgent`; passed raw so there is one place
       // that decides what a description and an instruction may contain.
       description: String(formData.get('description') ?? ''),
@@ -210,6 +214,8 @@ export interface SaveAgentProfileState {
   error?: string;
   /** The agent the last save was for, so one row's result cannot show on another. */
   agentId?: string;
+  /** Whether the save will restart it: a new character alone does not. */
+  restarts?: boolean;
 }
 
 export async function saveAgentProfileAction(
@@ -237,6 +243,28 @@ export async function saveAgentProfileAction(
     return raw === null ? undefined : String(raw);
   };
 
+  // Checked first, so a name it may not have leaves the whole save unmade. A
+  // shared name can be neither mentioned nor DMed, and this agent's would
+  // stop working the moment it was saved. Its own, in another case, is fine.
+  const name = field('name');
+  if (name !== undefined) {
+    const wanted = normaliseAgentName(name);
+    if (wanted.length === 0) return { ok: false, error: 'Give the agent a name.', agentId };
+    const office = await listAgentsForWorkspace(db, agent.workspaceId);
+    const taken = office.some(
+      (other) =>
+        other.id !== agentId && other.revokedAt === null && other.name.toLowerCase() === wanted.toLowerCase(),
+    );
+    if (taken) return { ok: false, error: `Another agent here is already called ${wanted}.`, agentId };
+    await setAgentName(db, agentId, wanted);
+  }
+
+  // Only a real choice: a crafted form must not store a body nothing can draw.
+  const character = field('spriteKey');
+  if (character !== undefined && isBodyId(character)) {
+    await setAgentCharacter(db, agentId, character);
+  }
+
   await setAgentProfile(db, agentId, {
     description: field('description'),
     instructions: field('instructions'),
@@ -254,7 +282,16 @@ export async function saveAgentProfileAction(
   // The office reads both on connect, so a change lands for anybody joining
   // now; a running agent is restarted by its host on the next fleet poll.
   revalidatePath('/office');
-  return { ok: true, agentId };
+  const after = await findAgentById(db, agentId);
+  return {
+    ok: true,
+    agentId,
+    restarts:
+      after?.name !== agent.name ||
+      after?.description !== agent.description ||
+      after?.instructions !== agent.instructions ||
+      after?.maxSessions !== agent.maxSessions,
+  };
 }
 
 /**

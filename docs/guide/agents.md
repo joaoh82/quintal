@@ -11,16 +11,20 @@ place to stand and people to talk to.
 
 **Settings → Agents.** Give it a name, and optionally:
 
+- a **character** — which of the twelve people it walks around as; you choose by
+  looking at them, or leave it on Random;
 - a **description** — one line on its profile card ("Senior Software
   Engineer.");
 - **instructions** — standing orders it is given at the start of every
   session ("Review PRs in this repo. Be terse.");
 - **scopes** — what it may do: `chat`, `move`, `status`, `dm`, `board`,
-  `commands`, `routines` and `run`. `board` lets it read and write the [office
+  `commands`, `routines`, `agents` and `run`. `board` lets it read and write the [office
   board](./board.md); `commands` lets it read the office's
   [commands](./commands.md) and make or change them as you; `routines` lets
   it keep [routines](./routines.md) — standing requests on a schedule — on
-  itself and your other agents, as you. `run` means its harness answers the runtime's "may I run this?" questions
+  itself and your other agents, as you; `agents` lets it
+  [see the office's agents and make or change yours](#asking-an-agent-to-make-or-change-an-agent),
+  as you. `run` means its harness answers the runtime's "may I run this?" questions
   for it — ongoing, every turn, with nothing shown to you. Without `run`,
   every command its runtime is unsure about is put to you in the channel or
   room you asked from, as a card with the tool and the command on it: click
@@ -55,8 +59,49 @@ reads your machine only and never calls out to GitHub or anywhere else, so
 "there is a checkout of that here" is all it will claim; whether it can still
 push to the remote is something it has to go and check.
 
-Changing the description, instructions or model later restarts the agent
-with the new settings.
+Changing the name, description, instructions or model later restarts the agent
+with the new settings, under **Name, character, description and instructions**
+on its row. Changing its character does not: the new look shows within seconds.
+An agent you start by hand takes a new name the next time you start it. A renamed
+agent keeps its tasks and worktrees, and its branches go on saying the name it had
+when it first took a task on that machine.
+
+## Asking an agent to make or change an agent
+
+With the `agents` scope, an agent does what Settings → Agents does when you ask
+it: "what agents do we have?", "make me a reviewer called Bob, terse, on the
+laptop", "give Bob the board", "rename Bob to Robert", "dress Bob as Hugo", "turn
+Bob off". The tools are `agent_list`,
+`agent_get`, `agent_create` and `agent_update`.
+
+A new agent is yours, not its maker's, and its row in Settings and the first
+line of its log say which agent made it. It runs on a machine of yours: unless
+you say otherwise, the maker's machine and runtime, on that runtime's default
+model, as a character drawn at random. If the maker runs on no machine and you name none, the new agent is
+created with nothing running it, and the agent says so. It is never given a
+key: the machine runs it on its own token.
+
+Because this hands out power, it has limits Settings does not:
+
+- **It can give only what it holds.** An agent without `run` cannot make one
+  with `run`, or give `run` to a colleague or itself.
+- **It can never give `agents`.** Only you can. So what an agent makes cannot
+  make more, and a model in a loop cannot fan out.
+- **It changes only your agents**, even if you run the office, and none that
+  holds a scope it lacks. An agent without `run` cannot rewrite the
+  instructions of one with it and have it do what it may not.
+- **It sees only the public card of other people's agents.** Their instructions
+  and scopes stay theirs.
+- **Three new agents a minute across all your agents, and none past twenty of
+  yours.** Each is a runtime process on your machine. Settings is not limited.
+- **It cannot revoke.** It can turn an agent off, which you can undo. Revoking
+  is permanent, and stays with you in Settings.
+
+Withdrawing the `agents` scope stops an agent's changes at once, without waiting
+for its next session. Every change it makes is in both agents' logs.
+
+A scope it gives or takes away reaches a running agent from its next session.
+Anything else restarts that agent, and a turn it is on may be cut short.
 
 ## Running agents
 

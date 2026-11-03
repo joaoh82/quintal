@@ -346,7 +346,7 @@ export function routineSection(command: AgentCommandCall, fromName: string): str
  * where the owner wants certainty rather than a good chance.
  */
 export const TOOL_HINT = [
-  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update, command_list, command_get, command_create, command_update, routine_list, routine_get, routine_create, routine_update, routine_delete.',
+  'Tools available now: say, look_around, who_is_here, messages_get, workspace_info, memory_get, memory_set, emote, board_list, board_get, board_create, board_update, command_list, command_get, command_create, command_update, routine_list, routine_get, routine_create, routine_update, routine_delete, agent_list, agent_get, agent_create, agent_update.',
   'say posts a line now, into the conversation this turn is in — use it to say',
   'you have picked something up and to report when it lands or blocks, rather',
   'than holding everything for your final answer. Your final answer is posted',
@@ -370,6 +370,9 @@ export const TOOL_HINT = [
   'session ends, as a line in your owner\'s direct message with the agent it is on — you,',
   'unless you put it on another of your owner\'s agents. routine_list says what there',
   'already is; to stop one, routine_update with paused, or routine_delete.',
+  'When asked what agents there are, or to make or change one, use agent_list, agent_get,',
+  'agent_create or agent_update: describing an agent in conversation does not make it',
+  'exist. Make one only when asked, and say back the note the office returns.',
 ].join('\n');
 
 /** Trim the conversation window to the messages that belong in a prompt. */

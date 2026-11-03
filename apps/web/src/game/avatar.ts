@@ -29,10 +29,9 @@ import { cueFor, sameCue, type Cue } from './glass';
 /**
  * Which of the twelve bodies somebody walks around in.
  *
- * `spriteKey` wins when it names one, which is the hook a chooser will hang
- * off; today only agents carry one and its three legacy values are colours,
- * not bodies, so in practice everybody falls through to the derived answer.
- * The seed is the stable identity where there is one — a reconnect must not
+ * `spriteKey` wins when it names one: an agent's owner chooses it. An agent
+ * from before that holds a colour instead, and falls through to the derived
+ * answer it has always had, like everybody else. The seed is the stable identity where there is one — a reconnect must not
  * change somebody's face — and the name only for a guest who has no identity
  * to speak of.
  */
@@ -141,7 +140,7 @@ const BUBBLE_STYLE = {
 export class Avatar {
   readonly sessionId: string;
   readonly kind: PlayerKind;
-  readonly body: BodyId;
+  body: BodyId;
   /** Scratch space for the scene's "did anything notable change" test. */
   lastStatus = '';
 
@@ -270,6 +269,13 @@ export class Avatar {
       moving: player.moving,
       pose: player.pose,
     });
+
+    // Only a chosen body changes under a live avatar: a derived one is the
+    // same on every patch, and a guest's new name must not change their face.
+    if (isBodyId(player.spriteKey) && player.spriteKey !== this.body) {
+      this.body = player.spriteKey;
+      this.#sprite.anims.play(bodyAnimation(this.body, this.#state, this.#facing));
+    }
 
     // Two snapshots older than the interpolation window is all we ever need:
     // one to interpolate from, one to interpolate to.

@@ -42,6 +42,7 @@ const run = promisify(execFile);
 export const WORKTREES_DIR = 'WORKTREES';
 /** The book of tasks, one per agent, beside that agent's worktrees. */
 const TASKS_FILE = 'tasks.json';
+const SHELVES_FILE = 'shelves.json';
 /** A fetch that takes longer than this is a network that is not there. */
 const FETCH_TIMEOUT_MS = 60_000;
 /** Enough for a title, short enough for a branch name people can type. */
@@ -180,6 +181,50 @@ export function resolveRepo(reposDir: string, repo: string): { name: string; pat
     );
   }
   return { name: wanted, path };
+}
+
+// --- the shelf -------------------------------------------------------------
+
+/**
+ * The name an agent's tasks are filed under on this machine: what it was
+ * called the first time it worked here, for as long as this machine knows it.
+ *
+ * Worktrees and the book live under the agent's name, and a person can now
+ * change that. Moving them would break every worktree's link to its repository,
+ * and looking under the new name would lose them: an agent renamed mid-task
+ * would no longer know it was on one, and a worktree kept for its unpushed work
+ * would never be mentioned again. So the name on the shelf stays, and a renamed
+ * agent's branches go on saying what it was called when it started here.
+ *
+ * Keyed by agent id, which does not change. A second agent taking a name
+ * another left behind gets its own shelf rather than inheriting that one's work.
+ *
+ * Written down only once there is work to keep: when a task begins (`claim`),
+ * or on finding a book under this name from before there were shelves. Merely
+ * asking leaves no trace, because asking is what every turn does and a machine
+ * should not fill up with agents that never did anything here.
+ */
+export function taskShelf(nest: string, agentId: string, name: string, options: { claim?: boolean } = {}): string {
+  const path = join(nest, WORKTREES_DIR, SHELVES_FILE);
+  let shelves: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) shelves = parsed as Record<string, string>;
+  } catch {
+    // None yet, or unreadable: nobody's shelf is known, so start again.
+  }
+  const known = shelves[agentId];
+  if (typeof known === 'string' && known.length > 0) return known;
+
+  const taken = new Set(Object.values(shelves).map(agentSlug));
+  let shelf = name;
+  for (let n = 2; taken.has(agentSlug(shelf)); n += 1) shelf = `${name}-${n}`;
+  if (!options.claim && !existsSync(bookPath(nest, shelf))) return shelf;
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ ...shelves, [agentId]: shelf }, null, 2) + '\n', { mode: 0o600 });
+  renameSync(tmp, path);
+  return shelf;
 }
 
 // --- the book --------------------------------------------------------------

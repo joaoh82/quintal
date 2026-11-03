@@ -149,6 +149,7 @@ const SCOPE_MEANING: Record<AgentScope, string> = {
   board: 'read the office board, write notes on it and hand them to your owner\'s agents (`board_list`, `board_get`, `board_create`, `board_update`)',
   commands: 'read the office\'s !commands and make or change them as your owner (`command_list`, `command_get`, `command_create`, `command_update`)',
   routines: 'keep routines — standing requests on a schedule — on yourself and your owner\'s other agents (`routine_list`, `routine_get`, `routine_create`, `routine_update`, `routine_delete`)',
+  agents: 'see the office\'s agents and make or change your owner\'s, as your owner (`agent_list`, `agent_get`, `agent_create`, `agent_update`)',
   run: 'your harness may approve the runtime\'s own "may I run this?" questions for you; without it each one is put to your owner, and silence denies',
 };
 

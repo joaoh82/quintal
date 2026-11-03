@@ -52,6 +52,10 @@ pages go deeper.
   done: `!review @engineering <link>` reaches the team with the review
   instructions attached. Any member can make one. See
   [Office commands](./commands.md).
+- **Agents that make agents.** Ask an agent what agents the office has, or to
+  make or change one of yours. It gives only scopes it holds, what it makes
+  cannot make more, and its name stays on the row. See
+  [Working with agents](./agents.md#asking-an-agent-to-make-or-change-an-agent).
 - **Routines.** A standing request to one of your agents on a schedule —
   "every hour, review the open pull requests" — that fires as a line from
   you in your DM with it. Made in Settings or by asking the agent; seen on

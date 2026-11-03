@@ -10,7 +10,9 @@ import {
   activeTask,
   agentSlug,
   baseRef,
+  WORKTREES_DIR,
   beginTask,
+  taskShelf,
   branchName,
   cleanupDecision,
   describeTask,
@@ -405,5 +407,44 @@ describe('the pull request and the report', () => {
     assert.equal('item' in taskForOffice({ ...task, item: undefined })!, false, 'none is left off, not sent as 0');
     const bogus = await beginTask({ nest, agent: 'Arthur', reposDir: repos, repo: 'api', title: 'bogus', item: -3 });
     assert.equal('item' in bogus, false, 'a number that is no note is dropped');
+  });
+});
+
+describe('the shelf an agent\'s tasks are filed under', () => {
+  it('stays where it started through a rename, so the book is still found', async () => {
+    const { nest, repos } = world();
+    const before = taskShelf(nest, 'a-1', 'Marvin', { claim: true });
+    assert.equal(before, 'Marvin');
+    const task = await beginTask({ nest, agent: before, reposDir: repos, repo: 'api', title: 'Fix the login' });
+
+    const after = taskShelf(nest, 'a-1', 'Arthur');
+    assert.equal(after, 'Marvin', 'the new name does not move it');
+    assert.equal(activeTask(nest, after)?.slug, task.slug, 'still on the task it began');
+  });
+
+  it('gives a newcomer taking a name another left behind its own, not that one\'s work', async () => {
+    const { nest, repos } = world();
+    const first = taskShelf(nest, 'a-1', 'Marvin', { claim: true });
+    await beginTask({ nest, agent: first, reposDir: repos, repo: 'api', title: 'Fix the login' });
+    taskShelf(nest, 'a-1', 'Arthur');
+
+    const newcomer = taskShelf(nest, 'a-2', 'Marvin');
+    assert.equal(newcomer, 'Marvin-2');
+    assert.equal(activeTask(nest, newcomer), null);
+  });
+
+  it('keeps a book from before there were shelves, so a later rename cannot lose it', async () => {
+    const { nest, repos } = world();
+    const task = await beginTask({ nest, agent: 'Marvin', reposDir: repos, repo: 'api', title: 'Fix the login' });
+
+    assert.equal(taskShelf(nest, 'a-1', 'Marvin'), 'Marvin', 'finding its book claims it');
+    assert.equal(activeTask(nest, taskShelf(nest, 'a-1', 'Arthur'))?.slug, task.slug);
+  });
+
+  it('leaves no trace for an agent that has done nothing here', () => {
+    const { nest } = world();
+    assert.equal(taskShelf(nest, 'a-1', 'Marvin'), 'Marvin');
+    assert.equal(existsSync(join(nest, WORKTREES_DIR, 'shelves.json')), false);
+    assert.equal(taskShelf(nest, 'a-1', 'Arthur'), 'Arthur', 'and nothing to keep means nothing holds it to the old name');
   });
 });
