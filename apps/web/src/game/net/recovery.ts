@@ -9,10 +9,11 @@
  * Two phases, because the server offers two things. For a short window after
  * a drop it keeps the seat — avatar, position, session — and a *resume* with
  * the room's reconnection token gets it back exactly as it was. After that the
- * seat is gone and the only way in is a fresh *join*: a new session, spawned
- * at the door, but in the office. Resume is tried first because it is better;
- * join is tried forever because giving up is the one thing that must not
- * happen while the page is open.
+ * seat is gone and the only way in is a fresh *join*: a new session, put back
+ * where the old one stood while the server remembers, and at the door when it
+ * does not. Resume is tried first because it is better; join is tried forever
+ * because giving up is the one thing that must not happen while the page is
+ * open.
  *
  * Pure with respect to the network and the clock so the whole policy can be
  * tested without either: everything it touches is handed in.

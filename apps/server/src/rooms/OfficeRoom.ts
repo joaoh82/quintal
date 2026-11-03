@@ -59,6 +59,7 @@ import {
   directionFromIntent,
   findPath,
   followPath,
+  isWalkable,
   memoryLimitFor,
   nearestWalkable,
   normalize,
@@ -315,6 +316,7 @@ import {
   officeCommandsSignature,
 } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
+import { LastPlaces, type LastPlace } from './last-places.js';
 import { LatestRead } from './latest-read.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import {
@@ -443,6 +445,9 @@ const EARSHOT_SWEEP_MS = 250;
 
 /** Tiles of clearance an arriving agent tries to leave around everyone else. */
 const AGENT_SPAWN_GAP_TILES = 4;
+
+/** One for the process: a room closes when its last person leaves for Settings. */
+const lastPlaces = new LastPlaces();
 
 /**
  * The office.
@@ -1001,14 +1006,15 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
-    const spawn = spawnFor(this.#map, 'human');
+    const arrival = this.#arrivalFor(auth.userId);
     this.state.players.set(
       client.sessionId,
       createPlayer({
         userId: auth.userId,
         name: auth.name,
-        x: tileCentre(spawn.x, this.#map.tileSize),
-        y: tileCentre(spawn.y, this.#map.tileSize),
+        x: arrival.x,
+        y: arrival.y,
+        dir: arrival.dir,
         kind: 'human',
         isGuest: auth.isGuest,
         description: auth.description,
@@ -1026,6 +1032,41 @@ export class OfficeRoom extends Room<OfficeState> {
 
     logger.info(`[office] ${auth.name} (${client.sessionId}) joined ${this.roomId}`);
     this.#broadcastRosterToAgents();
+  }
+
+  /**
+   * Where a person comes in: where they were, or else the door.
+   *
+   * A page that reloads, or a plain link out of it, drops the socket rather
+   * than leaving, and they are back before that seat has timed out and reached
+   * `lastPlaces`, so a seat still held for them is offered too.
+   */
+  #arrivalFor(userId: string): LastPlace {
+    let heldSeat: LastPlace | null = null;
+    for (const [sessionId, player] of this.state.players) {
+      if (player.userId === userId && this.#sims.get(sessionId)?.away) {
+        heldSeat = { x: player.x, y: player.y, dir: player.dir };
+        break;
+      }
+    }
+    const place = lastPlaces.take(this.#placeKey(userId), heldSeat);
+    if (place) {
+      const tile = {
+        x: toTile(place.x, this.#map.tileSize),
+        y: toTile(place.y, this.#map.tileSize),
+      };
+      if (isWalkable(this.#map, tile.x, tile.y)) return place;
+    }
+    const spawn = spawnFor(this.#map, 'human');
+    return {
+      x: tileCentre(spawn.x, this.#map.tileSize),
+      y: tileCentre(spawn.y, this.#map.tileSize),
+      dir: 'down',
+    };
+  }
+
+  #placeKey(userId: string): string {
+    return `${this.#workspaceId}:${this.state.mapId}:${userId}`;
   }
 
   /**
@@ -1059,10 +1100,10 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#sendChannels(sessionId);
   }
 
-  /** Is anybody still connected as this member? */
-  #hasSessionFor(memberId: string): boolean {
-    for (const player of this.state.players.values()) {
-      if (player.userId === memberId) return true;
+  /** Is anybody still connected as this member, `except` one session? */
+  #hasSessionFor(memberId: string, except?: string): boolean {
+    for (const [sessionId, player] of this.state.players) {
+      if (player.userId === memberId && sessionId !== except) return true;
     }
     return false;
   }
@@ -5842,7 +5883,17 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #removePlayer(sessionId: string): void {
     // Read before the player goes: the cursors are keyed by who they were.
-    const leaving = this.state.players.get(sessionId)?.userId;
+    const player = this.state.players.get(sessionId);
+    const leaving = player?.userId;
+    if (player?.kind === 'human') {
+      const key = this.#placeKey(player.userId);
+      const place = { x: player.x, y: player.y, dir: player.dir };
+      if (this.#sims.get(sessionId)?.away) {
+        lastPlaces.seatExpired(key, place, this.#hasSessionFor(player.userId, sessionId));
+      } else {
+        lastPlaces.left(key, place);
+      }
+    }
     voiceRelay.sessionLeft(this.roomId, sessionId);
     const ended = this.#earshot.remove(sessionId);
     if (ended.length > 0) voiceRelay.updatePeers(this.roomId, ended);
