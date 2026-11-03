@@ -15,6 +15,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.18.1",
+    date: "2026-11-03",
+    summary: "You come back where you were, and the Agent Bay's desks line up.",
+    changes: [
+      "Going to Settings and back, or reloading the page, puts you where you were standing instead of back at the door. So does getting back in after a long disconnect.",
+      "The Agent Bay's desks are centred on their chairs, so a chair, whoever sits in it and the monitor all line up.",
+    ],
+  },
+  {
     version: "0.18.0",
     date: "2026-11-02",
     summary: "Desks where your agents work, and routines they keep on a schedule.",
