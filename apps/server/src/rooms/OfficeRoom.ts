@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { latencyRequestId } from '@quintal/shared';
 import { activityTerminal, parseActivity, type PublicActivity } from '@quintal/shared';
 import {
@@ -326,6 +328,7 @@ import {
 import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
+import { reviewsFinishedBy } from './review-turn.js';
 import { handedFrom, whyNotBegin, whyNotNote } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
@@ -2210,7 +2213,9 @@ export class OfficeRoom extends Room<OfficeState> {
         this.#sendError(client, 'unauthorised', `${agent?.name ?? 'That agent'} takes no direct messages, so it cannot be asked from here.`);
         return;
       }
-      this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), undefined, reviewBrief(target));
+      // The agent's turn on the line reports this id back, which is how the board hears the review is done.
+      const requestId = randomUUID();
+      this.#deliverChannelChat(client.sessionId, writer.player, channel, reviewLine(target, agent.name), requestId, reviewBrief(target));
       // Stamped once, so the row shown now is the row the next read finds.
       const now = Date.now();
       // The tab says who was asked at once. A read already in flight may have
@@ -2225,6 +2230,9 @@ export class OfficeRoom extends Room<OfficeState> {
         agentName: agent.name,
         byName: writer.player.name,
         at: now,
+        requestId,
+        finishedAt: null,
+        outcome: null,
       };
       this.#boardReviews = [review, ...this.#boardReviews].slice(0, BOARD_PULL_REVIEWS_MAX);
       this.#sendBoardIfChanged();
@@ -2235,7 +2243,7 @@ export class OfficeRoom extends Room<OfficeState> {
         actor: { kind: 'user', id: writer.player.userId, name: writer.player.name },
         taskId: target.taskId,
         itemId: target.itemId,
-        payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name },
+        payload: { repo: target.repo, number: target.number, url: target.url, agentId: agent.id, agentName: agent.name, requestId },
         now,
       }).then(
         () => true,
@@ -2250,6 +2258,40 @@ export class OfficeRoom extends Room<OfficeState> {
       logger.error('[office] could not ask for a review', error);
       this.#sendError(client, 'invalid_payload', 'The review could not be asked for just now.');
     }
+  }
+
+  /**
+   * An agent's turn ended: if it was on a review asked for from the board,
+   * the board says the review is done — or stopped — from now on, and an
+   * event keeps it. Written whatever the turn's conversation, since the
+   * ask's id is what names it.
+   */
+  #noteReviewTurn(activity: PublicActivity): void {
+    const finished = reviewsFinishedBy(this.#boardReviews, activity.agentId, activity);
+    if (finished.length === 0) return;
+    const now = Date.now();
+    // As for the ask: a read already in flight must not land without this.
+    this.#boardReads.start();
+    const ended = new Map(finished.map(({ review, outcome }) => [review.requestId, outcome]));
+    this.#boardReviews = this.#boardReviews.map((review) => {
+      const outcome = review.requestId ? ended.get(review.requestId) : undefined;
+      return outcome ? { ...review, finishedAt: now, outcome } : review;
+    });
+    this.#sendBoardIfChanged();
+    void Promise.all(
+      finished.map(({ review, outcome }) =>
+        recordBoardEvent(getDb(), {
+          workspaceId: this.#workspaceId,
+          kind: 'pr.review_finished',
+          actor: { kind: 'agent', id: review.agentId, name: review.agentName },
+          payload: { requestId: review.requestId, repo: review.repo, number: review.number, url: review.url, agentId: review.agentId, outcome },
+          now,
+        }),
+      ),
+    ).then(
+      () => void this.#refreshBoard(),
+      (error: unknown) => logger.error('[office] board event write failed (pr.review_finished)', error),
+    );
   }
 
   /**
@@ -3369,6 +3411,7 @@ export class OfficeRoom extends Room<OfficeState> {
       if (oldest) this.#activity.delete(oldest[0]);
     }
     this.#publishActivity(entry);
+    this.#noteReviewTurn(publicValue);
     await keepActivity(getDb(), conversationId, this.#workspaceId, publicValue, value.channelId ? null : entry);
   }
 
@@ -3690,6 +3733,7 @@ export class OfficeRoom extends Room<OfficeState> {
       items: entry.value.items.map(item => item.state === 'running' || item.state === 'pending'
         ? { ...item, state: 'interrupted', endedAt: Date.now() } : item) };
     this.#publishActivity(entry);
+    this.#noteReviewTurn(entry.value);
     void keepActivity(getDb(), entry.conversationId, this.#workspaceId, entry.value,
       entry.value.channelId ? null : entry).catch(error => logger.error('[office] activity close failed', error));
   }

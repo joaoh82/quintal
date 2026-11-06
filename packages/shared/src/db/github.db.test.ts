@@ -265,4 +265,25 @@ describe('who did what on the board', () => {
       ],
     );
   });
+
+  it('says a review is done once the event for its request id is written, and an older ask without one never is', async () => {
+    const { db, owner, marvin } = await office();
+    const actor = { kind: 'user' as const, id: owner.id, name: 'Josh' };
+    const payload = { repo: 'acme/office', number: 12, url: 'https://github.com/acme/office/pull/12', agentId: marvin.id, agentName: 'Marvin' };
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload, now: 1000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload: { ...payload, requestId: 'r1' }, now: 2000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_requested', actor, payload: { ...payload, number: 13, requestId: 'r2' }, now: 3000 });
+    const agent = { kind: 'agent' as const, id: marvin.id, name: 'Marvin' };
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_finished', actor: agent, payload: { requestId: 'r1', outcome: 'reviewed' }, now: 5000 });
+    await recordBoardEvent(db, { workspaceId: owner.workspaceId, kind: 'pr.review_finished', actor: agent, payload: { requestId: 'r2', outcome: 'nonsense' }, now: 6000 });
+    const reviews = await listPullReviewRequests(db, owner.workspaceId);
+    assert.deepEqual(
+      reviews.map((review) => [review.number, review.requestId, review.finishedAt, review.outcome]),
+      [
+        [13, 'r2', null, null],
+        [12, 'r1', 5000, 'reviewed'],
+        [12, null, null, null],
+      ],
+    );
+  });
 });

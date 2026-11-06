@@ -104,8 +104,9 @@ closed or merged of each, asked for every five minutes while somebody is in
 the room, and again on **Check GitHub** if the last listing is more than
 three minutes old. One an agent's task opened is the
 same row as its ledger line. Pick a **status** (open, which includes drafts;
-draft; merged; closed; or any), an **author** (a GitHub login, or an agent
-by name) and a **project** to narrow it; the filter box still finds a number,
+draft; merged; closed; or any), a **review** (no agent asked, awaiting
+review, reviewed), an **author** (a GitHub login, or an agent by name) and a
+**project** to narrow it; the filter box still finds a number,
 a title, a branch or a person.
 
 ### Asking an agent for a review
@@ -120,5 +121,18 @@ request says about itself — its title, author, branch — is never in the line
 said in your name; the brief carries it fenced off as the author's words, not
 instructions, on one line and cut short. Only a pull request on the ledger or in a repository on the list can
 be handed out, and only an agent that takes direct messages can be asked.
+
+The row then says who was asked and how it stands: **reviewing** while the
+agent's turn on it is going, **reviewed** once that turn has finished, and
+**review stopped** if it failed or was cut off. A chip beside GitHub's own
+review decision says the same at a glance — *agent reviewed*, *agent
+reviewing* — and the **review** picker lists only the ones done, or only the
+ones still waiting. The office hears it from the agent's turn, not from
+GitHub, so a review asked for before this, or one it has waited on for six
+hours without hearing back, says only when it was asked.
+
+A review is also in the agent's history on the **Agents** tab, beside the
+branches it worked on, and an agent busy with one says *reviewing
+acme/api#12* where its task would be.
 
 ![The board's Pull requests tab, with GitHub's facts on three pull requests and the actions row open on one](../../screenshots/board-pull-requests.png)

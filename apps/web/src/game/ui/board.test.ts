@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardItemRef } from '@quintal/shared';
+import type { BoardItemRef, BoardPullReviewRef } from '@quintal/shared';
 
 import type {
   BoardAgentRef,
@@ -35,6 +35,11 @@ import {
   pullRowActionsOf,
   pullProjectsOf,
   DEFAULT_PULL_FILTERS,
+  REVIEW_WAIT_MS,
+  agentHistoryOf,
+  pullReviewStandingOf,
+  reviewStandingLabel,
+  reviewStandingOf,
   pullStateOf,
   repoOfPrUrl,
   routineMatches,
@@ -381,6 +386,26 @@ describe('the Agents tab', () => {
     assert.equal(agentMatches(row!, 'long-ago'), true, 'the filter finds an agent by what it was on');
   });
 
+  it('puts the reviews it was asked for in its history beside its tasks, the most recent first', () => {
+    const tasks = [
+      ledger('now', { agentId: 'zaphod', lastSeenAt: 30 }),
+      ledger('before', { agentId: 'zaphod', status: 'ended', lastSeenAt: 20 }),
+    ];
+    const reviews = [
+      review({ agentId: 'zaphod', number: 7, at: 5, finishedAt: 25, outcome: 'reviewed', requestId: 'r1' }),
+      review({ agentId: 'zaphod', number: 8, at: 10 }),
+      review({ agentId: 'marvin', number: 9, at: 12 }),
+    ];
+    const [row] = agentRowsOf([agent('zaphod')], [], [], tasks, zones, channels, 0, [], reviews);
+    assert.deepEqual(row!.reviews.map((r) => r.number), [8, 7], "its own, newest ask first");
+    assert.deepEqual(
+      agentHistoryOf(row!).map((line) => (line.kind === 'task' ? line.line.id : `#${line.review.number}`)),
+      ['#7', 'before', '#8'],
+      'a finished review by when it finished',
+    );
+    assert.equal(agentMatches(row!, 'acme/api#8'), true, 'the filter finds an agent by a review it was asked for');
+  });
+
   it('answers the filter by name, owner, status, branch or note', () => {
     const [marvin] = agentRowsOf([agent('marvin')], roster, items, [], zones, channels, 0);
     assert.equal(agentMatches(marvin!, 'marv'), true);
@@ -389,6 +414,46 @@ describe('the Agents tab', () => {
     assert.equal(agentMatches(marvin!, 'chair'), true);
     assert.equal(agentMatches(marvin!, '#1'), true);
     assert.equal(agentMatches(marvin!, 'zaphod'), false);
+  });
+});
+
+function review(over: Partial<BoardPullReviewRef> = {}): BoardPullReviewRef {
+  return {
+    url: `https://github.com/acme/api/pull/${over.number ?? 2}`,
+    repo: 'acme/api',
+    number: 2,
+    agentId: 'marvin',
+    agentName: 'marvin',
+    byName: 'Arthur',
+    at: 0,
+    requestId: 'r0',
+    finishedAt: null,
+    outcome: null,
+    ...over,
+  };
+}
+
+describe('reviews asked for from the board', () => {
+  it('says reviewing until the turn ends, then how it ended', () => {
+    assert.equal(reviewStandingOf(review(), 60_000), 'reviewing');
+    assert.equal(reviewStandingLabel(review(), 120_000), 'reviewing · asked 2m ago');
+    const done = review({ finishedAt: 60_000, outcome: 'reviewed' });
+    assert.equal(reviewStandingOf(done, 120_000), 'reviewed');
+    assert.equal(reviewStandingLabel(done, 120_000), 'reviewed 1m ago');
+    assert.equal(reviewStandingOf(review({ finishedAt: 1, outcome: 'stopped' }), 2), 'stopped');
+  });
+
+  it('says only that it was asked when the office cannot know: no request id, or waited on too long', () => {
+    assert.equal(reviewStandingOf(review({ requestId: null }), 1), 'asked');
+    assert.equal(reviewStandingOf(review(), REVIEW_WAIT_MS + 1), 'asked');
+    assert.equal(reviewStandingOf(review({ outcome: 'reviewed', finishedAt: 5 }), REVIEW_WAIT_MS * 2), 'reviewed', 'a finished one stays finished');
+  });
+
+  it('sums a pull request up: reviewed once any agent is done', () => {
+    assert.equal(pullReviewStandingOf([], 0), 'none');
+    assert.equal(pullReviewStandingOf([review()], 0), 'reviewing');
+    assert.equal(pullReviewStandingOf([review(), review({ outcome: 'reviewed', finishedAt: 1 })], 2), 'reviewed');
+    assert.equal(pullReviewStandingOf([review({ requestId: null })], 0), 'asked');
   });
 });
 
@@ -440,6 +505,9 @@ describe('the Pull requests tab', () => {
       agentName: agentId === 'a1' ? 'Marvin' : 'Eddie',
       byName: 'Arthur',
       at,
+      requestId: null,
+      finishedAt: null,
+      outcome: null,
     });
     const rows = pullListOf(
       [listed(2), listed(3, { repo: 'acme/web', url: 'https://github.com/acme/web/pull/3' })],
@@ -478,6 +546,20 @@ describe('the Pull requests tab', () => {
       ['@ford', '@trillian', '◆ marvin'],
     );
     assert.deepEqual(pullProjectsOf(rows, { connected: true, login: null, repos: ['acme/zz'] }), ['acme/api', 'acme/web', 'acme/zz']);
+  });
+
+  it('filters by whether an agent was asked to review it, and whether that is done', () => {
+    const rows = pullListOf([listed(4)], tasks, undefined, [
+      review({ number: 2, finishedAt: 5, outcome: 'reviewed' }),
+      review({ number: 4, at: 1 }),
+    ]);
+    const extra = pullListOf([listed(6)], tasks).find((row) => row.number === 6)!;
+    const all = [...rows, extra];
+    const keys = (r: (typeof DEFAULT_PULL_FILTERS)['review']) =>
+      all.filter((row) => pullListMatches(row, { ...DEFAULT_PULL_FILTERS, status: 'all', review: r }, '', 10)).map((row) => row.number).sort();
+    assert.deepEqual(keys('reviewed'), [2]);
+    assert.deepEqual(keys('waiting'), [4]);
+    assert.deepEqual(keys('unasked'), [1, 6]);
   });
 
   it('answers the filter box by PR number, note number, title, repo, branch, author or agent', () => {

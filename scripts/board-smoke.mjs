@@ -316,6 +316,31 @@ async function anAgentTakesANote() {
     them.room.send('agent:task', { ...task, pr });
     check((noteOf(await reviewed, stapler.id)).status === 'in_progress', 'an open pull request is shown, and the note stays where it is');
 
+    // Asked for a review from the board: the line carries a request id, and
+    // the agent's turn on it ending is what says the review is done.
+    const asked = them.next('agent:channel_chat', 6000, (line) => /please review pull request acme\/office#7/.test(line.text));
+    const reviewing = me.next('board', 6000, (board) => board.reviews?.some((r) => r.agentId === agent.id && r.number === 7));
+    me.room.send('board_pull_review', { agentId: agent.id, url: pr.url });
+    const askLine = await asked;
+    const askBoard = await reviewing;
+    const askRef = askBoard.reviews.find((r) => r.agentId === agent.id && r.number === 7);
+    check(typeof askLine.requestId === 'string' && askLine.requestId === askRef?.requestId, 'a review ask reaches the agent with the request id the board keeps', JSON.stringify(askRef));
+    check(askRef?.finishedAt === null && askRef?.outcome === null, 'and the board has it as not done yet');
+    const turn = (state, sequence) => ({
+      version: 1, turnId: randomUUID(), workerId: 'w1', sessionId: 's1', requestId: askLine.requestId, sequence,
+      channelId: askLine.channel.id, state, startedAt: Date.now(), updatedAt: Date.now(), items: [],
+    });
+    const running = turn('running', 1);
+    them.room.send('agent:activity', running);
+    const reviewDone = me.next('board', 8000, (board) => board.reviews?.some((r) => r.requestId === askLine.requestId && r.outcome !== null));
+    them.room.send('agent:activity', { ...running, state: 'completed', sequence: 2, updatedAt: Date.now() });
+    const doneRef = (await reviewDone).reviews.find((r) => r.requestId === askLine.requestId);
+    check(doneRef?.outcome === 'reviewed' && typeof doneRef?.finishedAt === 'number', 'the turn completing says the review is done', JSON.stringify(doneRef));
+    // Read back by a fresh board: it was written, not only held in the room.
+    const { listPullReviewRequests } = await import('@quintal/shared/db');
+    const stored = (await listPullReviewRequests(getDb(), workspaceId)).find((r) => r.requestId === askLine.requestId);
+    check(stored?.outcome === 'reviewed', 'and the office keeps it', JSON.stringify(stored));
+
     const done = me.next('board', 6000, (board) => noteOf(board, stapler.id)?.status === 'done');
     them.room.send('agent:task', { ...task, pr: { ...pr, state: 'merged' } });
     const doneBoard = await done;

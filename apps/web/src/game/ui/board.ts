@@ -142,6 +142,8 @@ export interface AgentRow {
   notes: BoardItemRef[];
   /** Its other ledger lines — what it was on before, and any still open beside `task` — most recently heard first. */
   history: BoardTaskRef[];
+  /** The reviews it was asked for from the board, every ask, newest first. Not on the ledger: a review cuts no branch. */
+  reviews: BoardPullReviewRef[];
   /** The routines on it, running ones first and the soonest due at the top. */
   routines: BoardRoutineRef[];
   /** When the office last heard from it: now while it is here. Null for never. */
@@ -189,6 +191,7 @@ export function agentRowsOf(
   channels: readonly ChannelRef[],
   now: number,
   routines: readonly BoardRoutineRef[] = [],
+  reviews: readonly BoardPullReviewRef[] = [],
 ): AgentRow[] {
   const rows = agents.map((agent): AgentRow => {
     const here = roster.find((entry) => entry.kind === 'agent' && entry.identityId === agent.id) ?? null;
@@ -203,6 +206,7 @@ export function agentRowsOf(
       notes: items.filter((item) => item.assignee?.id === agent.id && item.status !== 'done'),
       // The ledger is upserted by (agent, branch), so the branch is what makes a line the current task.
       history: tasks.filter((line) => line.agentId === agent.id && line.branch !== task?.branch),
+      reviews: reviews.filter((review) => review.agentId === agent.id).sort((a, b) => b.at - a.at),
       routines: sortRoutines(routines.filter((routine) => routine.agentId === agent.id)),
       lastSeenAt: here ? now : agent.lastSeenAt,
     };
@@ -221,7 +225,73 @@ export function agentMatches(row: AgentRow, query: string): boolean {
   if (row.task && (row.task.branch.toLowerCase().includes(q) || row.task.title.toLowerCase().includes(q))) return true;
   if (row.history.some((line) => line.branch.toLowerCase().includes(q) || line.title.toLowerCase().includes(q))) return true;
   if (row.routines.some((routine) => routine.name.toLowerCase().includes(q))) return true;
+  if (row.reviews.some((review) => `${review.repo}#${review.number}`.includes(q))) return true;
   return row.notes.some((note) => matchesFilter(note, q));
+}
+
+/** One line of an agent's history: a ledger task, or a review it was asked for. */
+export type AgentHistoryLine =
+  | { kind: 'task'; at: number; line: BoardTaskRef }
+  | { kind: 'review'; at: number; review: BoardPullReviewRef };
+
+/** An agent's history as its row opens onto it: tasks and reviews together, the most recent first. */
+export function agentHistoryOf(row: Pick<AgentRow, 'history' | 'reviews'>): AgentHistoryLine[] {
+  const lines: AgentHistoryLine[] = [
+    ...row.history.map((line) => ({ kind: 'task' as const, at: line.lastSeenAt, line })),
+    ...row.reviews.map((review) => ({ kind: 'review' as const, at: review.finishedAt ?? review.at, review })),
+  ];
+  return lines.sort((a, b) => b.at - a.at);
+}
+
+// --- reviews asked for from the board ------------------------------------------
+
+/**
+ * How long the board waits on a review before it stops saying "reviewing".
+ * The office hears a review is done from the agent's turn on it; a turn it
+ * never hears end — an older harness, an office restarted under it — is
+ * past saying anything about after this.
+ */
+export const REVIEW_WAIT_MS = 6 * 60 * 60_000;
+
+/**
+ * Where an asked-for review stands: `reviewing` while the agent's turn on
+ * it is going, `reviewed` once it completed, `stopped` for one that failed
+ * or was cut off, and `asked` when the office cannot say — an ask from
+ * before it stamped them, or one it has waited on too long.
+ */
+export type ReviewStanding = 'reviewing' | 'reviewed' | 'stopped' | 'asked';
+
+export function reviewStandingOf(review: Pick<BoardPullReviewRef, 'requestId' | 'outcome' | 'at'>, now: number): ReviewStanding {
+  if (review.outcome) return review.outcome;
+  if (review.requestId === null || now - review.at > REVIEW_WAIT_MS) return 'asked';
+  return 'reviewing';
+}
+
+/** A review's standing in a few words: `reviewed 4m ago`, `reviewing · asked 2m ago`. */
+export function reviewStandingLabel(review: BoardPullReviewRef, now: number): string {
+  switch (reviewStandingOf(review, now)) {
+    case 'reviewed':
+      return `reviewed ${ageLabel(review.finishedAt!, now)}`;
+    case 'stopped':
+      return `review stopped ${ageLabel(review.finishedAt!, now)}`;
+    case 'reviewing':
+      return `reviewing · asked ${ageLabel(review.at, now)}`;
+    case 'asked':
+      return `asked ${ageLabel(review.at, now)}`;
+  }
+}
+
+/**
+ * A pull request's reviews from the board, summed up: `reviewed` once any
+ * agent's is done, else `reviewing` while one is going, else `asked` when
+ * somebody was asked, else `none`.
+ */
+export function pullReviewStandingOf(reviews: readonly BoardPullReviewRef[], now: number): ReviewStanding | 'none' {
+  const standings = reviews.map((review) => reviewStandingOf(review, now));
+  for (const standing of ['reviewed', 'reviewing', 'asked', 'stopped'] as const) {
+    if (standings.includes(standing)) return standing;
+  }
+  return 'none';
 }
 
 // --- the Routines tab --------------------------------------------------------
@@ -473,15 +543,27 @@ export function pullRowActionsOf(row: PullListRow, office: BoardGithubRef, host:
 export const PULL_STATUS_FILTERS = ['open', 'draft', 'merged', 'closed', 'all'] as const;
 export type PullStatusFilter = (typeof PULL_STATUS_FILTERS)[number];
 
-/** The tab's three pickers. An empty author or project is anybody's, anywhere. */
+/** The review picker: any, none asked, asked and not done yet, done. */
+export const PULL_REVIEW_FILTERS = ['any', 'unasked', 'waiting', 'reviewed'] as const;
+export type PullReviewFilter = (typeof PULL_REVIEW_FILTERS)[number];
+
+export const PULL_REVIEW_FILTER_LABELS: Record<PullReviewFilter, string> = {
+  any: 'any review',
+  unasked: 'no agent asked',
+  waiting: 'awaiting review',
+  reviewed: 'reviewed',
+};
+
+/** The tab's pickers. An empty author or project is anybody's, anywhere. */
 export interface PullFilters {
   status: PullStatusFilter;
+  review: PullReviewFilter;
   /** A GitHub login, or an agent's name. */
   author: string;
   project: string;
 }
 
-export const DEFAULT_PULL_FILTERS: PullFilters = { status: 'open', author: '', project: '' };
+export const DEFAULT_PULL_FILTERS: PullFilters = { status: 'open', review: 'any', author: '', project: '' };
 
 /** Who opened what is listed, for the author picker: GitHub logins, then agents, each once. */
 export function pullAuthorsOf(rows: readonly PullListRow[]): { value: string; label: string }[] {
@@ -498,7 +580,7 @@ export function pullProjectsOf(rows: readonly PullListRow[], github: BoardGithub
 }
 
 /** Does a row answer the pickers and the filter box? The box: number, note, title, repo, branch, author, agent. */
-export function pullListMatches(row: PullListRow, filters: PullFilters, query: string): boolean {
+export function pullListMatches(row: PullListRow, filters: PullFilters, query: string, now: number = Date.now()): boolean {
   switch (filters.status) {
     case 'open':
       if (row.state !== 'open') return false;
@@ -512,6 +594,12 @@ export function pullListMatches(row: PullListRow, filters: PullFilters, query: s
       break;
     case 'all':
       break;
+  }
+  if (filters.review !== 'any') {
+    const standing = pullReviewStandingOf(row.reviews, now);
+    if (filters.review === 'unasked' && standing !== 'none') return false;
+    if (filters.review === 'waiting' && standing !== 'reviewing' && standing !== 'asked' && standing !== 'stopped') return false;
+    if (filters.review === 'reviewed' && standing !== 'reviewed') return false;
   }
   if (filters.author && row.author !== filters.author && row.agentName !== filters.author) return false;
   if (filters.project && row.repo !== filters.project) return false;

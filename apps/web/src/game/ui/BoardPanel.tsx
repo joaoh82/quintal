@@ -14,6 +14,7 @@ import {
   type BoardColor,
   type BoardGithubRef,
   type BoardItemRef,
+  type BoardPullReviewRef,
   type BoardRoutineRef,
   type BoardRoutineRunRef,
   type BoardStatus,
@@ -46,7 +47,13 @@ import {
   pullActionLabel,
   pullRowActionsOf,
   DEFAULT_PULL_FILTERS,
+  PULL_REVIEW_FILTER_LABELS,
+  PULL_REVIEW_FILTERS,
   PULL_STATUS_FILTERS,
+  agentHistoryOf,
+  pullReviewStandingOf,
+  reviewStandingLabel,
+  reviewStandingOf,
   pullAuthorsOf,
   pullListMatches,
   pullListOf,
@@ -62,7 +69,9 @@ import {
   type BoardTab,
   type PullFilters,
   type PullListRow,
+  type PullReviewFilter,
   type PullStatusFilter,
+  type ReviewStanding,
   type BoardView,
   type RoutineRow,
 } from './board';
@@ -118,10 +127,10 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
   const selected = drawer?.kind === 'item' ? (board.items.find((item) => item.id === drawer.id) ?? null) : null;
   const agentRows = useMemo(
     () =>
-      agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now, board.routines).filter((row) =>
+      agentRowsOf(board.agents, roster, board.items, board.tasks, zones, channels, now, board.routines, board.reviews).filter((row) =>
         agentMatches(row, query),
       ),
-    [board.agents, board.items, board.tasks, board.routines, roster, zones, channels, now, query],
+    [board.agents, board.items, board.tasks, board.routines, board.reviews, roster, zones, channels, now, query],
   );
   const routineRows = useMemo(
     () => routineRowsOf(board.routines, board.routineRuns, roster, board.you.userId).filter((row) => routineMatches(row, query)),
@@ -133,8 +142,8 @@ export function BoardPanel({ board, roster, notice, onClose, onMessageAgent, zon
     [board.pulls.pulls, board.tasks, board.githubHost, board.reviews],
   );
   const pulls = useMemo(
-    () => allPulls.filter((row) => pullListMatches(row, pullFilters, query)),
-    [allPulls, pullFilters, query],
+    () => allPulls.filter((row) => pullListMatches(row, pullFilters, query, now)),
+    [allPulls, pullFilters, query, now],
   );
   const reviewers = useMemo(
     () => board.agents.filter((agent) => agent.ownerUserId === board.you.userId),
@@ -419,6 +428,8 @@ function AgentsTab({
         const away = row.here === null;
         const open = expanded.has(row.agent.id);
         const routinesShown = routinesOpen.has(row.agent.id);
+        const earlier = row.history.length + row.reviews.length;
+        const reviewing = row.reviews.filter((review) => reviewStandingOf(review, now) === 'reviewing');
         return (
           <li key={row.agent.id} className={`px-4 py-2.5 text-xs ${away ? 'text-white/55' : ''}`}>
             <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)] gap-x-4">
@@ -471,9 +482,18 @@ function AgentsTab({
                       </>
                     ) : null}
                   </p>
-                ) : (
+                ) : reviewing.length === 0 ? (
                   <p className="text-white/30">on no task</p>
-                )}
+                ) : null}
+                {reviewing.map((review) => (
+                  <p key={review.requestId} className="truncate text-violet-200/90">
+                    reviewing{' '}
+                    <a href={review.url} target="_blank" rel="noreferrer" className="font-mono text-sky-200 underline-offset-2 hover:underline">
+                      {review.repo}#{review.number}
+                    </a>
+                    <span className="text-white/40"> · asked {ageLabel(review.at, now)}</span>
+                  </p>
+                ))}
                 {row.notes.length > 0 ? (
                   <p className="mt-0.5 flex flex-wrap gap-1">
                     {row.notes.map((note) => (
@@ -497,11 +517,11 @@ function AgentsTab({
                     onClick={() => toggle(row.agent.id)}
                     aria-expanded={open}
                     aria-controls={`agent-history-${row.agent.id}`}
-                    disabled={row.history.length === 0}
-                    title={row.history.length === 0 ? 'Nothing earlier in the ledger' : undefined}
+                    disabled={earlier === 0}
+                    title={earlier === 0 ? 'Nothing earlier in the ledger, and no reviews asked of it' : undefined}
                     className="text-[11px] text-white/60 underline-offset-2 enabled:hover:underline disabled:text-white/25"
                   >
-                    {open ? 'Hide history' : `History · ${row.history.length}`}
+                    {open ? 'Hide history' : `History · ${earlier}`}
                   </button>
                 )}
                 {guest ? null : (
@@ -528,8 +548,8 @@ function AgentsTab({
                 ) : null}
               </div>
             </div>
-            {open && row.history.length > 0 ? (
-              <AgentHistory id={`agent-history-${row.agent.id}`} lines={row.history} now={now} onOpenNote={onOpenNote} />
+            {open && earlier > 0 ? (
+              <AgentHistory id={`agent-history-${row.agent.id}`} row={row} now={now} onOpenNote={onOpenNote} />
             ) : null}
             {routinesShown && row.routines.length > 0 ? (
               <AgentRoutines
@@ -550,58 +570,91 @@ function AgentsTab({
 
 /**
  * What an agent was on before, from the office's ledger: each branch it
- * said it was on, what it was for, and how its pull request ended. The
- * board carries each agent's newest ended lines, not the whole ledger.
+ * said it was on, what it was for, and how its pull request ended — and
+ * beside them the reviews it was asked for from the board, which cut no
+ * branch and so are not on the ledger. The board carries each agent's
+ * newest ended lines, not the whole ledger.
  */
 function AgentHistory({
   id,
-  lines,
+  row,
   now,
   onOpenNote,
 }: {
   id: string;
-  lines: BoardTaskRef[];
+  row: Pick<AgentRow, 'history' | 'reviews'>;
   now: number;
   onOpenNote: (itemId: string) => void;
 }) {
   return (
     <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
-      {lines.map((line) => (
-        <li key={line.id} className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_auto] items-baseline gap-x-4">
-          <p className="min-w-0 truncate">
-            <span className="text-white/80">{line.title}</span>
-            {' · '}
-            <span className="font-mono text-[11px] text-white/50">
-              {line.repo} · {line.branch}
-            </span>
-          </p>
-          <p className="min-w-0 truncate">
-            {line.pr ? (
-              <>
-                <a href={line.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
-                  PR #{line.pr.number}
-                </a>{' '}
-                <PrState state={pullStateOf(line)} />{' '}
-              </>
-            ) : null}
-            {line.item ? (
-              <button
-                type="button"
-                onClick={() => onOpenNote(line.item!.id)}
-                title={line.item.title}
-                className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
-              >
-                #{line.item.number}
-              </button>
-            ) : null}
-            {!line.pr && !line.item ? <span className="text-white/30">no pull request</span> : null}
-          </p>
-          <p className="text-right font-mono text-[10px] text-white/40" title={new Date(line.startedAt).toLocaleString()}>
-            {line.status === 'active' ? `still open · heard ${ageLabel(line.lastSeenAt, now)}` : `ended ${ageLabel(line.endedAt ?? line.lastSeenAt, now)}`}
-          </p>
-        </li>
-      ))}
+      {agentHistoryOf(row).map((entry) =>
+        entry.kind === 'review' ? (
+          <AgentHistoryReview key={`review-${entry.review.requestId ?? entry.review.at}`} review={entry.review} now={now} />
+        ) : (
+          <AgentHistoryTask key={entry.line.id} line={entry.line} now={now} onOpenNote={onOpenNote} />
+        ),
+      )}
     </ol>
+  );
+}
+
+/** A ledger line in an agent's history. */
+function AgentHistoryTask({ line, now, onOpenNote }: { line: BoardTaskRef; now: number; onOpenNote: (itemId: string) => void }) {
+  return (
+    <li className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_auto] items-baseline gap-x-4">
+      <p className="min-w-0 truncate">
+        <span className="text-white/80">{line.title}</span>
+        {' · '}
+        <span className="font-mono text-[11px] text-white/50">
+          {line.repo} · {line.branch}
+        </span>
+      </p>
+      <p className="min-w-0 truncate">
+        {line.pr ? (
+          <>
+            <a href={line.pr.url} target="_blank" rel="noreferrer" className="text-sky-200 underline-offset-2 hover:underline">
+              PR #{line.pr.number}
+            </a>{' '}
+            <PrState state={pullStateOf(line)} />{' '}
+          </>
+        ) : null}
+        {line.item ? (
+          <button
+            type="button"
+            onClick={() => onOpenNote(line.item!.id)}
+            title={line.item.title}
+            className="rounded border border-amber-300/30 px-1 font-mono text-[10px] text-amber-200/90 hover:bg-amber-300/10"
+          >
+            #{line.item.number}
+          </button>
+        ) : null}
+        {!line.pr && !line.item ? <span className="text-white/30">no pull request</span> : null}
+      </p>
+      <p className="text-right font-mono text-[10px] text-white/40" title={new Date(line.startedAt).toLocaleString()}>
+        {line.status === 'active' ? `still open · heard ${ageLabel(line.lastSeenAt, now)}` : `ended ${ageLabel(line.endedAt ?? line.lastSeenAt, now)}`}
+      </p>
+    </li>
+  );
+}
+
+/** A review asked of the agent from the board, in its history: which pull request, who asked, and whether it is done. */
+function AgentHistoryReview({ review, now }: { review: BoardPullReviewRef; now: number }) {
+  const standing = reviewStandingOf(review, now);
+  return (
+    <li className="grid grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_auto] items-baseline gap-x-4">
+      <p className="min-w-0 truncate">
+        <span className="text-violet-200/90">review</span>
+        {' · '}
+        <a href={review.url} target="_blank" rel="noreferrer" className="font-mono text-[11px] text-sky-200 underline-offset-2 hover:underline">
+          {review.repo}#{review.number}
+        </a>
+      </p>
+      <p className="min-w-0 truncate text-white/50">asked by {review.byName}</p>
+      <p className={`text-right font-mono text-[10px] ${standingTone(standing)}`} title={new Date(review.at).toLocaleString()}>
+        {reviewStandingLabel(review, now)}
+      </p>
+    </li>
   );
 }
 
@@ -944,6 +997,12 @@ function PullsTab({
           options={PULL_STATUS_FILTERS.map((status) => ({ value: status, label: status === 'all' ? 'any status' : status }))}
         />
         <Picker
+          label="Review"
+          value={filters.review}
+          onChange={(review) => onFilters({ ...filters, review: review as PullReviewFilter })}
+          options={PULL_REVIEW_FILTERS.map((review) => ({ value: review, label: PULL_REVIEW_FILTER_LABELS[review] }))}
+        />
+        <Picker
           label="Author"
           value={filters.author}
           onChange={(author) => onFilters({ ...filters, author })}
@@ -1042,10 +1101,17 @@ function PullsTab({
                     {row.reviews.length > 0 ? (
                       <p
                         className="truncate text-[10px] text-violet-200/90"
-                        title={row.reviews.map((review) => `${review.agentName}, asked by ${review.byName} ${ageLabel(review.at, now)}`).join('\n')}
+                        title={row.reviews
+                          .map((review) => `${review.agentName}, asked by ${review.byName} ${ageLabel(review.at, now)} · ${reviewStandingLabel(review, now)}`)
+                          .join('\n')}
                       >
                         <span className="text-white/40">reviewer </span>
-                        {row.reviews.map((review) => `${AGENT_GLYPH} ${review.agentName}`).join(', ')}
+                        {row.reviews.map((review, index) => (
+                          <span key={review.agentId}>
+                            {index > 0 ? ', ' : ''}
+                            {AGENT_GLYPH} {review.agentName} <span className={standingTone(reviewStandingOf(review, now))}>{reviewStandingLabel(review, now)}</span>
+                          </span>
+                        ))}
                       </p>
                     ) : null}
                   </div>
@@ -1053,6 +1119,7 @@ function PullsTab({
                     <span className="flex items-center gap-1.5">
                       {checks ? <Chip tone={checks.tone}>{checks.text}</Chip> : null}
                       {review ? <Chip tone={review === 'approved' ? 'good' : 'bad'}>{review}</Chip> : null}
+                      <ReviewChip standing={pullReviewStandingOf(row.reviews, now)} />
                       {row.draft ? <Chip tone="none">draft</Chip> : null}
                       <PrState state={row.state} />
                     </span>
@@ -1225,6 +1292,36 @@ function Chip({ tone, children }: { tone: 'good' | 'bad' | 'wait' | 'none'; chil
   return <span className={`rounded border px-1 font-mono text-[9px] tracking-wide ${colour}`}>{children}</span>;
 }
 
+/** The colour of a review's standing, written out. */
+function standingTone(standing: ReviewStanding): string {
+  switch (standing) {
+    case 'reviewed':
+      return 'text-emerald-200/90';
+    case 'reviewing':
+      return 'text-amber-200/90';
+    case 'stopped':
+      return 'text-rose-200/90';
+    case 'asked':
+      return 'text-white/45';
+  }
+}
+
+/** A row's reviews from the board, as one chip beside GitHub's: whether an agent's is done. Nothing when nobody was asked. */
+function ReviewChip({ standing }: { standing: ReviewStanding | 'none' }) {
+  switch (standing) {
+    case 'reviewed':
+      return <Chip tone="good">agent reviewed</Chip>;
+    case 'reviewing':
+      return <Chip tone="wait">agent reviewing</Chip>;
+    case 'stopped':
+      return <Chip tone="bad">review stopped</Chip>;
+    case 'asked':
+      return <Chip tone="none">review asked</Chip>;
+    case 'none':
+      return null;
+  }
+}
+
 /**
  * Everything the office knows about one pull request, for the card a row
  * shows on hover and under itself when its title is clicked: its title in
@@ -1277,8 +1374,9 @@ function PullDetails({ row, now }: { row: PullListRow; now: number }) {
                   </span>
                   <span className="text-white/40">
                     {' '}
-                    asked by {review.byName}, {ageLabel(review.at, now)}
+                    asked by {review.byName}, {ageLabel(review.at, now)} ·{' '}
                   </span>
+                  <span className={standingTone(reviewStandingOf(review, now))}>{reviewStandingLabel(review, now)}</span>
                 </li>
               ))}
             </ul>
