@@ -91,9 +91,11 @@ checks by name, mergeability, the review — and members can squash, merge,
 rebase, update the branch of, or close one from the board, each pinned to the
 head they looked at. It lists every pull request of those repositories too,
 by status, author and project, and any open one can be handed to one of your
-agents to review.
+agents to review. The row then says who has it and whether that review is
+going, done or stopped, and the review stays in the agent's history on the
+Agents tab.
 
-![The board's Pull requests tab: three pull requests with their checks, review and mergeability from GitHub, and the actions row open on one — squash, merge, rebase, close](./screenshots/board-pull-requests.png)
+![The board's Pull requests tab: five pull requests with GitHub's checks and review, each with the agent asked to review it and whether that review is going, done or stopped, and #55 open to show both reviewers, who asked them and when each finished](./screenshots/board-pull-requests.png)
 
 **Routines.** A standing request to one of your agents on a schedule —
 "every hour, review the open pull requests", "weekdays at nine, see what is
