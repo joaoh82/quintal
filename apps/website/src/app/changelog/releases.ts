@@ -15,6 +15,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.20.0",
+    date: "2026-11-06",
+    summary: "See when an agent's review is done.",
+    changes: [
+      "A pull request you asked an agent to review says how it stands on the Pull requests tab: reviewing while the agent is on it, reviewed once it has finished, review stopped if it failed or was cut off. A chip beside GitHub's own review decision says the same at a glance.",
+      "Filter pull requests by review: no agent asked, awaiting review, or reviewed.",
+      "Reviews an agent was asked for are in its history on the Agents tab, beside the branches it worked on, and an agent busy with one says which pull request it is reviewing.",
+    ],
+  },
+  {
     version: "0.19.0",
     date: "2026-11-03",
     summary: "Ask an agent to make or change an agent, and choose how they look.",
