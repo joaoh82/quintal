@@ -217,7 +217,16 @@ export interface BoardEventRef {
   createdAt: number;
 }
 
-/** One of a member's agents asked from the board to review a pull request: which, for whom, by whom, when. */
+/**
+ * How an asked-for review ended, as the agent's turn on it did: `reviewed`
+ * for a turn that completed, `stopped` for one that failed, was cancelled
+ * or was cut off. The office hears it from the turn's activity, which
+ * carries the ask's request id.
+ */
+export const BOARD_PULL_REVIEW_OUTCOMES = ['reviewed', 'stopped'] as const;
+export type BoardPullReviewOutcome = (typeof BOARD_PULL_REVIEW_OUTCOMES)[number];
+
+/** One of a member's agents asked from the board to review a pull request: which, for whom, by whom, when, and how it ended. */
 export interface BoardPullReviewRef {
   url: string;
   /** `owner/name`, lower-case. */
@@ -228,6 +237,15 @@ export interface BoardPullReviewRef {
   /** The member who asked. */
   byName: string;
   at: number;
+  /**
+   * The id the ask's line went out with, which the agent's turn on it
+   * reports back. Null for an ask from before the office stamped them:
+   * nothing will ever say it ended.
+   */
+  requestId: string | null;
+  /** When the agent's turn on it ended; null while it has not, or nobody will say. */
+  finishedAt: number | null;
+  outcome: BoardPullReviewOutcome | null;
 }
 
 /**

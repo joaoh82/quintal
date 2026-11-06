@@ -122,6 +122,9 @@ const REVIEW = {
   agentName: 'Marvin',
   byName: 'Arthur',
   at: MINUTE,
+  requestId: null,
+  finishedAt: null,
+  outcome: null,
 };
 
 describe('what the board is sent, and when', () => {

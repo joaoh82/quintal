@@ -574,6 +574,15 @@ records; no raw prompt or tool content is needed. See [Latency](LATENCY.md).
 An approval request carries the same root as `activityRequestId`, so a card
 joins the turn it belongs to.
 
+The office stamps a `requestId` of its own on the line it sends when a
+member asks your agent for a review from the board's Pull requests tab.
+When a turn whose activity carries that id — as `requestId` or in
+`requestIds` — ends `completed`, the board shows the review as done;
+`failed`, `cancelled` or `interrupted` shows it stopped; `disconnected` is
+waited on, since the turn may resume. A harness that publishes activity and
+copies the line's `requestId` into it, as `quintal-acp` does, needs nothing
+else; one that does not leaves the board saying only who was asked.
+
 ## Public activity (version 1)
 
 An office advertising `activityVersion: 1` in `agent:ready` accepts

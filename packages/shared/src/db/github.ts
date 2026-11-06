@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import type { AgentTaskPrState } from '../agent-task.js';
-import type { BoardEventRef, BoardGithubRef, BoardPullReviewRef, OfficeGithubRef } from '../board.js';
+import { BOARD_PULL_REVIEW_OUTCOMES, type BoardEventRef, type BoardGithubRef, type BoardPullReviewOutcome, type BoardPullReviewRef, type OfficeGithubRef } from '../board.js';
 import type { PullRequestAction, PullRequestFacts, PullRequestStatusRef } from '../github.js';
 import type { Database } from './client.js';
 import { agentTasks, boardEvents, officeGithub, pullRequestStatus, users } from './schema.js';
@@ -412,6 +412,8 @@ export const BOARD_EVENT_KINDS = [
   'pr.state',
   /** A member asked one of their agents to review a pull request from the board. */
   'pr.review_requested',
+  /** The agent's turn on a review asked for from the board ended; the payload names the ask by its request id. */
+  'pr.review_finished',
 ] as const;
 export type BoardEventKind = (typeof BOARD_EVENT_KINDS)[number];
 
@@ -458,25 +460,51 @@ export const BOARD_PULL_REVIEWS_MAX = 200;
 
 /**
  * Who was asked from the board to review which pull request, newest first,
- * read back from the board's events. An event whose payload does not say
- * which pull request and which agent is left out.
+ * read back from the board's events, each with how its turn ended when an
+ * event says so. An event whose payload does not say which pull request and
+ * which agent is left out.
  */
 export async function listPullReviewRequests(db: Database, workspaceId: string, limit = BOARD_PULL_REVIEWS_MAX): Promise<BoardPullReviewRef[]> {
-  const rows = await db
-    .select({ actorName: boardEvents.actorName, payload: boardEvents.payload, createdAt: boardEvents.createdAt })
-    .from(boardEvents)
-    .where(and(eq(boardEvents.workspaceId, workspaceId), eq(boardEvents.kind, 'pr.review_requested')))
-    .orderBy(desc(boardEvents.createdAt))
-    .limit(Math.max(1, limit));
+  const read = (kind: BoardEventKind) =>
+    db
+      .select({ actorName: boardEvents.actorName, payload: boardEvents.payload, createdAt: boardEvents.createdAt })
+      .from(boardEvents)
+      .where(and(eq(boardEvents.workspaceId, workspaceId), eq(boardEvents.kind, kind)))
+      .orderBy(desc(boardEvents.createdAt))
+      .limit(Math.max(1, limit));
+  const [rows, finishes] = await Promise.all([read('pr.review_requested'), read('pr.review_finished')]);
+  const finished = new Map<string, { at: number; outcome: BoardPullReviewOutcome }>();
+  for (const row of finishes) {
+    const { requestId, outcome } = (row.payload ?? {}) as Record<string, unknown>;
+    if (typeof requestId !== 'string' || !isPullReviewOutcome(outcome) || finished.has(requestId)) continue;
+    finished.set(requestId, { at: row.createdAt.getTime(), outcome });
+  }
   const reviews: BoardPullReviewRef[] = [];
   for (const row of rows) {
     const payload = (row.payload ?? {}) as Record<string, unknown>;
     const { url, repo, number, agentId, agentName } = payload;
     if (typeof url !== 'string' || typeof repo !== 'string' || typeof number !== 'number') continue;
     if (typeof agentId !== 'string' || typeof agentName !== 'string') continue;
-    reviews.push({ url, repo: repo.toLowerCase(), number, agentId, agentName, byName: row.actorName, at: row.createdAt.getTime() });
+    const requestId = typeof payload.requestId === 'string' ? payload.requestId : null;
+    const end = requestId ? finished.get(requestId) : undefined;
+    reviews.push({
+      url,
+      repo: repo.toLowerCase(),
+      number,
+      agentId,
+      agentName,
+      byName: row.actorName,
+      at: row.createdAt.getTime(),
+      requestId,
+      finishedAt: end?.at ?? null,
+      outcome: end?.outcome ?? null,
+    });
   }
   return reviews;
+}
+
+function isPullReviewOutcome(value: unknown): value is BoardPullReviewOutcome {
+  return typeof value === 'string' && (BOARD_PULL_REVIEW_OUTCOMES as readonly string[]).includes(value);
 }
 
 export interface ListBoardEventsOptions {
