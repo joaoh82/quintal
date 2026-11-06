@@ -182,6 +182,40 @@ export default function Home() {
         <article className="conversation-feature">
           <div className="feature-copy">
             <span className="feature-symbol" aria-hidden="true">
+              ✓
+            </span>
+            <h2>
+              Ask for a review.
+              <br />
+              See it done.
+            </h2>
+            <p>
+              Hand any open pull request to one of your agents to review. The
+              board says who has it and whether the review is still going,
+              done or stopped, and it stays in that agent&rsquo;s history.
+            </p>
+            <a className="text-link" href={`${REPO}/blob/main/docs/guide/board.md#asking-an-agent-for-a-review`}>
+              Read about reviews <ArrowUpRight size={16} />
+            </a>
+          </div>
+          <a
+            href="/images/pull-requests.webp"
+            className="conversation-image"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open the full pull requests screenshot"
+          >
+            <Screenshot
+              src="/images/pull-requests.webp"
+              alt="The board's Pull requests tab: five pull requests with GitHub's checks and review, each with the agent asked to review it and whether that review is going, done or stopped, and one opened to show who asked whom and when."
+              width={1600}
+              height={1000}
+            />
+          </a>
+        </article>
+        <article className="conversation-feature">
+          <div className="feature-copy">
+            <span className="feature-symbol" aria-hidden="true">
               ▣
             </span>
             <h2>
@@ -364,7 +398,8 @@ export default function Home() {
               Give the office a GitHub token and the repositories it is for.
               It checks each pull request itself, and members squash, merge,
               rebase, update or close one from the board, pinned to the head
-              they looked at.
+              they looked at. Ask an agent to review one, and see when it is
+              done.
             </p>
           </li>
           <li>

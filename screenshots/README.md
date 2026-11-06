@@ -19,7 +19,7 @@ screenshot.
 | `settings-channels.png` | Settings → Channels: making a channel and its members | guide: channels |
 | `desktop-runtimes.png` | The desktop app's Agents tab: the fleet running, and every agent runtime this machine has | README, guide: agents |
 | `board-columns.png` | The office board in columns: seven notes open, in progress and done, with labels, colours, the agent each is handed to, and the *in review* and *merged* badges from the ledger | README, guide: board, website |
-| `board-pull-requests.png` | The board's Pull requests tab with GitHub's facts on three pull requests — checks, review, mergeability, checked when — and the actions row open on #42 | README, guide: board |
+| `board-pull-requests.png` | The board's Pull requests tab with five pull requests: GitHub's checks, review and mergeability, and the review asked of an agent on each — *reviewed*, *reviewing*, *review stopped* — with #55's details open on its two reviewers, who asked and when each finished | README, guide: board, website |
 | `desks-agent-bay.png` | The Agent Bay with desks: Marvin waiting for Josh under a `?` balloon with the beacon over its desk, Josh behind an empty desk with its screen lit and `E · begin a task at this desk` offered, Arthur at the far desk working under a lightbulb | README, guide: agents, website |
 | `desk-panel.png` | Arthur's desk panel: the card with the task it is on, and *On the screen* with the running turn — what it found, two steps done, the edit running — and *Go to Arthur →* | guide: agents, website |
 | `desk-station.png` | The station at an empty desk: note #1 picked from the board, Arthur offered and Marvin greyed with what it is on, the repository chosen from Arthur's machine's checkouts, Begin | guide: agents |
@@ -52,12 +52,20 @@ real questions; nothing in a bubble or a channel was typed by hand. Take a
 frame every second after asking: an answer bubble stays up for a few seconds
 only, and the thinking balloon for less.
 
-The two board shots were taken the same way on 29 October 2026 at 0.14.0,
+`board-columns.png` was taken the same way on 29 October 2026 at 0.14.0,
 against a seeded office — Josh, two agents never connected, seven notes, three
 ledger lines with their GitHub facts written straight into the status cache —
-so that what they show is the board as it draws, not a token's worth of real
+so that what it shows is the board as it draws, not a token's worth of real
 pull requests. The board is opened with `B` through `Input.dispatchKeyEvent`,
 the tab and the Actions button clicked by their measured rectangles.
+
+`board-pull-requests.png` was retaken on 6 November 2026 at 0.20.0 the
+same way, against a seeded office: Josh, three agents never connected, five
+ledger lines with their GitHub facts written straight into the status cache,
+and `pr.review_requested` / `pr.review_finished` board events for the
+reviews, so each standing the tab draws is on it. The office has no GitHub
+token, so the tab shows the ledger's pull requests only. The board is opened
+with `B`, the tab and #55's title clicked through the DOM.
 
 The three desk shots were taken on 2 November 2026 at 0.18.0 the same way
 as the board shots — headless Chromium over the DevTools protocol at
@@ -94,6 +102,7 @@ the site serves directly so static hosting needs no image server:
 | `board.webp` | `board-columns.png` |
 | `desks.webp` | `desks-agent-bay.png` |
 | `desk-panel.webp` | `desk-panel.png` |
+| `pull-requests.webp` | `board-pull-requests.png` |
 
 Regenerate one after retaking its source, at 1600, 960 and 640 wide, with
 `cwebp` or ImageMagick — either gives the same shape:

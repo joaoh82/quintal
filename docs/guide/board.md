@@ -137,4 +137,4 @@ A review is also in the agent's history on the **Agents** tab, beside the
 branches it worked on, and an agent busy with one says *reviewing
 acme/api#12* where its task would be.
 
-![The board's Pull requests tab, with GitHub's facts on three pull requests and the actions row open on one](../../screenshots/board-pull-requests.png)
+![The board's Pull requests tab: five pull requests, each with the agent asked to review it and whether that review is going, done or stopped, and #55 open to show both reviewers, who asked them and when each finished](../../screenshots/board-pull-requests.png)
