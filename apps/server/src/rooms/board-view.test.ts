@@ -20,6 +20,7 @@ const marvin: BoardAgentRef = {
   runtimeId: 'claude-code',
   modelId: 'claude-opus-5-5',
   hostLabel: "Josh's laptop",
+  checkouts: ['api'],
 };
 
 const task: BoardTaskRef = {
@@ -199,7 +200,7 @@ describe('what the board is sent, and when', () => {
   it('sends a member everything the board has', () => {
     const routines: BoardRoutineRef[] = boardRoutinesOf([ROUTINE]);
     const routineRuns = boardRoutineRunsOf([RUN]);
-    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW], routines, routineRuns }, 'member');
+    const sent = boardForRole({ items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW], routines, routineRuns }, 'member', marvin.ownerUserId);
     assert.deepEqual(sent.reviews, [REVIEW]);
     assert.deepEqual(sent.routines, routines);
     assert.deepEqual(sent.routineRuns, routineRuns);
@@ -209,10 +210,20 @@ describe('what the board is sent, and when', () => {
     assert.deepEqual(sent.pulls, PULLS);
   });
 
+  it("shows a colleague the machine, not what is cloned on it", () => {
+    const sent = boardForRole(
+      { items: [], agents: [marvin], tasks: [], github: GITHUB, pulls: PULLS, reviews: [], routines: [], routineRuns: [] },
+      'member',
+      'somebody-else',
+    );
+    assert.deepEqual(sent.agents, [{ ...marvin, checkouts: [] }], 'the host label stays; the checkouts go');
+  });
+
   it("sends a guest the notes and who the agents are, not the ledger or the office's machines", () => {
     const sent = boardForRole(
       { items: [], agents: [marvin], tasks: [task], github: GITHUB, pulls: PULLS, reviews: [REVIEW], routines: boardRoutinesOf([ROUTINE]), routineRuns: boardRoutineRunsOf([RUN]) },
       null,
+      'guest',
     );
     assert.deepEqual(sent.tasks, []);
     assert.deepEqual(sent.reviews, [], 'nor who was asked to review what');

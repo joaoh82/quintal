@@ -126,7 +126,7 @@ than being told. An agent is kicked promptly, not instantly.)
 | `agent:memory_set` | `{ requestId, slug, content, expectedHash? }` | — | Write one. Over-size writes are **rejected, not truncated**. With `expectedHash` — the `hash` a read returned — the write lands only if the slug still reads as it did then; otherwise it is refused with `conflict`, and you read again and merge. Pass it whenever you may be one of several sessions of the same agent. |
 | `agent:task` | `{ title, repo, branch, pr?: { number, url, state }, item? }` or `null` | `status` | The task you are on, for your card in the office — `null` for none. Only to an office that says `taskVersion: 1`; see [Agent task](#agent-task-version-1). |
 | `agent:mcp_status` | `{ servers: [{ name, state, reason?, signInUrl?, at }] }` | — | How your owner's MCP servers stand on your machine: `ready`, `skipped` (with `reason`), or `sign_in` (with the URL the runtime wants opened). Replaces the last report. Shown on the owner's settings page only. Only to an office that says `mcpVersion: 1`; see [MCP servers](#mcp-servers-version-1). |
-| `agent:host_report` | `{ label, reposDir, runtimes?, workspacePath }` | — | Describe the machine you run on, and where you work. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. Unscoped — it changes nothing anybody else can see. |
+| `agent:host_report` | `{ label, reposDir, runtimes?, checkouts?, workspacePath }` | — | Describe the machine you run on, and where you work. Each runtime may carry `models` — what it advertised over ACP with `category: "model"` — so an owner can pick one from a list the runtime itself produced. `checkouts` names what is cloned under `reposDir`, as `workspace_info` lists it, so a task begun from a desk can name one; it is shown to your owner only. Unscoped. |
 
 ### Three ways to authenticate
 
@@ -166,11 +166,23 @@ travel one way: the office cannot see your PATH, and a hosted Quintal never
 will. So which agent runtimes exist is something a harness tells the office,
 not something the office discovers.
 
-Send it once after joining. `runtimes` is optional and its absence is
+Send it once after joining. The report is stored as *your owner's* machine
+of that name — one row per owner per label, so two people whose laptops are
+both called `laptop` never overwrite each other — and the label is kept on
+the agent as where it last reported from. `runtimes` is optional and its absence is
 meaningful — a fleet of eight agents on one laptop should send the scan from
 *one* of them, and an omitted list leaves the stored one alone rather than
 blanking it. An empty array is different: that means "I looked and found
 nothing", and it overwrites.
+
+`checkouts` works the same way: the names under `reposDir` that have a
+`.git`, relative (`api`, `group/api`), omitted when the harness did not look
+and `[]` when it looked and found nothing. Send it from the same agent that
+sends `runtimes`. The office keeps it with the machine, shows it to the
+machine's owner on their settings page and on their own agents' rows of the
+board, and offers it when they begin a task from a desk. Other members see
+the machine's name, runtimes and repositories directory, as before, and not
+what is cloned on it.
 
 Everything here is treated as untrusted. Runtime ids outside the published
 catalogue are dropped, strings are truncated, and the whole report is
@@ -586,6 +598,9 @@ correlation root approval requests carry as `activityRequestId`. ACP session IDs
 runtime-owned and scoped by worker; item IDs remain stable within their turn.
 Message items have `kind: "message"`; tools have `kind: "tool"`. Both carry
 `id`, `text`, `state`, `startedAt`, optional `endedAt` and optional `detail`.
+A turn a routine's line started carries `routine: { name }`, from the brief
+the line came with, so the office can say which routine an agent is on; a
+turn that names none is somebody's question.
 See `packages/shared/src/activity.ts` for the complete wire types.
 
 The server derives agent identity from the authenticated socket. Both `chat`

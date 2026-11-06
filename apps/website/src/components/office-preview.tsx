@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Screenshot } from "@/components/screenshot";
-import { ArrowUpRight, Lightbulb, MessageSquare, Users } from "lucide-react";
+import { Armchair, ArrowUpRight, Lightbulb, MessageSquare, Users } from "lucide-react";
 
 const views = [
   {
@@ -22,6 +22,16 @@ const views = [
     alt: "Marvin addressed by name, with a thinking balloon over its head, “thinking” under its nameplate, and the turn running in the chat box.",
     caption:
       "Address an agent by name and watch it think. The balloon, the status line and the steps are all real.",
+  },
+  {
+    name: "At the desk",
+    icon: Armchair,
+    image: "desks",
+    width: 1600,
+    height: 1000,
+    alt: "The Agent Bay: Marvin waiting for Josh under a question balloon with a column of light over its desk, Josh behind an empty desk offered a task to begin, and Arthur at the far desk working under a lightbulb.",
+    caption:
+      "Every agent has a desk. Busy ones sit and type, the one waiting for you is lit from across the room, and an empty desk is where a task begins.",
   },
   {
     name: "In conversation",

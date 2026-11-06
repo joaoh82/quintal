@@ -12,6 +12,7 @@ import {
   activityPresentation,
   collapsedActivityItems,
 } from './activityPresentation';
+import { routineCaption } from './desk';
 import { Markdown } from './Markdown';
 
 const glyph = {
@@ -100,9 +101,17 @@ function FullHistory({
 export function TurnActivity({
   activity,
   detailLevel,
+  routine = false,
 }: {
   activity: PublicActivity;
   detailLevel: ActivityDetailLevel;
+  /**
+   * Caption the turn with the routine it is, when it says so. Drawn from
+   * the state this row shows, so a turn the row has judged stale reads
+   * "was on", never "on" above "disconnected". Off in the transcript, where
+   * the routine's own line is a few rows up.
+   */
+  routine?: boolean;
 }) {
   const [now, setNow] = useState(Date.now());
   const terminal = activityTerminal(activity.state);
@@ -137,6 +146,10 @@ export function TurnActivity({
         <span>{elapsed(activity.startedAt, outcomeEnd)}</span>
         {!terminal && <span>last activity {elapsed(activity.updatedAt, now)} ago</span>}
       </div>
+
+      {routine && routineCaption(activity, shownState) ? (
+        <p className="my-1 text-[11px] text-sky-200/80">{routineCaption(activity, shownState)}</p>
+      ) : null}
 
       {activity.state === 'waiting' ? (
         <p className="my-1 text-xs text-amber-200">Waiting for your input.</p>

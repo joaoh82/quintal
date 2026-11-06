@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 
 import {
   AGENT_KEY_BYTES,
@@ -19,6 +19,7 @@ import {
   type AgentScope,
 } from '../agent.js';
 import { verifyAttestation } from '../attestation.js';
+import { bodyOfAgent, isBodyId, randomBody, type BodyId } from '../bodies.js';
 import {
   mcpServersFingerprint,
   parseMcpStatus,
@@ -66,7 +67,8 @@ export interface CreateAgentInput {
   workspaceId: string;
   ownerUserId: string;
   name: string;
-  spriteKey: string;
+  /** Which of the bodies it walks around in. Absent means one at random. */
+  spriteKey?: string;
   /** One line about what it does, shown on its card. */
   description?: string;
   /** How it should behave, prepended to its system prompt. */
@@ -88,6 +90,89 @@ export interface CreateAgentInput {
    * the harness cannot use.
    */
   maxSessions?: number | null;
+  /** The agent making this one for its owner. Absent when a person is. */
+  createdByAgentId?: string;
+  /**
+   * Hold it to the office's rules, as it is written: its name must be free, and
+   * with `ownedMax` its owner must have fewer than that. Absent only for a
+   * seed or a test: anything somebody asked for goes through these.
+   */
+  rules?: { ownedMax?: number };
+}
+
+/** Refused by the rules on an office's agents. The message says why, and `reason` lets a caller say it its own way. */
+export class AgentRosterError extends Error {
+  constructor(
+    readonly reason: 'name' | 'full',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AgentRosterError';
+  }
+}
+
+/**
+ * Whether anybody else in the office answers to this name, an agent that is
+ * not revoked or a person. A shared name can be neither mentioned nor DMed.
+ *
+ * This is the whole rule, Unicode case and a nameless person's npub included,
+ * and it is what a caller should ask to refuse early, but it is a look and not
+ * a promise: what holds under overlapping requests is `nameIsFree`.
+ */
+export async function agentNameTaken(
+  db: Database,
+  workspaceId: string,
+  name: string,
+  exceptAgentId?: string,
+): Promise<boolean> {
+  const wanted = normaliseAgentName(name).toLowerCase();
+  const [theirs, people] = await Promise.all([
+    db
+      .select({ id: agents.id, name: agents.name })
+      .from(agents)
+      .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt))),
+    db
+      .select({ name: users.name, pubkey: users.pubkey })
+      .from(memberships)
+      .innerJoin(users, eq(users.id, memberships.userId))
+      .where(eq(memberships.workspaceId, workspaceId)),
+  ]);
+  return (
+    theirs.some((agent) => agent.id !== exceptAgentId && agent.name.toLowerCase() === wanted) ||
+    people.some((person) => displayName(person).toLowerCase() === wanted)
+  );
+}
+
+/**
+ * The name rule as a condition on the write itself.
+ *
+ * In one statement because SQLite runs a statement whole, on whichever
+ * connection and in whichever process: two rooms of an office, and Settings in
+ * another. Not a transaction, which this client gives a connection of its own
+ * and then opens a new one for everybody else, without the `foreign_keys`
+ * pragma the first was given, so cascades would quietly stop.
+ *
+ * `lower` here folds only ASCII, so two requests landing at once with names
+ * differing only in the case of a non-ASCII letter could both pass. Against a
+ * name already there, `agentNameTaken` has the full rule.
+ */
+function nameIsFree(workspaceId: string, name: string, exceptAgentId?: string): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM agents AS other
+    WHERE other.workspace_id = ${workspaceId}
+      AND other.revoked_at IS NULL
+      AND lower(other.name) = lower(${name})
+      ${exceptAgentId ? sql`AND other.id <> ${exceptAgentId}` : sql``}
+  ) AND NOT EXISTS (
+    SELECT 1 FROM memberships AS member
+    INNER JOIN users AS person ON person.id = member.user_id
+    WHERE member.workspace_id = ${workspaceId}
+      AND lower(person.name) = lower(${name})
+  )`;
+}
+
+function nameTaken(name: string): AgentRosterError {
+  return new AgentRosterError('name', `Somebody in this office is already called ${name}.`);
 }
 
 export interface CreatedAgent {
@@ -103,35 +188,57 @@ export async function createAgent(
 ): Promise<CreatedAgent> {
   const key = generateAgentKey();
   const id = newId();
+  const name = normaliseAgentName(input.name);
+  const { rules } = input;
 
-  await db.insert(agents).values({
-    id,
-    workspaceId: input.workspaceId,
-    ownerUserId: input.ownerUserId,
-    name: normaliseAgentName(input.name),
-    spriteKey: input.spriteKey,
-    description: normaliseAgentDescription(input.description),
-    instructions: normaliseAgentInstructions(input.instructions),
-    apiKeyHash: hashAgentKey(key),
-    scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
-    maxSessions: normaliseParallelism(input.maxSessions),
-    ...(input.launch
-      ? {
-          runtimeId: input.launch.runtimeId,
-          hostLabel: input.launch.hostLabel,
-          modelId: input.launch.modelId ?? null,
-        }
-      : {}),
-  });
+  // Asked first for the full rule, which the statement below cannot state.
+  if (rules && (await agentNameTaken(db, input.workspaceId, name))) throw nameTaken(name);
+
+  const row: Array<[{ name: string }, unknown]> = [
+    [agents.id, id],
+    [agents.workspaceId, input.workspaceId],
+    [agents.ownerUserId, input.ownerUserId],
+    [agents.name, name],
+    [agents.spriteKey, input.spriteKey ?? randomBody()],
+    [agents.description, normaliseAgentDescription(input.description)],
+    [agents.instructions, normaliseAgentInstructions(input.instructions)],
+    [agents.apiKeyHash, hashAgentKey(key)],
+    [agents.scopes, JSON.stringify([...(input.scopes ?? DEFAULT_AGENT_SCOPES)])],
+    [agents.maxSessions, normaliseParallelism(input.maxSessions)],
+    [agents.createdByAgentId, input.createdByAgentId ?? null],
+    [agents.runtimeId, input.launch?.runtimeId ?? null],
+    [agents.hostLabel, input.launch?.hostLabel ?? null],
+    [agents.modelId, input.launch?.modelId ?? null],
+  ];
+  const conditions = [
+    ...(rules ? [nameIsFree(input.workspaceId, name)] : []),
+    ...(rules?.ownedMax !== undefined
+      ? [sql`(SELECT count(*) FROM agents AS mine WHERE mine.workspace_id = ${input.workspaceId} AND mine.owner_user_id = ${input.ownerUserId} AND mine.revoked_at IS NULL) < ${rules.ownedMax}`]
+      : []),
+  ];
+  // Raw for the condition, which an insert has no way to say otherwise. The
+  // rule and the count are read in the same statement that writes the row.
+  const written = await db.run(sql`
+    INSERT INTO agents (${sql.join(row.map(([column]) => sql.identifier(column.name)), sql`, `)})
+    SELECT ${sql.join(row.map(([, value]) => sql`${value}`), sql`, `)}
+    ${conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``}
+  `);
+  if (written.rowsAffected === 0) {
+    // The statement does not say which condition stopped it. A name still
+    // taken is the one to report, since freeing a slot would not help it.
+    if (rules?.ownedMax === undefined || (await agentNameTaken(db, input.workspaceId, name))) throw nameTaken(name);
+    throw new AgentRosterError('full', `That owner already has ${rules.ownedMax} agents, the most that may be made this way.`);
+  }
 
   // The first line of the log, so the audit trail starts where the agent does.
   await recordAgentEvent(db, id, 'agent.created', {
-    name: normaliseAgentName(input.name),
+    name,
     ownerUserId: input.ownerUserId,
     scopes: [...(input.scopes ?? DEFAULT_AGENT_SCOPES)],
+    ...(input.createdByAgentId ? { createdByAgentId: input.createdByAgentId } : {}),
   });
 
-  return { id, name: normaliseAgentName(input.name), key };
+  return { id, name, key };
 }
 
 /**
@@ -177,6 +284,62 @@ export async function setAgentProfile(
   });
 
   return next;
+}
+
+/**
+ * Change what an agent is called.
+ *
+ * Normalised here for the reason `setAgentProfile` is. A fleet restarts it
+ * under the new name on its next poll: name is what a host runs agents by.
+ * Refused with `AgentRosterError` when somebody in the office has the name.
+ */
+export async function setAgentName(db: Database, agentId: string, name: string): Promise<string> {
+  const next = normaliseAgentName(name);
+  if (next.length === 0) throw new Error('An agent needs a name.');
+  const rows = await db
+    .select({ name: agents.name, workspaceId: agents.workspaceId })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+  if (current.name === next) return next;
+  if (await agentNameTaken(db, current.workspaceId, next, agentId)) throw nameTaken(next);
+  const written = await db
+    .update(agents)
+    .set({ name: next })
+    .where(and(eq(agents.id, agentId), nameIsFree(current.workspaceId, next, agentId)));
+  if (written.rowsAffected === 0) throw nameTaken(next);
+  await recordAgentEvent(db, agentId, 'agent.renamed', { before: current.name, after: next });
+  return next;
+}
+
+/**
+ * Change which body an agent walks around in. Refuses anything that is not
+ * one of them: a row holding a name the office cannot draw would quietly show
+ * some other body. A connected agent changes on the room's next look
+ * (`findAgentLooks`), with no restart: a costume is no reason to drop a turn.
+ */
+export async function setAgentCharacter(db: Database, agentId: string, character: string): Promise<BodyId> {
+  if (!isBodyId(character)) throw new Error(`No character called ${character}.`);
+  const rows = await db.select({ spriteKey: agents.spriteKey }).from(agents).where(eq(agents.id, agentId)).limit(1);
+  const current = rows[0];
+  if (!current) throw new Error('No such agent.');
+  const before = bodyOfAgent({ id: agentId, spriteKey: current.spriteKey });
+  if (before === character) return character;
+  await db.update(agents).set({ spriteKey: character }).where(eq(agents.id, agentId));
+  await recordAgentEvent(db, agentId, 'agent.character_changed', { before, after: character });
+  return character;
+}
+
+/** What these agents are drawn as now, for a room to notice one that changed. */
+export async function findAgentLooks(db: Database, ids: readonly string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: agents.id, spriteKey: agents.spriteKey })
+    .from(agents)
+    .where(sql`${agents.id} in ${ids}`);
+  return new Map(rows.map((row) => [row.id, row.spriteKey]));
 }
 
 /**
@@ -606,12 +769,17 @@ export interface AgentListEntry {
   /** How a host should launch it, when the office defines that. Null otherwise. */
   runtimeId: string | null;
   hostLabel: string | null;
+  /** The machine it last reported from, by label under its owner. Null until it has. */
+  reportedHostLabel: string | null;
   /** The model its owner chose, by the runtime's own id. Null for the runtime's default. */
   modelId: string | null;
   /** How many conversations it may answer at once. Null for the office's default. */
   maxSessions: number | null;
   /** Whether a host pulling its fleet should be running this. */
   enabled: boolean;
+  /** The agent that made this one for its owner. Null for one a person made. */
+  createdByAgentId: string | null;
+  createdByAgentName: string | null;
   /** Where its harness said it works. Empty until one connects. */
   workspacePath: string;
   /** Its own public key (credentials v2), or null while it still joins by `qa_` key. */
@@ -642,6 +810,7 @@ export async function listAgentsForWorkspace(
       ownerPubkey: users.pubkey,
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
+      reportedHostLabel: agents.reportedHostLabel,
       modelId: agents.modelId,
       maxSessions: agents.maxSessions,
       enabled: agents.enabled,
@@ -650,14 +819,18 @@ export async function listAgentsForWorkspace(
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
+      createdByAgentId: agents.createdByAgentId,
     })
     .from(agents)
     .innerJoin(users, eq(users.id, agents.ownerUserId))
     .where(eq(agents.workspaceId, workspaceId))
     .orderBy(desc(agents.createdAt));
 
+  // An agent's maker is in the same office, so it is already in these rows.
+  const names = new Map(rows.map((row) => [row.id, row.name]));
   return rows.map(({ ownerPubkey, ...row }) => ({
     ...row,
+    createdByAgentName: row.createdByAgentId ? (names.get(row.createdByAgentId) ?? null) : null,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),
@@ -687,6 +860,7 @@ export async function findAgentById(
       workspaceId: agents.workspaceId,
       runtimeId: agents.runtimeId,
       hostLabel: agents.hostLabel,
+      reportedHostLabel: agents.reportedHostLabel,
       modelId: agents.modelId,
       maxSessions: agents.maxSessions,
       enabled: agents.enabled,
@@ -695,6 +869,7 @@ export async function findAgentById(
       createdAt: agents.createdAt,
       lastSeenAt: agents.lastSeenAt,
       revokedAt: agents.revokedAt,
+      createdByAgentId: agents.createdByAgentId,
     })
     .from(agents)
     .innerJoin(users, eq(users.id, agents.ownerUserId))
@@ -704,8 +879,12 @@ export async function findAgentById(
   const row = rows[0];
   if (!row) return null;
   const { ownerPubkey, ...rest } = row;
+  const maker = row.createdByAgentId
+    ? await db.select({ name: agents.name }).from(agents).where(eq(agents.id, row.createdByAgentId)).limit(1)
+    : [];
   return {
     ...rest,
+    createdByAgentName: maker[0]?.name ?? null,
     ownerName: displayName({ name: row.ownerName, pubkey: ownerPubkey }),
     scopes: parseScopes(row.scopes),
     createdAt: row.createdAt.getTime(),
@@ -768,10 +947,15 @@ export async function setAgentWorkspace(
   db: Database,
   agentId: string,
   workspacePath: string,
+  /** The machine it reported from, by the label its report carried; omitted leaves what is kept. */
+  reportedHostLabel?: string | null,
 ): Promise<void> {
   await db
     .update(agents)
-    .set({ workspacePath: workspacePath.slice(0, 512) })
+    .set({
+      workspacePath: workspacePath.slice(0, 512),
+      ...(reportedHostLabel === undefined ? {} : { reportedHostLabel }),
+    })
     .where(eq(agents.id, agentId));
 }
 
@@ -807,6 +991,10 @@ export async function setAgentLaunch(
             runtimeId: launch.runtimeId,
             hostLabel: launch.hostLabel,
             modelId: launch.modelId ? launch.modelId.slice(0, 128) : null,
+            // Sent to a machine: where it last reported from is history
+            // until it reports from the new one, and must not keep lending
+            // the old machine's checkouts to a card that names the new.
+            reportedHostLabel: null,
           }
         : // Unassigning keeps the runtime so re-enabling is one field, but
           // not the model: it was chosen for a machine, and the next machine

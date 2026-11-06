@@ -5,13 +5,14 @@ import {
   AGENT_CORE_MEMORY_SLUG,
   AGENT_DESCRIPTION_MAX_LENGTH,
   AGENT_INSTRUCTIONS_MAX_LENGTH,
+  AGENT_NAME_MAX_LENGTH,
   AGENT_PARALLELISM_MAX,
   AGENT_PARALLELISM_MIN,
   AGENT_SCOPE_NOTES,
   AGENT_SCOPES,
-  AGENT_SPRITE_KEYS,
   DEFAULT_AGENT_SCOPES,
   RUNTIMES,
+  bodyOfAgent,
   npubEncode,
   runtimeById,
   truncateNpub,
@@ -22,6 +23,7 @@ import type { AgentListEntry, AgentMcpView } from '@quintal/shared/db';
 import Link from 'next/link';
 
 import { AgentMcpSection } from './AgentMcpForm';
+import { CharacterPicker, CharacterSprite } from './CharacterPicker';
 import { RegisterKey } from './RegisterKey';
 import { WorkspaceBadge } from './RuntimeList';
 import { useActionState, useState } from 'react';
@@ -47,9 +49,14 @@ import {
 
 const INITIAL: CreateAgentState = { ok: false };
 
-/** What a machine reported it can run, keyed by the label a form picks. */
+/**
+ * What a machine reported it can run, keyed by the label a form picks —
+ * under its owner, because two people's laptops may share a label and a
+ * model is offered by one machine, not by a name.
+ */
 export interface ReportedHost {
   label: string;
+  ownerUserId: string;
   runtimes: RuntimeStatus[];
 }
 
@@ -230,20 +237,7 @@ export function AgentsManager({
             <Input name="name" placeholder="reviewer" required className="w-48" />
           </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium">Sprite</span>
-            <select
-              name="spriteKey"
-              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-              defaultValue={AGENT_SPRITE_KEYS[0]}
-            >
-              {AGENT_SPRITE_KEYS.map((sprite) => (
-                <option key={sprite} value={sprite}>
-                  {sprite}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CharacterPicker allowRandom />
 
           <fieldset className="flex flex-col gap-1">
             <legend className="text-xs font-medium">Scopes</legend>
@@ -376,7 +370,7 @@ export function AgentsManager({
               <label className="flex flex-col gap-1">
                 <span className="text-xs font-medium">Model</span>
                 <ModelSelect
-                  hosts={hosts}
+                  hosts={hosts.filter((host) => host.ownerUserId === currentUserId)}
                   hostLabel={newHost}
                   runtimeId={newRuntime}
                   value={newModel}
@@ -487,6 +481,7 @@ function AgentRow({
 
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
+      <CharacterSprite body={bodyOfAgent(agent)} />
       <span className="flex items-center gap-1.5 font-medium">
         <span aria-hidden className="text-sky-500">
           ◆
@@ -541,6 +536,7 @@ function AgentRow({
 
       <span className="text-muted-foreground ml-auto text-xs">
         created <RelativeTime at={agent.createdAt} />
+        {agent.createdByAgentName ? ` by ${agent.createdByAgentName}` : null}
       </span>
       <span className="text-muted-foreground text-xs">
         {agent.revokedAt !== null ? (
@@ -590,7 +586,7 @@ function AgentRow({
             ))}
           </select>
           <ModelSelect
-            hosts={hosts}
+            hosts={hosts.filter((reported) => reported.ownerUserId === agent.ownerUserId)}
             hostLabel={host}
             runtimeId={runtime}
             value={model}
@@ -645,7 +641,7 @@ function AgentRow({
       {canRevoke && agent.revokedAt === null ? (
         <details className="w-full pt-2">
           <summary className="text-muted-foreground cursor-pointer text-xs">
-            Description and instructions
+            Name, character, description and instructions
           </summary>
           <AgentProfileForm agent={agent} officeParallelism={officeParallelism} />
         </details>
@@ -715,6 +711,18 @@ function AgentProfileForm({
     <form action={formAction} className="mt-2 flex flex-col gap-2">
       <input type="hidden" name="agentId" value={agent.id} />
       <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium">Name</span>
+        <Input
+          name="name"
+          defaultValue={agent.name}
+          maxLength={AGENT_NAME_MAX_LENGTH}
+          required
+          disabled={pending}
+          className="w-64"
+        />
+      </label>
+      <CharacterPicker current={bodyOfAgent(agent)} disabled={pending} />
+      <label className="flex flex-col gap-1">
         <span className="text-xs font-medium">Description</span>
         <Input
           name="description"
@@ -759,7 +767,9 @@ function AgentProfileForm({
         </Button>
         {mine && state.ok ? (
           <span className="text-xs text-emerald-600">
-            Saved — {agent.name} restarts within about 15 seconds to pick it up.
+            {state.restarts
+              ? `Saved — ${agent.name} restarts within about 15 seconds to pick it up.`
+              : 'Saved. A new character shows within seconds, with no restart.'}
           </span>
         ) : null}
         {mine && state.error ? (
@@ -771,7 +781,8 @@ function AgentProfileForm({
       {!mine || !state.ok ? (
         <span className="text-muted-foreground text-xs">
           Applied by restarting the agent, so anything it was in the middle of is
-          dropped.
+          dropped. Changing only its character does not restart it. An agent you
+          start by hand takes a new name the next time you start it.
         </span>
       ) : null}
     </form>

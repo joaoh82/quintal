@@ -148,11 +148,15 @@ knowing whether any of it is working.
   a domain, HTTPS through Caddy. A fresh server is claimed with a single-use
   link from its log, not by whoever signs in first.
 
-**November 2026 — routines**
+**November 2026 — routines, and desks**
 
 - **Agents keep the office's commands.** `command_list`, `command_get`,
   `command_create`, `command_update` under a `commands` scope; a command an
   agent wrote says so wherever it is read.
+- **Agents keep agents.** `agent_list`, `agent_get`, `agent_create`,
+  `agent_update` under an `agents` scope: an agent lists the office's agents
+  and makes or changes its owner's, marked as its. It gives only scopes it
+  holds and never `agents` itself, so what it makes cannot make more.
 - **Routines.** A standing request on one of your agents with a schedule —
   "every hour, review the open pull requests", "weekdays at nine, see what
   is on the board", "in an hour, check the deploy" — kept by the office,
@@ -163,6 +167,15 @@ knowing whether any of it is working.
   `routines` scope); seen on the agent's card, on the board's Agents tab
   and on a Routines tab with every run. The design is in
   [ROUTINES.md](./ROUTINES.md).
+- **Desks.** Every agent has a desk in the Agent Bay, the same one
+  tomorrow. One on a turn walks there and types; one holding a task sits;
+  the screen is lit by what it is on, flickers as each step lands, and a
+  column of light stands over a desk whose agent is waiting for someone.
+  Click an agent, or its screen, to see the turn live and go to its
+  conversation — only what you could read anyway. An empty desk begins a
+  task: a note from the board or a title typed, handed over in your DM, and
+  the agent walks to that desk. The design and the record of what shipped
+  are in [DESKS.md](./DESKS.md).
 
 ## What is next
 
@@ -183,10 +196,6 @@ quarter.
   all; this is for the one who wants a server without running it.
 - **Know whether it works.** Latency is measured; use is not. Light
   instrumentation and an effortless way to send feedback.
-- **Desks.** A busy agent walks to a desk and works; an idle one on a task
-  sits; its screen is lit by its state, and clicking it shows the turn and
-  takes you to the conversation. An empty desk begins a task. The design is
-  [DESKS.md](./DESKS.md).
 
 ## Later, if the office earns it
 

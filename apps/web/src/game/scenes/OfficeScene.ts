@@ -65,6 +65,7 @@ import { getStateCallbacks, type Room } from 'colyseus.js';
 import * as Phaser from 'phaser';
 
 import { Avatar } from '../avatar';
+import { GLASS, cueFor, glassState, type GlassState } from '../glass';
 import { predictionStep } from '../clock';
 import { canSettle, settle, type Authority } from '../reconcile';
 import { Speech } from '../speech';
@@ -74,6 +75,8 @@ import {
   BODY_IDS,
   BODY_ROW,
   BODY_TIMING,
+  WORK_PACES,
+  WORK_PACE_TIMING,
   CAMERA_LERP,
   CAMERA_ZOOM,
   DEPTH,
@@ -114,6 +117,28 @@ const HALO_PADDING = 6;
 const HALO_NEAR_ALPHA = { from: 0.3, to: 0.6 };
 const HALO_HOVER_ALPHA = 0.7;
 
+/** The glass: see `#createGlass`. */
+interface Glass {
+  pane: Phaser.GameObjects.Rectangle;
+  lines: Phaser.GameObjects.Graphics;
+  beacon: Phaser.GameObjects.Rectangle;
+  beat: Phaser.Tweens.Tween | null;
+  /** The flicker fading, if one is. */
+  flash: Phaser.Tweens.Tween | null;
+  globe: Phaser.GameObjects.Graphics;
+  state: GlassState;
+  globeOn: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+const BEACON_WIDTH = 4;
+const BEACON_HEIGHT = 44;
+const BEACON_ALPHA = { from: 0.25, to: 0.7 };
+const GLOBE_RADIUS = 4;
+const FLICKER_LINES = 4;
+
 export class OfficeScene extends Phaser.Scene {
   static readonly KEY = 'office';
 
@@ -152,6 +177,8 @@ export class OfficeScene extends Phaser.Scene {
   readonly #halos = new Map<string, { halo: Phaser.GameObjects.Rectangle; breath: Phaser.Tweens.Tween | null }>();
   /** The screen of each desk, by seat id: a click on it is a click on whoever holds the desk. */
   readonly #screens = new Map<string, Phaser.GameObjects.Zone>();
+  /** The glass of each desk, by seat id: the pane that glows, the lines that flicker, the beacon, the globe. */
+  readonly #glass = new Map<string, Glass>();
   /** Something clicked from afar, to be used when the route ends on its doorstep. */
   #useOnArrival: string | null = null;
   /** Signature of the last roster we published, to avoid pointless re-renders. */
@@ -442,6 +469,8 @@ export class OfficeScene extends Phaser.Scene {
     // the roster keeps saying "idle" rather than "now".
     if ((player.moving && !player.idle) || player.status !== avatar.lastStatus) {
       this.#lastAction.set(sessionId, Date.now());
+      // A new status line is a step landed: the screen it is landing on flickers.
+      if (player.status !== avatar.lastStatus && player.seat && player.pose !== 'stand') this.#flicker(player.seat);
       avatar.lastStatus = player.status;
     }
 
@@ -706,6 +735,7 @@ export class OfficeScene extends Phaser.Scene {
         .zone(x + width / 2, y + height / 2, width, height)
         .setInteractive({ useHandCursor: true });
       this.#screens.set(seat.id, zone);
+      this.#glass.set(seat.id, this.#createGlass(zone.x, zone.y, width, height));
       const desk = this.#map.interactables.find((interactable) => interactable.kind === 'desk' && interactable.id === seat.id);
       if (!desk) continue;
       this.#interactableSprites.set(desk.id, zone);
@@ -716,6 +746,113 @@ export class OfficeScene extends Phaser.Scene {
       zone.on('pointerover', () => this.#light(desk.id));
       zone.on('pointerout', () => this.#light(desk.id));
     }
+  }
+
+  /**
+   * The glass over one screen. Drawn once; changed on events, never per
+   * frame, because the desktop app may be painting in software. The pane is
+   * the monitor's colour; the lines are a flicker when a step lands; the
+   * beacon is a column of light over a desk whose holder is waiting for
+   * somebody, tall enough to be seen from the door; the globe is the small
+   * sign of an agent out on the web. Over the desk, under the chair.
+   */
+  #createGlass(x: number, y: number, width: number, height: number): Glass {
+    const depth = y + this.#map.tileSize + 0.2;
+    const pane = this.add.rectangle(x, y, width, height, GLASS.off.colour, 0).setDepth(depth);
+    const lines = this.add.graphics().setDepth(depth + 0.1).setAlpha(0);
+    const beacon = this.add
+      .rectangle(x, y - height / 2 - BEACON_HEIGHT / 2, BEACON_WIDTH, BEACON_HEIGHT, GLASS.waiting.colour, 0)
+      .setDepth(depth);
+    const globe = this.add.graphics().setDepth(depth + 0.1).setVisible(false);
+    globe.lineStyle(1, 0xbfe3ff, 0.95);
+    globe.strokeCircle(x + width / 2 - 2, y - height / 2 - 4, GLOBE_RADIUS);
+    globe.strokeEllipse(x + width / 2 - 2, y - height / 2 - 4, GLOBE_RADIUS, GLOBE_RADIUS * 2);
+    globe.lineBetween(x + width / 2 - 2 - GLOBE_RADIUS, y - height / 2 - 4, x + width / 2 - 2 + GLOBE_RADIUS, y - height / 2 - 4);
+    return { pane, lines, beacon, beat: null, flash: null, globe, state: 'off', globeOn: false, x, y, width, height };
+  }
+
+  /** What the glass was last drawn from: every agent's seat, pose and status. */
+  #glassKey = '';
+
+  /**
+   * Every desk's glass, from whoever holds it: colour by state, the beacon
+   * while they wait, the globe while they fetch. Asked on every patch, but
+   * walked only when an agent's seat, pose or status has changed — not
+   * when somebody takes a step — so the cost follows the glass, not the
+   * room.
+   */
+  #drawGlass(key: string): void {
+    if (key === this.#glassKey) return;
+    this.#glassKey = key;
+    for (const [seatId, glass] of this.#glass) {
+      let holder: OfficePlayer | null = null;
+      for (const player of this.#room.state.players.values()) {
+        if (player.kind === 'agent' && player.seat === seatId) {
+          holder = player;
+          break;
+        }
+      }
+      const state = glassState(holder ? { status: holder.status, pose: holder.pose } : null);
+      const globeOn = state === 'working' && holder !== null && cueFor(holder.status).globe;
+      if (globeOn !== glass.globeOn) {
+        glass.globeOn = globeOn;
+        glass.globe.setVisible(globeOn);
+      }
+      if (state === glass.state) continue;
+      glass.state = state;
+      const { colour, alpha } = GLASS[state];
+      glass.pane.setFillStyle(colour, glass.pane.fillAlpha);
+      this.tweens.add({ targets: glass.pane, fillAlpha: alpha, duration: 300 });
+      glass.beat?.stop();
+      glass.beat = null;
+      if (state === 'waiting') {
+        glass.beacon.setFillStyle(GLASS.waiting.colour, BEACON_ALPHA.from);
+        glass.beat = this.tweens.add({
+          targets: glass.beacon,
+          fillAlpha: BEACON_ALPHA.to,
+          duration: 700,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      } else {
+        glass.beacon.setFillStyle(GLASS.waiting.colour, 0);
+      }
+    }
+  }
+
+  /**
+   * A step landed on this desk: a flicker of lines across its screen, gone
+   * in a quarter of a second. Unreadable by design at this size; it says
+   * "something is happening", like a real screen seen from the door. Fired
+   * by a status change, which the nameplate already shows everybody, so it
+   * tells nobody anything new.
+   */
+  #flicker(seatId: string): void {
+    const glass = this.#glass.get(seatId);
+    if (!glass || glass.state === 'off' || glass.state === 'idle') return;
+    const { lines, x, y, width, height } = glass;
+    // A second step inside the first flicker's fade: the first must not wipe the second's lines.
+    glass.flash?.stop();
+    lines.clear();
+    lines.fillStyle(0xffffff, 0.9);
+    const left = x - width / 2 + 2;
+    const top = y - height / 2 + 2;
+    for (let i = 0; i < FLICKER_LINES; i += 1) {
+      const row = top + Math.floor(Math.random() * Math.max(1, height - 4));
+      const span = 3 + Math.floor(Math.random() * Math.max(1, width - 6));
+      lines.fillRect(left + Math.floor(Math.random() * Math.max(1, width - 4 - span)), row, span, 1);
+    }
+    lines.setAlpha(1);
+    glass.flash = this.tweens.add({
+      targets: lines,
+      alpha: 0,
+      duration: 260,
+      onComplete: () => {
+        lines.clear();
+        glass.flash = null;
+      },
+    });
   }
 
   /** The interactable whose prop is under the pointer, if any. */
@@ -1010,18 +1147,22 @@ export class OfficeScene extends Phaser.Scene {
     const states: BodyState[] = ['idle', 'walk', 'sit', 'work'];
     for (const body of BODY_IDS) {
       for (const state of states) {
-        const [longMs, shortMs] = BODY_TIMING[state];
-        for (const direction of Object.keys(BODY_ROW) as Array<keyof typeof BODY_ROW>) {
-          const [first, second] = bodyFrames(state, direction);
-          this.anims.create({
-            key: bodyAnimation(body, state, direction),
-            frames: [
-              { key: bodyTexture(body), frame: first, duration: longMs - shortMs },
-              { key: bodyTexture(body), frame: second, duration: 0 },
-            ],
-            duration: shortMs * 2,
-            repeat: -1,
-          });
+        // Work has a pace — slow reading, fast editing — so it is three animations.
+        const paces = state === 'work' ? WORK_PACES : (['normal'] as const);
+        for (const pace of paces) {
+          const [longMs, shortMs] = state === 'work' ? WORK_PACE_TIMING[pace] : BODY_TIMING[state];
+          for (const direction of Object.keys(BODY_ROW) as Array<keyof typeof BODY_ROW>) {
+            const [first, second] = bodyFrames(state, direction);
+            this.anims.create({
+              key: bodyAnimation(body, state, direction, pace),
+              frames: [
+                { key: bodyTexture(body), frame: first, duration: longMs - shortMs },
+                { key: bodyTexture(body), frame: second, duration: 0 },
+              ],
+              duration: shortMs * 2,
+              repeat: -1,
+            });
+          }
         }
       }
     }
@@ -1052,7 +1193,9 @@ export class OfficeScene extends Phaser.Scene {
 
   #publishRoster(): void {
     const players: RosterEntry[] = [];
+    let glassKey = '';
     for (const [sessionId, player] of this.#room.state.players) {
+      if (player.kind === 'agent') glassKey += `${player.seat}:${player.pose}:${player.status}|`;
       players.push({
         sessionId,
         name: player.name,
@@ -1081,6 +1224,7 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
     players.sort((a, b) => Number(b.isSelf) - Number(a.isSelf) || a.name.localeCompare(b.name));
+    this.#drawGlass(glassKey);
 
     // Cheaper than it looks, and far cheaper than re-rendering a React list
     // twenty times a second because somebody took a step.

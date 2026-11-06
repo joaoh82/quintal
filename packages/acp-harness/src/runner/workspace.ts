@@ -149,6 +149,7 @@ const SCOPE_MEANING: Record<AgentScope, string> = {
   board: 'read the office board, write notes on it and hand them to your owner\'s agents (`board_list`, `board_get`, `board_create`, `board_update`)',
   commands: 'read the office\'s !commands and make or change them as your owner (`command_list`, `command_get`, `command_create`, `command_update`)',
   routines: 'keep routines — standing requests on a schedule — on yourself and your owner\'s other agents (`routine_list`, `routine_get`, `routine_create`, `routine_update`, `routine_delete`)',
+  agents: 'see the office\'s agents and make or change your owner\'s, as your owner (`agent_list`, `agent_get`, `agent_create`, `agent_update`)',
   run: 'your harness may approve the runtime\'s own "may I run this?" questions for you; without it each one is put to your owner, and silence denies',
 };
 
@@ -193,6 +194,23 @@ export function workspaceReport(input: WorkspaceReportInput): WorkspaceReport {
     report.agents_md = 'AGENTS.md is in your working directory. Read it once per session.';
   }
   return report;
+}
+
+/** The note a repositories directory gets when it is there, readable, and empty. */
+const NOTHING_CLONED = 'nothing cloned here yet';
+
+/**
+ * The checkouts on this machine, by name, for its report to the office: the
+ * same listing `workspace_info` gives, kept to the entries with a `.git`,
+ * since a plain folder is not something a task can be begun in. `[]` only
+ * for a directory that was read and holds nothing; undefined when there is
+ * no repositories directory, or it is not there, or it could not be read —
+ * "did not look" must not overwrite what the office has as "found nothing".
+ */
+export function checkoutNames(cwd: string, reposDir?: string): string[] | undefined {
+  const found = repositories(cwd, reposDir, MAX_CHECKOUTS);
+  if (found.checkouts) return found.checkouts.filter((checkout) => checkout.git).map((checkout) => checkout.name);
+  return found.note === NOTHING_CLONED ? [] : undefined;
 }
 
 /**
@@ -243,7 +261,7 @@ function listing(path: string, reachedAs: string, limit: number): WorkspaceRepor
   }
 
   if (names.length === 0) {
-    return { path, reached_as: reachedAs, note: 'nothing cloned here yet' };
+    return { path, reached_as: reachedAs, note: NOTHING_CLONED };
   }
 
   // Checkouts first, plain directories with whatever room is left, each group

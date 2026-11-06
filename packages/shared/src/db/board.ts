@@ -17,7 +17,7 @@ import {
 import { displayName } from '../identity.js';
 import { taskLinksForBoard } from './agent-tasks.js';
 import type { Database } from './client.js';
-import { agentTasks, agents, boardItems, users, workspaces } from './schema.js';
+import { agentHosts, agentTasks, agents, boardItems, users, workspaces } from './schema.js';
 
 /**
  * The office board's rows.
@@ -308,9 +308,23 @@ export async function listBoardAgentsForWorkspace(
       runtimeId: agents.runtimeId,
       modelId: agents.modelId,
       hostLabel: agents.hostLabel,
+      checkouts: agentHosts.checkouts,
     })
     .from(agents)
     .leftJoin(users, eq(users.id, agents.ownerUserId))
+    // The machine it runs on, for what is checked out there: the one it last
+    // reported from, else the one its owner assigned it to — an agent
+    // launched by hand is assigned nowhere and still reports from somewhere.
+    // Under the same owner: a label defaults to a hostname, so two members'
+    // laptops can share one, and host rows are one per owner.
+    .leftJoin(
+      agentHosts,
+      and(
+        eq(agentHosts.workspaceId, agents.workspaceId),
+        eq(agentHosts.ownerUserId, agents.ownerUserId),
+        eq(agentHosts.label, sql`coalesce(${agents.reportedHostLabel}, ${agents.hostLabel})`),
+      ),
+    )
     .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt)))
     .orderBy(asc(agents.name));
   return rows.map((row) => ({
@@ -324,5 +338,6 @@ export async function listBoardAgentsForWorkspace(
     runtimeId: row.runtimeId,
     modelId: row.modelId,
     hostLabel: row.hostLabel,
+    checkouts: row.checkouts ?? [],
   }));
 }

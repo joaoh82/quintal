@@ -61,6 +61,7 @@ import {
   directionFromIntent,
   findPath,
   followPath,
+  isWalkable,
   memoryLimitFor,
   nearestWalkable,
   normalize,
@@ -106,6 +107,14 @@ import {
   type AgentRoutineListPayload,
   type AgentRoutineRef,
   type AgentRoutineUpdatePayload,
+  type AgentAgentCreatePayload,
+  type AgentAgentGetPayload,
+  type AgentAgentListPayload,
+  type AgentAgentUpdatePayload,
+  type AgentCardRef,
+  type AgentGetResult,
+  type AgentListResult,
+  type AgentWriteResult,
   type RoutineDeleteResult,
   type RoutineGetResult,
   type RoutineListResult,
@@ -167,6 +176,20 @@ import {
   mayCreateOfficeCommands,
   mayEditOfficeCommand,
   mayManageRoutine,
+  AGENT_CREATES_PER_WINDOW,
+  AGENT_CREATE_OWNED_MAX,
+  AGENT_CREATE_WINDOW_MS,
+  AGENT_DESCRIPTION_MAX_LENGTH,
+  AGENT_INSTRUCTIONS_MAX_LENGTH,
+  DEFAULT_AGENT_SCOPES,
+  BODIES,
+  type AgentScope,
+  grantableScopes,
+  isBodyId,
+  normaliseAgentName,
+  normaliseParallelism,
+  scopesBeyondGrant,
+  scopesOutOfReach,
   isTimeZone,
   parseRoutineWhen,
   routineWhenPhrase,
@@ -243,6 +266,19 @@ import {
   OfficeCommandError,
   createOfficeCommand,
   updateOfficeCommand,
+  AgentRosterError,
+  agentNameTaken,
+  createAgent,
+  findAgentLooks,
+  listHostsForWorkspace,
+  setAgentCharacter,
+  setAgentEnabled,
+  setAgentLaunch,
+  setAgentMaxSessions,
+  setAgentName,
+  setAgentProfile,
+  setAgentScopes,
+  type AgentListEntry,
   claimRoutineRun,
   createRoutine,
   deleteRoutine,
@@ -304,6 +340,7 @@ import {
   findRevoked,
   hasScope,
   markSeen,
+  hostReportOf,
   persistHostReport,
   persistStatus,
   type AgentSession,
@@ -316,6 +353,7 @@ import {
   officeCommandsSignature,
 } from './channel-list.js';
 import { SPATIAL, WakeHops, hopOf, mayWake } from './hops.js';
+import { LastPlaces, type LastPlace } from './last-places.js';
 import { LatestRead } from './latest-read.js';
 import { absentNotice, resolveMentions, type Addressable, type TeamRoster } from './mentions.js';
 import {
@@ -329,7 +367,7 @@ import { workingSinceAfter } from './working-since.js';
 import { applyAgentTask } from './agent-task.js';
 import { assignmentBrief, assignmentLine, boardStatusAfterTask, handoverLine, reviewBrief, reviewLine, reviewTargetOf } from './board-brief.js';
 import { reviewsFinishedBy } from './review-turn.js';
-import { handedFrom, whyNotBegin, whyNotNote } from './station.js';
+import { handedFrom, sessionOf, whyNotBegin, whyNotNote, whyNotRepo, type AgentSessionRef } from './station.js';
 import { ROUTINE_TICK_MS, decideSlot, routineBrief, routineLine, shouldMakeUp } from './routine-brief.js';
 
 /** Where a routine speaks and whether its agent is there: see `OfficeRoom#routineWhere`. */
@@ -339,6 +377,15 @@ interface RoutineWhere {
   sessionId: string | null;
   agent: { present: boolean; busyHere: boolean };
 }
+import {
+  agentCardOf,
+  agentChangeNote,
+  agentMachineOf,
+  agentMadeNote,
+  parseWantedScopes,
+  resolveLaunch,
+  type RosterMachine,
+} from './agent-roster.js';
 import { boardAgentsOf, boardForRole, boardRoutineRunsOf, boardRoutinesOf, boardSignatureOf, type BoardView } from './board-view.js';
 import { PULL_POLL_MS, PullActionError, PullRequestWatch, REPO_PULLS_REFRESH_MIN_MS } from '../github/pulls.js';
 import { voiceRelay } from '../voice/index.js';
@@ -446,6 +493,9 @@ const EARSHOT_SWEEP_MS = 250;
 /** Tiles of clearance an arriving agent tries to leave around everyone else. */
 const AGENT_SPAWN_GAP_TILES = 4;
 
+/** One for the process: a room closes when its last person leaves for Settings. */
+const lastPlaces = new LastPlaces();
+
 /**
  * The office.
  *
@@ -482,6 +532,10 @@ export class OfficeRoom extends Room<OfficeState> {
   readonly #commandPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
   /** Routine writes by agents, at the board's pace: a model in a loop must not fill an agent's twenty. */
   readonly #routinePace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
+  /** Agent changes by agents, at the board's pace. */
+  readonly #rosterPace = new ChatRateLimiter(AGENT_BOARD_WRITES_PER_WINDOW, AGENT_BOARD_WRITE_WINDOW_MS);
+  /** New agents, by owner: each is a runtime process on that owner's machine, whichever agent asked. */
+  readonly #rosterCreatePace = new ChatRateLimiter(AGENT_CREATES_PER_WINDOW, AGENT_CREATE_WINDOW_MS);
   /**
    * zoneId -> conversation id, for every zone on this map in this office.
    *
@@ -821,6 +875,18 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage(AgentMessage.RoutineDelete, (client, payload: AgentRoutineDeletePayload) =>
       void this.#onAgentRoutineDelete(client, payload),
     );
+    this.onMessage(AgentMessage.AgentList, (client, payload: AgentAgentListPayload) =>
+      void this.#onAgentRosterList(client, payload),
+    );
+    this.onMessage(AgentMessage.AgentGet, (client, payload: AgentAgentGetPayload) =>
+      void this.#onAgentRosterGet(client, payload),
+    );
+    this.onMessage(AgentMessage.AgentCreate, (client, payload: AgentAgentCreatePayload) =>
+      void this.#onAgentRosterCreate(client, payload),
+    );
+    this.onMessage(AgentMessage.AgentUpdate, (client, payload: AgentAgentUpdatePayload) =>
+      void this.#onAgentRosterUpdate(client, payload),
+    );
     this.onMessage(AgentMessage.MemoryGet, (client, payload: AgentMemoryGetPayload) =>
       void this.#onAgentMemoryGet(client, payload),
     );
@@ -872,7 +938,10 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     }, AGENT_HEARTBEAT_MS);
     this.#revocationTimer = setInterval(
-      () => void this.#kickRevokedAgents(),
+      () => {
+        void this.#kickRevokedAgents();
+        void this.#refreshAgentLooks();
+      },
       AGENT_REVOCATION_POLL_MS,
     );
 
@@ -1003,14 +1072,15 @@ export class OfficeRoom extends Room<OfficeState> {
       return;
     }
 
-    const spawn = spawnFor(this.#map, 'human');
+    const arrival = this.#arrivalFor(auth.userId);
     this.state.players.set(
       client.sessionId,
       createPlayer({
         userId: auth.userId,
         name: auth.name,
-        x: tileCentre(spawn.x, this.#map.tileSize),
-        y: tileCentre(spawn.y, this.#map.tileSize),
+        x: arrival.x,
+        y: arrival.y,
+        dir: arrival.dir,
         kind: 'human',
         isGuest: auth.isGuest,
         description: auth.description,
@@ -1028,6 +1098,41 @@ export class OfficeRoom extends Room<OfficeState> {
 
     logger.info(`[office] ${auth.name} (${client.sessionId}) joined ${this.roomId}`);
     this.#broadcastRosterToAgents();
+  }
+
+  /**
+   * Where a person comes in: where they were, or else the door.
+   *
+   * A page that reloads, or a plain link out of it, drops the socket rather
+   * than leaving, and they are back before that seat has timed out and reached
+   * `lastPlaces`, so a seat still held for them is offered too.
+   */
+  #arrivalFor(userId: string): LastPlace {
+    let heldSeat: LastPlace | null = null;
+    for (const [sessionId, player] of this.state.players) {
+      if (player.userId === userId && this.#sims.get(sessionId)?.away) {
+        heldSeat = { x: player.x, y: player.y, dir: player.dir };
+        break;
+      }
+    }
+    const place = lastPlaces.take(this.#placeKey(userId), heldSeat);
+    if (place) {
+      const tile = {
+        x: toTile(place.x, this.#map.tileSize),
+        y: toTile(place.y, this.#map.tileSize),
+      };
+      if (isWalkable(this.#map, tile.x, tile.y)) return place;
+    }
+    const spawn = spawnFor(this.#map, 'human');
+    return {
+      x: tileCentre(spawn.x, this.#map.tileSize),
+      y: tileCentre(spawn.y, this.#map.tileSize),
+      dir: 'down',
+    };
+  }
+
+  #placeKey(userId: string): string {
+    return `${this.#workspaceId}:${this.state.mapId}:${userId}`;
   }
 
   /**
@@ -1061,10 +1166,10 @@ export class OfficeRoom extends Room<OfficeState> {
     this.#sendChannels(sessionId);
   }
 
-  /** Is anybody still connected as this member? */
-  #hasSessionFor(memberId: string): boolean {
-    for (const player of this.state.players.values()) {
-      if (player.userId === memberId) return true;
+  /** Is anybody still connected as this member, `except` one session? */
+  #hasSessionFor(memberId: string, except?: string): boolean {
+    for (const [sessionId, player] of this.state.players) {
+      if (player.userId === memberId && sessionId !== except) return true;
     }
     return false;
   }
@@ -1132,6 +1237,7 @@ export class OfficeRoom extends Room<OfficeState> {
       boardVersion: 1,
       commandsVersion: 1,
       routinesVersion: 1,
+      agentsVersion: 1,
       mcpServers: mcp?.servers ?? [],
       agentId: identity.id,
       sessionId: client.sessionId,
@@ -2346,7 +2452,7 @@ export class OfficeRoom extends Room<OfficeState> {
     if (!client || !player || this.#agents.has(sessionId)) return;
     const role = await this.#roleFor(sessionId, player);
     client.send(ServerMessage.Board, {
-      ...boardForRole(this.#boardView(), role),
+      ...boardForRole(this.#boardView(), role, player.userId),
       githubHost: config.githubWebHost,
       you: { userId: player.userId, role },
     } satisfies BoardMessagePayload);
@@ -2508,6 +2614,8 @@ export class OfficeRoom extends Room<OfficeState> {
     assigner: OfficePlayer,
     before: BoardItemRef,
     after: BoardItemRef,
+    /** A checkout the person chose at the station, for the brief to name. */
+    repo: string | null = null,
   ): Promise<string | null> {
     let saidIn: string | null = null;
     try {
@@ -2521,7 +2629,7 @@ export class OfficeRoom extends Room<OfficeState> {
             channel,
             assignmentLine(after, after.assignee.name),
             undefined,
-            assignmentBrief(after),
+            assignmentBrief(after, repo),
           );
           saidIn = channel.id;
         }
@@ -2600,15 +2708,25 @@ export class OfficeRoom extends Room<OfficeState> {
     const agentSessionId = this.#sessionOfAgent(asked.agentId);
     const agent = agentSessionId ? this.state.players.get(agentSessionId) : undefined;
     const identity = agentSessionId ? this.#agents.get(agentSessionId) : undefined;
+    // In its grace the socket is gone: nothing said in the DM would wake it.
+    const connected = agentSessionId !== null && this.#sims.get(agentSessionId)?.away === false;
     const refused = whyNotBegin({
       name: identity?.name ?? 'That agent',
-      here: agent !== undefined && identity !== undefined,
+      here: agent !== undefined && identity !== undefined && connected,
       status: agent?.status ?? '',
       onTask: (agent?.taskBranch.length ?? 0) > 0,
       scopes: identity?.scopes ?? [],
     });
     if (refused || !agent) {
       this.#sendError(client, refused && agent ? 'invalid_payload' : 'not_found', refused ?? 'That agent is not in the office.');
+      return;
+    }
+    // A checkout, if chosen, as the agent's machine last listed it.
+    if (this.#boardLoaded) await this.#boardLoaded;
+    const listed = this.#boardAgents.find((known) => known.id === asked.agentId)?.checkouts ?? [];
+    const noRepo = whyNotRepo(asked.repo, listed, agent.name);
+    if (noRepo) {
+      this.#sendError(client, 'invalid_payload', noRepo);
       return;
     }
     const holder = this.#seats.holderOf(asked.seatId);
@@ -2680,6 +2798,7 @@ export class OfficeRoom extends Room<OfficeState> {
       writer.player,
       handedFrom(before, asked.agentId),
       after,
+      asked.repo,
     );
     client.send(ServerMessage.DeskBegun, {
       seatId: asked.seatId,
@@ -2690,10 +2809,19 @@ export class OfficeRoom extends Room<OfficeState> {
     } satisfies DeskBegunPayload);
   }
 
-  /** The session an agent is connected on, if it is here. The first, when it is here twice. */
+  /**
+   * The session an agent is on, if it is here: a connected one before one
+   * in its reconnection grace, which a harness restarted without a clean
+   * leave keeps beside its live one for a while.
+   */
   #sessionOfAgent(agentId: string): string | null {
-    for (const [sessionId, identity] of this.#agents) if (identity.id === agentId) return sessionId;
-    return null;
+    return sessionOf(this.#agentSessions(), agentId);
+  }
+
+  *#agentSessions(): Iterable<AgentSessionRef> {
+    for (const [sessionId, identity] of this.#agents) {
+      yield { sessionId, agentId: identity.id, away: this.#sims.get(sessionId)?.away ?? true };
+    }
   }
 
   /**
@@ -3980,11 +4108,14 @@ export class OfficeRoom extends Room<OfficeState> {
   /**
    * A harness describing the machine it runs on.
    *
-   * Unscoped, because it changes nothing anybody else can see — it is the
-   * agent telling its owner where it lives. It is still *untrusted*: an agent
-   * key is a credential pasted into a config file, and everything here ends up
-   * rendered on the owner's settings page, so `recordHost` normalises it and
-   * drops runtime ids that aren't in the catalogue.
+   * Unscoped: it is the agent telling its owner where it lives. Members see
+   * the machine, its runtimes and where it keeps repositories; what is
+   * checked out there is shown to the agent's owner only (`boardForRole`,
+   * and the settings page), because the names of everything cloned can say
+   * whose work a machine holds. It is still *untrusted*: an agent key is a
+   * credential pasted into a config file, and everything here ends up
+   * rendered on a settings page, so `recordHost` normalises it and drops
+   * runtime ids that aren't in the catalogue.
    */
   #onAgentHostReport(client: Client, payload: AgentHostReportPayload): void {
     const session = this.#agentSession(client);
@@ -4003,14 +4134,8 @@ export class OfficeRoom extends Room<OfficeState> {
       agentId: session.identity.id,
       workspaceId: session.identity.workspaceId,
       ownerUserId: session.identity.ownerUserId,
-      // The runtime list is passed through exactly as it arrived, including
-      // absent: only the first agent of a fleet scans PATH, and `[]` from the
-      // other seven would erase the answer seconds after getting it.
-      report: {
-        label: payload?.label,
-        reposDir: payload?.reposDir,
-        ...(payload?.runtimes ? { runtimes: payload.runtimes } : {}),
-      },
+      // Whole, absent fields absent: see `hostReportOf`.
+      report: hostReportOf(payload),
       workspacePath,
     });
   }
@@ -4459,14 +4584,6 @@ export class OfficeRoom extends Room<OfficeState> {
 
   // --- routines ------------------------------------------------------------
 
-  /** The session of an agent that is in the room, by its identity; null when it is away. */
-  #agentSessionIdOf(agentId: string): string | null {
-    for (const [sessionId, session] of this.#agents) {
-      if (session.id === agentId) return sessionId;
-    }
-    return null;
-  }
-
   /** Whether the agent at this session is on a turn in this conversation right now. */
   #agentBusyIn(sessionId: string, conversationId: string): boolean {
     for (const entry of this.#activity.values()) {
@@ -4543,7 +4660,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const channel = mayManageRoutine(actor, { ownerUserId: routine.agentOwnerUserId })
       ? await this.#dmWith(actor, routine.agentId)
       : null;
-    const sessionId = this.#agentSessionIdOf(routine.agentId);
+    const sessionId = this.#sessionOfAgent(routine.agentId);
     return {
       actor,
       channel,
@@ -5176,6 +5293,405 @@ export class OfficeRoom extends Room<OfficeState> {
     }
   }
 
+  // --- the office's agents, for agents --------------------------------------
+
+  /** An agent's session, if the call is in its `agents` scope, as the session last read it. */
+  #agentRosterSession(client: Client, payload: AgentRequest | undefined): AgentSession | null {
+    const session = this.#agentSession(client);
+    if (!session) return null;
+    if (!hasScope(session.identity, 'agents')) {
+      const message = 'This agent has no "agents" scope.';
+      audit(session.identity.id, 'command.rejected', { code: 'missing_scope', message });
+      this.#replyError(client, payload?.requestId, { code: 'missing_scope', message });
+      return null;
+    }
+    return session;
+  }
+
+  /** The agents in this room now, by id. */
+  #agentsHere(): Set<string> {
+    return new Set([...this.#agents.values()].map((identity) => identity.id));
+  }
+
+  /** The owner's machines, as they last reported. Only theirs: a host runs nobody else's agents. */
+  async #ownerMachines(ownerUserId: string): Promise<RosterMachine[]> {
+    const hosts = await listHostsForWorkspace(getDb(), this.#workspaceId);
+    return hosts.filter((host) => host.ownerUserId === ownerUserId);
+  }
+
+  /**
+   * Who is asking to write, read from the row and not the session.
+   *
+   * A session holds the scopes it joined with, and this is the one place that
+   * must not trust them: an owner who withdrew `run` or `agents` a minute ago
+   * should not find that agent granting `run` to a new colleague because it
+   * has not reconnected. Its owner's standing is read for the same reason.
+   * Null after a refusal, which is already sent.
+   */
+  async #agentRosterWriter(
+    client: Client,
+    session: AgentSession,
+    requestId: unknown,
+  ): Promise<AgentListEntry | null> {
+    const now = Date.now();
+    if (!this.#rosterPace.tryConsume(session.identity.id, now)) {
+      const retryAfterMs = this.#rosterPace.retryAfterSeconds(session.identity.id, now) * 1000;
+      const message = `Agents may change agents ${AGENT_BOARD_WRITES_PER_WINDOW} times every ${AGENT_BOARD_WRITE_WINDOW_MS / 1000}s.`;
+      audit(session.identity.id, 'command.rejected', { code: 'rate_limited', message });
+      this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs });
+      return null;
+    }
+    const self = await findAgentById(getDb(), session.identity.id);
+    if (!self || self.revokedAt !== null || !self.scopes.includes('agents')) {
+      const message = 'This agent no longer has the "agents" scope.';
+      audit(session.identity.id, 'command.rejected', { code: 'missing_scope', message });
+      this.#replyError(client, requestId, { code: 'missing_scope', message });
+      return null;
+    }
+    const actor = await this.#actorForUser(self.ownerUserId);
+    if (actor.role === null) {
+      this.#replyError(client, requestId, {
+        code: 'unauthorised',
+        message: 'Your owner is not a member of this office, so you cannot keep agents for it.',
+      });
+      return null;
+    }
+    return self;
+  }
+
+  /**
+   * The agent a name, an id or "me" says, among the office's live ones. Names
+   * are not unique, so one two of them share asks for the id instead. Null
+   * after a refusal, which is already sent.
+   */
+  #agentRosterNamed(
+    client: Client,
+    session: AgentSession,
+    all: readonly AgentListEntry[],
+    wanted: unknown,
+    requestId: unknown,
+  ): AgentListEntry | null {
+    const live = all.filter((agent) => agent.revokedAt === null);
+    const needle = typeof wanted === 'string' ? wanted.trim().replace(/^@/, '') : '';
+    const lookup = needle.length === 0 || needle.toLowerCase() === 'me' ? session.identity.id : needle;
+    const byId = live.find((agent) => agent.id === lookup);
+    if (byId) return byId;
+    const found = live.filter((agent) => agent.name.toLowerCase() === needle.toLowerCase());
+    if (found.length === 1) return found[0]!;
+    this.#replyError(client, requestId, {
+      code: found.length === 0 ? 'not_found' : 'invalid_payload',
+      message:
+        found.length === 0
+          ? `No agent in this office is called ${needle}. agent_list names them.`
+          : `${found.length} agents are called ${needle}; say which by id: ${found
+              .map((agent) => `${agent.id} (${agent.ownerName}'s)`)
+              .join(', ')}.`,
+    });
+    return null;
+  }
+
+  /**
+   * A name for a new or renamed agent, or null after a refusal already sent.
+   * A look ahead of the write, so a name it cannot have costs no slot of the
+   * pace and comes back before anything else is checked; the write holds the
+   * rule itself (`createAgent`, `setAgentName`), and `#agentRosterFailed` says
+   * the same words when a request overlapping this one got there first.
+   */
+  async #agentRosterFreeName(
+    client: Client,
+    wanted: unknown,
+    selfId: string | null,
+    requestId: unknown,
+  ): Promise<string | null> {
+    const name = typeof wanted === 'string' ? normaliseAgentName(wanted) : '';
+    if (name.length === 0) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: 'Give the agent a name.' });
+      return null;
+    }
+    if (await agentNameTaken(getDb(), this.#workspaceId, name, selfId ?? undefined)) {
+      this.#replyError(client, requestId, { code: 'invalid_payload', message: `Somebody in this office is already called ${name}. If you made it a moment ago, it worked: agent_list shows it.` });
+      return null;
+    }
+    return name;
+  }
+
+  /** Instructions and a description go in whole or not at all; the normalisers would quietly cut them. False after a refusal. */
+  #agentRosterFits(client: Client, payload: { description?: unknown; instructions?: unknown } | undefined, requestId: unknown): boolean {
+    const over = (value: unknown, max: number): boolean => typeof value === 'string' && Array.from(value).length > max;
+    const message = over(payload?.description, AGENT_DESCRIPTION_MAX_LENGTH)
+      ? `A description is one line, up to ${AGENT_DESCRIPTION_MAX_LENGTH} characters.`
+      : over(payload?.instructions, AGENT_INSTRUCTIONS_MAX_LENGTH)
+        ? `Instructions run to ${AGENT_INSTRUCTIONS_MAX_LENGTH} characters; these are longer. Shorten them rather than lose the end.`
+        : null;
+    if (message === null) return true;
+    this.#replyError(client, requestId, { code: 'too_large', message });
+    return false;
+  }
+
+  /** Every agent in the office, and the machines the caller's owner can put one on. */
+  async #onAgentRosterList(client: Client, payload: AgentAgentListPayload): Promise<void> {
+    const session = this.#agentRosterSession(client, payload);
+    if (!session) return;
+    audit(session.identity.id, 'command.agent_list', { mine: payload?.mine === true });
+    markSeen(session.identity.id);
+    const { ownerUserId } = session.identity;
+    try {
+      const here = this.#agentsHere();
+      const [all, machines] = await Promise.all([
+        listAgentsForWorkspace(getDb(), this.#workspaceId),
+        this.#ownerMachines(ownerUserId),
+      ]);
+      this.#reply(client, payload?.requestId, {
+        agents: all
+          .filter((agent) => agent.revokedAt === null && (payload?.mine !== true || agent.ownerUserId === ownerUserId))
+          .map((agent) => agentCardOf(agent, { ownerUserId, here })),
+        machines: machines.map(agentMachineOf),
+      } satisfies AgentListResult);
+    } catch (error: unknown) {
+      this.#agentRosterFailed(client, payload?.requestId, error);
+    }
+  }
+
+  async #onAgentRosterGet(client: Client, payload: AgentAgentGetPayload): Promise<void> {
+    const session = this.#agentRosterSession(client, payload);
+    if (!session) return;
+    audit(session.identity.id, 'command.agent_get', { agent: String(payload?.agent ?? '') });
+    markSeen(session.identity.id);
+    try {
+      const all = await listAgentsForWorkspace(getDb(), this.#workspaceId);
+      const agent = this.#agentRosterNamed(client, session, all, payload?.agent, payload?.requestId);
+      if (!agent) return;
+      const card: AgentCardRef = agentCardOf(agent, { ownerUserId: session.identity.ownerUserId, here: this.#agentsHere(), whole: true });
+      this.#reply(client, payload?.requestId, { agent: card } satisfies AgentGetResult);
+    } catch (error: unknown) {
+      this.#agentRosterFailed(client, payload?.requestId, error);
+    }
+  }
+
+  /**
+   * An agent makes an agent as its owner: the owner's name on it, its maker
+   * beside that. Never with more than the maker may give, and never with a
+   * key: `createAgent` mints one because a row needs one, but a model's
+   * transcript is no place for a credential, so it is dropped here. A machine
+   * runs the new agent on its own token; on no machine, it waits for its owner.
+   */
+  async #onAgentRosterCreate(client: Client, payload: AgentAgentCreatePayload): Promise<void> {
+    const session = this.#agentRosterSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    const requestId = payload?.requestId;
+    try {
+      const self = await this.#agentRosterWriter(client, session, requestId);
+      if (!self) return;
+      const name = await this.#agentRosterFreeName(client, payload?.name, null, requestId);
+      if (name === null || !this.#agentRosterFits(client, payload, requestId)) return;
+
+      let scopes: AgentScope[];
+      const grantable = grantableScopes(self.scopes);
+      if (payload?.scopes === undefined) {
+        scopes = DEFAULT_AGENT_SCOPES.filter((scope) => grantable.includes(scope));
+      } else {
+        const wanted = parseWantedScopes(payload.scopes);
+        if ('refusal' in wanted) {
+          this.#replyError(client, requestId, { code: 'invalid_payload', message: wanted.refusal });
+          return;
+        }
+        const beyond = scopesBeyondGrant(self.scopes, [], wanted.scopes);
+        if (beyond.length > 0) {
+          this.#replyError(client, requestId, {
+            code: 'unauthorised',
+            message: `You cannot give ${beyond.join(', ')}: you may give only ${grantable.join(', ') || 'nothing'}. Your owner can add more under Settings → Agents.`,
+          });
+          return;
+        }
+        scopes = wanted.scopes;
+      }
+
+      const launch = resolveLaunch(
+        { machine: payload?.machine, runtime: payload?.runtime, model: payload?.model },
+        self,
+        await this.#ownerMachines(self.ownerUserId),
+        { creating: true },
+      );
+      if (!launch.ok) {
+        this.#replyError(client, requestId, { code: 'invalid_payload', message: launch.refusal });
+        return;
+      }
+
+      const now = Date.now();
+      if (!this.#rosterCreatePace.tryConsume(self.ownerUserId, now)) {
+        const message = `Your owner's agents may make ${AGENT_CREATES_PER_WINDOW} agents every ${AGENT_CREATE_WINDOW_MS / 1000}s.`;
+        audit(self.id, 'command.rejected', { code: 'rate_limited', message });
+        this.#replyError(client, requestId, { code: 'rate_limited', message, retryAfterMs: this.#rosterCreatePace.retryAfterSeconds(self.ownerUserId, now) * 1000 });
+        return;
+      }
+      const made = await createAgent(getDb(), {
+        workspaceId: this.#workspaceId,
+        ownerUserId: self.ownerUserId,
+        name,
+        description: typeof payload?.description === 'string' ? payload.description : '',
+        instructions: typeof payload?.instructions === 'string' ? payload.instructions : '',
+        scopes,
+        maxSessions: normaliseParallelism(payload?.maxSessions),
+        createdByAgentId: self.id,
+        rules: { ownedMax: AGENT_CREATE_OWNED_MAX },
+        ...(launch.launch ? { launch: launch.launch } : {}),
+      });
+      audit(self.id, 'command.agent_create', { name: made.name, agentId: made.id, machine: launch.launch?.hostLabel ?? null, scopes });
+      void this.#refreshBoard();
+      const row = await findAgentById(getDb(), made.id);
+      if (!row) throw new Error('an agent just made did not read back');
+      this.#reply(client, requestId, {
+        agent: agentCardOf(row, { ownerUserId: self.ownerUserId, here: this.#agentsHere(), whole: true }),
+        note: agentMadeNote(made.name, launch.launch?.hostLabel ?? null),
+      } satisfies AgentWriteResult);
+    } catch (error: unknown) {
+      this.#agentRosterFailed(client, requestId, error);
+    }
+  }
+
+  /**
+   * Change one of the owner's agents. Only the owner's, an admin's agent
+   * included: rewriting somebody else's agent is changing what it does while
+   * their name stays on it, and Settings leaves that to the admin in person.
+   * Not one that holds a scope the caller lacks, or an agent without `run`
+   * could have one with it do what it may not. Everything is checked before
+   * anything is written, so a refusal changes nothing.
+   */
+  async #onAgentRosterUpdate(client: Client, payload: AgentAgentUpdatePayload): Promise<void> {
+    const session = this.#agentRosterSession(client, payload);
+    if (!session) return;
+    markSeen(session.identity.id);
+    const requestId = payload?.requestId;
+    try {
+      const self = await this.#agentRosterWriter(client, session, requestId);
+      if (!self) return;
+      const wantedAgent = typeof payload?.agent === 'string' ? payload.agent.trim() : '';
+      if (wantedAgent.length === 0) {
+        this.#replyError(client, requestId, { code: 'invalid_payload', message: 'Say which agent: by name, by id, or "me".' });
+        return;
+      }
+      const all = await listAgentsForWorkspace(getDb(), this.#workspaceId);
+      const target = this.#agentRosterNamed(client, session, all, wantedAgent, requestId);
+      if (!target) return;
+      if (target.ownerUserId !== self.ownerUserId) {
+        this.#replyError(client, requestId, {
+          code: 'unauthorised',
+          message: `${target.name} is ${target.ownerName}'s; an agent changes only its own owner's. Say what you would have changed instead.`,
+        });
+        return;
+      }
+      const reach = scopesOutOfReach(self.scopes, target.scopes);
+      if (reach.length > 0) {
+        this.#replyError(client, requestId, {
+          code: 'unauthorised',
+          message: `${target.name} holds ${reach.join(', ')}, which you do not, so only your owner may change it, under Settings → Agents.`,
+        });
+        return;
+      }
+      if (!this.#agentRosterFits(client, payload, requestId)) return;
+
+      const name = typeof payload?.newName === 'string' ? await this.#agentRosterFreeName(client, payload.newName, target.id, requestId) : undefined;
+      if (name === null) return;
+
+      const character = typeof payload?.character === 'string' ? payload.character.trim().toLowerCase() : undefined;
+      if (character !== undefined && !isBodyId(character)) {
+        this.#replyError(client, requestId, { code: 'invalid_payload', message: `No character called ${character}. There are: ${BODIES.join(', ')}.` });
+        return;
+      }
+
+      let scopes: AgentScope[] | undefined;
+      if (payload?.scopes !== undefined) {
+        const wanted = parseWantedScopes(payload.scopes);
+        if ('refusal' in wanted) {
+          this.#replyError(client, requestId, { code: 'invalid_payload', message: wanted.refusal });
+          return;
+        }
+        const beyond = scopesBeyondGrant(self.scopes, target.scopes, wanted.scopes);
+        if (beyond.length > 0) {
+          this.#replyError(client, requestId, {
+            code: 'unauthorised',
+            message: `You cannot give ${beyond.join(', ')}: you may give only ${grantableScopes(self.scopes).join(', ') || 'nothing'}. Your owner can, under Settings → Agents.`,
+          });
+          return;
+        }
+        scopes = wanted.scopes;
+      }
+
+      const launch = resolveLaunch(
+        { machine: payload?.machine, runtime: payload?.runtime, model: payload?.model },
+        target,
+        await this.#ownerMachines(self.ownerUserId),
+        { creating: false },
+      );
+      if (!launch.ok) {
+        this.#replyError(client, requestId, { code: 'invalid_payload', message: launch.refusal });
+        return;
+      }
+
+      const fields = [
+        ...(name !== undefined ? ['name'] : []),
+        ...(character !== undefined ? ['character'] : []),
+        ...(typeof payload?.description === 'string' ? ['description'] : []),
+        ...(typeof payload?.instructions === 'string' ? ['instructions'] : []),
+        ...(scopes !== undefined ? ['scopes'] : []),
+        ...(launch.launch !== undefined ? ['machine'] : []),
+        ...(payload?.maxSessions !== undefined ? ['maxSessions'] : []),
+        ...(typeof payload?.enabled === 'boolean' ? ['enabled'] : []),
+      ];
+      if (fields.length === 0) {
+        this.#replyError(client, requestId, { code: 'invalid_payload', message: `agent_update ${target.name}: say what changes.` });
+        return;
+      }
+
+      const db = getDb();
+      if (name !== undefined) await setAgentName(db, target.id, name);
+      if (character !== undefined) await setAgentCharacter(db, target.id, character);
+      if (fields.includes('description') || fields.includes('instructions')) {
+        await setAgentProfile(db, target.id, {
+          ...(typeof payload?.description === 'string' ? { description: payload.description } : {}),
+          ...(typeof payload?.instructions === 'string' ? { instructions: payload.instructions } : {}),
+        });
+      }
+      if (scopes !== undefined) await setAgentScopes(db, target.id, scopes, self.ownerUserId);
+      if (launch.launch !== undefined) await setAgentLaunch(db, target.id, launch.launch);
+      if (payload?.maxSessions !== undefined) await setAgentMaxSessions(db, target.id, normaliseParallelism(payload.maxSessions));
+      if (typeof payload?.enabled === 'boolean') await setAgentEnabled(db, target.id, payload.enabled);
+
+      audit(self.id, 'command.agent_update', { name: target.name, agentId: target.id, fields });
+      audit(target.id, 'agent.changed_by_agent', { by: self.name, byAgentId: self.id, fields });
+      void this.#refreshBoard();
+      const row = await findAgentById(db, target.id);
+      if (!row) throw new Error('an agent just changed did not read back');
+      this.#reply(client, requestId, {
+        agent: agentCardOf(row, { ownerUserId: self.ownerUserId, here: this.#agentsHere(), whole: true }),
+        note: agentChangeNote(row.name, fields, row.hostLabel, row.enabled),
+      } satisfies AgentWriteResult);
+    } catch (error: unknown) {
+      this.#agentRosterFailed(client, requestId, error);
+    }
+  }
+
+  #agentRosterFailed(client: Client, requestId: unknown, error: unknown): void {
+    // A request overlapping this one got there first. A rename is the first
+    // thing `agent_update` writes, so this one has changed nothing.
+    if (error instanceof AgentRosterError) {
+      this.#replyError(
+        client,
+        requestId,
+        error.reason === 'full'
+          ? {
+              code: 'too_large',
+              message: `Your owner has reached ${AGENT_CREATE_OWNED_MAX} agents, where agents stop making more. They can make one under Settings → Agents.`,
+            }
+          : { code: 'invalid_payload', message: `${error.message} If you made it a moment ago, it worked: agent_list shows it.` },
+      );
+      return;
+    }
+    logger.error('[office] an agent tool on the office\'s agents failed', error);
+    this.#replyError(client, requestId, { code: 'unavailable', message: 'The office could not read or write its agents just now.' });
+  }
+
   async #onAgentMemoryGet(client: Client, payload: AgentMemoryGetPayload): Promise<void> {
     const session = this.#agentSession(client);
     if (!session) return;
@@ -5338,6 +5854,28 @@ export class OfficeRoom extends Room<OfficeState> {
     }
 
     if (revoked.size > 0) this.#broadcastRosterToAgents();
+  }
+
+  /**
+   * Redraw an agent whose character changed. Settings is another process in
+   * development, so this polls as the revocation check does. Only the look:
+   * a new name reaches the harness by restarting it, because it is the name
+   * the harness answers to, and a card ahead of that would be a lie.
+   */
+  async #refreshAgentLooks(): Promise<void> {
+    if (this.#agents.size === 0) return;
+    try {
+      const looks = await findAgentLooks(getDb(), [...this.#agents.values()].map((identity) => identity.id));
+      for (const [sessionId, identity] of this.#agents) {
+        const look = looks.get(identity.id);
+        if (look === undefined || look === identity.spriteKey) continue;
+        identity.spriteKey = look;
+        const player = this.state.players.get(sessionId);
+        if (player) player.spriteKey = look;
+      }
+    } catch (error: unknown) {
+      logger.error('[office] could not read how agents look', error);
+    }
   }
 
   #denyAgent(
@@ -5874,7 +6412,17 @@ export class OfficeRoom extends Room<OfficeState> {
 
   #removePlayer(sessionId: string): void {
     // Read before the player goes: the cursors are keyed by who they were.
-    const leaving = this.state.players.get(sessionId)?.userId;
+    const player = this.state.players.get(sessionId);
+    const leaving = player?.userId;
+    if (player?.kind === 'human') {
+      const key = this.#placeKey(player.userId);
+      const place = { x: player.x, y: player.y, dir: player.dir };
+      if (this.#sims.get(sessionId)?.away) {
+        lastPlaces.seatExpired(key, place, this.#hasSessionFor(player.userId, sessionId));
+      } else {
+        lastPlaces.left(key, place);
+      }
+    }
     voiceRelay.sessionLeft(this.roomId, sessionId);
     const ended = this.#earshot.remove(sessionId);
     if (ended.length > 0) voiceRelay.updatePeers(this.roomId, ended);

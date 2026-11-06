@@ -5,7 +5,7 @@ import { FLOOR_ZONE_ID } from '@quintal/shared';
 import type { ChannelRef, ChatBroadcastPayload, MapZone, PublicActivity, RosterEntry } from '@quintal/shared';
 
 import type { Transcript } from '../useConversations';
-import { currentTurn, destinations, labelFor, preferTurn, screenTurn } from './desk';
+import { currentTurn, destinations, labelFor, preferTurn, routineCaption, screenTurn } from './desk';
 
 const NOW = 1_700_000_000_000;
 
@@ -103,6 +103,22 @@ describe('the turn on the screen', () => {
     const turn = activity({ zoneId: 'bay' });
     const transcripts = { nearby: transcript(turn), 'zone:bay': transcript(turn) };
     assert.equal(currentTurn(transcripts, 'marvin')?.key, 'zone:bay');
+  });
+});
+
+describe('what the screen says of a routine', () => {
+  it('names the routine a turn is, and says when it was', () => {
+    assert.equal(routineCaption(activity({ routine: { name: 'Inbox sweep' } })), 'On its routine Inbox sweep');
+    assert.equal(
+      routineCaption(activity({ routine: { name: 'Inbox sweep' }, state: 'completed' })),
+      'Was on its routine Inbox sweep',
+    );
+    assert.equal(routineCaption(activity({})), null, "a turn that names none is somebody's question");
+    assert.equal(
+      routineCaption(activity({ routine: { name: 'Inbox sweep' } }), 'disconnected'),
+      'Was on its routine Inbox sweep',
+      'a row that has given a turn up as stale does not claim it is still on it',
+    );
   });
 });
 

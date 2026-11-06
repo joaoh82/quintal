@@ -102,8 +102,17 @@ export const bodyFrames = (state: BodyState, direction: keyof typeof BODY_ROW): 
   return [base, base + 1];
 };
 
-export const bodyAnimation = (body: string, state: BodyState, direction: string) =>
-  `${body}-${state}-${direction}`;
+/** How fast the work frames go: an act-out by tool class, see `glass.ts`. */
+export type WorkPace = 'slow' | 'normal' | 'fast';
+export const WORK_PACE_TIMING: Record<WorkPace, readonly [number, number]> = {
+  slow: [420, 420],
+  normal: BODY_TIMING.work,
+  fast: [140, 140],
+};
+export const WORK_PACES: readonly WorkPace[] = ['slow', 'normal', 'fast'];
+
+export const bodyAnimation = (body: string, state: BodyState, direction: string, pace: WorkPace = 'normal') =>
+  `${body}-${state}-${direction}${state === 'work' && pace !== 'normal' ? `-${pace}` : ''}`;
 
 /** Every body is loaded up front: 12 sheets is 450KB, and a late one pops in. */
 export const BODY_IDS = BODIES;

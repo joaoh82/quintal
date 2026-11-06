@@ -20,6 +20,9 @@ screenshot.
 | `desktop-runtimes.png` | The desktop app's Agents tab: the fleet running, and every agent runtime this machine has | README, guide: agents |
 | `board-columns.png` | The office board in columns: seven notes open, in progress and done, with labels, colours, the agent each is handed to, and the *in review* and *merged* badges from the ledger | README, guide: board, website |
 | `board-pull-requests.png` | The board's Pull requests tab with GitHub's facts on three pull requests — checks, review, mergeability, checked when — and the actions row open on #42 | README, guide: board |
+| `desks-agent-bay.png` | The Agent Bay with desks: Marvin waiting for Josh under a `?` balloon with the beacon over its desk, Josh behind an empty desk with its screen lit and `E · begin a task at this desk` offered, Arthur at the far desk working under a lightbulb | README, guide: agents, website |
+| `desk-panel.png` | Arthur's desk panel: the card with the task it is on, and *On the screen* with the running turn — what it found, two steps done, the edit running — and *Go to Arthur →* | guide: agents, website |
+| `desk-station.png` | The station at an empty desk: note #1 picked from the board, Arthur offered and Marvin greyed with what it is on, the repository chosen from Arthur's machine's checkouts, Begin | guide: agents |
 
 A screenshot of an agent should show it doing something a person would
 plausibly ask for, with the owner attribution visible. A staged "hello" proves
@@ -56,6 +59,19 @@ so that what they show is the board as it draws, not a token's worth of real
 pull requests. The board is opened with `B` through `Input.dispatchKeyEvent`,
 the tab and the Actions button clicked by their measured rectangles.
 
+The three desk shots were taken on 2 November 2026 at 0.18.0 the same way
+as the board shots — headless Chromium over the DevTools protocol at
+1600x1000 and a device pixel ratio of 2, `nextjs-portal` removed, the
+station filled in through the DOM and `E` pressed through
+`Input.dispatchKeyEvent` — against a fresh office with Josh and two agents.
+Arthur and Marvin were scripted sessions on the gateway rather than a
+runtime: they spoke the protocol a harness speaks (`agent:host_report` with
+the machine's checkouts, `agent:task`, `agent:set_status`, `agent:emote`,
+`agent:activity` with the turn's steps), so every pose, screen, balloon and
+step is the office's own drawing of what a harness sends, but the words of
+the turn were written for the shot. The hand-over line and the walk to the
+desk are real: Begin was pressed at the station.
+
 The four settings and desktop shots come from the desktop app instead, because
 the runtime list, the machine an agent runs on and the running fleet only exist
 there. They were taken from a 1280x1040-point window on a 2x display and
@@ -76,6 +92,8 @@ the site serves directly so static hosting needs no image server:
 | `thinking.webp` | `agent-thinking.png` |
 | `runtimes.webp` | `desktop-runtimes.png` |
 | `board.webp` | `board-columns.png` |
+| `desks.webp` | `desks-agent-bay.png` |
+| `desk-panel.webp` | `desk-panel.png` |
 
 Regenerate one after retaking its source, at 1600, 960 and 640 wide, with
 `cwebp` or ImageMagick — either gives the same shape:

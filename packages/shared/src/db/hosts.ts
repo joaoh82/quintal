@@ -3,15 +3,18 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { normaliseHostReport, type HostReport } from '../runtimes.js';
-import { agentHosts } from './schema.js';
+import { agentHosts, agents, users } from './schema.js';
 import type { Database } from './client.js';
 
 /**
  * Record what a machine says it can run.
  *
- * Upsert by (workspace, label) rather than insert: a fleet of eight agents on
- * one laptop reports the same machine eight times, and eight rows saying the
- * same thing would be a worse answer than one.
+ * Upsert by (workspace, owner, label) rather than insert: a fleet of eight
+ * agents on one laptop reports the same machine eight times, and eight rows
+ * saying the same thing would be a worse answer than one. The owner is part
+ * of the key because a label defaults to a hostname and everybody calls
+ * their laptop "laptop": a report is one person's machine, and must never
+ * update a colleague's row of the same name.
  */
 export async function recordHost(
   db: Database,
@@ -20,45 +23,47 @@ export async function recordHost(
   const report = normaliseHostReport(input.report);
   if (!report) return null;
 
-  const existing = await db
-    .select({ id: agentHosts.id })
-    .from(agentHosts)
-    .where(
-      and(eq(agentHosts.workspaceId, input.workspaceId), eq(agentHosts.label, report.label)),
-    )
-    .limit(1);
-
   // Omitting the runtime list leaves the stored one alone: every agent of a
   // fleet reports its machine, but only the first one scans PATH. Writing
   // `[]` for the other seven would erase the answer seconds after getting it.
+  // The checkouts the same.
   const row = {
     reposDir: report.reposDir,
     lastSeenAt: new Date(),
     ...(report.runtimes ? { runtimes: report.runtimes } : {}),
+    ...(report.checkouts ? { checkouts: report.checkouts } : {}),
   };
 
-  if (existing[0]) {
-    await db.update(agentHosts).set(row).where(eq(agentHosts.id, existing[0].id));
-  } else {
-    await db.insert(agentHosts).values({
+  // One statement, on the unique key: two agents of a fleet make a machine's
+  // first report in the same instant, and a select-then-insert had the
+  // second one fail on the index — and that agent then knew no machine.
+  await db
+    .insert(agentHosts)
+    .values({
       id: randomUUID(),
       workspaceId: input.workspaceId,
       ownerUserId: input.ownerUserId,
       label: report.label,
       runtimes: [],
       ...row,
+    })
+    .onConflictDoUpdate({
+      target: [agentHosts.workspaceId, agentHosts.ownerUserId, agentHosts.label],
+      set: row,
     });
-  }
 
   return report;
 }
 
+/** Every machine reported into the office, newest report first, with whose it is. */
 export async function listHostsForWorkspace(db: Database, workspaceId: string) {
-  return db
-    .select()
+  const rows = await db
+    .select({ host: agentHosts, ownerName: users.name })
     .from(agentHosts)
+    .leftJoin(users, eq(users.id, agentHosts.ownerUserId))
     .where(eq(agentHosts.workspaceId, workspaceId))
     .orderBy(desc(agentHosts.lastSeenAt));
+  return rows.map(({ host, ownerName }) => ({ ...host, ownerName: ownerName ?? '' }));
 }
 
 /**
@@ -92,5 +97,17 @@ export async function forgetHostReport(
   for (const row of rows) {
     await db.delete(agentHosts).where(eq(agentHosts.id, row.id));
   }
+  // Nothing of this person's now reports from a machine the office has
+  // forgotten: an agent's row would otherwise name a machine with no row.
+  await db
+    .update(agents)
+    .set({ reportedHostLabel: null })
+    .where(
+      and(
+        eq(agents.workspaceId, input.workspaceId),
+        eq(agents.ownerUserId, input.ownerUserId),
+        eq(agents.reportedHostLabel, input.label),
+      ),
+    );
   return true;
 }

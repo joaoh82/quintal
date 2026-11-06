@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -42,6 +43,8 @@ const run = promisify(execFile);
 export const WORKTREES_DIR = 'WORKTREES';
 /** The book of tasks, one per agent, beside that agent's worktrees. */
 const TASKS_FILE = 'tasks.json';
+/** Beside the agents' own directories, which a slug can never name: no slug starts with a dot. */
+export const SHELVES_DIR = '.shelves';
 /** A fetch that takes longer than this is a network that is not there. */
 const FETCH_TIMEOUT_MS = 60_000;
 /** Enough for a title, short enough for a branch name people can type. */
@@ -180,6 +183,93 @@ export function resolveRepo(reposDir: string, repo: string): { name: string; pat
     );
   }
   return { name: wanted, path };
+}
+
+// --- the shelf -------------------------------------------------------------
+
+/**
+ * The name an agent's tasks are filed under on this machine: what it was
+ * called the first time it worked here, for as long as this machine knows it.
+ *
+ * Worktrees and the book live under the agent's name, and a person can now
+ * change that. Moving them would break every worktree's link to its repository,
+ * and looking under the new name would lose them: an agent renamed mid-task
+ * would no longer know it was on one, and a worktree kept for its unpushed work
+ * would never be mentioned again. So the name on the shelf stays, and a renamed
+ * agent's branches go on saying what it was called when it started here.
+ *
+ * Keyed by agent id, which does not change. A second agent taking a name
+ * another left behind gets its own shelf rather than inheriting that one's work.
+ *
+ * Written down only once there is work to keep: when a task begins (`claim`),
+ * or on finding a book under this name from before there were shelves. Merely
+ * asking leaves no trace, because asking is what every turn does and a machine
+ * should not fill up with agents that never did anything here.
+ *
+ * One small file per fact, because several harness processes share a machine
+ * and a single file of everybody's would be read, added to and replaced by each
+ * of them, with the last to write erasing the others. A record is only ever
+ * written by its own agent, and a name is taken by creating its file, which
+ * only one of them can do. No lock, so nothing to leave behind on a crash: one
+ * between the two steps finds the name already its own next time.
+ */
+export function taskShelf(nest: string, agentId: string, name: string, options: { claim?: boolean } = {}): string {
+  const dir = join(nest, WORKTREES_DIR, SHELVES_DIR);
+  const record = join(dir, `agent-${createHash('sha256').update(agentId).digest('hex').slice(0, 32)}`);
+  const known = readShelfFile(record);
+  if (known) return known;
+
+  for (let n = 1; ; n += 1) {
+    const shelf = n === 1 ? name : `${agentSlug(name).slice(0, SLUG_MAX - 8)}-${n}`;
+    const taken = join(dir, `name-${agentSlug(shelf)}`);
+    const holder = readShelfFile(taken);
+    if (holder !== null && holder !== agentId) continue;
+    if (!options.claim && !existsSync(bookPath(nest, shelf))) return shelf;
+
+    if (holder === null && !takeShelfName(dir, taken, agentId)) continue;
+    writeShelfFile(dir, record, shelf);
+    return shelf;
+  }
+}
+
+function readShelfFile(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** Written aside and moved, so a reader never finds half of one. */
+function writeShelfFile(dir: string, path: string, content: string): void {
+  renameSync(shelfDraft(dir, content), path);
+}
+
+function shelfDraft(dir: string, content: string): string {
+  mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, `.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  writeFileSync(tmp, content, { mode: 0o600 });
+  return tmp;
+}
+
+/**
+ * Take a shelf's name, whole or not at all. Hard-linked into place rather than
+ * created exclusively, because a link arrives with its contents, where a new
+ * file is briefly empty and would read as held by nobody in particular. False
+ * when somebody else got there first; it is still this agent's if that was
+ * another of its own processes.
+ */
+function takeShelfName(dir: string, path: string, agentId: string): boolean {
+  const tmp = shelfDraft(dir, agentId);
+  try {
+    linkSync(tmp, path);
+    return true;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    return readShelfFile(path) === agentId;
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
 // --- the book --------------------------------------------------------------

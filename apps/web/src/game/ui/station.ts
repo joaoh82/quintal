@@ -1,4 +1,14 @@
-import { idleStatus, type BoardItemRef, type MapInteractable, type RosterEntry } from '@quintal/shared';
+import {
+  activityTerminal,
+  idleStatus,
+  type BoardAgentRef,
+  type BoardItemRef,
+  type MapInteractable,
+  type RosterEntry,
+} from '@quintal/shared';
+
+import type { ConversationKey, Transcript } from '../useConversations';
+import { currentTurn } from './desk';
 
 /**
  * The station: what an empty desk offers, and to whom.
@@ -21,6 +31,21 @@ export interface Candidate {
 }
 
 /**
+ * The routine an agent's running turn is, by name, or null: a turn a
+ * routine's line started says so itself (`AgentActivity.routine`, from the
+ * brief the line carried), and nothing else does — the line is spoken in
+ * the owner's DM, and the status line says `working`. Read from the turn
+ * this client holds for the agent, which it holds only if it may read the
+ * conversation the turn is in; for the owner, who the station is for,
+ * that is their own DM. A finished turn is nobody's routine any more.
+ */
+export function routineOn(transcripts: Record<ConversationKey, Transcript>, agentId: string): string | null {
+  const turn = currentTurn(transcripts, agentId)?.activity;
+  if (!turn || activityTerminal(turn.state)) return null;
+  return turn.routine?.name ?? null;
+}
+
+/**
  * Your agents that are in the office, free ones first. Free means idle and
  * on no task — a desk given to a busy agent would move it mid-turn; a
  * standing refusal ("no model … here") is not work, but not an agent that
@@ -31,15 +56,38 @@ export interface Candidate {
  * be begun for it from a chair it cannot walk to. The office refuses the
  * same ones (`whyNotBegin`), before it writes anything.
  */
-export function candidates(roster: readonly RosterEntry[], you: string): Candidate[] {
-  return roster
-    .filter((entry) => entry.kind === 'agent' && entry.ownerUserId === you)
-    .map((entry) => ({ entry, busy: whyBusy(entry) }))
+export function candidates(
+  roster: readonly RosterEntry[],
+  you: string,
+  transcripts: Record<ConversationKey, Transcript> = {},
+): Candidate[] {
+  return [...oneSessionEach(roster.filter((entry) => entry.kind === 'agent' && entry.ownerUserId === you)).values()]
+    .map((entry) => ({ entry, busy: whyBusy(entry, transcripts) }))
     .sort((a, b) => Number(a.busy.length > 0) - Number(b.busy.length > 0) || a.entry.name.localeCompare(b.entry.name));
 }
 
-function whyBusy(entry: RosterEntry): string {
+/**
+ * One session per agent, by its id. An agent is on one socket at a time
+ * but can be in the roster on two: a harness restarted without a clean
+ * leave keeps its old session in reconnection grace, `away`, beside the
+ * live one, until the grace runs out. The live one is the agent. The away
+ * one is kept only when it is all there is, and then it says so, which is
+ * not free.
+ */
+function oneSessionEach(entries: readonly RosterEntry[]): Map<string, RosterEntry> {
+  const chosen = new Map<string, RosterEntry>();
+  for (const entry of entries) {
+    const held = chosen.get(entry.identityId);
+    if (!held || (held.status === 'away' && entry.status !== 'away')) chosen.set(entry.identityId, entry);
+  }
+  return chosen;
+}
+
+function whyBusy(entry: RosterEntry, transcripts: Record<ConversationKey, Transcript>): string {
   if (entry.task) return `on ${entry.task.title}`;
+  // A scheduled turn is named for its routine, not by its status line.
+  const routine = routineOn(transcripts, entry.identityId);
+  if (routine) return `on its routine ${routine}`;
   if (!idleStatus(entry.status)) return entry.status;
   if (!entry.scopes.includes('dm')) return 'cannot be messaged';
   if (!entry.scopes.includes('move')) return 'cannot walk';
@@ -55,6 +103,15 @@ export function offeredNotes(items: readonly BoardItemRef[], yourAgentIds: Reado
   return items
     .filter((item) => item.status === 'open' && (!item.assignee || yourAgentIds.has(item.assignee.id)))
     .sort((a, b) => b.number - a.number);
+}
+
+/**
+ * The checkouts on an agent's machine, as its harness last listed them: what
+ * the station can offer as a repository. Empty when the machine has not
+ * said, which is also what a guest sees.
+ */
+export function checkoutsOf(agents: readonly BoardAgentRef[], agentId: string): string[] {
+  return agents.find((agent) => agent.id === agentId)?.checkouts ?? [];
 }
 
 /**

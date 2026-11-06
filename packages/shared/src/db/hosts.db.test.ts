@@ -25,6 +25,35 @@ async function setup() {
 
 const report = (label: string) => ({ label, reposDir: '/repos', runtimes: [] });
 
+describe('what a machine says it has checked out', () => {
+  it('is kept with the machine, and left alone by a report that did not look', async () => {
+    const { db, josh } = await setup();
+    const who = { workspaceId: josh.workspaceId, ownerUserId: josh.id };
+    await recordHost(db, { ...who, report: { ...report('laptop'), checkouts: ['api', 'group/web'] } });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, ['api', 'group/web']);
+    await recordHost(db, { ...who, report: report('laptop') });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, ['api', 'group/web'], 'not looked is not "none"');
+    await recordHost(db, { ...who, report: { ...report('laptop'), checkouts: [] } });
+    assert.deepEqual((await listHostsForWorkspace(db, josh.workspaceId))[0]?.checkouts, [], 'looked and found nothing');
+  });
+});
+
+describe('whose machine a report is', () => {
+  it("is the reporter's own row, never a teammate's of the same name", async () => {
+    const { db, josh, sam } = await setup();
+    await recordHost(db, { workspaceId: josh.workspaceId, ownerUserId: josh.id, report: { ...report('laptop'), checkouts: ['mine'] } });
+    await recordHost(db, { workspaceId: sam.workspaceId, ownerUserId: sam.id, report: { ...report('laptop'), checkouts: ['theirs'] } });
+    const rows = await listHostsForWorkspace(db, josh.workspaceId);
+    assert.deepEqual(
+      rows.map((row) => [row.ownerUserId, row.label, row.checkouts]).sort(),
+      [[josh.id, 'laptop', ['mine']], [sam.id, 'laptop', ['theirs']]].sort(),
+      'two laptops, one each',
+    );
+    await recordHost(db, { workspaceId: josh.workspaceId, ownerUserId: josh.id, report: { ...report('laptop'), checkouts: ['mine', 'more'] } });
+    assert.equal((await listHostsForWorkspace(db, josh.workspaceId)).length, 2, 'a second report of mine is still my one row');
+  });
+});
+
 describe('forgetting a machine report', () => {
   it('removes the one asked for', async () => {
     const { db, josh } = await setup();

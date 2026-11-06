@@ -452,14 +452,15 @@ function openOffice() {
 }
 
 function agentBay() {
-  // Ten desks, ten seats. A desk straddles two tiles; its chair is on the
-  // left one, so an agent sits square on its chair, a little left of the
-  // desk's own monitor, which is the seat's screen. Seat ids are the desk's
-  // number along the bay, west to east.
+  // Ten desks, ten seats. An agent sits square on its chair, which needs a
+  // whole tile, so the desk is centred on that same tile rather than on the
+  // boundary between two: it blocks a third tile, and the chair, the sitter and
+  // the desk's own monitor, which is the seat's screen, all line up. Seat ids
+  // are the desk's number along the bay, west to east.
   for (let i = 0; i < 10; i += 1) {
-    const dx = 4.5 + i * 5;
-    prop('office/desk-south', dx, 30);
-    seat(`bay-${i + 1}`, 'office-base/chair-north', 4 + i * 5, 31, 'up', screenOf('office/desk-south', dx, 30));
+    const tx = 4 + i * 5;
+    prop('office/desk-south', tx, 30);
+    seat(`bay-${i + 1}`, 'office-base/chair-north', tx, 31, 'up', screenOf('office/desk-south', tx, 30));
   }
   prop('office/server-cabinet', 2, 33);
   prop('office/server-cabinet', 4, 33);

@@ -1,4 +1,4 @@
-import { CHOSEN_EMOTES } from '@quintal/shared';
+import { BODIES, CHOSEN_EMOTES } from '@quintal/shared';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -475,6 +475,92 @@ const TOOLS = [
         agent: { type: 'string', description: 'Needed only when two of your owner\'s agents have a routine of that name.' },
       },
       required: ['routine'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'agent_list',
+    description:
+      'Every agent in this office: who it is, whose it is, what it says it does, whether it is here, and ' +
+      'the runtime, model and machine it runs on. Yours tells you which are your owner\'s, the only ones you ' +
+      'may change, and those also show their scopes. Comes with your owner\'s machines and what each can ' +
+      'run, for agent_create and agent_update to name. Read this when asked what agents there are, and ' +
+      'before making one that might already exist.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mine: { type: 'boolean', description: 'true for only your owner\'s agents.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'agent_get',
+    description:
+      'One agent by name or id, "me" for you. For your owner\'s agents this includes its instructions, ' +
+      'its scopes and which agent made it; other people\'s show only what agent_list does. Read an agent ' +
+      'before changing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string', description: 'A name, an id, or "me" (the default).' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'agent_create',
+    description:
+      'Make a new agent, as your owner, when you are asked to; never one nobody asked for. It belongs to ' +
+      'your owner, is marked as made by you, and runs as a real runtime process on their machine: unless ' +
+      'told otherwise, on your machine and your runtime, on that runtime\'s default model. It may hold only ' +
+      'scopes you hold, and never "agents", which only your owner gives. Its character is drawn at random; ' +
+      'change it afterwards with agent_update if asked. Its name must be free in this office. You get no key for it: the machine runs it. Say back the note the office returns: it says ' +
+      'whether the agent will start. Check agent_list first, and do not retry a create without looking.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'What it is called, up to 40 characters. People mention it by this.' },
+        description: { type: 'string', description: 'One line on its card, up to 280 characters.' },
+        instructions: { type: 'string', description: 'Its standing orders, up to 2,000 characters: given to it at the start of every session.' },
+        scopes: { type: 'array', items: { type: 'string' }, description: 'What it may do. Omit for the defaults you may give.' },
+        machine: { type: ['string', 'null'], description: 'One of your owner\'s machines, as agent_list names them. Omit for yours; null leaves it unrun until somebody assigns it.' },
+        runtime: { type: 'string', description: 'A runtime that machine has. Omit for yours.' },
+        model: { type: ['string', 'null'], description: 'A model that runtime reported on that machine. Omit for its default.' },
+        max_sessions: { type: ['number', 'null'], description: 'How many conversations it answers at once. Omit for the office\'s default.' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'agent_update',
+    description:
+      'Change one of your owner\'s agents, or yourself, when asked: its name, character, description, instructions, ' +
+      'scopes, machine, runtime, model, parallelism, or whether it is on. Only what you pass changes; ' +
+      'instructions and scopes replace whole, so read it with agent_get first. You may give only scopes you ' +
+      'hold, and never "agents", and you cannot change an agent that holds a scope you lack. Most changes ' +
+      'restart the agent, which can cut short a turn it is on, yours included, so say what you did before ' +
+      'changing yourself. To retire an agent, turn it off with enabled; revoking one is for its owner, in Settings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: { type: 'string', description: 'Which: a name, an id, or "me".' },
+        new_name: { type: 'string' },
+        character: {
+          type: 'string',
+          description: `Which body it walks around in: ${BODIES.join(', ')}. Changes within moments, with no restart.`,
+        },
+        description: { type: 'string', description: 'One line, up to 280 characters.' },
+        instructions: { type: 'string', description: 'The whole new instructions, up to 2,000 characters.' },
+        scopes: { type: 'array', items: { type: 'string' }, description: 'The whole new list.' },
+        machine: { type: ['string', 'null'], description: 'One of your owner\'s machines, or null to take it off its machine.' },
+        runtime: { type: 'string' },
+        model: { type: ['string', 'null'], description: 'A model the runtime reported, or null for its default.' },
+        max_sessions: { type: ['number', 'null'], description: 'How many conversations it answers at once, or null for the office\'s default.' },
+        enabled: { type: 'boolean', description: 'false stops it running, kept and reversible; true starts it again.' },
+      },
+      required: ['agent'],
       additionalProperties: false,
     },
   },

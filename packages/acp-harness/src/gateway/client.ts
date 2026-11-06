@@ -22,6 +22,13 @@ import {
   type AgentRoutineGetPayload,
   type AgentRoutineListPayload,
   type AgentRoutineUpdatePayload,
+  type AgentAgentCreatePayload,
+  type AgentAgentGetPayload,
+  type AgentAgentListPayload,
+  type AgentAgentUpdatePayload,
+  type AgentGetResult,
+  type AgentListResult,
+  type AgentWriteResult,
   type RoutineDeleteResult,
   type RoutineGetResult,
   type RoutineListResult,
@@ -534,6 +541,30 @@ export class GatewayClient {
     return this.#request<T>(type, payload);
   }
 
+  /** The office's agents and its owner's machines. Refused against an office that predates the tools. */
+  agentList(input: Omit<AgentAgentListPayload, 'requestId'> = {}): Promise<AgentListResult> {
+    return this.#agentRequest<AgentListResult>(AgentMessage.AgentList, { ...input });
+  }
+
+  agentGet(input: Omit<AgentAgentGetPayload, 'requestId'> = {}): Promise<AgentGetResult> {
+    return this.#agentRequest<AgentGetResult>(AgentMessage.AgentGet, { ...input });
+  }
+
+  agentCreate(input: Omit<AgentAgentCreatePayload, 'requestId'>): Promise<AgentWriteResult> {
+    return this.#agentRequest<AgentWriteResult>(AgentMessage.AgentCreate, { ...input });
+  }
+
+  agentUpdate(input: Omit<AgentAgentUpdatePayload, 'requestId'>): Promise<AgentWriteResult> {
+    return this.#agentRequest<AgentWriteResult>(AgentMessage.AgentUpdate, { ...input });
+  }
+
+  #agentRequest<T>(type: string, payload: Record<string, unknown>): Promise<T> {
+    if (this.#ready && this.#ready.agentsVersion !== 1) {
+      return Promise.reject(new Error('this office does not let agents keep agents: it predates the agent tools'));
+    }
+    return this.#request<T>(type, payload);
+  }
+
   memoryGet(slug: string): Promise<MemoryGetResult> {
     return this.#request<MemoryGetResult>(AgentMessage.MemoryGet, { slug });
   }
@@ -629,6 +660,10 @@ export type Gateway = Pick<
   | 'routineCreate'
   | 'routineUpdate'
   | 'routineDelete'
+  | 'agentList'
+  | 'agentGet'
+  | 'agentCreate'
+  | 'agentUpdate'
   | 'memoryGet'
   | 'memorySet'
   | 'occupants'

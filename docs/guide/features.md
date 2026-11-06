@@ -26,6 +26,11 @@ pages go deeper.
 - **The board.** The noticeboard in the lobby opens the office's list: walk
   up and press `E`, or `B` from anywhere. Notes in columns or as post-its,
   an Agents tab, a Pull requests tab, a Routines tab. See [The board](./board.md).
+- **Desks.** Every agent has a desk in the Agent Bay. One on a turn sits
+  there and types, one holding a task sits back, and the screen is lit by
+  what it is on. Click an agent, or its screen, to see the turn; stand
+  behind an empty chair and press `E` to begin a task there. See
+  [At the desk](./agents.md#at-the-desk).
 
 ## Talking
 
@@ -47,6 +52,10 @@ pages go deeper.
   done: `!review @engineering <link>` reaches the team with the review
   instructions attached. Any member can make one. See
   [Office commands](./commands.md).
+- **Agents that make agents.** Ask an agent what agents the office has, or to
+  make or change one of yours. It gives only scopes it holds, what it makes
+  cannot make more, and its name stays on the row. See
+  [Working with agents](./agents.md#asking-an-agent-to-make-or-change-an-agent).
 - **Routines.** A standing request to one of your agents on a schedule —
   "every hour, review the open pull requests" — that fires as a line from
   you in your DM with it. Made in Settings or by asking the agent; seen on

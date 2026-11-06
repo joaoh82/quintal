@@ -77,6 +77,17 @@ export const AgentMessage = {
   RoutineUpdate: 'agent:routine_update',
   /** Delete a routine, runs and all. */
   RoutineDelete: 'agent:routine_delete',
+  /**
+   * The office's agents, under the `agents` scope: reading them, and making
+   * and changing its owner's. Only to an office that says `agentsVersion: 1`.
+   */
+  AgentList: 'agent:agent_list',
+  /** One agent, by name or id. Its instructions and scopes only when it is its owner's. */
+  AgentGet: 'agent:agent_get',
+  /** Make an agent, as the agent's owner. The office records the agent beside them. */
+  AgentCreate: 'agent:agent_create',
+  /** Change one of its owner's agents. Absent fields stay. */
+  AgentUpdate: 'agent:agent_update',
   /** Read a memory slug. */
   MemoryGet: 'agent:memory_get',
   /** Write a memory slug. Over-size writes are rejected, not truncated. */
@@ -146,6 +157,8 @@ export interface AgentHostReportPayload {
   reposDir: string;
   /** Omitted by all but the first agent of a fleet — the answer is per machine. */
   runtimes?: { id: string; installed: boolean; path: string | null }[];
+  /** The checkouts under `reposDir`, by name as `workspace_info` lists them. Omitted when not looked. */
+  checkouts?: string[];
   /** Where *this* agent works: the machine's nest, unless rooted elsewhere by hand. */
   workspacePath: string;
 }
@@ -321,6 +334,55 @@ export interface AgentRoutineDeletePayload extends AgentRequest {
   agent?: string;
 }
 
+/** Which agents: every one in the office, or with `mine` only its owner's. */
+export interface AgentAgentListPayload extends AgentRequest {
+  mine?: boolean;
+}
+
+/** An agent as an agent names it: by name, by id, or "me". Absent means the caller. */
+export interface AgentAgentGetPayload extends AgentRequest {
+  agent?: string;
+}
+
+/**
+ * An agent as an agent writes it. `scopes` may name only what the caller may
+ * give (`grantableScopes`), and absent means the defaults it may give.
+ * `machine` absent means the caller's own, and null none, which leaves the
+ * new agent unrun until somebody assigns it; `runtime` absent means the
+ * caller's own; `model` absent or null means the runtime's default. Its
+ * character is drawn at random: nobody asked a model to choose a face.
+ */
+export interface AgentAgentCreatePayload extends AgentRequest {
+  name: string;
+  description?: string;
+  instructions?: string;
+  scopes?: string[];
+  machine?: string | null;
+  runtime?: string;
+  model?: string | null;
+  maxSessions?: number | null;
+}
+
+/**
+ * A change to one of the owner's agents. Absent fields stay; `scopes` replaces
+ * the list; `machine: null` takes it off its machine; `model: null` and
+ * `maxSessions: null` go back to the default.
+ */
+export interface AgentAgentUpdatePayload extends AgentRequest {
+  agent: string;
+  newName?: string;
+  /** One of `BODIES`. */
+  character?: string;
+  description?: string;
+  instructions?: string;
+  scopes?: string[];
+  machine?: string | null;
+  runtime?: string;
+  model?: string | null;
+  maxSessions?: number | null;
+  enabled?: boolean;
+}
+
 export interface AgentMessagesGetPayload extends AgentRequest {
   /**
    * `nearby` = within earshot of where you stand now; `zone` = a zone's
@@ -441,6 +503,8 @@ export interface AgentReadyPayload {
   commandsVersion?: 1;
   /** Set when this office keeps routines and answers `agent:routine_*`. */
   routinesVersion?: 1;
+  /** Set when this office answers `agent:agent_*`. */
+  agentsVersion?: 1;
   /**
    * The MCP servers its owner gave it, for the harness to hand the runtime
    * beside its own tools. Secret values are sealed to the agent's key.
@@ -844,6 +908,63 @@ export interface RoutineWriteResult {
 export interface RoutineDeleteResult {
   deleted: true;
   name: string;
+}
+
+/**
+ * An agent as another agent reads it. Everyone in the office sees what the
+ * board's Agents tab shows; the rest is its owner's business, and is here
+ * only when `yours` says the reader shares that owner. `instructions` only on
+ * `agent_get`: they are long, and a list is for choosing.
+ */
+export interface AgentCardRef {
+  id: string;
+  name: string;
+  description: string;
+  /** Which body it walks around in. */
+  character: string;
+  /** Its owner's name. */
+  owner: string;
+  /** Whether it is the reader's owner's, and so whether the reader may change it. */
+  yours: boolean;
+  status: string;
+  /** Whether it is in this room now. */
+  here: boolean;
+  lastSeenAt: number | null;
+  runtime: string | null;
+  /** The runtime's own id for the model; null for its default. */
+  model: string | null;
+  machine: string | null;
+  enabled?: boolean;
+  scopes?: string[];
+  /** How many conversations it answers at once; null for the office's default. */
+  maxSessions?: number | null;
+  instructions?: string;
+  /** The agent that made it for its owner, when one did. */
+  madeBy?: string | null;
+}
+
+/** One of the owner's machines, as it last reported: where an agent can be put to run. */
+export interface AgentMachineRef {
+  label: string;
+  lastSeenAt: number | null;
+  /** The runtimes installed there that Quintal can drive, and the models each offers when it has said. */
+  runtimes: Array<{ id: string; label: string; models: string[] }>;
+}
+
+export interface AgentListResult {
+  agents: AgentCardRef[];
+  /** The caller's owner's machines, for `agent_create` and `agent_update` to name. */
+  machines: AgentMachineRef[];
+}
+
+export interface AgentGetResult {
+  agent: AgentCardRef;
+}
+
+/** What was written, and what happens next in words: whether it starts, or restarts, and when. */
+export interface AgentWriteResult {
+  agent: AgentCardRef;
+  note: string;
 }
 
 export interface MemoryGetResult {

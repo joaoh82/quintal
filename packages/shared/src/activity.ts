@@ -50,6 +50,14 @@ export interface AgentActivity {
   startedAt: number;
   updatedAt: number;
   items: ActivityItem[];
+  /**
+   * The routine this turn is, when a routine's line started it: its name, as
+   * the brief the line carried named it. A turn knows this and nothing else
+   * does — a routine fires as a line in its owner's DM, and the status line
+   * says `working` — so the harness says it here, and the station and the
+   * desk panel read it.
+   */
+  routine?: { name: string };
 }
 export interface PublicActivity extends AgentActivity {
   agentId: string;
@@ -132,7 +140,8 @@ export function parseActivity(value: unknown): AgentActivity | null {
     v.items.length > ACTIVITY_MAX_ITEMS ||
     (v.channelId !== undefined && !id(v.channelId)) ||
     (v.zoneId !== undefined && !id(v.zoneId)) ||
-    (v.channelId && v.zoneId)
+    (v.channelId && v.zoneId) ||
+    (v.routine !== undefined && !routineName(v.routine))
   )
     return null;
   if (new TextEncoder().encode(JSON.stringify(value)).length > ACTIVITY_MAX_BYTES) return null;
@@ -174,7 +183,17 @@ export function parseActivity(value: unknown): AgentActivity | null {
     items,
     ...(v.channelId ? { channelId: v.channelId } : {}),
     ...(v.zoneId ? { zoneId: v.zoneId } : {}),
+    ...(v.routine ? { routine: { name: routineName(v.routine)! } } : {}),
   };
+}
+
+/** A routine's name as a turn may carry it: one line, trimmed, as long as a routine's name may be. */
+function routineName(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const name = (value as { name?: unknown }).name;
+  if (typeof name !== 'string') return null;
+  const line = name.replace(/\s+/g, ' ').trim().slice(0, 60);
+  return line.length > 0 ? line : null;
 }
 export function mergeActivity(
   current: PublicActivity | undefined,

@@ -355,6 +355,8 @@ export interface DeskBeginPayload {
   itemId?: string;
   title?: string;
   body?: string;
+  /** A checkout on the agent's machine, by name as the board lists it, for the brief to name. Omitted: the agent chooses. */
+  repo?: string;
 }
 
 /** `desk_begun`: the desk, the agent, the note, and the DM the hand-over landed in, if the office could say it there. */

@@ -15,7 +15,7 @@ services:
     # forward (scripts/set-version.mjs); redeploying pulls the newest patch.
     runtime: image
     image:
-      url: ghcr.io/joaoh82/quintal:0.17
+      url: ghcr.io/joaoh82/quintal:0.19
     # A disk needs a paid instance, and the free one sleeps when idle, which
     # drops everybody's connection to the room.
     plan: 0.5c-512mb

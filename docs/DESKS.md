@@ -1,14 +1,17 @@
 # Desks: where an agent's work is seen
 
 An agent that is working should be seen working: at a desk, on a screen
-you can walk up to and read. Today a busy agent stands wherever it spawned
-with a balloon over its head, and the work itself is only visible in the
-conversation it was asked in. This is the design for closing that gap, and
-for the inverse: walking up to an empty desk and starting a task from it.
+you can walk up to and read. Before this, a busy agent stood wherever it
+spawned with a balloon over its head, and the work itself was visible only
+in the conversation it was asked in. This is the design for closing that
+gap, and for the inverse — walking up to an empty desk and starting a task
+from it — and, since all four phases shipped, the record of what was built
+and why. Where the text names a file or a function, it is the one in the
+tree.
 
-It is written against two offices that do some of this already, and against
-what the codebase has. Nothing here needs the harness to run the agent's
-loop, and none of it costs a token.
+It was written against three offices that do some of this already, and
+against what the codebase had. Nothing here needs the harness to run the
+agent's loop, and none of it costs a token.
 
 ## The stance
 
@@ -65,7 +68,10 @@ The lesson from all three: the desk is the unit people read. Sitting says
 "on something", the screen says "what", the beacon says "needs you", and the
 empty chair says "give me something".
 
-## What the codebase has
+## What the codebase had
+
+The starting point, kept because the design below leans on it; each
+bullet says what was there before phase 1, not what is there now.
 
 - **Sit and work frames** in every avatar sheet: columns 4-5 and 6-7, with
   timings in `apps/web/src/game/constants.ts`. Only `idle` and `walk` are
@@ -110,21 +116,22 @@ the office opens that one tile for the one agent it has given the desk to
 (`withSeatOpen`) when it routes it there. The chair sits on a whole tile,
 not the desk's centre line, so the sitter is square on it. `screen` is the
 desk's monitor in map pixels, measured off the desk sprite by the builder,
-for the glow and the click to come; the laptops that used to peek out from
-behind the Agent Bay desks are gone, since the desks have screens of their
-own. The doorstep a *person* stands on to
-use a desk is a `desk` interactable, which arrives with the panel in phase
-3; a seat is where the agent is, not where you stand to look.
+for the glow and the click; the laptops that used to peek out from behind
+the Agent Bay desks are gone, since the desks have screens of their own.
+The doorstep a *person* stands on to use a desk is the `desk` interactable
+every seat makes (`deskOf`, under "Click the desk"); a seat is where the
+agent is, not where you stand to look.
 
-The server owns seating. A desk has a holder or none, kept in room state
-beside the board, and the rules are pure (`seats.ts`, pinned in tests):
+The server owns seating. A desk has a holder or none, in the room's
+`SeatBook`, and the rules are pure (`seating.ts`, pinned in tests):
 
 - An agent is given a **home desk** the first time it needs one, and keeps
   it while it is in the office. Same desk tomorrow. This is the roadmap's
   "a place that is yours", for agents first.
 - No free desk: the agent stands where it is, and takes the next desk that
   frees. Never a refusal.
-- An agent that leaves the office frees its desk.
+- An agent that leaves the office keeps its desk until a present agent
+  needs one and none is free; the book under "Posture" says how.
 
 ### Posture
 
@@ -138,9 +145,10 @@ beside idle life:
 | no task, idle | stands up, wanders as today | free |
 | waiting for its owner | sits, question balloon as today, **beacon** over the desk | you cannot miss who needs you |
 
-Two fields appended to `OfficePlayer`: `seat` (the desk id, or empty) and
-`pose` (`stand`, `sit`, `work`). The client creates the two missing
-animations and `setFacing` takes the pose, drawing walk over any of them;
+Two fields on `OfficePlayer`: `seat` (the desk the office has given it, by
+seat id, or empty — its, not necessarily under it) and `pose` (`stand`,
+`sit`, `work`). The client creates the sit and work animations beside idle
+and walk, and `setFacing` takes the pose, drawing walk over any of them;
 the sheets were drawn for this (see `world-assets.md`, "Seating
 integration"). Depth needs nothing special: the chair's anchor is a row
 below the sitter's feet, so the chair back draws over the legs, and the
@@ -172,26 +180,51 @@ desk a leaver frees is its.
 
 ### Act-outs, by tool class
 
-Optional, after the above. `statusForTool` already names the tool; a small
-pure map from tool class to a cue, as agent-office's `actions.ts` does:
-read means slow work frames, edit means fast, a shell command that runs
-tests means sit frames with the "thinking" balloon, web means a small globe
-over the laptop. Two failed test runs in a row is worth a head-in-hands
-emote. All of it from the tool title the harness already sends.
+A small pure map from the status line to a cue (`cueFor` in `glass.ts`),
+as agent-office's `actions.ts` does, from the verb `statusForTool` already
+chose: reading and searching are slow work frames, editing is fast, a
+shell command that runs a test suite is sit frames — sitting back while
+they run — and fetching puts a small globe over the laptop. The avatar
+takes the cue when its status line changes (`setCue`) and redraws only
+what is at a desk: a body walking or standing is drawn as it was. Work has
+three paces, so it is three animations per direction.
+
+The "thinking" balloon on a test run comes from the same rule: the harness
+sets its balloon from the status line through the shared table
+(`emoteForStatus`), and a test run (`testRunStatus`) reads as a wait there
+too, so the agent sits back under the thinking dots and the screen shows
+the thinking colour. Not from this: head-in-hands after two failed runs,
+which needs the test's outcome, and that is a step in the activity stream,
+not something public.
 
 ### The monitor
 
 The laptop prop gets a glow and a surface, driven by events, never per
 frame (the desktop app may be painting in software; see `DESKTOP.md`):
 
-- **Colour by state**, visible from across the room: thinking, a tool
-  running, waiting for you, an error, idle. Agent Office 3D does this and it
-  reads at a glance.
-- **A flicker of lines** when a step lands, from a tiny RenderTexture
-  updated on `agent:activity`. Unreadable by design at 32 pixels; it says
-  "something is happening", like a real screen seen from the door.
+- **Colour by state**, visible from across the room (`glassState`): dark
+  with nobody at it or its holder on its feet; dim under one sitting on a
+  task with nothing running; then by the status line, through the same
+  table that picks the balloon — thinking, a tool at work, waiting for
+  somebody, a refusal or a stop. Agent Office 3D does this and it reads at
+  a glance.
+- **A flicker of lines** when a step lands: a few random short lines over
+  the screen, gone in a quarter of a second. Unreadable by design at 32
+  pixels; it says "something is happening", like a real screen seen from
+  the door. Fired by a change of the status line, which the nameplate
+  already shows everybody, rather than by `agent:activity`, which reaches
+  only those who may read the conversation: so it is public and tells
+  nobody anything new.
+- **The beacon**: while the holder's status says "waiting for …", a column
+  of light stands over the desk and breathes, tall enough to be seen from
+  the door. It lights for whoever is being waited for, and looks the same
+  to every viewer; the question balloon says the same thing up close. It
+  is over the desk, so an agent waiting on its feet — one that may not
+  move, or one its model walked elsewhere mid-turn — has the balloon and
+  no beacon.
 
-Both are public. They carry no words.
+All of it is public. It carries no words, and nothing the status line,
+the pose and the seat did not already say.
 
 ### Click the desk
 
@@ -206,8 +239,10 @@ exist:
 1. The agent's card (`AgentCard`): name, owner, status, task, scopes,
    runtime, model, the audit log.
 2. **The screen**: the agent's running turn, or its most recent, rendered
-   by `TurnActivity` at your detail level, live. The panel reads it from
-   the transcripts this client already holds, and from a copy held for
+   by `TurnActivity` at your detail level, live, and captioned with the
+   routine it is when the turn says so (`routineCaption`, from the state
+   the row shows). The panel reads the turn from the transcripts this
+   client already holds, and from a copy held for
    the panel from the moment it opens (`useScreenTurn`), because a
    transcript keeps its newest 500 lines and a turn that has run while a
    busy channel said 500 things has fallen off it. Opening the panel sends
@@ -233,9 +268,10 @@ unfollow: later steps reach the panel by the same rule, or do not.
 Clicking a human opens their card; it is the same event. The keyboard
 path is the desk interactable: every seat makes one (`deskOf`), named for
 its seat, with a tile beside the chair as its doorstep — behind it, or a
-side when behind it is not floor — and the screen as its halo. Stand there and the screen lights up as the noticeboard does, and
-the offer under `E` reads "see what Arthur is on" — or, when nobody holds
-the desk, "begin a task at this desk", which is the next section.
+side when behind it is not floor — and the screen as its halo. Stand there
+and the screen lights up as the noticeboard does, and the offer under `E`
+reads "see what Arthur is on" — or, when nobody holds the desk, "begin a
+task at this desk", which is the next section.
 
 ### Click an empty desk: begin a task from the station
 
@@ -255,12 +291,28 @@ desk panel's place at the left of the room:
   not an agent that would answer either. An agent that is not offered is
   listed greyed with why — "on Fix the chair", "reading auth.ts", "cannot
   be messaged" — and one that is not here is not listed, because nothing
-  can be begun for it from a chair it cannot walk to. The rules are
-  `candidates` and `offeredNotes` in `station.ts`, pinned without a panel;
-  the office refuses the same ones (`whyNotBegin`, `whyNotNote` in the
-  room's `station.ts`), before it writes anything.
+  can be begun for it from a chair it cannot walk to. An agent is listed
+  once: a harness restarted without a clean leave keeps its old session in
+  reconnection grace, `away`, beside the live one, and the live one is the
+  agent — on the panel and in the office, which judges Begin on the
+  connected session (`sessionOf` in the room's `station.ts`), not the
+  first it finds. The rules are
+  `candidates` and `offeredNotes` in the client's `station.ts`, pinned
+  without a panel; the office refuses the same ones (`whyNotBegin`,
+  `whyNotNote` in the room's `station.ts`), before it writes anything.
+- **Which routine**, when that is what an agent is on: "on its routine
+  Inbox sweep", not "working". A routine fires as a line in its owner's
+  DM and the status line says only `working`, so the turn says which
+  routine it is (`AgentActivity.routine`, set by the harness from the
+  brief the line carried) and `routineOn` reads it from the running turn
+  this client holds for the agent — which, for the owner, is their own
+  DM. Never from the clocks: the busy stamp is held across a second turn,
+  so a join on it named the wrong work.
+- **Where**, when the agent's machine has said what it has checked out:
+  a repository, with the agent's own choice first. The next section but
+  one says how the office knows.
 - **Begin**, which sends one message, `desk_begin { seatId, agentId,
-  itemId | title, body }`.
+  itemId | title, body, repo? }`.
 
 What happens is what happens already when a note is handed over, so nothing
 new reaches the agent. The office checks that the asker may hand this agent
@@ -292,34 +344,50 @@ A team is not offered. A board note is one agent's, the hand-over is one DM,
 and the desk is one chair; "the team sorts out who takes it" is a mention in
 a channel, which is a different thing from a chair and already works as one.
 
-The repository is the agent's to choose, as it is for a board note today:
-the brief says what the work is, the agent knows what is under `REPOS/`.
-Offering a repository picker in the panel needs the harness to report its
-checkouts' names to the office at boot, the way it reports runtimes, which
-is a small addition and worth doing next: then the panel can say "api, web"
-and the brief can name one.
+The repository is the agent's to choose, as it is for a board note, unless
+you choose it. The harness reports the checkouts under `REPOS/` with its
+machine: `checkouts` on `agent:host_report`, once per fleet, the names
+`workspace_info` lists ("api", "group/web"). The office keeps them on the
+machine's row — one row per owner per label, so two people's laptops can
+share a name and never overwrite each other — and joins them onto each of
+the board's agent rows by the machine that agent last reported from, under
+the same owner. They go only to that owner: a machine's name and runtimes
+are the office's to see, what is cloned on it is not. The station offers
+them for the chosen agent, with the agent's own choice first. A name picked
+rides in `desk_begin` as `repo`, the office refuses one the machine never
+listed (`whyNotRepo`), and the brief says "Work in the api checkout under
+REPOS/: pass repo "api" to task_begin." Nothing else changes: the agent
+still begins with `task_begin`, which is what takes a repository.
 
 The board stays the record. Nothing is tracked only by a chair.
 
 ## Phases
 
-1. **Seats and posture.** The `desk` interactable, seat reservation, the
-   two schema fields, the two animations, walk-to-desk on busy and the three
-   postures. Pure presence; the office feels inhabited and nothing else
-   changes. Tests: the seating rules and the posture decision, pinned.
-2. **Click to look.** The `inspect` event, the desk panel from existing
-   parts, `activity_follow` with the privacy rule, and the conversation
-   jump. Tests: a follower who is not a member never receives a step, the
-   turn the screen shows, and where the buttons go.
-3. **Begin from the station.** The `desk` interactable from every seat, the
-   station panel over the existing hand-over, free-agent listing, seat
-   reservation on Begin, a typed task becoming a note. Tests: what a desk
-   is told to begin, who the station offers, and the reserved desk being
-   the one the agent walks to. Not yet: the harness reporting checkouts.
-4. **The glass.** Monitor colour and flicker, the waiting beacon, act-outs by
-   tool class.
+All shipped, in this order; the pull requests are the detailed record.
 
-Phase 1 alone is worth shipping. Phase 2 is the feature. Phase 3 turns the
+1. **Seats and posture** (#183). The `seats` layer and the seat book, the
+   two schema fields, the two animations, walk-to-desk on busy and the
+   three postures. Pure presence; the office feels inhabited and nothing
+   else changes. Tests: the seating rules and the posture decision, pinned.
+2. **Click to look** (#185). The `inspect` event, the desk panel from
+   existing parts, `activity_follow` with the privacy rule, and the
+   conversation jump. Tests: a follower who is not a member never receives
+   a step, the turn the screen shows, and where the buttons go.
+3. **Begin from the station** (#188). The `desk` interactable from every
+   seat, the station panel over the existing hand-over, free-agent listing,
+   seat reservation on Begin, a typed task becoming a note. Then the harness
+   reporting its checkouts and the station offering them (#191, #192).
+   Tests: what a desk is told to begin, who the station offers, the
+   reserved desk being the one the agent walks to, and the checkouts a
+   machine names.
+4. **The glass** (#190). Monitor colour and flicker, the waiting beacon,
+   act-outs by tool class. Tests: the state a desk shows, and the cue a
+   status line calls for.
+
+After them, the routine an agent is on, named at the station (#193) and on
+the desk panel (#194).
+
+Phase 1 alone was worth shipping. Phase 2 is the feature. Phase 3 turns the
 room into the place work starts, not only where it is watched. Phase 4 is
 what makes the laptop worth clicking.
 
@@ -333,3 +401,7 @@ what makes the laptop worth clicking.
   are the agents' first, because that is what the room is for.
 - **Posture from the model.** No tool for an agent to sit down. Its status
   and its task decide, so it cannot look busy while idle or idle while busy.
+- **Reading a routine off the clocks.** The busy stamp does not mark turn
+  boundaries, and a join on it named a question after a routine. The turn
+  that a routine's line started says which routine it is; nothing else
+  needs to guess.

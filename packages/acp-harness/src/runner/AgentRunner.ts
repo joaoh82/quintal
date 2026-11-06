@@ -43,6 +43,7 @@ import { reposTarget, writeGuide } from '../nest.js';
 import {
   TaskError,
   activeTask,
+  taskShelf,
   beginTask,
   describeCleanup,
   endTask,
@@ -792,7 +793,7 @@ export class AgentRunner {
    * The runtime list is optional and its absence is meaningful — see
    * `Supervisor.#reportHost`.
    */
-  reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[] }): void {
+  reportHost(host: { label: string; reposDir: string; runtimes?: RuntimeStatus[]; checkouts?: string[] }): void {
     this.#host = { label: host.label, reposDir: host.reposDir };
     this.#gateway.hostReport({
       ...host,
@@ -1056,7 +1057,7 @@ export class AgentRunner {
 
   #taskReport(): Record<string, unknown> {
     try {
-      return taskReport(this.#task(), keptWorktrees(nestRoot(), this.name));
+      return taskReport(this.#task(), keptWorktrees(nestRoot(), this.#shelf()));
     } catch (error: unknown) {
       this.#log('warn', `could not read the task book: ${describe(error)}`);
       return taskReport(this.#task());
@@ -1073,10 +1074,19 @@ export class AgentRunner {
     return this.#task()?.worktree ?? this.config.cwd;
   }
 
+  /**
+   * The name its tasks are filed under here, which outlasts a rename. Its own
+   * name until it knows its id, which an agent on its own key learns on joining.
+   */
+  #shelf(options: { claim?: boolean } = {}): string {
+    const agentId = this.config.agentId ?? this.#gateway.ready?.agentId;
+    return agentId ? taskShelf(nestRoot(), agentId, this.name, options) : this.name;
+  }
+
   /** The active task, read from the book each time: it is small, and a restart must see it. */
   #task(): Task | null {
     try {
-      return activeTask(nestRoot(), this.name);
+      return activeTask(nestRoot(), this.#shelf());
     } catch (error: unknown) {
       this.#log('warn', `could not read the task book: ${describe(error)}`);
       return null;
@@ -1108,7 +1118,7 @@ export class AgentRunner {
     return this.#serialised(async () => {
       const task = await beginTask({
         nest: nestRoot(),
-        agent: this.name,
+        agent: this.#shelf({ claim: true }),
         reposDir: this.#reposDir(),
         repo,
         title,
@@ -1124,7 +1134,7 @@ export class AgentRunner {
   /** End the active task. `deliveredHead` is the merged PR's head, when that is why. */
   endTask(deliveredHead?: string): Promise<{ task: Task; outcome: string; said: string }> {
     return this.#serialised(async () => {
-      const ended = await endTask({ nest: nestRoot(), agent: this.name, ...(deliveredHead ? { deliveredHead } : {}) });
+      const ended = await endTask({ nest: nestRoot(), agent: this.#shelf(), ...(deliveredHead ? { deliveredHead } : {}) });
       this.#unwatchPullRequest();
       this.#publishTask(null);
       const said = describeCleanup(ended.task, ended.outcome, ended.unpushed);
@@ -1309,7 +1319,7 @@ export class AgentRunner {
     // Asked outside the lock; acted on inside it. A `!done` that landed
     // meanwhile has ended the task, and `endTask` then refuses, which is right.
     if (!task.pr || task.pr.number !== pr.number || task.pr.state !== pr.state) {
-      const noted = notePullRequest(nestRoot(), this.name, task.slug, pr);
+      const noted = notePullRequest(nestRoot(), this.#shelf(), task.slug, pr);
       if (noted && !task.pr) {
         this.#log('info', `task "${task.title}" has PR #${pr.number}`);
       }
@@ -1604,6 +1614,8 @@ export class AgentRunner {
       this.#queuedActivity.set(scope, new PublicTurn(channelId ? { channelId } : { zoneId: this.#gateway.roster?.zone?.id ?? FLOOR_ZONE_ID },
         value => this.#publishActivity(value), trigger.requestId));
     }
+    // A routine's line names the turn it starts, from the moment it is queued.
+    if (trigger.command?.routine) this.#queuedActivity.get(scope)?.routine(trigger.command.routine.name);
     const queue = this.#queues.get(scope) ?? [];
     queue.push(trigger);
     const activity = this.#queuedActivity.get(scope);
@@ -1695,6 +1707,7 @@ export class AgentRunner {
           const id = latencyRequestId(trigger.requestId);
           return id ? [id] : [];
         });
+        for (const trigger of triggers) if (trigger.command?.routine) activity.routine(trigger.command.routine.name);
       }
       turn.latency = triggers.flatMap(trigger => trigger.latency ? [trigger.latency] : []);
       for (const trace of turn.latency) {

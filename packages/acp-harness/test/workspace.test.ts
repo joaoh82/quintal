@@ -13,6 +13,7 @@ import type { AgentConfig } from '../src/config.js';
 import { AgentRunner, workspaceSection } from '../src/runner/AgentRunner.js';
 import { TOOL_HINT } from '../src/runner/context.js';
 import {
+  checkoutNames,
   redactRemote,
   urlOfOrigin,
   workspaceReport,
@@ -80,6 +81,26 @@ function report(cwd: string, extra: { scopes?: AgentScope[]; reposDir?: string; 
     ...(extra.limit === undefined ? {} : { limit: extra.limit }),
   });
 }
+
+describe('what the machine tells the office it has checked out', () => {
+  it('names the checkouts, grouped ones included, and not the plain folders', () => {
+    const repos = temp('repos');
+    checkout(repos, 'api');
+    checkout(join(repos, 'group'), 'web');
+    mkdirSync(join(repos, 'scratch'));
+    assert.deepEqual(checkoutNames(nest(repos)), ['api', 'group/web']);
+  });
+
+  it('tells "found nothing" from "did not look"', () => {
+    const repos = temp('repos');
+    checkout(repos, 'api');
+    const rooted = checkout(temp('rooted'), 'one');
+    assert.deepEqual(checkoutNames(rooted, repos), ['api'], 'an agent rooted in one checkout still knows the machine\'s');
+    assert.deepEqual(checkoutNames(nest(temp('empty'))), [], 'read, and nothing cloned yet: a real answer');
+    assert.equal(checkoutNames(rooted), undefined, 'no repositories directory: nothing was looked at');
+    assert.equal(checkoutNames(rooted, join(repos, 'gone')), undefined, 'a directory that is not there: the same');
+  });
+});
 
 describe('what the harness answers about this machine', () => {
   it('names the workspace, its AGENTS.md and the repositories linked into it', () => {
@@ -258,7 +279,7 @@ describe('what the harness answers about this machine', () => {
   it('splits the scopes the office granted from the ones it did not', () => {
     const result = report(temp('bare'), { scopes: ['chat', 'dm'] });
     assert.deepEqual(Object.keys(result.quintal_scopes.granted), ['chat', 'dm']);
-    assert.deepEqual(Object.keys(result.quintal_scopes.not_granted), ['move', 'status', 'board', 'commands', 'routines', 'run']);
+    assert.deepEqual(Object.keys(result.quintal_scopes.not_granted), ['move', 'status', 'board', 'commands', 'routines', 'agents', 'run']);
     assert.match(result.quintal_scopes.granted.chat ?? '', /say/);
     assert.match(result.quintal_scopes.not_granted.move ?? '', /walk/);
     assert.match(result.quintal_scopes.unscoped, /memory_get/);

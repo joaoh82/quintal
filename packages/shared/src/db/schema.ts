@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 
 import { AGENT_SCOPES } from '../agent.js';
@@ -369,6 +370,11 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    /**
+     * Which body it walks around in, by `BODIES` id. Rows from before there
+     * was a choice hold a colour that was never drawn, and read as the body
+     * their id derives: see `bodyOfAgent`.
+     */
     spriteKey: text('sprite_key').notNull().default('slate'),
     /**
      * One line about what this agent does, written by its owner.
@@ -451,6 +457,14 @@ export const agents = sqliteTable(
     /** Which machine should run it, matching `agent_hosts.label`. */
     hostLabel: text('host_label'),
     /**
+     * Which machine it last reported from (`agent:host_report`), matching
+     * `agent_hosts.label` under the same owner. Where it actually runs, as
+     * against `hostLabel`, where the office told a host to launch it: an
+     * agent launched by hand has no `hostLabel` and still reports from
+     * somewhere. Null until it has reported.
+     */
+    reportedHostLabel: text('reported_host_label'),
+    /**
      * Which model the runtime should use, by the id the runtime itself
      * advertised over ACP. Null means the runtime's own default — a real
      * state, not a magic string, because "whatever Claude Code picks" has to
@@ -486,6 +500,14 @@ export const agents = sqliteTable(
       .notNull(),
     /** Set instead of deleting: an audit log with dangling agent ids is useless. */
     revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    /**
+     * The agent that made this one for its owner, or null for one a person
+     * made. Shown on its row in Settings: an owner should be able to tell
+     * what they asked for from what was made on their behalf.
+     */
+    createdByAgentId: text('created_by_agent_id').references((): AnySQLiteColumn => agents.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => [
     index('agents_workspace_id_idx').on(table.workspaceId),
@@ -526,9 +548,14 @@ export const agentHosts = sqliteTable(
       .$type<{ id: string; installed: boolean; path: string | null }[]>()
       .notNull()
       .default([]),
+    /** JSON array of checkout names under `reposDir`, as the harness listed them. */
+    checkouts: text('checkouts', { mode: 'json' }).$type<string[]>().notNull().default([]),
     lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).default(now).notNull(),
   },
-  (table) => [uniqueIndex('agent_hosts_workspace_label').on(table.workspaceId, table.label)],
+  // One row per machine per owner: a label defaults to a hostname, and
+  // everybody calls their laptop "laptop". A report is one person's machine
+  // and must never update another's row of the same name.
+  (table) => [uniqueIndex('agent_hosts_workspace_owner_label').on(table.workspaceId, table.ownerUserId, table.label)],
 );
 
 /**

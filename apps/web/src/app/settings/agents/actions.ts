@@ -5,13 +5,14 @@ import {
   DEFAULT_AGENT_SCOPES,
   runtimeById,
   isAgentScope,
-  isAgentSpriteKey,
+  isBodyId,
   modelChoice,
   normaliseAgentName,
   normaliseParallelism,
   type AgentScope,
 } from '@quintal/shared';
 import {
+  AgentRosterError,
   MemoryLimitError,
   MemorySlugError,
   canAdministerAgent,
@@ -26,9 +27,11 @@ import {
   revokeAgent,
   revokeHostToken,
   forgetHostReport,
+  setAgentCharacter,
   setAgentEnabled,
   setAgentLaunch,
   setAgentMaxSessions,
+  setAgentName,
   setAgentProfile,
   readAgentMcp,
   setAgentMcpServers,
@@ -86,6 +89,8 @@ async function requireSession() {
 async function modelFor(
   db: ReturnType<typeof getDb>,
   workspaceId: string,
+  /** Whose machine: a label names one row per owner, and a model is offered by one machine, not by a name. */
+  ownerUserId: string,
   hostLabel: string,
   runtimeId: string,
   raw: FormDataEntryValue | null,
@@ -100,7 +105,7 @@ async function modelFor(
   if (modelId === current) return { modelId };
 
   const host = (await listHostsForWorkspace(db, workspaceId)).find(
-    (row) => row.label === hostLabel,
+    (row) => row.ownerUserId === ownerUserId && row.label === hostLabel,
   );
   const status = host?.runtimes.find((entry) => entry.id === runtimeId);
   if (!modelChoice(status, modelId)) {
@@ -130,8 +135,9 @@ export async function createAgentAction(
     const name = normaliseAgentName(String(formData.get('name') ?? ''));
     if (name.length === 0) return { ok: false, error: 'Give the agent a name.' };
 
-    const spriteRaw = String(formData.get('spriteKey') ?? 'slate');
-    const spriteKey = isAgentSpriteKey(spriteRaw) ? spriteRaw : 'slate';
+    // Nothing chosen, or a crafted value, is left to `createAgent`'s random draw.
+    const spriteRaw = String(formData.get('spriteKey') ?? '');
+    const spriteKey = isBodyId(spriteRaw) ? spriteRaw : undefined;
 
     const scopes = formData
       .getAll('scopes')
@@ -164,7 +170,7 @@ export async function createAgentAction(
 
     let modelId: string | null = null;
     if (wantsLaunch) {
-      const model = await modelFor(db, workspace.id, hostLabel, runtimeId, formData.get('modelId'));
+      const model = await modelFor(db, workspace.id, session.user.id, hostLabel, runtimeId, formData.get('modelId'));
       if ('error' in model) return { ok: false, error: model.error };
       modelId = model.modelId;
     }
@@ -173,7 +179,7 @@ export async function createAgentAction(
       workspaceId: workspace.id,
       ownerUserId: session.user.id,
       name,
-      spriteKey,
+      ...(spriteKey ? { spriteKey } : {}),
       // Normalised again inside `createAgent`; passed raw so there is one place
       // that decides what a description and an instruction may contain.
       description: String(formData.get('description') ?? ''),
@@ -184,6 +190,7 @@ export async function createAgentAction(
       // it here is a crafted submission, not a typo worth a message.
       maxSessions: normaliseParallelism(formData.get('maxSessions')),
       ...(wantsLaunch ? { launch: { runtimeId, hostLabel, modelId } } : {}),
+      rules: {},
     });
 
     revalidatePath('/settings/agents');
@@ -208,6 +215,8 @@ export interface SaveAgentProfileState {
   error?: string;
   /** The agent the last save was for, so one row's result cannot show on another. */
   agentId?: string;
+  /** Whether the save will restart it: a new character alone does not. */
+  restarts?: boolean;
 }
 
 export async function saveAgentProfileAction(
@@ -235,6 +244,26 @@ export async function saveAgentProfileAction(
     return raw === null ? undefined : String(raw);
   };
 
+  // First, so a name it may not have leaves the whole save unmade. A shared
+  // name can be neither mentioned nor DMed, and this agent's would stop working
+  // the moment it was saved. The write itself holds that line.
+  const name = field('name');
+  if (name !== undefined) {
+    if (normaliseAgentName(name).length === 0) return { ok: false, error: 'Give the agent a name.', agentId };
+    try {
+      await setAgentName(db, agentId, name);
+    } catch (error: unknown) {
+      if (error instanceof AgentRosterError) return { ok: false, error: error.message, agentId };
+      throw error;
+    }
+  }
+
+  // Only a real choice: a crafted form must not store a body nothing can draw.
+  const character = field('spriteKey');
+  if (character !== undefined && isBodyId(character)) {
+    await setAgentCharacter(db, agentId, character);
+  }
+
   await setAgentProfile(db, agentId, {
     description: field('description'),
     instructions: field('instructions'),
@@ -252,7 +281,16 @@ export async function saveAgentProfileAction(
   // The office reads both on connect, so a change lands for anybody joining
   // now; a running agent is restarted by its host on the next fleet poll.
   revalidatePath('/office');
-  return { ok: true, agentId };
+  const after = await findAgentById(db, agentId);
+  return {
+    ok: true,
+    agentId,
+    restarts:
+      after?.name !== agent.name ||
+      after?.description !== agent.description ||
+      after?.instructions !== agent.instructions ||
+      after?.maxSessions !== agent.maxSessions,
+  };
 }
 
 /**
@@ -549,6 +587,8 @@ export async function assignAgentAction(formData: FormData): Promise<void> {
   const model = await modelFor(
     db,
     agent.workspaceId,
+    // The agent's owner's machine, not the assigner's: an admin may assign somebody else's agent.
+    agent.ownerUserId,
     hostLabel,
     runtimeId,
     formData.get('modelId'),

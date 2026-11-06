@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { BoardItemRef, MapInteractable, RosterEntry } from '@quintal/shared';
+import type { BoardAgentRef, BoardItemRef, MapInteractable, PublicActivity, RosterEntry } from '@quintal/shared';
 
-import { candidates, holderOf, offeredNotes, promptFor } from './station';
+import type { Transcript } from '../useConversations';
+import { candidates, checkoutsOf, holderOf, offeredNotes, promptFor, routineOn } from './station';
 
 function entry(over: Partial<RosterEntry>): RosterEntry {
   return {
@@ -88,6 +89,25 @@ describe('who the station offers', () => {
     );
   });
 
+  it('lists an agent once when its old session is still in reconnection grace', () => {
+    const roster = [
+      entry({ sessionId: 's1', identityId: 'a1', name: 'Arthur', status: 'away' }),
+      entry({ sessionId: 's2', identityId: 'a1', name: 'Arthur' }),
+      entry({ sessionId: 's3', identityId: 'a2', name: 'Marvin' }),
+      entry({ sessionId: 's4', identityId: 'a2', name: 'Marvin', status: 'away' }),
+      entry({ sessionId: 's5', identityId: 'a3', name: 'Zed', status: 'away' }),
+    ];
+    assert.deepEqual(
+      candidates(roster, 'u1').map((c) => [c.entry.name, c.entry.sessionId, c.busy]),
+      [
+        ['Arthur', 's2', ''],
+        ['Marvin', 's3', ''],
+        ['Zed', 's5', 'away'],
+      ],
+      'the live session is the agent, whichever came first; one that is only away says so, and is not free',
+    );
+  });
+
   it('offers open notes that are nobody\'s or one of yours, newest first', () => {
     const items = [
       note({ id: 'n1', number: 1 }),
@@ -97,6 +117,41 @@ describe('who the station offers', () => {
       note({ id: 'n5', number: 5, status: 'done' }),
     ];
     assert.deepEqual(offeredNotes(items, new Set(['a1'])).map((item) => item.number), [4, 1]);
+  });
+
+  it('names the routine an agent is on, from the turn that says so', () => {
+    const turn = (over: Partial<PublicActivity>): PublicActivity => ({
+      version: 1, turnId: 't1', workerId: '1', sessionId: 's', requestId: 't1', sequence: 1, channelId: 'dm1',
+      state: 'running', startedAt: 1_000, updatedAt: 2_000, items: [], agentId: 'a1', agentName: 'Arthur', receivedAt: 2_000, ...over,
+    });
+    const holding = (...turns: PublicActivity[]): Record<string, Transcript> => ({
+      'channel:dm1': {
+        messages: turns.map((activity) => ({ from: activity.agentId, fromName: activity.agentName, fromKind: 'agent', text: '', sentAt: activity.startedAt, activity })),
+        hasMore: false, loaded: true, loading: false,
+      },
+    });
+    const sweep = turn({ routine: { name: 'Inbox sweep' } });
+    assert.equal(routineOn(holding(sweep), 'a1'), 'Inbox sweep');
+    assert.equal(routineOn(holding(turn({})), 'a1'), null, 'a turn that names no routine is somebody\'s question');
+    assert.equal(routineOn(holding(turn({ routine: { name: 'Inbox sweep' }, state: 'completed' })), 'a1'), null, 'a finished turn is nobody\'s routine any more');
+    assert.equal(routineOn(holding(sweep), 'a2'), null, 'another agent\'s turn is not this one\'s');
+    assert.equal(routineOn({}, 'a1'), null, 'nothing held, nothing known');
+    // A question that joined the routine's busy period is its own turn, and the running one wins.
+    const question = turn({ turnId: 't2', requestId: 't2', startedAt: 3_000, updatedAt: 4_000 });
+    assert.equal(routineOn(holding({ ...sweep, state: 'completed' }, question), 'a1'), null);
+
+    const roster = [entry({ identityId: 'a1', name: 'Arthur', status: 'working', workingSince: 1_000 })];
+    assert.deepEqual(candidates(roster, 'u1', holding(sweep)).map((c) => c.busy), ['on its routine Inbox sweep']);
+    assert.deepEqual(candidates(roster, 'u1').map((c) => c.busy), ['working'], 'without the turn, the status line');
+  });
+
+  it('offers the checkouts the agent\'s machine listed, or none', () => {
+    const agent: BoardAgentRef = {
+      id: 'a1', name: 'Arthur', ownerUserId: 'u1', ownerName: 'Josh', description: '', status: '',
+      lastSeenAt: null, runtimeId: null, modelId: null, hostLabel: 'laptop', checkouts: ['api', 'group/web'],
+    };
+    assert.deepEqual(checkoutsOf([agent], 'a1'), ['api', 'group/web']);
+    assert.deepEqual(checkoutsOf([agent], 'a2'), []);
   });
 
   it('says what E does where you stand', () => {

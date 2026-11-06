@@ -51,13 +51,19 @@ export function handoverLine(
  * the work, so the agent passes the note's number to `task_begin` and the
  * office can move the note as the branch and pull request move.
  */
-export function assignmentBrief(item: Pick<BoardItemRef, 'number' | 'title' | 'body' | 'labels'>): AgentCommandCall {
+export function assignmentBrief(
+  item: Pick<BoardItemRef, 'number' | 'title' | 'body' | 'labels'>,
+  /** A checkout under REPOS/ the person chose, by name; null when the choice is the agent's. */
+  repo: string | null = null,
+): AgentCommandCall {
   const labels = item.labels.length > 0 ? `\nLabels: ${item.labels.join(', ')}` : '';
   const body = item.body.trim().length > 0 ? `\n\n${item.body.trim()}` : '';
+  const where = repo ? `Work in the ${repo} checkout under REPOS/: pass repo "${repo}" to task_begin. ` : '';
   return {
     name: 'board',
     instructions:
       `You have been handed note #${item.number} from the office board: ${item.title}${labels}${body}\n\n` +
+      where +
       `If this changes a repository, begin with task_begin and pass item ${item.number}, so the board ` +
       'follows your branch and pull request: the note moves to "in progress" when you begin and to "done" ' +
       'when the pull request merges. If it needs no repository, do it and say so here. Report here, in ' +

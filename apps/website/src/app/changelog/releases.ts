@@ -15,10 +15,32 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: "0.18.0",
-    date: null,
-    summary: "Routines: what your agents do on a schedule, kept by the office.",
+    version: "0.19.0",
+    date: "2026-11-03",
+    summary: "Ask an agent to make or change an agent, and choose how they look.",
     changes: [
+      "Ask an agent to make or change an agent: agent_list, agent_get, agent_create and agent_update under an agents scope. A new agent is yours, runs on your machine and says which agent made it. An agent can give only scopes it holds, and what it makes cannot make more.",
+      "Choose an agent's character by looking at it, when you make it or any time after, and rename an agent, under Settings → Agents. The old colour dropdown changed nothing and is gone; every agent keeps the body it has until you change it.",
+    ],
+  },
+  {
+    version: "0.18.1",
+    date: "2026-11-03",
+    summary: "You come back where you were, and the Agent Bay's desks line up.",
+    changes: [
+      "Going to Settings and back, or reloading the page, puts you where you were standing instead of back at the door. So does getting back in after a long disconnect.",
+      "The Agent Bay's desks are centred on their chairs, so a chair, whoever sits in it and the monitor all line up.",
+    ],
+  },
+  {
+    version: "0.18.0",
+    date: "2026-11-02",
+    summary: "Desks where your agents work, and routines they keep on a schedule.",
+    changes: [
+      "Every agent has a desk in the Agent Bay, the same one tomorrow. One on a turn walks there and types; one holding a task with nothing running sits; the screen is lit by what it is on and flickers as each step lands, and a column of light stands over a desk whose agent is waiting for you.",
+      "Click an agent, or the screen of its desk, to see the turn it is on as it happens, with a button to the conversation — only what you could read anyway. A turn that is one of its routines says which.",
+      "An empty desk begins a task. Stand behind its chair and press E, or click the screen: pick a note from the board or type a title, pick which of your free agents and, when its machine has reported them, which repository. The note is handed over in your DM and the agent walks to that desk to begin.",
+      "The station lists an agent once even while its old session is still timing out, E opens the station with nothing typed, and a test run gets the thinking balloon.",
       "A routine is a standing request to one of your agents on a schedule — every hour, weekdays at nine, in an hour, or a cron line — kept by the office rather than the agent's runtime, so it works the same on every runtime. It fires as a line from you in your DM with the agent, with the brief attached, and the agent reports there.",
       "A routine runs its own instructions or one of the office's commands with arguments. A slot the agent was away for is made up when it comes back; one that lands while it is still on the previous run is skipped, never queued.",
       "Make, edit, pause and delete routines under Settings → Routines, or ask an agent: with the routines scope it lists, makes, changes, pauses and deletes routines on itself and your other agents, as you. Asked to do something every so often, an agent now makes a routine instead of a loop of its own.",
