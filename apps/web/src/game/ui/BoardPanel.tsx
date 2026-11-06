@@ -53,6 +53,7 @@ import {
   agentHistoryOf,
   pullReviewStandingOf,
   reviewStandingLabel,
+  reviewKeyOf,
   reviewStandingOf,
   pullAuthorsOf,
   pullListMatches,
@@ -486,7 +487,7 @@ function AgentsTab({
                   <p className="text-white/30">on no task</p>
                 ) : null}
                 {reviewing.map((review) => (
-                  <p key={review.requestId} className="truncate text-violet-200/90">
+                  <p key={reviewKeyOf(review)} className="truncate text-violet-200/90">
                     reviewing{' '}
                     <a href={review.url} target="_blank" rel="noreferrer" className="font-mono text-sky-200 underline-offset-2 hover:underline">
                       {review.repo}#{review.number}
@@ -590,7 +591,7 @@ function AgentHistory({
     <ol id={id} className="mt-2 space-y-1 rounded border border-white/10 bg-white/[0.03] px-3 py-2">
       {agentHistoryOf(row).map((entry) =>
         entry.kind === 'review' ? (
-          <AgentHistoryReview key={`review-${entry.review.requestId ?? entry.review.at}`} review={entry.review} now={now} />
+          <AgentHistoryReview key={`review-${reviewKeyOf(entry.review)}`} review={entry.review} now={now} />
         ) : (
           <AgentHistoryTask key={entry.line.id} line={entry.line} now={now} onOpenNote={onOpenNote} />
         ),
@@ -1107,7 +1108,7 @@ function PullsTab({
                       >
                         <span className="text-white/40">reviewer </span>
                         {row.reviews.map((review, index) => (
-                          <span key={review.agentId}>
+                          <span key={reviewKeyOf(review)}>
                             {index > 0 ? ', ' : ''}
                             {AGENT_GLYPH} {review.agentName} <span className={standingTone(reviewStandingOf(review, now))}>{reviewStandingLabel(review, now)}</span>
                           </span>
@@ -1368,7 +1369,7 @@ function PullDetails({ row, now }: { row: PullListRow; now: number }) {
           ) : (
             <ul className="flex flex-col gap-0.5">
               {row.reviews.map((review) => (
-                <li key={review.agentId} className="truncate">
+                <li key={reviewKeyOf(review)} className="truncate">
                   <span className="text-violet-200">
                     {AGENT_GLYPH} {review.agentName}
                   </span>

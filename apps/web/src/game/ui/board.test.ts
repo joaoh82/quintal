@@ -38,6 +38,7 @@ import {
   REVIEW_WAIT_MS,
   agentHistoryOf,
   pullReviewStandingOf,
+  reviewKeyOf,
   reviewStandingLabel,
   reviewStandingOf,
   pullStateOf,
@@ -450,6 +451,11 @@ describe('reviews asked for from the board', () => {
     assert.equal(reviewStandingOf(review({ outcome: 'reviewed', finishedAt: 5 }), REVIEW_WAIT_MS * 2), 'reviewed', 'a finished one stays finished');
   });
 
+  it('keys each ask on its own, the same agent asked twice included', () => {
+    assert.equal(reviewKeyOf(review({ requestId: 'r9' })), 'r9');
+    assert.notEqual(reviewKeyOf(review({ requestId: null, at: 1 })), reviewKeyOf(review({ requestId: null, at: 2 })));
+  });
+
   it('sums a pull request up: reviewed once any agent is done', () => {
     assert.equal(pullReviewStandingOf([], 0), 'none');
     assert.equal(pullReviewStandingOf([review()], 0), 'reviewing');
@@ -553,14 +559,15 @@ describe('the Pull requests tab', () => {
     const rows = pullListOf([listed(4)], tasks, undefined, [
       review({ number: 2, finishedAt: 5, outcome: 'reviewed' }),
       review({ number: 4, at: 1 }),
+      review({ number: 1, agentId: 'eddie', finishedAt: 5, outcome: 'stopped' }),
     ]);
     const extra = pullListOf([listed(6)], tasks).find((row) => row.number === 6)!;
     const all = [...rows, extra];
     const keys = (r: (typeof DEFAULT_PULL_FILTERS)['review']) =>
       all.filter((row) => pullListMatches(row, { ...DEFAULT_PULL_FILTERS, status: 'all', review: r }, '', 10)).map((row) => row.number).sort();
     assert.deepEqual(keys('reviewed'), [2]);
-    assert.deepEqual(keys('waiting'), [4]);
-    assert.deepEqual(keys('unasked'), [1, 6]);
+    assert.deepEqual(keys('waiting'), [4], 'a stopped review is not still waiting');
+    assert.deepEqual(keys('unasked'), [6]);
   });
 
   it('answers the filter box by PR number, note number, title, repo, branch, author or agent', () => {

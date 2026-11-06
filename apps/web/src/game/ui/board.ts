@@ -234,6 +234,11 @@ export type AgentHistoryLine =
   | { kind: 'task'; at: number; line: BoardTaskRef }
   | { kind: 'review'; at: number; review: BoardPullReviewRef };
 
+/** A React key for one ask: its request id, or for an older ask with none, the agent and when. */
+export function reviewKeyOf(review: Pick<BoardPullReviewRef, 'requestId' | 'agentId' | 'at'>): string {
+  return review.requestId ?? `${review.agentId}:${review.at}`;
+}
+
 /** An agent's history as its row opens onto it: tasks and reviews together, the most recent first. */
 export function agentHistoryOf(row: Pick<AgentRow, 'history' | 'reviews'>): AgentHistoryLine[] {
   const lines: AgentHistoryLine[] = [
@@ -598,7 +603,7 @@ export function pullListMatches(row: PullListRow, filters: PullFilters, query: s
   if (filters.review !== 'any') {
     const standing = pullReviewStandingOf(row.reviews, now);
     if (filters.review === 'unasked' && standing !== 'none') return false;
-    if (filters.review === 'waiting' && standing !== 'reviewing' && standing !== 'asked' && standing !== 'stopped') return false;
+    if (filters.review === 'waiting' && standing !== 'reviewing' && standing !== 'asked') return false;
     if (filters.review === 'reviewed' && standing !== 'reviewed') return false;
   }
   if (filters.author && row.author !== filters.author && row.agentName !== filters.author) return false;
